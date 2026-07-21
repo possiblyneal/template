@@ -95,7 +95,7 @@ The hidden files that dictate environment variables, Git behavior, and tool inte
 
 \*\*`.gitignore`\*\*: Specifies intentionally untracked files and directories.
 
-\*\*`.gitattributes`\*\*: Git behavior rules for line endings and language classification.
+\*\*`.gitattributes`\*\*: Git behavior rules for line endings, binary files, and GitHub Linguist classification. Normalizes source/config/Quadlet files to LF, keeps Windows scripts as CRLF, treats lockfiles and SVGs as reviewable text, marks common media/archive/font files as binary, and classifies `docs/`, `generated/`, and `vendor/` for cleaner GitHub language stats.
 
 \*\*`.pre-commit-config.yaml`\*\*: Local guardrails that run formatters and linters automatically before code gets committed, catching AI syntax mistakes early.
 
