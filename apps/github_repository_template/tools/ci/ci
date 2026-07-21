@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$repo_root"
+
+run_npm_script() {
+  local script_name="$1"
+
+  if [[ -s package.json ]] && command -v npm >/dev/null 2>&1 && npm run --silent 2>/dev/null | grep -qE "^  ${script_name}$"; then
+    npm run "$script_name"
+    return 0
+  fi
+
+  return 1
+}
+
+if ! run_npm_script lint; then
+  if [[ -s pyproject.toml ]] && command -v uv >/dev/null 2>&1; then
+    uv run ruff check .
+  else
+    echo "No lint command configured. Add project-specific lint checks to tools/ci/ci."
+  fi
+fi
+
+if ! run_npm_script format:check; then
+  if [[ -s pyproject.toml ]] && command -v uv >/dev/null 2>&1; then
+    uv run ruff format --check .
+  else
+    echo "No format check configured. Add project-specific format checks to tools/ci/ci."
+  fi
+fi
+
+if ! run_npm_script typecheck; then
+  if [[ -s pyproject.toml ]] && command -v uv >/dev/null 2>&1; then
+    uv run mypy .
+  else
+    echo "No typecheck command configured. Add project-specific type checks to tools/ci/ci."
+  fi
+fi
+
+if ! run_npm_script test; then
+  if [[ -s pyproject.toml ]] && command -v uv >/dev/null 2>&1; then
+    uv run pytest
+  elif [[ -s go.work ]] || [[ -s go.mod ]]; then
+    go test ./...
+  elif [[ -s Cargo.toml ]]; then
+    cargo test
+  else
+    echo "No test command configured. Add project-specific tests to tools/ci/ci."
+  fi
+fi
+
+if ! run_npm_script build; then
+  if [[ -s go.work ]] || [[ -s go.mod ]]; then
+    go build ./...
+  elif [[ -s Cargo.toml ]]; then
+    cargo build --locked
+  else
+    echo "No build command configured. Add project-specific build steps to tools/ci/ci."
+  fi
+fi

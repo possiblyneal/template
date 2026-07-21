@@ -13,9 +13,17 @@ This section establishes the continuous integration guardrails.
 
 \*\*`.github/workflows/security.yml`\*\*: Runs dependency audits, CodeQL, OpenSSF Scorecard, and secret scanning. Should be kept as simple as possible, the bulk of the code will go in the tools folder, so this can be run independently of pushing to GitHub.
 
-\*\*`.github/ISSUE_TEMPLATE/`\*\*: Contains `bug_report.yml` and `feature_request.yml`. These force users—and agents—to provide reproducible inputs \(expected/actual behavior, environment, logs\) rather than vague complaints.
+Rule of thumb:
 
-\*\*`.github/PULL_REQUEST_TEMPLATE.md`\*\*: Establishes the required checklist for code merges, ensuring the AI documents its changes thoroughly.
+- **`ci.yml`**: Thinnest. One call to `tools/ci/ci` is often enough.
+- **`release.yml`**: Thin wrapper plus GitHub release/package auth.
+- **`security.yml`**: Wrapper plus GitHub-native security actions.
+
+Best-practice goal is not "all logic outside YAML." Better goal: portable project logic in `tools/ci/`; provider-specific orchestration in `.github/workflows/`.
+
+\*\*`.github/ISSUE_TEMPLATE/`\*\*: Contains `bug_report.yml` and `feature_request.yml`. `bug_report.yml` captures expected vs. actual behavior, frequency, reproduction steps, logs, regression history, environment, investigation hints, and reporter safeguards. `feature_request.yml` captures the problem or user need, desired outcome, use cases, scope boundaries, and supporting context.
+
+\*\*`.github/PULL_REQUEST_TEMPLATE.md`\*\*: Establishes a reviewer-focused merge template with summary, linked issue or goal, changes made, verification evidence, risk/rollback prompts, screenshots or demos, optional AI assistance notes, and a clean pre-flight checklist separated from verification details.
 
 ### AI Directives
 
@@ -59,7 +67,7 @@ The core workspace where development, execution, and testing occur.
 
 \*\*`tools/scripts/`\*\*: One-off shell or Python scripts for data manipulation, migration, or setup.
 
-\*\*`tools/ci/`\*\*: scripts called by `.github/workflows/`.
+\*\*`tools/ci/`\*\*: Portable shell scripts called by `.github/workflows/`. Keep this folder small: `ci`, `release`, and `security`. These are scripts, not YAML, because they should run locally the same way they run in GitHub Actions.
 
 \*\*`tmp/`\*\*: Git-ignored scratch space for the AI to write temporary files, download artifacts, or dump logs. Includes a `.gitkeep` to maintain the directory structure.
 

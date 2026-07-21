@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$repo_root"
+
+tag="${GITHUB_REF_NAME:-${1:-}}"
+
+if [[ -z "$tag" ]]; then
+  echo "No release tag detected. Pass tag as first argument when running locally."
+  echo "Example: tools/ci/release v1.2.3"
+  exit 0
+fi
+
+case "$tag" in
+  v[0-9]*.[0-9]*.[0-9]*) ;;
+  *)
+    echo "Release tag should look like v1.2.3. Got: $tag"
+    exit 1
+    ;;
+esac
+
+echo "Preparing release for $tag"
+
+if [[ -x tools/ci/ci ]]; then
+  tools/ci/ci
+else
+  echo "No tools/ci/ci script found; skipping pre-release CI checks."
+fi
+
+mkdir -p dist
+
+echo "No release artifact build configured. Add project-specific packaging to tools/ci/release."
+echo "No changelog generation configured. Add project-specific changelog logic to tools/ci/release."

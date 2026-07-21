@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$repo_root"
+
+if [[ -s package-lock.json ]] && command -v npm >/dev/null 2>&1; then
+  npm audit --audit-level=moderate
+elif [[ -s pnpm-lock.yaml ]] && command -v pnpm >/dev/null 2>&1; then
+  pnpm audit --audit-level moderate
+elif [[ -s yarn.lock ]] && command -v yarn >/dev/null 2>&1; then
+  yarn npm audit --severity moderate
+elif [[ -s pyproject.toml ]] && command -v uv >/dev/null 2>&1; then
+  uv run pip-audit
+elif [[ -s Cargo.toml ]] && command -v cargo-audit >/dev/null 2>&1; then
+  cargo audit
+else
+  echo "No dependency audit configured. Add project-specific audit checks to tools/ci/security."
+fi
+
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks detect --source . --redact --verbose
+else
+  echo "No secret scanner configured. Install gitleaks or add project-specific secret scan to tools/ci/security."
+fi
+
+if [[ -s package.json ]] && command -v npx >/dev/null 2>&1; then
+  npx --yes license-checker --summary
+elif [[ -s Cargo.toml ]] && command -v cargo-deny >/dev/null 2>&1; then
+  cargo deny check licenses
+else
+  echo "No license check configured. Add project-specific license checks to tools/ci/security."
+fi
+
+if command -v trivy >/dev/null 2>&1; then
+  trivy fs --exit-code 1 --severity HIGH,CRITICAL .
+else
+  echo "No container/filesystem scanner configured. Install trivy or add project-specific scan to tools/ci/security."
+fi
