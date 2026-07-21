@@ -1,0 +1,4 @@
+# Files copied into Claude worktrees when present but not tracked by Git.
+# Keep this small: local config only, not dependencies, caches, build output, or scratch data.
+
+.env
