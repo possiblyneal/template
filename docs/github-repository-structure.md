@@ -65,7 +65,7 @@ The core workspace where development, execution, and testing occur.
 
 \*\*`tools/container-files/`\*\*: Holds Dockerfiles, Compose files, and Quadlets for infrastructure-as-code, allowing the AI to spin up local environments or deployments autonomously.
 
-\*\*`tools/scripts/`\*\*: One-off shell or Python scripts for data manipulation, migration, or setup.
+\*\*`tools/scripts/`\*\*: Portable helper scripts for local development and repo hygiene. Default scripts: `doctor` checks required tools, `check` runs local pre-commit checks, `clean` removes common generated/cache files, and `dev` starts the local dev command when configured.
 
 \*\*`tools/ci/`\*\*: Portable shell scripts called by `.github/workflows/`. Keep this folder small: `ci`, `release`, and `security`. These are scripts, not YAML, because they should run locally the same way they run in GitHub Actions.
 
