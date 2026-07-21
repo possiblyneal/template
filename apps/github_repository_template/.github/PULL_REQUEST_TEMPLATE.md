@@ -14,9 +14,9 @@
 
 <!-- List commands run, tests passed, manual checks, screenshots, or demos. If something was not verified, say why. -->
 
-- [ ] Tests pass
-- [ ] Lint/format checks pass
-- [ ] Type checks pass
+- [ ] Tests run and passing
+- [ ] Lint/format checks run and passing
+- [ ] Type checks run and passing
 - [ ] Manual verification completed or not needed
 
 Details:
@@ -26,9 +26,11 @@ Details:
 ## Risk and rollback
 
 Risk level: Low / Medium / High
+
 <!-- Explain why this risk level is correct. Note risky areas, migrations, config changes, and compatibility concerns. -->
 
 Rollback plan:
+
 <!-- Describe how to revert safely. Include backup, migration rollback, config rollback, or deploy rollback steps if relevant. -->
 
 ## Screenshots or demos
@@ -39,12 +41,13 @@ Rollback plan:
 
 AI tool/agent:
 
-<!-- Optional. If AI generated or modified code, describe tool/agent used, what it changed, and what human review was done. -->
+<!-- Optional. If AI generated or modified code describe tool/agent used. -->
 
 ## Pre-Flight Checklist
 
 - [ ] PR scope is focused; unrelated cleanup avoided.
-- [ ] Documentation updated or not needed.
-- [ ] Tests added/updated or not needed.
+- [ ] Linked issue, ticket, or goal is included.
+- [ ] Risk level and rollback plan are filled out.
+- [ ] Screenshots or demos are included for UI changes, or marked N/A.
 - [ ] Secrets, tokens, passwords, and private data are not included.
-- [ ] Breaking changes are documented or not present.
+

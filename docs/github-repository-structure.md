@@ -97,6 +97,8 @@ These files govern community interaction and legal usage. They are only necessar
 
 \*\*`README.md`\*\*: The public orientation page explaining what the project does, how to install it, and how to use it.
 
+\*\*`FUNDING.yml`\*\*: Displays a sponsor button in your repository to increase the visibility of funding options for your open source project. 
+
 \*\*`CONTRIBUTING.md`\*\*: Guidelines for external developers on how to submit pull requests, run tests, and adhere to code style.
 
 \*\*`SECURITY.md`\*\*: Outlines the project's security policy, supported versions, and the private channel for reporting vulnerabilities.
