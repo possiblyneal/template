@@ -93,7 +93,7 @@ The hidden files that dictate environment variables, Git behavior, and tool inte
 
 \*\*`.env.example`\*\*: A sanitized template of `.env` showing required variables without exposing actual secrets.
 
-\*\*`.gitignore`\*\*: Specifies intentionally untracked files and directories.
+\*\*`.gitignore`\*\*: Specifies intentionally untracked files and directories. Ignores local secrets (`.env` while keeping `.env.example`), scratch files, logs, OS/editor files, dependency folders, language caches/build outputs, container runtime state, local database files, and generated artifacts while preserving `tmp/.gitkeep`.
 
 \*\*`.gitattributes`\*\*: Git behavior rules for line endings, binary files, and GitHub Linguist classification. Normalizes source/config/Quadlet files to LF, keeps Windows scripts as CRLF, treats lockfiles and SVGs as reviewable text, marks common media/archive/font files as binary, and classifies `docs/`, `generated/`, and `vendor/` for cleaner GitHub language stats.
 
