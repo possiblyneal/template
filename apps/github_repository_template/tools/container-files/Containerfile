@@ -1,0 +1,9 @@
+FROM docker.io/library/alpine:latest
+
+WORKDIR /app
+
+# Copy project files and replace this with project-specific build steps.
+# COPY . /app
+
+# Replace with the command your container should run.
+CMD ["sh", "-c", "echo 'Containerfile template: add project-specific runtime command.' && sleep infinity"]

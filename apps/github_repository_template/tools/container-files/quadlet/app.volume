@@ -1,0 +1,5 @@
+[Unit]
+Description={{PROJECT_NAME}} Podman volume
+
+[Volume]
+VolumeName={{PROJECT_NAME}}
