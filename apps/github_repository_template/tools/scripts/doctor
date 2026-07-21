@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$repo_root"
+
+missing=0
+
+check_required() {
+  local tool="$1"
+
+  if command -v "$tool" >/dev/null 2>&1; then
+    echo "ok: $tool"
+  else
+    echo "missing: $tool"
+    missing=1
+  fi
+}
+
+check_optional() {
+  local tool="$1"
+
+  if command -v "$tool" >/dev/null 2>&1; then
+    echo "ok: $tool"
+  else
+    echo "optional missing: $tool"
+  fi
+}
+
+check_required git
+check_required bash
+
+if [[ -s package.json ]]; then
+  check_required npm
+fi
+
+if [[ -s pyproject.toml ]]; then
+  check_required uv
+fi
+
+if [[ -s go.work ]] || [[ -s go.mod ]]; then
+  check_required go
+fi
+
+if [[ -s Cargo.toml ]]; then
+  check_required cargo
+fi
+
+if find . -maxdepth 3 \( -name Dockerfile -o -name compose.yml -o -name docker-compose.yml \) | grep -q .; then
+  check_optional docker
+fi
+
+if [[ "$missing" -ne 0 ]]; then
+  echo "Required tools missing. Install them, then rerun tools/scripts/doctor."
+  exit 1
+fi
+
+echo "Environment checks passed. Add project-specific checks to tools/scripts/doctor."

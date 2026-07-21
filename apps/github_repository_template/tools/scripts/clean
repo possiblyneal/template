@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$repo_root"
+
+rm -rf dist build coverage .pytest_cache .ruff_cache .mypy_cache node_modules/.cache target/debug/.fingerprint
+find . -type d -name __pycache__ -prune -exec rm -rf {} +
+find . -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
+
+echo "Cleaned common generated files and caches. Add project-specific cleanup to tools/scripts/clean."
