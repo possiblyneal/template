@@ -1,0 +1,80 @@
+# Normalize text files across platforms.
+* text=auto
+
+# Shell and config files should use LF.
+*.sh text eol=lf
+*.bash text eol=lf
+*.py text eol=lf
+*.go text eol=lf
+*.rs text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.json text eol=lf
+*.jsonc text eol=lf
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
+*.container text eol=lf
+*.network text eol=lf
+*.volume text eol=lf
+Containerfile text eol=lf
+
+# Windows scripts should use CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Environment files.
+.env text eol=lf
+.env.* text eol=lf
+*.env text eol=lf
+
+# Lockfiles are reviewable text.
+package-lock.json text eol=lf
+pnpm-lock.yaml text eol=lf
+yarn.lock text eol=lf
+Cargo.lock text eol=lf
+go.sum text eol=lf
+uv.lock text eol=lf
+
+# SVG is reviewable text.
+*.svg text eol=lf
+
+# Binary files.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.avif binary
+*.heic binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.tar binary
+*.tgz binary
+*.xz binary
+*.bz2 binary
+*.7z binary
+*.rar binary
+*.deb binary
+*.rpm binary
+*.dmg binary
+*.exe binary
+*.mp4 binary
+*.mov binary
+*.mp3 binary
+*.wav binary
+*.flac binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+
+# GitHub language statistics.
+docs/** linguist-documentation=true
+generated/** linguist-generated=true
+vendor/** linguist-vendored=true
