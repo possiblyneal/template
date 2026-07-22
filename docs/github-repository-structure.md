@@ -57,11 +57,11 @@ The core workspace where development, execution, and testing occur.
 
 \*\*`apps/<domain or deployable service>/tests/`\*\*: Tests for the domain or deployable service that doesn't touch other domains or services.
 
-\*\*`packages/`\*\*: Shared packages, libraries, and reusable modules used by apps.
+\*\*`libs/`\*\*: Shared internal libraries, schemas, utilities, and reusable modules used by apps. They do not have to be publishable packages.
 
-\*\*`packages/schemas/`\*\*: Shared data structures and schemas.
+\*\*`libs/schemas/`\*\*: Shared data structures and schemas.
 
-\*\*`tests/`\*\*: Repo-level tests that span multiple apps or packages, such as integration, end-to-end, contract, benchmark, and shared fixtures. App-local tests stay under `apps/<domain or deployable service>/tests/`.
+\*\*`tests/`\*\*: Repo-level tests that span multiple apps or libraries, such as integration, end-to-end, contract, benchmark, and shared fixtures. App-local tests stay under `apps/<domain or deployable service>/tests/`.
 
 \*\*`tools/container-files/`\*\*: Holds container tooling templates such as `Containerfile` and Podman Quadlet examples. These are reusable starting points for project deployment files, not live runtime state.
 
