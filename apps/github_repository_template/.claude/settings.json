@@ -6,7 +6,7 @@
       "Edit(./**)",
       "Write(./apps/**)",
       "Write(./docs/**)",
-      "Write(./integration-tests/**)",
+      "Write(./tests/**)",
       "Write(./libs/**)",
       "Write(./tmp/**)",
       "Write(./tools/**)"

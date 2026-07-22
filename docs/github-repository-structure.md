@@ -61,7 +61,7 @@ The core workspace where development, execution, and testing occur.
 
 \*\*`libs/schemas/`\*\*: Shared data structures
 
-\*\*`integration-tests/`\*\*: end-to-end, integration, and benchmark tests that span multiple projects in `src/apps/` or `libs/`.
+\*\*`tests/`\*\*: Repo-level tests that span multiple apps or libraries, such as integration, end-to-end, contract, benchmark, and shared fixtures. App-local tests stay under `apps/<domain or deployable service>/tests/`.
 
 \*\*`tools/container-files/`\*\*: Holds Dockerfiles, Compose files, and Quadlets for infrastructure-as-code, allowing the AI to spin up local environments or deployments autonomously.
 
