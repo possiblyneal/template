@@ -1,22 +1,22 @@
 # DocSync framework
 
-- DocSync keeps CLAUDE.md files aligned with repo structure, workflows, and durable conventions.
+- DocSync keeps `CLAUDE.md` files aligned with repo structure, workflows, and durable conventions.
 - Agent must follow DocSync instructions across any edits
 
 ## Core Contract
 
-- CLAUDE.md files are binding work contracts for their subtrees
-- Work products, source materials, instructions, records, assets, and durable docs must stay understandable from the nearest applicable CLAUDE.md plus every parent CLAUDE.md above it
-- Root CLAUDE.md is source of truth for DocSync rules. Other durable facts may live in docs, scripts, ADRs, or local child CLAUDE.md files.
+- `CLAUDE.md` files are binding work contracts for their subtrees
+- Work products, source materials, instructions, records, assets, and durable docs must stay understandable from the nearest applicable `CLAUDE.md` plus every parent `CLAUDE.md` above it
+- Root `CLAUDE.md` contains DocSync information reguarding maintenance, style, and structure. 
 
 ## Read Before Editing
 
-1. Read the root CLAUDE.md
+1. Read the root `CLAUDE.md`
 2. Identify every file or folder you expect to touch
 3. Walk from the repository root to each target path
-4. Read every CLAUDE.md found along each route
-5. If a parent CLAUDE.md lists a child CLAUDE.md whose scope contains the path, read that child and continue from there
-6. Use the nearest CLAUDE.md as the local contract and parent docs for repo-wide rules
+4. Read every `CLAUDE.md` found along each route
+5. If a parent `CLAUDE.md` lists a child `CLAUDE.md` whose scope contains the path, read that child and continue from there
+6. Use the nearest `CLAUDE.md` as the local contract and parent docs for repo-wide rules
 7. If docs conflict, the closer doc controls local work details, but no child doc may weaken DocSync
 
 Do not rely on memory. Re-read the applicable DocSync chain in the current session before editing.
@@ -25,26 +25,26 @@ Do not rely on memory. Re-read the applicable DocSync chain in the current sessi
 
 Every meaningful change requires a DocSync pass before the task is done. A meaningful change is one that changes durable behavior, structure, workflow, ownership, commands, interfaces, or conventions.
 
-Update the closest owning CLAUDE.md when a change affects:
+Update the closest owning `CLAUDE.md` when a change affects:
 
 - purpose, scope, ownership, or responsibilities
 - durable structure, contracts, workflows, or operating rules
 - required inputs, outputs, permissions, constraints, side effects, or artifacts
 - durable user preferences that should affect future work in this repo
-- CLAUDE.md creation, deletion, move, rename, or index contents
+- `CLAUDE.md` creation, deletion, move, rename, or index contents
 
 Update parent docs when parent-level structure, ownership, workflow, or child index changes. Update child docs when parent changes alter local rules. Remove stale or contradictory text immediately. Small edits that do not change behavior or contracts may leave docs unchanged, but the DocSync pass still must happen.
 
 ## Hierarchy
 
-- Root CLAUDE.md is the DocSync rail: project-wide instructions, global preferences, durable workflow rules, and the top-level Child DocSync Index
-- Child CLAUDE.md files own domain-specific instructions and their own Child DocSync Index
+- Root `CLAUDE.md` is the DocSync rail: project-wide instructions, global preferences, durable workflow rules, and the top-level Child DocSync Index
+- Child `CLAUDE.md` files own domain-specific instructions and their own Child DocSync Index
 - Each parent explains what its direct children cover and what stays owned by the parent
 - The closer a doc is to the work, the more specific and practical it must be
 
 ## Child Doc Shape
 
-- Create a child CLAUDE.md when a folder becomes a durable boundary with its own purpose, rules, responsibilities, workflow, materials, or quality standards
+- Create a child `CLAUDE.md` when a folder becomes a durable boundary with its own purpose, rules, responsibilities, workflow, materials, or quality standards
 - Work Guidance must reflect the current standards of the project or user instructions; if there are no specific standards or instructions yet, leave it empty
 - Verification must reflect an existing check; if no verification framework exists yet, leave it empty and update it when one exists
 
@@ -80,11 +80,11 @@ Default section order:
 
 ## User Preferences
 
-When the user requests a durable behavior change, record it here or in the relevant child CLAUDE.md
+When the user requests a durable behavior change, record it here or in the relevant child `CLAUDE.md`
 
 ## Continuous improvement
 
-When you discover a recurring repo-specific mistake, stale doc, missing command, missing script, or missing convention that would help future agents, propose a minimal update to this file or the relevant doc. Do not add broad rules from one-off incidents. 
+When you discover a recurring repo-specific mistake, stale doc, missing command, missing script, or missing convention that would help future agents, propose a minimal update to this file or the relevant doc. Do not add broad rules from one-off incidents.
 
 ## Child DocSync Index
 
