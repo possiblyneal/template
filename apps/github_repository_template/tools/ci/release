@@ -28,7 +28,5 @@ else
   echo "No tools/ci/ci script found; skipping pre-release CI checks."
 fi
 
-mkdir -p dist
-
 echo "No release artifact build configured. Add project-specific packaging to tools/ci/release."
 echo "No changelog generation configured. Add project-specific changelog logic to tools/ci/release."
