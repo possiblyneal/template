@@ -57,13 +57,13 @@ The core workspace where development, execution, and testing occur.
 
 \*\*`apps/<domain or deployable service>/tests/`\*\*: Tests for the domain or deployable service that doesn't touch other domains or services.
 
-\*\*`libs/`\*\*: Shared libraries
+\*\*`packages/`\*\*: Shared packages, libraries, and reusable modules used by apps.
 
-\*\*`libs/schemas/`\*\*: Shared data structures
+\*\*`packages/schemas/`\*\*: Shared data structures and schemas.
 
-\*\*`tests/`\*\*: Repo-level tests that span multiple apps or libraries, such as integration, end-to-end, contract, benchmark, and shared fixtures. App-local tests stay under `apps/<domain or deployable service>/tests/`.
+\*\*`tests/`\*\*: Repo-level tests that span multiple apps or packages, such as integration, end-to-end, contract, benchmark, and shared fixtures. App-local tests stay under `apps/<domain or deployable service>/tests/`.
 
-\*\*`tools/container-files/`\*\*: Holds Dockerfiles, Compose files, and Quadlets for infrastructure-as-code, allowing the AI to spin up local environments or deployments autonomously.
+\*\*`tools/container-files/`\*\*: Holds container tooling templates such as `Containerfile` and Podman Quadlet examples. These are reusable starting points for project deployment files, not live runtime state.
 
 \*\*`tools/scripts/`\*\*: Portable helper scripts for local development and repo hygiene. Default scripts: `doctor` checks required tools, `check` runs local pre-commit checks, `clean` removes common generated/cache files, and `dev` starts the local dev command when configured.
 

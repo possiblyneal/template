@@ -7,7 +7,7 @@
       "Write(./apps/**)",
       "Write(./docs/**)",
       "Write(./tests/**)",
-      "Write(./libs/**)",
+      "Write(./packages/**)",
       "Write(./tmp/**)",
       "Write(./tools/**)"
     ],

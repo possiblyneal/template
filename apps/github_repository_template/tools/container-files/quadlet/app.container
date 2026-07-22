@@ -1,3 +1,6 @@
+# Quadlet template. Replace {{PLACEHOLDERS}} before copying to ~/.config/containers/systemd/.
+# Podman/systemd does not expand {{...}} placeholders.
+
 [Unit]
 Description={{DESCRIPTION}}
 After=network-online.target
