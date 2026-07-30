@@ -11,6 +11,11 @@
       "Write(./tmp/**)",
       "Write(./tools/**)"
     ],
+    "deny": [
+      "Edit(../**)",
+      "Write(../**)",
+      "NotebookEdit(../**)"
+    ],
     "ask": [
       "Read(./.env)",
       "Read(./.env.*)",

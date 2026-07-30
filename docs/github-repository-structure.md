@@ -1,7 +1,8 @@
 ---
 type: Note
 ---
-# Github Repository Structure
+
+# GitHub Repository Structure
 
 ### GitHub Automation
 
@@ -53,13 +54,15 @@ States the specific operating parameters for the AI agent.
 
 The core workspace where development, execution, and testing occur.
 
-\*\*`apps/<domain or deployable service>/src/`\*\*: Project source code is stored here. Each deployable unit inside must be entirely self-contained reguarding its specific dependencies.
+\*\*`apps/<domain or deployable service>/src/`\*\*: Project source code is stored here. Each deployable unit inside must be entirely self-contained regarding its specific dependencies.
 
 \*\*`apps/<domain or deployable service>/tests/`\*\*: Tests for the domain or deployable service that doesn't touch other domains or services.
 
-\*\*`libs/`\*\*: Shared internal libraries, schemas, utilities, and reusable modules used by apps. They do not have to be publishable packages.
+\*\*`apps/<domain or deployable service>/docs/specs/`\*\*: Specs describing that unit's own behavior and acceptance criteria. They change in the same commit as the code they describe.
 
-\*\*`libs/schemas/`\*\*: Shared data structures and schemas.
+\*\*`apps/<domain or deployable service>/docs/plans/`\*\*: Implementation plans for in-flight work on that unit. Plans spanning several units live in `docs/plans/`. Short-lived; remove them once the work lands.
+
+\*\*`libs/`\*\*: Shared internal libraries, schemas, utilities, and reusable modules used by apps. They do not have to be publishable packages.
 
 \*\*`tests/`\*\*: Repo-level tests that span multiple apps or libraries, such as integration, end-to-end, contract, benchmark, and shared fixtures. App-local tests stay under `apps/<domain or deployable service>/tests/`.
 
@@ -75,13 +78,13 @@ The core workspace where development, execution, and testing occur.
 
 Durable knowledge that grounds the AI in the project's specific reality and operational standards.
 
-\*\*`TODO.md`\*\*: A plain-text todo of backlogged, informal tasks
+\*\*`TODO.md`\*\*: A plain-text to-do of backlogged, informal tasks
 
-\*\*`docs/adr/`\*\*: Architectural Decision Records \(e.g., `0001-initial-stack.md`\). Explains \*why\* decisions were made so the AI doesn't attempt to revert or fundamentally alter established systems.
+\*\*`docs/adr/`\*\*: Architectural Decision Records \(e.g., `0001-initial-stack.md`\). Explains \*why\* decisions were made so the AI doesn't attempt to revert or fundamentally alter established systems. Keep one repo-wide numbered sequence here so decisions stay discoverable without knowing which app to look in. An app may keep its own `docs/adr/` once local decisions would drown the repo-wide ones; when it does, link it from this folder's index and never reuse numbers across scopes.
 
-\*\*`docs/specs/`\*\*: Spec Documents detailing feature scopes and acceptance criteria.
+\*\*`docs/specs/`\*\*: Specs for contracts that span apps, such as service-to-service APIs and shared schemas. Specs for a single unit stay under `apps/<domain or deployable service>/docs/specs/`.
 
-\*\*`docs/plans/`\*\*: Documents implementation plans for new features.
+\*\*`docs/plans/`\*\*: Implementation plans for the cross-app specs above. A plan lives at the same level as the spec driving it, so plans for a single unit stay under `apps/<domain or deployable service>/docs/plans/`. Cross-app plans own the sequencing across units; when the work is large enough to need per-app detail, keep the ordering and rollout here and link out to per-app slices. Delete a plan once its work lands so stale designs cannot mislead later readers.
 
 ### Root Configuration Files
 
@@ -90,8 +93,6 @@ The hidden files that dictate environment variables, Git behavior, and tool inte
 \*\*`.worktreeinclude`\*\*: Lists git-ignored files to copy into new Git worktrees. Ensures untracked configurations are maintained across multiple branch checkouts.
 
 \*\*`.env`\*\*: The git-ignored config file for storing active sensitive environment variables.
-
-\*\*`.env.example`\*\*: A sanitized template of `.env` showing required variables without exposing actual secrets.
 
 \*\*`.gitignore`\*\*: Specifies intentionally untracked files and directories. Ignores local secrets (`.env` while keeping `.env.example`), scratch files, logs, OS/editor files, dependency folders, language caches/build outputs, container runtime state, local database files, and generated artifacts while preserving `tmp/.gitkeep`.
 
@@ -123,6 +124,8 @@ These files govern community interaction and legal usage. They are only necessar
 
 \*\*`GOVERNANCE.md`\*\*: The political structure of the repository, defining how decisions are made, how maintainers are elected, and how disputes are resolved.
 
+\*\*`.env.example`\*\*: A sanitized template of `.env` showing required variables without exposing actual secrets.
+
 ### Program Language Metadata
 
 These languages have built-in or universally accepted package managers, meaning they have strict, required root-level files and app-level files
@@ -153,12 +156,14 @@ These languages have built-in or universally accepted package managers, meaning 
 
 #### Swift
 
-**Root-level: TBD**
+**Root-level:** None. Swift Package Manager has no workspace manifest; multi-package repository support has been an open request since 2017, so there is no root file that enumerates members or produces a shared lockfile. Apps reach each other with `.package(path: "../../libs/<name>")` instead. An `.xcworkspace` can group packages for Xcode, but it is an IDE convenience, not a build contract, and command-line builds ignore it.
 
-**App-level: TBD**
+**App-level:** \*\*`Package.swift`\*\*: Swift will automatically create the lockfile, `Package.resolved`. Because there is no workspace, every app resolves independently and versions can drift between apps; pin shared dependencies deliberately.
 
 #### Kotlin
 
-**Root-level: TBD**
+**Root-level:** \*\*`settings.gradle.kts`\*\* \(defines the workspace via `include(":app")`, and each path must match a real directory\). \*\*`build.gradle.kts`\*\* \(shared plugin and config applied to subprojects\). \*\*`gradle/libs.versions.toml`\*\* \(version catalog holding the single source of dependency versions\). \*\*`gradle/wrapper/`\*\* and \*\*`gradlew`\*\* \(pin the Gradle version itself; commit them\).
 
-**App-level: TBD**
+**App-level:** \*\*`build.gradle.kts`\*\*
+
+Unlike the package managers above, Gradle writes no lockfile by default. Dependency locking is opt-in and produces `gradle.lockfile` per project only after it is enabled and written. Without it, builds are not reproducible across time.
