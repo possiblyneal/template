@@ -46,6 +46,28 @@ if [[ -s Cargo.toml ]]; then
   check_required cargo
 fi
 
+# SwiftPM has no workspace file, so packages sit at apps/<name>/ and libs/<name>/
+# and are found by search. .build holds checked-out dependencies, each with a
+# Package.swift of its own.
+if [[ -n "$(find . -name Package.swift -not -path '*/.build/*' -print -quit)" ]]; then
+  check_required swift
+fi
+
+# tools/ci/ci drives Gradle through ./gradlew, which needs a JDK. A missing
+# wrapper leaves those checks with no runner, which fails the run because a
+# manifest is present, so it is a missing tool here rather than a silent skip.
+if [[ -s settings.gradle.kts || -s build.gradle.kts ]]; then
+  check_required java
+
+  if [[ -x ./gradlew ]]; then
+    echo "ok: gradlew"
+  else
+    echo "missing: gradlew (a Gradle manifest is present but the wrapper is not executable here)"
+    echo "  Generate it with: gradle wrapper"
+    missing=1
+  fi
+fi
+
 if find . -maxdepth 3 \( -name Dockerfile -o -name compose.yml -o -name docker-compose.yml \) | grep -q .; then
   check_optional docker
 fi
