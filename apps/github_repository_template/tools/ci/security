@@ -4,36 +4,107 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_root"
 
-if [[ -s package-lock.json ]] && command -v npm >/dev/null 2>&1; then
-  npm audit --audit-level=moderate
-elif [[ -s pnpm-lock.yaml ]] && command -v pnpm >/dev/null 2>&1; then
-  pnpm audit --audit-level moderate
-elif [[ -s yarn.lock ]] && command -v yarn >/dev/null 2>&1; then
-  yarn npm audit --severity moderate
-elif [[ -s pyproject.toml ]] && command -v uv >/dev/null 2>&1; then
-  uv run pip-audit
-elif [[ -s Cargo.toml ]] && command -v cargo-audit >/dev/null 2>&1; then
-  cargo audit
-else
-  echo "No dependency audit configured. Add project-specific audit checks to tools/ci/security."
+readonly NO_RUNNER=199
+
+# Checks that only fail when a tool is missing if a manifest is present. The
+# secret scan is absent from both lists because it is required unconditionally:
+# any repository can leak a credential. License and filesystem scanning are
+# advisory here because the script has no runner for every language, and a
+# requirement that some languages can never satisfy just trains people to
+# ignore it.
+readonly REQUIRED_WITH_MANIFEST="dependency-audit"
+readonly ADVISORY="license-check filesystem-scan"
+
+failed=()
+unavailable=()
+
+has_manifest() {
+  [[ -s package.json || -s pyproject.toml || -s go.mod || -s go.work || -s Cargo.toml ]]
+}
+
+check_audit() {
+  if [[ -s package-lock.json ]] && command -v npm >/dev/null 2>&1; then npm audit --audit-level=moderate; return; fi
+  if [[ -s pnpm-lock.yaml ]] && command -v pnpm >/dev/null 2>&1; then pnpm audit --audit-level moderate; return; fi
+  if [[ -s yarn.lock ]] && command -v yarn >/dev/null 2>&1; then yarn npm audit --severity moderate; return; fi
+  if [[ -s pyproject.toml ]] && command -v uv >/dev/null 2>&1; then uv run pip-audit; return; fi
+  if [[ -s go.mod || -s go.work ]] && command -v govulncheck >/dev/null 2>&1; then govulncheck ./...; return; fi
+  if [[ -s Cargo.toml ]] && command -v cargo-audit >/dev/null 2>&1; then cargo audit; return; fi
+  return $NO_RUNNER
+}
+
+check_secrets() {
+  if command -v gitleaks >/dev/null 2>&1; then
+    gitleaks detect --source . --redact --verbose
+    return
+  fi
+  return $NO_RUNNER
+}
+
+check_licenses() {
+  if [[ -s package.json ]] && command -v npx >/dev/null 2>&1; then npx --yes license-checker --summary; return; fi
+  if [[ -s Cargo.toml ]] && command -v cargo-deny >/dev/null 2>&1; then cargo deny check licenses; return; fi
+  return $NO_RUNNER
+}
+
+check_filesystem() {
+  if command -v trivy >/dev/null 2>&1; then
+    trivy fs --exit-code 1 --severity HIGH,CRITICAL .
+    return
+  fi
+  return $NO_RUNNER
+}
+
+run_check() {
+  local name="$1" fn="$2" status=0
+  "$fn" || status=$?
+
+  case "$status" in
+    0) echo "pass         $name" ;;
+    "$NO_RUNNER") echo "unavailable  $name"; unavailable+=("$name") ;;
+    *) echo "FAIL         $name (exit $status)"; failed+=("$name") ;;
+  esac
+}
+
+run_check dependency-audit check_audit
+run_check secret-scan check_secrets
+run_check license-check check_licenses
+run_check filesystem-scan check_filesystem
+
+echo
+
+if (( ${#failed[@]} > 0 )); then
+  echo "Failed: ${failed[*]}"
+  exit 1
 fi
 
-if command -v gitleaks >/dev/null 2>&1; then
-  gitleaks detect --source . --redact --verbose
-else
-  echo "No secret scanner configured. Install gitleaks or add project-specific secret scan to tools/ci/security."
+blocking=()
+advisory_missing=()
+
+for name in ${unavailable[@]+"${unavailable[@]}"}; do
+  if [[ " $ADVISORY " == *" $name "* ]]; then
+    advisory_missing+=("$name")
+  elif [[ "$name" == "secret-scan" ]] || has_manifest; then
+    blocking+=("$name")
+  else
+    advisory_missing+=("$name")
+  fi
+done
+
+if (( ${#advisory_missing[@]} > 0 )); then
+  echo "Not run: ${advisory_missing[*]}"
+  echo "Install the matching tool to enable these; they do not block on their own."
 fi
 
-if [[ -s package.json ]] && command -v npx >/dev/null 2>&1; then
-  npx --yes license-checker --summary
-elif [[ -s Cargo.toml ]] && command -v cargo-deny >/dev/null 2>&1; then
-  cargo deny check licenses
-else
-  echo "No license check configured. Add project-specific license checks to tools/ci/security."
-fi
-
-if command -v trivy >/dev/null 2>&1; then
-  trivy fs --exit-code 1 --severity HIGH,CRITICAL .
-else
-  echo "No container/filesystem scanner configured. Install trivy or add project-specific scan to tools/ci/security."
+if (( ${#blocking[@]} > 0 )); then
+  echo
+  echo "No runner for: ${blocking[*]}"
+  for name in "${blocking[@]}"; do
+    if [[ "$name" == "secret-scan" ]]; then
+      echo "  secret-scan: install gitleaks, or add an equivalent scan here."
+      echo "  A clean result because nothing looked is what this check exists to prevent."
+    else
+      echo "  $name: this repository has a project manifest, so it is expected to run."
+    fi
+  done
+  exit 1
 fi

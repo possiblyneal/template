@@ -72,6 +72,8 @@ The core workspace where development, execution, and testing occur.
 
 \*\*`tools/ci/`\*\*: Portable shell scripts called by `.github/workflows/`. Keep this folder small: `ci`, `release`, and `security`. These are scripts, not YAML, because they should run locally the same way they run in GitHub Actions.
 
+Both scripts distinguish a check that ran and passed from one that never ran, and treat the second as a failure whenever the check was expected. If a project manifest is present but its toolchain is missing, the run fails rather than reporting success for work it did not do; `tools/ci/security` additionally fails whenever no secret scanner is available at all, since a clean result produced by looking at nothing is the outcome that check exists to prevent. License and filesystem scanning are advisory, because no runner covers every language. The workflows install only the toolchains a repository actually uses, detected from its manifests.
+
 \*\*`tmp/`\*\*: Git-ignored scratch space for the AI to write temporary files, download artifacts, or dump logs. Includes a `.gitkeep` to maintain the directory structure.
 
 ### Documentation & Knowledge Base
