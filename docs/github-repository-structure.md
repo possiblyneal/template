@@ -24,7 +24,7 @@ Best-practice goal is not "all logic outside YAML." Better goal: portable projec
 
 \*\*`.github/ISSUE_TEMPLATE/`\*\*: Contains `bug_report.yml` and `feature_request.yml`. `bug_report.yml` captures expected vs. actual behavior, frequency, reproduction steps, logs, regression history, environment, investigation hints, and reporter safeguards. `feature_request.yml` captures the problem or user need, desired outcome, use cases, scope boundaries, and supporting context.
 
-\*\*`.github/PULL_REQUEST_TEMPLATE.md`\*\*: Establishes a reviewer-focused merge template with summary, linked issue or goal, changes made, verification evidence, risk/rollback prompts, screenshots or demos, optional AI assistance notes, and a clean pre-flight checklist separated from verification details.
+\*\*`.github/PULL_REQUEST_TEMPLATE.md`\*\*: Structures a pull request so a reviewer can approve, reject, or question it without trusting the author's own assessment. Verification asks for a CI run link or raw output rather than a checkbox claiming tests passed, since a self-reported pass is indistinguishable from an unrun one. Risk is a set of factual yes/no questions about migrations, auth, secrets, public interfaces, dependencies, and data loss, each of which can be checked against the diff, rather than a self-assigned severity label. Two sections ask for what a diff cannot show: what was not verified, and which judgment calls a reviewer should examine. A scope section catches unrelated changes.
 
 ### AI Directives
 
