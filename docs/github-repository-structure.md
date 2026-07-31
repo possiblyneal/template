@@ -74,6 +74,10 @@ The core workspace where development, execution, and testing occur.
 
 Both scripts distinguish a check that ran and passed from one that never ran, and treat the second as a failure whenever the check was expected. If a project manifest is present but its toolchain is missing, the run fails rather than reporting success for work it did not do; `tools/ci/security` additionally fails whenever no secret scanner is available at all, since a clean result produced by looking at nothing is the outcome that check exists to prevent. License and filesystem scanning are advisory, because no runner covers every language. The workflows install only the toolchains a repository actually uses, detected from its manifests.
 
+Manifest detection has to list every language the repository supports, because a manifest the scripts do not recognize reads as no project at all and exits successfully with nothing checked, which is indistinguishable from a passing run. `Package.swift`, `settings.gradle.kts`, and `build.gradle.kts` therefore count as manifests alongside the others.
+
+Swift and Kotlin differ from the rest in two ways. Neither has a first-party dependency audit, so `tools/ci/security` audits both through trivy reading their lockfiles; because Gradle locking is opt-in, a repository with no `gradle.lockfile` has no resolved versions to audit and reports no runner rather than scanning declared version ranges, which would report findings for versions the build may never select. Gradle also exposes lint and format tasks only when the matching plugin is applied, so `tools/ci/ci` queries the task list and runs `ktlintCheck` or `detekt` if present rather than assuming either exists.
+
 \*\*`tmp/`\*\*: Git-ignored scratch space for the AI to write temporary files, download artifacts, or dump logs. Includes a `.gitkeep` to maintain the directory structure.
 
 ### Documentation & Knowledge Base

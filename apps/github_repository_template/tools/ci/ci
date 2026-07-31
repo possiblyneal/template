@@ -12,7 +12,22 @@ failed=()
 unavailable=()
 
 project_detected() {
-  [[ -s package.json || -s pyproject.toml || -s go.mod || -s go.work || -s Cargo.toml ]]
+  [[ -s package.json || -s pyproject.toml || -s go.mod || -s go.work || -s Cargo.toml || -s Package.swift ]] ||
+    is_gradle
+}
+
+is_gradle() {
+  [[ -s settings.gradle.kts || -s build.gradle.kts ]]
+}
+
+# Gradle exposes lint and format tasks only when the matching plugin is applied,
+# so the task list decides which checks exist. Listing costs a daemon start, so
+# the result is read once and reused.
+gradle_tasks=""
+gradle_has_task() {
+  is_gradle && [[ -x ./gradlew ]] || return 1
+  [[ -n "$gradle_tasks" ]] || gradle_tasks="$(./gradlew -q tasks --all 2>/dev/null || true)"
+  grep -qE "^$1( |$)" <<<"$gradle_tasks"
 }
 
 # Reads package.json directly. `npm run` writes its listing to stderr and prints
@@ -29,6 +44,9 @@ check_lint() {
   if [[ -s pyproject.toml ]] && command -v uv >/dev/null 2>&1; then uv run ruff check .; return; fi
   if [[ -s go.mod || -s go.work ]]; then go vet ./...; return; fi
   if [[ -s Cargo.toml ]]; then cargo clippy -- -D warnings; return; fi
+  if [[ -s Package.swift ]] && command -v swift >/dev/null 2>&1; then swift format lint --recursive --strict .; return; fi
+  if gradle_has_task ktlintCheck; then ./gradlew ktlintCheck; return; fi
+  if gradle_has_task detekt; then ./gradlew detekt; return; fi
   return $NO_RUNNER
 }
 
@@ -42,14 +60,18 @@ check_format() {
     return
   fi
   if [[ -s Cargo.toml ]]; then cargo fmt --check; return; fi
+  # Lint mode, not the default format mode, which rewrites files in place.
+  if [[ -s Package.swift ]] && command -v swift >/dev/null 2>&1; then swift format lint --recursive .; return; fi
+  if gradle_has_task ktlintCheck; then ./gradlew ktlintCheck; return; fi
   return $NO_RUNNER
 }
 
 check_typecheck() {
   if has_npm_script typecheck; then npm run typecheck; return; fi
   if [[ -s pyproject.toml ]] && command -v uv >/dev/null 2>&1; then uv run mypy .; return; fi
-  # Go and Rust type-check as part of build.
-  if [[ -s go.mod || -s go.work || -s Cargo.toml ]]; then return; fi
+  # Go, Rust, Swift, and Kotlin type-check as part of build.
+  if [[ -s go.mod || -s go.work || -s Cargo.toml || -s Package.swift ]]; then return; fi
+  if is_gradle; then return; fi
   return $NO_RUNNER
 }
 
@@ -58,6 +80,8 @@ check_test() {
   if [[ -s pyproject.toml ]] && command -v uv >/dev/null 2>&1; then uv run pytest; return; fi
   if [[ -s go.mod || -s go.work ]]; then go test ./...; return; fi
   if [[ -s Cargo.toml ]]; then cargo test; return; fi
+  if [[ -s Package.swift ]] && command -v swift >/dev/null 2>&1; then swift test; return; fi
+  if is_gradle && [[ -x ./gradlew ]]; then ./gradlew test; return; fi
   return $NO_RUNNER
 }
 
@@ -65,6 +89,8 @@ check_build() {
   if has_npm_script build; then npm run build; return; fi
   if [[ -s go.mod || -s go.work ]]; then go build ./...; return; fi
   if [[ -s Cargo.toml ]]; then cargo build --locked; return; fi
+  if [[ -s Package.swift ]] && command -v swift >/dev/null 2>&1; then swift build; return; fi
+  if is_gradle && [[ -x ./gradlew ]]; then ./gradlew build -x test; return; fi
   # An interpreted project has nothing to build.
   if [[ -s pyproject.toml ]]; then return; fi
   return $NO_RUNNER

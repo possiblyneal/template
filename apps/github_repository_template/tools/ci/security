@@ -19,7 +19,8 @@ failed=()
 unavailable=()
 
 has_manifest() {
-  [[ -s package.json || -s pyproject.toml || -s go.mod || -s go.work || -s Cargo.toml ]]
+  [[ -s package.json || -s pyproject.toml || -s go.mod || -s go.work || -s Cargo.toml ||
+     -s Package.swift || -s settings.gradle.kts || -s build.gradle.kts ]]
 }
 
 check_audit() {
@@ -29,6 +30,18 @@ check_audit() {
   if [[ -s pyproject.toml ]] && command -v uv >/dev/null 2>&1; then uv run pip-audit; return; fi
   if [[ -s go.mod || -s go.work ]] && command -v govulncheck >/dev/null 2>&1; then govulncheck ./...; return; fi
   if [[ -s Cargo.toml ]] && command -v cargo-audit >/dev/null 2>&1; then cargo audit; return; fi
+  # Swift and Gradle have no first-party audit command. Trivy reads the
+  # resolved lockfiles instead, so it is the runner for both. Gradle locking is
+  # opt-in, so a repository without gradle.lockfile has no resolved versions to
+  # audit and this reports no runner rather than scanning declared ranges.
+  if [[ -s Package.resolved ]] && command -v trivy >/dev/null 2>&1; then
+    trivy fs --exit-code 1 --severity HIGH,CRITICAL --scanners vuln Package.resolved
+    return
+  fi
+  if [[ -n "$(find . -name gradle.lockfile -print -quit)" ]] && command -v trivy >/dev/null 2>&1; then
+    trivy fs --exit-code 1 --severity HIGH,CRITICAL --scanners vuln .
+    return
+  fi
   return $NO_RUNNER
 }
 

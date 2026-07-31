@@ -27,6 +27,8 @@ jobs:
             echo "python=$([[ -s pyproject.toml ]] && echo true || echo false)"
             echo "go=$([[ -s go.mod || -s go.work ]] && echo true || echo false)"
             echo "rust=$([[ -s Cargo.toml ]] && echo true || echo false)"
+            echo "swift=$([[ -s Package.swift ]] && echo true || echo false)"
+            echo "kotlin=$([[ -s settings.gradle.kts || -s build.gradle.kts ]] && echo true || echo false)"
           } >> "$GITHUB_OUTPUT"
 
       - name: Set up Node
@@ -59,6 +61,24 @@ jobs:
       - name: Set up Rust
         if: steps.detect.outputs.rust == 'true'
         run: rustup component add clippy rustfmt
+
+      # ubuntu-latest ships no Swift toolchain, unlike Node, Go, and Rust.
+      - name: Set up Swift
+        if: steps.detect.outputs.swift == 'true'
+        uses: SwiftyLab/setup-swift@latest
+        with:
+          swift-version: latest
+
+      - name: Set up Java
+        if: steps.detect.outputs.kotlin == 'true'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        if: steps.detect.outputs.kotlin == 'true'
+        uses: gradle/actions/setup-gradle@v5
 
       - name: Run CI checks
         run: tools/ci/ci
