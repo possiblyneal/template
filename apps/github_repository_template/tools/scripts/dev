@@ -6,6 +6,15 @@ cd "$repo_root"
 
 app_name="${1:-}"
 
+# Reads package.json directly. `npm run` writes its listing to stderr and prints
+# nothing under --silent, so parsing its output silently matches nothing.
+has_npm_script() {
+  [[ -s package.json ]] &&
+    command -v node >/dev/null 2>&1 &&
+    command -v npm >/dev/null 2>&1 &&
+    node -e 'const s=require("./package.json").scripts||{};process.exit(s[process.argv[1]]?0:1)' "$1" 2>/dev/null
+}
+
 if [[ -x tools/scripts/doctor ]]; then
   tools/scripts/doctor
 else
@@ -16,11 +25,11 @@ if [[ -n "$app_name" && -d "apps/$app_name" ]]; then
   cd "apps/$app_name"
 fi
 
-if [[ -s package.json ]] && command -v npm >/dev/null 2>&1 && npm run --silent 2>/dev/null | grep -qE '^  dev$'; then
+if has_npm_script dev; then
   npm run dev
 elif [[ -s pyproject.toml ]] && command -v uv >/dev/null 2>&1; then
   echo "No Python dev command configured. Add project-specific server command to tools/scripts/dev."
-elif [[ -s go.mod ]] || [[ -s ../../go.work ]]; then
+elif [[ -s go.mod ]] || [[ -s "$repo_root/go.work" ]]; then
   go run .
 elif [[ -s Cargo.toml ]]; then
   cargo run
