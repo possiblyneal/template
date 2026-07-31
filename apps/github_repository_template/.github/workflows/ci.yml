@@ -9,10 +9,17 @@ on:
 permissions:
   contents: read
 
+# A new push to the same branch makes the previous run's result obsolete, and
+# leaving it running lets a stale result report after the newer one.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ci:
     name: CI
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -48,7 +55,7 @@ jobs:
 
       - name: Set up Python
         if: steps.detect.outputs.python == 'true'
-        uses: astral-sh/setup-uv@v9
+        uses: astral-sh/setup-uv@v9.0.0
         with:
           enable-cache: true
 
@@ -65,7 +72,7 @@ jobs:
       # ubuntu-latest ships no Swift toolchain, unlike Node, Go, and Rust.
       - name: Set up Swift
         if: steps.detect.outputs.swift == 'true'
-        uses: SwiftyLab/setup-swift@latest
+        uses: SwiftyLab/setup-swift@v1
         with:
           swift-version: latest
 
@@ -78,7 +85,7 @@ jobs:
 
       - name: Set up Gradle
         if: steps.detect.outputs.kotlin == 'true'
-        uses: gradle/actions/setup-gradle@v5
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Run CI checks
         run: tools/ci/ci

@@ -12,15 +12,24 @@ This section establishes the continuous integration guardrails.
 
 \*\*`.github/workflows/release.yml`\*\*: Publishes packages, tags releases, builds binaries, and creates changelog artifacts. Should be kept as simple as possible, the bulk of the code will go in the tools folder, so this can be run independently of pushing to GitHub.
 
-\*\*`.github/workflows/security.yml`\*\*: Runs dependency audits, CodeQL, OpenSSF Scorecard, and secret scanning. Should be kept as simple as possible, the bulk of the code will go in the tools folder, so this can be run independently of pushing to GitHub.
+\*\*`.github/workflows/security.yml`\*\*: Runs dependency audits, plus a secret scan when a scanner is present. Should be kept as simple as possible, the bulk of the code will go in the tools folder, so this can be run independently of pushing to GitHub.
 
 Rule of thumb:
 
 - **`ci.yml`**: Thinnest. One call to `tools/ci/ci` is often enough.
 - **`release.yml`**: Thin wrapper plus GitHub release/package auth.
 - **`security.yml`**: Wrapper plus GitHub-native security actions.
+- **`codeql.yml`**: No `tools/ci/` counterpart. CodeQL runs on GitHub's infrastructure and reports into the Security tab, so there is nothing to run locally.
 
 Best-practice goal is not "all logic outside YAML." Better goal: portable project logic in `tools/ci/`; provider-specific orchestration in `.github/workflows/`.
+
+\*\*`.github/workflows/codeql.yml`\*\*: Static analysis that traces untrusted input to dangerous sinks across files, which is the class of bug the linters in `tools/ci/ci` cannot see. It runs on pull requests, on `main`, and weekly, because CodeQL adds queries over time and a scheduled run finds problems in code that has not changed.
+
+CodeQL fails when told to analyze a language a repository does not contain, so a fixed language list would break every clone that does not use all of them. A detect job reads the same manifests as `tools/ci/ci` and builds the analysis matrix from what is present. Swift is pinned to a macOS runner because CodeQL does not analyze it on Linux. The matrix always includes `actions`, which analyzes the workflows themselves: it keeps the matrix non-empty on a repository that has no application code yet, and the workflows are worth scanning on their own since they run with repository credentials.
+
+Findings appear in the repository's Security tab. Code scanning is free on public repositories; on private ones it requires GitHub Advanced Security, and without it this workflow fails at the upload step rather than silently reporting success.
+
+\*\*`.github/dependabot.yml`\*\*: Opens weekly pull requests for the action versions used in `.github/workflows/`, grouped into one pull request rather than one per action. Every action is pinned to a major tag so patch and minor releases arrive without a change here, which leaves this file responsible only for major bumps, the ones that need review anyway. Pinning without this would mean tracking versions by hand; floating refs such as `@latest` would avoid that at the cost of letting a third-party action change under every repository cloned from the template. `astral-sh/setup-uv` is the one exception, pinned to an exact release because that project stopped publishing moving major tags after `v7`, so `@v9` resolves to nothing.
 
 \*\*`.github/ISSUE_TEMPLATE/`\*\*: Contains `bug_report.yml` and `feature_request.yml`. `bug_report.yml` captures expected vs. actual behavior, frequency, reproduction steps, logs, regression history, environment, investigation hints, and reporter safeguards. `feature_request.yml` captures the problem or user need, desired outcome, use cases, scope boundaries, and supporting context.
 
@@ -72,9 +81,15 @@ The core workspace where development, execution, and testing occur.
 
 \*\*`tools/ci/`\*\*: Portable shell scripts called by `.github/workflows/`. Keep this folder small: `ci`, `release`, and `security`. These are scripts, not YAML, because they should run locally the same way they run in GitHub Actions.
 
-Both scripts distinguish a check that ran and passed from one that never ran, and treat the second as a failure whenever the check was expected. If a project manifest is present but its toolchain is missing, the run fails rather than reporting success for work it did not do; `tools/ci/security` additionally fails whenever no secret scanner is available at all, since a clean result produced by looking at nothing is the outcome that check exists to prevent. License and filesystem scanning are advisory, because no runner covers every language. The workflows install only the toolchains a repository actually uses, detected from its manifests.
+Both scripts distinguish a check that ran and passed from one that never ran, and treat the second as a failure whenever the check was expected. If a project manifest is present but its toolchain is missing, the run fails rather than reporting success for work it did not do. The workflows install only the toolchains a repository actually uses, detected from its manifests.
+
+`tools/ci/security` runs a dependency audit and, when a scanner is installed, a secret scan. Secret prevention belongs to GitHub push protection rather than to CI: push protection rejects a secret before it reaches the remote, while a CI scan reports one that is already published and can only be rotated. The workflow therefore installs no scanner, since doing so meant downloading an unverified binary inside the job responsible for supply-chain safety, and gitleaks runs from `.pre-commit-config.yaml` instead, where it sees a secret while it is still an unstaged edit. The CI secret scan stays as a backstop that runs when a scanner happens to be present and never blocks on its absence.
+
+Checks that GitHub already provides are left to GitHub. Dependabot opens upgrade pull requests rather than only reporting findings, and push protection blocks secrets outright, so neither is reimplemented here. Code scanning, license policy, and container image scanning are deliberately absent: each answers a question this repository does not currently have, and a check that cannot fail meaningfully teaches people to ignore the ones that can.
 
 Manifest detection has to list every language the repository supports, because a manifest the scripts do not recognize reads as no project at all and exits successfully with nothing checked, which is indistinguishable from a passing run. `Package.swift`, `settings.gradle.kts`, and `build.gradle.kts` therefore count as manifests alongside the others.
+
+`tools/ci/release` runs `tools/ci/ci` before publishing, so the release workflow installs the same toolchains as the CI workflow; without them the pre-release check fails on every tagged release for exactly the reason it is there. It refuses to publish while packaging is unconfigured, rather than printing that nothing is configured and exiting successfully, so a green release always means an artifact was produced. The tag comes from an explicit argument before `GITHUB_REF_NAME`, because a `workflow_dispatch` run is dispatched against a branch and its ref is not the tag being released; the workflow passes that input through the environment rather than `${{ }}` interpolation, which would place a user-supplied string directly into a shell command.
 
 Swift and Kotlin differ from the rest in two ways. Neither has a first-party dependency audit, so `tools/ci/security` audits both through trivy reading their lockfiles; because Gradle locking is opt-in, a repository with no `gradle.lockfile` has no resolved versions to audit and reports no runner rather than scanning declared version ranges, which would report findings for versions the build may never select. Gradle also exposes lint and format tasks only when the matching plugin is applied, so `tools/ci/ci` queries the task list and runs `ktlintCheck` or `detekt` if present rather than assuming either exists.
 
@@ -108,7 +123,7 @@ Build output directories whose names also occur in source trees are anchored wit
 
 Lockfiles carry `merge=binary` alongside `linguist-generated`. Line-wise merging of a generated file can combine two branches into a dependency set that no resolver ever produced and no branch ever tested, and that result appears as a clean merge; `merge=binary` turns it into a conflict so the resolution is to take one side and regenerate. `linguist-generated` separately collapses lockfiles in GitHub pull requests while leaving local diffs and blame intact. `docs/`, `generated/`, and `vendor/` are classified for cleaner GitHub language stats.
 
-\*\*`.pre-commit-config.yaml`\*\*: Local guardrails that run formatters and linters automatically before code gets committed, catching AI syntax mistakes early.
+\*\*`.pre-commit-config.yaml`\*\*: Local guardrails that run automatically before code gets committed, catching AI syntax mistakes early. Ships gitleaks, which is the primary secret control in the template because it fires while a credential is still an uncommitted edit, and a handful of hooks that catch mistakes a diff review tends to miss: merge conflict markers, oversized files, and malformed YAML or JSON. Hooks run only after `pre-commit install` in a clone, so the file alone guarantees nothing.
 
 ### Public / Open Source Additions
 
