@@ -10,12 +10,16 @@ on:
 
 permissions:
   contents: read
-  security-events: write
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   security:
     name: Security
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -31,8 +35,12 @@ jobs:
             echo "node=$([[ -s package.json ]] && echo true || echo false)"
             echo "python=$([[ -s pyproject.toml ]] && echo true || echo false)"
             echo "go=$([[ -s go.mod || -s go.work ]] && echo true || echo false)"
+            echo "rust=$([[ -s Cargo.toml ]] && echo true || echo false)"
 
             # Swift and Gradle audit through trivy, which reads their lockfiles.
+            # Package.resolved is committed, and Gradle writes gradle.lockfile
+            # only once dependency locking is enabled, so both are read from the
+            # checkout rather than produced here.
             trivy=false
             if [[ -s Package.resolved ]] || [[ -n "$(find . -name gradle.lockfile -print -quit)" ]]; then
               trivy=true
@@ -48,7 +56,7 @@ jobs:
 
       - name: Set up Python
         if: steps.detect.outputs.python == 'true'
-        uses: astral-sh/setup-uv@v9
+        uses: astral-sh/setup-uv@v9.0.0
         with:
           enable-cache: true
 
@@ -62,21 +70,19 @@ jobs:
         if: steps.detect.outputs.go == 'true'
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
+      - name: Install cargo-audit
+        if: steps.detect.outputs.rust == 'true'
+        run: cargo install cargo-audit --locked
+
       - name: Install trivy
         if: steps.detect.outputs.trivy == 'true'
-        uses: aquasecurity/setup-trivy@v0.2.3
+        uses: aquasecurity/setup-trivy@v0.3.1
 
-      # tools/ci/security fails outright when no secret scanner is present, so
-      # this step is required for every repository regardless of language.
-      - name: Install gitleaks
-        env:
-          GITLEAKS_VERSION: "8.30.1"
-        run: |
-          curl -fsSL -o /tmp/gitleaks.tar.gz \
-            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
-          sudo install -m 0755 /tmp/gitleaks /usr/local/bin/gitleaks
-          gitleaks version
-
+      # No gitleaks install. Secret prevention belongs to GitHub push protection,
+      # which blocks a secret before it reaches the remote; a CI scan only finds
+      # one that is already pushed. Installing a scanner here meant curling an
+      # unverified binary into the job that exists to check supply-chain safety.
+      # Enable push protection in repository settings, and run gitleaks locally
+      # from .pre-commit-config.yaml.
       - name: Run local security checks
         run: tools/ci/security

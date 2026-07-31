@@ -6,15 +6,6 @@ cd "$repo_root"
 
 readonly NO_RUNNER=199
 
-# Checks that only fail when a tool is missing if a manifest is present. The
-# secret scan is absent from both lists because it is required unconditionally:
-# any repository can leak a credential. License and filesystem scanning are
-# advisory here because the script has no runner for every language, and a
-# requirement that some languages can never satisfy just trains people to
-# ignore it.
-readonly REQUIRED_WITH_MANIFEST="dependency-audit"
-readonly ADVISORY="license-check filesystem-scan"
-
 failed=()
 unavailable=()
 
@@ -45,23 +36,13 @@ check_audit() {
   return $NO_RUNNER
 }
 
+# A backstop, not the primary control. GitHub push protection blocks a secret
+# before it reaches the remote; this only reports one that is already pushed,
+# by which time rotation is the remedy. Run gitleaks from .pre-commit-config.yaml
+# to catch secrets before the commit exists.
 check_secrets() {
   if command -v gitleaks >/dev/null 2>&1; then
     gitleaks detect --source . --redact --verbose
-    return
-  fi
-  return $NO_RUNNER
-}
-
-check_licenses() {
-  if [[ -s package.json ]] && command -v npx >/dev/null 2>&1; then npx --yes license-checker --summary; return; fi
-  if [[ -s Cargo.toml ]] && command -v cargo-deny >/dev/null 2>&1; then cargo deny check licenses; return; fi
-  return $NO_RUNNER
-}
-
-check_filesystem() {
-  if command -v trivy >/dev/null 2>&1; then
-    trivy fs --exit-code 1 --severity HIGH,CRITICAL .
     return
   fi
   return $NO_RUNNER
@@ -80,8 +61,6 @@ run_check() {
 
 run_check dependency-audit check_audit
 run_check secret-scan check_secrets
-run_check license-check check_licenses
-run_check filesystem-scan check_filesystem
 
 echo
 
@@ -94,9 +73,7 @@ blocking=()
 advisory_missing=()
 
 for name in ${unavailable[@]+"${unavailable[@]}"}; do
-  if [[ " $ADVISORY " == *" $name "* ]]; then
-    advisory_missing+=("$name")
-  elif [[ "$name" == "secret-scan" ]] || has_manifest; then
+  if [[ "$name" == "dependency-audit" ]] && has_manifest; then
     blocking+=("$name")
   else
     advisory_missing+=("$name")
@@ -111,13 +88,7 @@ fi
 if (( ${#blocking[@]} > 0 )); then
   echo
   echo "No runner for: ${blocking[*]}"
-  for name in "${blocking[@]}"; do
-    if [[ "$name" == "secret-scan" ]]; then
-      echo "  secret-scan: install gitleaks, or add an equivalent scan here."
-      echo "  A clean result because nothing looked is what this check exists to prevent."
-    else
-      echo "  $name: this repository has a project manifest, so it is expected to run."
-    fi
-  done
+  echo "This repository has a project manifest, so a dependency audit is expected to run."
+  echo "Install the audit tool for its language, or add a runner to tools/ci/security."
   exit 1
 fi

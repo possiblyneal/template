@@ -1,0 +1,18 @@
+# Install once per clone with `pre-commit install`, otherwise these never run.
+repos:
+  # Catches a secret while it is still only in the working tree, which is the
+  # one point where the fix is editing a file rather than rotating a credential.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-yaml
+      - id: check-json
