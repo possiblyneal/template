@@ -4,14 +4,16 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_root"
 
-if [[ -x tools/scripts/doctor ]]; then
-  tools/scripts/doctor
-else
-  echo "No tools/scripts/doctor script found; skipping environment checks."
+if [[ ! -x tools/scripts/doctor ]]; then
+  echo "tools/scripts/doctor is missing or not executable."
+  exit 1
 fi
 
-if [[ -x tools/ci/ci ]]; then
-  tools/ci/ci
-else
-  echo "No tools/ci/ci script found; skipping CI checks."
+tools/scripts/doctor
+
+if [[ ! -x tools/ci/ci ]]; then
+  echo "tools/ci/ci is missing or not executable."
+  exit 1
 fi
+
+tools/ci/ci
