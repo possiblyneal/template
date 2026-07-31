@@ -79,9 +79,11 @@ The core workspace where development, execution, and testing occur.
 
 \*\*`tests/`\*\*: Repo-level tests that span multiple apps or libraries, such as integration, end-to-end, contract, benchmark, and shared fixtures. App-local tests stay under `apps/<domain or deployable service>/tests/`.
 
-\*\*`tools/scripts/`\*\*: Portable helper scripts for local development and repo hygiene. Default scripts: `doctor` checks required tools, `check` runs local pre-commit checks, `fix` repairs formatting, `clean` removes common generated/cache files, and `dev` starts the local dev command when configured.
+\*\*`tools/scripts/`\*\*: Portable helper scripts for local development and repo hygiene. Default scripts: `doctor` checks required tools, `check` runs local pre-commit checks, `fix` repairs formatting, `clean` removes common generated/cache files wherever they sit, and `dev` starts the local dev command when configured.
 
 `check` runs `doctor`, then `tools/ci/ci`, then `tools/ci/security`. The security workflow blocks a pull request the same way the CI workflow does, so a local check that skipped it would move a dependency finding from before the commit to after the push, which is the wrong end of the loop to learn about it.
+
+`clean` searches for build output rather than removing it from the repository root, because in this layout it lands under `apps/<name>/` and `libs/<name>/`, so a root-only removal finds nothing in the ordinary case and reports success for it. The search skips `.git`, `node_modules`, and `.build`, each of which holds directories named `build` or `dist` that belong to a dependency or to git, where deleting them cleans nothing this repository produced and forces a re-fetch.
 
 `fix` is the write half of the format check in `tools/ci/ci`, which only reports: it runs the same formatters in the same order, so it repairs exactly what that check fails on. Without it the repair step is guesswork per language, and the guess is made by whoever hit the failure. Lint autofixes stay out even where the tool offers them, because they rewrite code rather than whitespace, and a formatting diff is one a reviewer can skim while a rewritten-logic diff is one they have to read.
 

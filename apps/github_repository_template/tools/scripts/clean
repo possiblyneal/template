@@ -4,8 +4,27 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_root"
 
-rm -rf dist build coverage .pytest_cache .ruff_cache .mypy_cache node_modules/.cache target/debug/.fingerprint
-find . -type d -name __pycache__ -prune -exec rm -rf {} +
-find . -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
+# Build output lands under apps/<name>/ and libs/<name>/ in this layout, so a
+# root-only removal cleans nothing in the common case. Searching finds it
+# wherever it sits.
+#
+# .git, node_modules, and .build are pruned rather than searched. Each holds
+# directories named build or dist that belong to a dependency or to git, and
+# deleting those cleans nothing this repository produced while forcing a
+# re-fetch. Swift output inside .build is left to `swift package clean`.
+prune=( -name .git -o -name node_modules -o -name .build )
+
+find . \( "${prune[@]}" \) -prune -o \
+  -type d \( -name dist -o -name build -o -name coverage -o -name __pycache__ \
+  -o -name .pytest_cache -o -name .ruff_cache -o -name .mypy_cache \) \
+  -exec rm -rf {} +
+
+# rm rather than -delete, which implies -depth and so disables the prune above.
+find . \( "${prune[@]}" \) -prune -o \
+  -type f \( -name '*.pyc' -o -name '*.pyo' \) -exec rm -f {} +
+
+# Dependency caches, kept out of the search above so that only these exact
+# paths are removed rather than every directory sharing their names.
+rm -rf node_modules/.cache target/debug/.fingerprint
 
 echo "Cleaned common generated files and caches. Add project-specific cleanup to tools/scripts/clean."
