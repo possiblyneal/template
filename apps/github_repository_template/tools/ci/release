@@ -4,12 +4,15 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_root"
 
-tag="${GITHUB_REF_NAME:-${1:-}}"
+# An explicit argument wins over GITHUB_REF_NAME so a workflow_dispatch run,
+# where the ref is a branch rather than the tag being released, can pass the
+# tag directly.
+tag="${1:-${GITHUB_REF_NAME:-}}"
 
 if [[ -z "$tag" ]]; then
   echo "No release tag detected. Pass tag as first argument when running locally."
   echo "Example: tools/ci/release v1.2.3"
-  exit 0
+  exit 1
 fi
 
 case "$tag" in
@@ -22,11 +25,17 @@ esac
 
 echo "Preparing release for $tag"
 
-if [[ -x tools/ci/ci ]]; then
-  tools/ci/ci
-else
-  echo "No tools/ci/ci script found; skipping pre-release CI checks."
+if [[ ! -x tools/ci/ci ]]; then
+  echo "tools/ci/ci is missing or not executable, so this release would ship unverified."
+  exit 1
 fi
 
-echo "No release artifact build configured. Add project-specific packaging to tools/ci/release."
-echo "No changelog generation configured. Add project-specific changelog logic to tools/ci/release."
+tools/ci/ci
+
+# Packaging is project-specific, so the template cannot supply it. Until it is
+# filled in there is nothing to publish, and exiting 0 here would report a
+# successful release that produced no artifact and no changelog.
+echo
+echo "No release packaging configured, so there is nothing to publish for $tag."
+echo "Add artifact build and changelog steps to tools/ci/release, then remove this block."
+exit 1

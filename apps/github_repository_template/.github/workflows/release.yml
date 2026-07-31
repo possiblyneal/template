@@ -2,6 +2,10 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release, e.g. v1.2.3"
+        required: true
   push:
     tags:
       - "v*"
@@ -9,15 +13,95 @@ on:
 permissions:
   contents: write
 
+# Not cancel-in-progress, unlike the other workflows: a cancelled release can
+# stop after publishing some artifacts and none of the rest. Overlapping runs
+# queue instead.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
+          # Full history so changelog generation can reach the previous tag.
           fetch-depth: 0
 
+      # tools/ci/release runs tools/ci/ci before publishing, and that fails when
+      # a manifest is present but its toolchain is missing, so this job installs
+      # the same toolchains as the CI workflow.
+      - name: Detect toolchains
+        id: detect
+        run: |
+          {
+            echo "node=$([[ -s package.json ]] && echo true || echo false)"
+            echo "python=$([[ -s pyproject.toml ]] && echo true || echo false)"
+            echo "go=$([[ -s go.mod || -s go.work ]] && echo true || echo false)"
+            echo "rust=$([[ -s Cargo.toml ]] && echo true || echo false)"
+            echo "swift=$([[ -s Package.swift ]] && echo true || echo false)"
+            echo "kotlin=$([[ -s settings.gradle.kts || -s build.gradle.kts ]] && echo true || echo false)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node
+        if: steps.detect.outputs.node == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+
+      - name: Install Node dependencies
+        if: steps.detect.outputs.node == 'true'
+        run: |
+          if [[ -s package-lock.json ]]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
+
+      - name: Set up Python
+        if: steps.detect.outputs.python == 'true'
+        uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+
+      - name: Set up Go
+        if: steps.detect.outputs.go == 'true'
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+
+      - name: Set up Rust
+        if: steps.detect.outputs.rust == 'true'
+        run: rustup component add clippy rustfmt
+
+      # ubuntu-latest ships no Swift toolchain, unlike Node, Go, and Rust.
+      - name: Set up Swift
+        if: steps.detect.outputs.swift == 'true'
+        uses: SwiftyLab/setup-swift@v1
+        with:
+          swift-version: latest
+
+      - name: Set up Java
+        if: steps.detect.outputs.kotlin == 'true'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        if: steps.detect.outputs.kotlin == 'true'
+        uses: gradle/actions/setup-gradle@v6
+
+      # On a tag push GITHUB_REF_NAME is the tag. A workflow_dispatch run is
+      # dispatched against a branch, so the tag comes from the input instead.
+      # The value crosses into the step as an environment variable rather than
+      # through ${{ }} interpolation, which would paste a dispatch input
+      # straight into the shell command.
       - name: Build release artifacts
-        run: tools/ci/release
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: tools/ci/release "$RELEASE_TAG"
