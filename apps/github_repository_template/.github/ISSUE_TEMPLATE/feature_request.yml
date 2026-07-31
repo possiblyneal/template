@@ -43,11 +43,34 @@ body:
     id: scope
     attributes:
       label: Scope boundaries
-      description: What should this explicitly not include?
+      description: What should this explicitly not include? Name the adjacent things someone might assume come with it.
       placeholder: |
-
+        - Out of scope:
+        - Deliberately deferred to later:
     validations:
       required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: How will we know it works?
+      description: What should someone do to confirm this is finished and correct? Concrete checks, not "it works".
+      placeholder: |
+        - Given `...`, when I `...`, then `...`.
+        - Edge case that must behave correctly:
+    validations:
+      required: true
+
+  - type: textarea
+    id: unclear
+    attributes:
+      label: Open questions and things you have not decided
+      description: What are you unsure about, and where should whoever builds this come back to you instead of guessing? Naming a gap here is more useful than leaving it to be discovered mid-build.
+      placeholder: |
+        - Undecided:
+        - Ask me before assuming:
+    validations:
+      required: false
 
   - type: textarea
     id: context
@@ -60,7 +83,7 @@ body:
         - Docs/prior discussion:
     validations:
       required: false
-  
+
   - type: checkboxes
     id: checklist
     attributes:

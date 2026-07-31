@@ -10,6 +10,15 @@ body:
       value: |
         Thanks for filing a bug. Clear, reproducible reports help humans and AI agents diagnose issues faster.
 
+  - type: input
+    id: version
+    attributes:
+      label: Affected version
+      description: Which version, tag, or commit SHA does this bug occur on? "Latest" is ambiguous by the time anyone reads this, so give the exact value.
+      placeholder: "Example: v1.4.2, or commit 9026ce4"
+    validations:
+      required: true
+
   - type: textarea
     id: expected
     attributes:
@@ -27,7 +36,20 @@ body:
       placeholder: "Example: API returns 500 with `TypeError: cannot read property ...`."
     validations:
       required: true
-      
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How much damage does this cause when it happens?
+      options:
+        - Critical - data loss, security exposure, or total outage
+        - High - core workflow blocked with no workaround
+        - Medium - feature impaired but a workaround exists
+        - Low - minor or cosmetic
+    validations:
+      required: true
+
   - type: dropdown
     id: frequency
     attributes:
@@ -40,7 +62,7 @@ body:
         - Unknown
     validations:
       required: true
-      
+
   - type: textarea
     id: reproduce
     attributes:
@@ -82,9 +104,8 @@ body:
       label: Environment
       description: Include versions and platform details.
       placeholder: |
-        - Device / Hardware:
-        - OS & Version:
-        - Browser & Version:
+        - OS & version:
+        - Architecture (x86_64, arm64):
     validations:
       required: true
 
@@ -107,8 +128,8 @@ body:
       options:
         - label: I searched existing issues and did not find a duplicate.
           required: true
-        - label: I have updated to the latest version and confirmed the bug still exists there.
-          required: true
+        - label: I checked the latest version, and the bug still exists there.
+          required: false
         - label: I included exact steps or artifacts needed to reproduce the bug.
           required: true
         - label: I removed or redacted secrets, tokens, passwords, and private data.

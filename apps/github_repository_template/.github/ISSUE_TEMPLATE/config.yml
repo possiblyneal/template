@@ -1,0 +1,3 @@
+# Without this, GitHub offers "Open a blank issue" alongside the forms, and
+# every required field in them becomes optional in practice.
+blank_issues_enabled: false
