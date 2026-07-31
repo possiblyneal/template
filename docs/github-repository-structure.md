@@ -44,7 +44,9 @@ States the specific operating parameters for the AI agent.
 
 \*\*`.claude/agent-memory/`\*\*: Subagent persistent memory, maintaining state across sessions separately from the main session auto-memory.
 
-\*\*`.claude/settings.json`\*\*: Overrides for global `settings.json`. 
+\*\*`.claude/settings.json`\*\*: Overrides for global `settings.json`. The template ships the empty containers only, so a new project sees the available sections without inheriting rules: `permissions` \(`allow`, `ask`, `deny`, `additionalDirectories`\), `env`, `hooks`, `sandbox`, `attribution`, `enabledPlugins`, `modelOverrides`, and `skillOverrides`.
+
+Keys are omitted rather than blanked when an empty value would be invalid, because a settings file that fails validation is rejected as a whole rather than partially applied. Three kinds must stay absent until they hold a real value: enum strings such as `permissions.defaultMode` and `editorMode`, where `""` is not a permitted member; strings with a minimum length such as `outputStyle` and `apiKeyHelper`; and objects with required sub-fields such as `statusLine` and `policyHelper`, which need `type` and `command` or `path`. `model` is also omitted because its empty-string behavior is undefined.
 
 \*\*`.mcp.json`\*\*: Configures Model Context Protocol \(MCP\) servers exclusively for this project, granting the AI read/write access to external tools like databases, APIs, or local browsers.
 

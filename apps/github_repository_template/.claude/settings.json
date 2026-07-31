@@ -1,52 +1,15 @@
 {
   "permissions": {
-    "allow": [
-      "Read(/home/neal/**)",
-      "Read(/mnt/homelab-roots/**)",
-      "Edit(./**)",
-      "Write(./apps/**)",
-      "Write(./docs/**)",
-      "Write(./tests/**)",
-      "Write(./libs/**)",
-      "Write(./tmp/**)",
-      "Write(./tools/**)"
-    ],
-    "deny": [
-      "Edit(../**)",
-      "Write(../**)",
-      "NotebookEdit(../**)"
-    ],
-    "ask": [
-      "Read(./.env)",
-      "Read(./.env.*)",
-      "Read(./**/.env)",
-      "Read(./**/.env.*)",
-      "Read(./**/*secret*)",
-      "Read(./**/*token*)",
-      "Read(./**/*credential*)",
-      "Read(./**/*.key)",
-      "Read(./**/*.pem)",
-      "Edit(./.env)",
-      "Edit(./.env.*)",
-      "Edit(./**/.env)",
-      "Edit(./**/.env.*)",
-      "Edit(./**/*secret*)",
-      "Edit(./**/*token*)",
-      "Edit(./**/*credential*)",
-      "Edit(./**/*.key)",
-      "Edit(./**/*.pem)",
-      "Write(./.env)",
-      "Write(./.env.*)",
-      "Write(./**/.env)",
-      "Write(./**/.env.*)",
-      "Write(./**/*secret*)",
-      "Write(./**/*token*)",
-      "Write(./**/*credential*)",
-      "Write(./**/*.key)",
-      "Write(./**/*.pem)",
-      "Write(./*)",
-      "Write(./.claude/**)",
-      "Write(./.github/**)"
-    ]
-  }
+    "allow": [],
+    "ask": [],
+    "deny": [],
+    "additionalDirectories": []
+  },
+  "env": {},
+  "hooks": {},
+  "sandbox": {},
+  "attribution": {},
+  "enabledPlugins": {},
+  "modelOverrides": {},
+  "skillOverrides": {}
 }
