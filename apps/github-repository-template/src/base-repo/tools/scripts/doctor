@@ -90,6 +90,13 @@ if [[ -s .pre-commit-config.yaml ]]; then
   fi
 fi
 
+# The PreToolUse hook parses its input with jq. A hook that exits non-zero for
+# any reason other than a deliberate block is a non-blocking error, so a missing
+# jq lets writes outside the repository through without a prompt.
+if [[ -x .claude/hooks/ask-outside-repo.sh ]]; then
+  check_required jq
+fi
+
 if [[ "$missing" -ne 0 ]]; then
   echo "Required tools missing. Install them, then rerun tools/scripts/doctor."
   exit 1
