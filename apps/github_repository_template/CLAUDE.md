@@ -7,7 +7,7 @@
 
 - `CLAUDE.md` files are binding work contracts for their subtrees
 - Work products, source materials, instructions, records, assets, and durable docs must stay understandable from the nearest applicable `CLAUDE.md` plus every parent `CLAUDE.md` above it
-- Root `CLAUDE.md` contains DocSync information reguarding maintenance, style, and structure. 
+- Root `CLAUDE.md` contains DocSync information regarding maintenance, style, and structure. 
 
 ## Read Before Editing
 
