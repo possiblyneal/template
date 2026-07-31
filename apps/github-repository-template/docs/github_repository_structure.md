@@ -57,7 +57,7 @@ States the specific operating parameters for the AI agent.
 
 \*\*`.claude/hooks/`\*\*: Shell scripts wired to tool events by `.claude/settings.json`. Ships `ask-outside-repo.sh`, a `PreToolUse` hook that prompts before `Edit`, `Write`, or `NotebookEdit` touches a path outside the repository. Claude Code already prompts for those writes in most permission modes, but `bypassPermissions` skips the check, and permission rules cannot cover it: rules are evaluated deny, then ask, then allow, first match wins, and the syntax has no negation, so an ask rule broad enough to catch everything outside the repository also catches everything inside it. The hook resolves symlinks and `..` before comparing against `CLAUDE_PROJECT_DIR`, so a path inside the repository cannot be used to reach outside it, and asks rather than allowing when the root cannot be determined. Writes made through Bash redirection are not covered.
 
-\*\*`.claude/settings.json`\*\*: Overrides for global `settings.json`. The template fills `hooks` with the entry above, `permissions.ask`, `permissions.deny`, and `attribution`, and ships the remaining containers empty so a new project sees the available sections without inheriting rules: `permissions.allow`, `permissions.additionalDirectories`, `env`, `sandbox`, `enabledPlugins`, `modelOverrides`, and `skillOverrides`.
+\*\*`.claude/settings.json`\*\*: Overrides for global `settings.json`. The template fills `hooks` with the entry above, `permissions.ask`, `permissions.deny`, `plansDirectory`, and `attribution`, and ships the remaining containers empty so a new project sees the available sections without inheriting rules: `permissions.allow`, `permissions.additionalDirectories`, `env`, `sandbox`, `enabledPlugins`, `modelOverrides`, and `skillOverrides`.
 
 `permissions.ask` covers the operations that are hard to undo or visible outside the repository: `git push`, `git reset --hard`, `git clean`, `git rebase`, and the `gh` commands that create or merge pull requests, cut releases, or delete the repository. Rules merge across scopes and a matching ask rule prompts in every permission mode, `bypassPermissions` included, so these hold for a clone regardless of how the session was started.
 
@@ -128,6 +128,8 @@ Durable knowledge that grounds the AI in the project's specific reality and oper
 \*\*`docs/adr/`\*\*: Architectural Decision Records \(e.g., `0001-initial-stack.md`\). Explains \*why\* decisions were made so the AI doesn't attempt to revert or fundamentally alter established systems. Keep one repo-wide numbered sequence here so decisions stay discoverable without knowing which app to look in. An app may keep its own `docs/adr/` once local decisions would drown the repo-wide ones; when it does, link it from this folder's index and never reuse numbers across scopes.
 
 \*\*`docs/specs/`\*\*: Specs for contracts that span apps, such as service-to-service APIs and shared schemas. Specs for a single unit stay under `apps/<domain or deployable service>/docs/specs/`.
+
+\*\*`docs/plans/`\*\*: Plans written in plan mode, pointed here by `plansDirectory` in `.claude/settings.json`. The default is `~/.claude/plans`, outside the repository, where a plan is invisible to review and disappears with the machine. Under `docs/` it arrives in the diff alongside the code it describes, which is the point when a human approves the plan before the work starts.
 
 ### Root Configuration Files
 
