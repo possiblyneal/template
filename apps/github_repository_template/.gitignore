@@ -20,6 +20,10 @@ service-account*.json
 *.tfstate.*
 .terraform/
 
+# Claude worktrees are checkouts of this same repo; without this their
+# entire file tree shows up as untracked noise in the main checkout.
+.claude/worktrees/
+
 # Local scratch
 tmp/*
 !tmp/.gitkeep

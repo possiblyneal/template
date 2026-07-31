@@ -90,7 +90,7 @@ Durable knowledge that grounds the AI in the project's specific reality and oper
 
 The hidden files that dictate environment variables, Git behavior, and tool integrations.
 
-\*\*`.worktreeinclude`\*\*: Lists git-ignored files to copy into new Git worktrees. Ensures untracked configurations are maintained across multiple branch checkouts.
+\*\*`.worktreeinclude`\*\*: Lists git-ignored files to copy into new Claude worktrees, which are otherwise fresh checkouts holding tracked files only. Uses `.gitignore` syntax, and a file is copied only if it both matches a pattern here and is git-ignored, so tracked files are never duplicated. Scoped to local configuration; private keys and Terraform state are deliberately excluded, because worktrees are created and removed casually and copying key material into each one multiplies the places a credential sits on disk.
 
 \*\*`.env`\*\*: The git-ignored config file for storing active sensitive environment variables.
 

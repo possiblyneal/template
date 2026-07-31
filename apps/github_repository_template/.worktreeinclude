@@ -1,4 +1,13 @@
-# Files copied into Claude worktrees when present but not tracked by Git.
-# Keep this small: local config only, not dependencies, caches, build output, or scratch data.
+# Gitignored files copied into each new Claude worktree, which is otherwise
+# a fresh checkout containing tracked files only. Uses .gitignore syntax.
+# A file is copied only if it matches here AND is gitignored.
+#
+# Local config only. Private keys and Terraform state are deliberately absent:
+# worktrees are created and deleted casually, and copying key material into
+# each one multiplies the places a credential sits on disk.
 
 .env
+.env.*
+.npmrc
+credentials.json
+service-account*.json
