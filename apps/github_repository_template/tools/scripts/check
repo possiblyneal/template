@@ -17,3 +17,13 @@ if [[ ! -x tools/ci/ci ]]; then
 fi
 
 tools/ci/ci
+
+# The security workflow blocks a pull request the same way the CI workflow does,
+# so leaving it out here means finding out on the pull request instead of before
+# the commit.
+if [[ ! -x tools/ci/security ]]; then
+  echo "tools/ci/security is missing or not executable."
+  exit 1
+fi
+
+tools/ci/security
