@@ -4,6 +4,22 @@
 !.env.example
 !.env.*.example
 
+# Keys and credentials. A leaked key means rotation, not just a revert.
+*.pem
+*.key
+id_rsa*
+*.p12
+*.pfx
+credentials.json
+service-account*.json
+.npmrc
+.pypirc
+
+# Terraform state stores secrets in plaintext.
+*.tfstate
+*.tfstate.*
+.terraform/
+
 # Local scratch
 tmp/*
 !tmp/.gitkeep
@@ -26,11 +42,10 @@ Thumbs.db
 *.swp
 *.swo
 
-# Dependencies
+# Dependencies. Unanchored: these nest legitimately in monorepos.
 node_modules/
 .venv/
 venv/
-env/
 
 # Python
 __pycache__/
@@ -46,24 +61,19 @@ htmlcov/
 .pnpm-store/
 .yarn/cache/
 coverage/
-dist/
-build/
+/dist/
+/build/
 .next/
 .nuxt/
 .svelte-kit/
 
-# Go
-bin/
-
-# Rust
+# Go and Rust. /bin/ is anchored: src/bin/ and cmd/*/bin/ hold real source.
+/bin/
 target/
 
 # Containers
 *.pid
 *.cid
-containers/
-podman/
-docker-data/
 
 # Local databases
 *.sqlite
@@ -71,5 +81,5 @@ docker-data/
 *.db
 
 # Generated artifacts
-artifacts/
-downloads/
+/artifacts/
+/downloads/
