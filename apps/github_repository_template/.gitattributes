@@ -8,16 +8,25 @@
 # SVG is markup; keep it diffable and reviewable.
 *.svg text
 
-# Show the enclosing heading in Markdown diff hunk headers.
+# Name the enclosing function or heading in diff hunk headers.
+# Only Git's built-in drivers work; an unknown name is silently ignored.
 *.md diff=markdown
+*.py diff=python
+*.go diff=golang
+*.rs diff=rust
+*.sh diff=bash
+*.java diff=java
+*.rb diff=ruby
 
-# Collapse lockfiles on GitHub; local diffs and blame stay intact.
-package-lock.json linguist-generated
-pnpm-lock.yaml linguist-generated
-yarn.lock linguist-generated
-Cargo.lock linguist-generated
-go.sum linguist-generated
-uv.lock linguist-generated
+# Lockfiles are generated, so line-wise merging can silently produce a
+# dependency set no resolver ever validated. Conflict instead, then take
+# one side and regenerate. linguist-generated collapses them on GitHub.
+package-lock.json merge=binary linguist-generated
+pnpm-lock.yaml merge=binary linguist-generated
+yarn.lock merge=binary linguist-generated
+Cargo.lock merge=binary linguist-generated
+go.sum merge=binary linguist-generated
+uv.lock merge=binary linguist-generated
 
 # GitHub language statistics.
 **/docs/** linguist-documentation
