@@ -62,15 +62,15 @@ body:
       required: false
   
   - type: checkboxes
-  id: checklist
-  attributes:
-    label: Reporter checklist
-    options:
-      - label: I searched existing issues and did not find a duplicate.
-        required: true
-      - label: I have updated to the latest version and confirmed the bug still exists there.
-        required: true
-      - label: I included exact steps or artifacts needed to reproduce the bug.
-        required: true
-      - label: I removed or redacted secrets, tokens, passwords, and private data.
-        required: true
+    id: checklist
+    attributes:
+      label: Reporter checklist
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: I confirmed this capability does not already exist in the latest version.
+          required: true
+        - label: I described the problem and desired outcome, not only a proposed implementation.
+          required: true
+        - label: I removed or redacted secrets, tokens, passwords, and private data.
+          required: true
