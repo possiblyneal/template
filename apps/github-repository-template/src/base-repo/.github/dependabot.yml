@@ -17,3 +17,17 @@ updates:
       actions:
         patterns:
           - "*"
+
+  # Reads the rev of every hook in .pre-commit-config.yaml. Those pins are
+  # exact tags rather than major ones, because pre-commit resolves a rev to a
+  # single revision and offers no floating form, so nothing here updates
+  # without a bump. The scanners are the reason it matters: a stale gitleaks
+  # reports a clean tree by knowing about fewer secret formats.
+  - package-ecosystem: pre-commit
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      pre-commit:
+        patterns:
+          - "*"

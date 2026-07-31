@@ -7,6 +7,23 @@ repos:
     hooks:
       - id: gitleaks
 
+  # The only static analysis the shell scripts in tools/ get. Every script there
+  # is extensionless, so pre-commit recognizes it as shell by reading its
+  # shebang, which it only does for files that are executable. The two shebang
+  # hooks below keep that true; without them a script committed without its
+  # executable bit is skipped silently rather than reported.
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+
+  # Workflow errors otherwise surface as a failed run after the push, since
+  # nothing validates workflow syntax, action inputs, or shell snippets locally.
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
@@ -16,3 +33,28 @@ repos:
       - id: trailing-whitespace
       - id: check-yaml
       - id: check-json
+      - id: check-toml
+
+      # tools/scripts/check exits early when a script it calls is not
+      # executable, and shell detection depends on the same bit.
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+
+      # Catches a key committed under a name the ignore rules do not cover.
+      - id: detect-private-key
+
+      # A submodule adds code from another repository that arrives without
+      # review here and is pinned by a commit no tool in this repo audits.
+      - id: forbid-submodules
+
+      # A path that differs only by case is one file on macOS or Windows and
+      # two on Linux, so the clone that lands second silently overwrites.
+      - id: check-case-conflict
+
+      # Enforces the LF rule in .gitattributes at commit time. Defaults to
+      # rewriting to the majority ending in the file.
+      - id: mixed-line-ending
+
+      # Keeps main reviewable: work lands through a pull request, where the
+      # template and CODEOWNERS apply, rather than as a direct commit.
+      - id: no-commit-to-branch
