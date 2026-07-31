@@ -96,7 +96,7 @@ The hidden files that dictate environment variables, Git behavior, and tool inte
 
 \*\*`.gitignore`\*\*: Specifies intentionally untracked files and directories. Ignores local secrets (`.env` while keeping `.env.example`), scratch files, logs, OS/editor files, dependency folders, language caches/build outputs, container runtime state, local database files, and generated artifacts while preserving `tmp/.gitkeep`.
 
-\*\*`.gitattributes`\*\*: Git behavior rules for line endings, binary files, and GitHub Linguist classification. Normalizes source and config files to LF, keeps Windows scripts as CRLF, treats lockfiles and SVGs as reviewable text, marks common media/archive/font files as binary, and classifies `docs/`, `generated/`, and `vendor/` for cleaner GitHub language stats.
+\*\*`.gitattributes`\*\*: Git behavior rules for line endings, diffs, and GitHub Linguist classification. A single `* text=auto eol=lf` rule normalizes every text file to LF in both the repo and the working tree on all platforms, so per-extension rules exist only where they override it: Windows scripts stay CRLF, SVG is pinned as text, and Markdown gets a diff driver that names the enclosing heading in hunk headers. Binary files need no rules because Git's auto-detection already handles them. Lockfiles are marked `linguist-generated` so GitHub collapses them in pull requests while local diffs and blame stay intact, and `docs/`, `generated/`, and `vendor/` are classified for cleaner GitHub language stats.
 
 \*\*`.pre-commit-config.yaml`\*\*: Local guardrails that run formatters and linters automatically before code gets committed, catching AI syntax mistakes early.
 
