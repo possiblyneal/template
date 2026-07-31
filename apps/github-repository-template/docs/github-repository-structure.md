@@ -73,8 +73,6 @@ The core workspace where development, execution, and testing occur.
 
 \*\*`apps/<domain or deployable service>/docs/specs/`\*\*: Specs describing that unit's own behavior and acceptance criteria. They change in the same commit as the code they describe.
 
-\*\*`apps/<domain or deployable service>/docs/plans/`\*\*: Implementation plans for in-flight work on that unit. Plans spanning several units live in `docs/plans/`. Short-lived; remove them once the work lands.
-
 \*\*`libs/`\*\*: Shared internal libraries, schemas, utilities, and reusable modules used by apps. They do not have to be publishable packages.
 
 \*\*`tests/`\*\*: Repo-level tests that span multiple apps or libraries, such as integration, end-to-end, contract, benchmark, and shared fixtures. App-local tests stay under `apps/<domain or deployable service>/tests/`.
@@ -118,8 +116,6 @@ Durable knowledge that grounds the AI in the project's specific reality and oper
 \*\*`docs/adr/`\*\*: Architectural Decision Records \(e.g., `0001-initial-stack.md`\). Explains \*why\* decisions were made so the AI doesn't attempt to revert or fundamentally alter established systems. Keep one repo-wide numbered sequence here so decisions stay discoverable without knowing which app to look in. An app may keep its own `docs/adr/` once local decisions would drown the repo-wide ones; when it does, link it from this folder's index and never reuse numbers across scopes.
 
 \*\*`docs/specs/`\*\*: Specs for contracts that span apps, such as service-to-service APIs and shared schemas. Specs for a single unit stay under `apps/<domain or deployable service>/docs/specs/`.
-
-\*\*`docs/plans/`\*\*: Implementation plans for the cross-app specs above. A plan lives at the same level as the spec driving it, so plans for a single unit stay under `apps/<domain or deployable service>/docs/plans/`. Cross-app plans own the sequencing across units; when the work is large enough to need per-app detail, keep the ordering and rollout here and link out to per-app slices. Delete a plan once its work lands so stale designs cannot mislead later readers.
 
 ### Root Configuration Files
 
