@@ -1,0 +1,77 @@
+# Environment / secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Local scratch
+tmp/*
+!tmp/.gitkeep
+*.tmp
+*.temp
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+.orca/
+
+# Dependencies
+node_modules/
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# JavaScript / TypeScript
+.npm/
+.pnpm-store/
+.yarn/cache/
+coverage/
+dist/
+build/
+.next/
+.nuxt/
+.svelte-kit/
+
+# Go
+bin/
+
+# Rust
+target/
+
+# Containers
+*.pid
+*.cid
+containers/
+podman/
+docker-data/
+
+# Local databases
+*.sqlite
+*.sqlite3
+*.db
+
+# Generated artifacts
+artifacts/
+downloads/
+
