@@ -17,10 +17,6 @@
 *.yaml text eol=lf
 *.yml text eol=lf
 *.md text eol=lf
-*.container text eol=lf
-*.network text eol=lf
-*.volume text eol=lf
-Containerfile text eol=lf
 
 # Windows scripts should use CRLF.
 *.bat text eol=crlf

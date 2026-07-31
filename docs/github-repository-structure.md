@@ -66,8 +66,6 @@ The core workspace where development, execution, and testing occur.
 
 \*\*`tests/`\*\*: Repo-level tests that span multiple apps or libraries, such as integration, end-to-end, contract, benchmark, and shared fixtures. App-local tests stay under `apps/<domain or deployable service>/tests/`.
 
-\*\*`tools/container-files/`\*\*: Holds container tooling templates such as `Containerfile` and Podman Quadlet examples. These are reusable starting points for project deployment files, not live runtime state.
-
 \*\*`tools/scripts/`\*\*: Portable helper scripts for local development and repo hygiene. Default scripts: `doctor` checks required tools, `check` runs local pre-commit checks, `clean` removes common generated/cache files, and `dev` starts the local dev command when configured.
 
 \*\*`tools/ci/`\*\*: Portable shell scripts called by `.github/workflows/`. Keep this folder small: `ci`, `release`, and `security`. These are scripts, not YAML, because they should run locally the same way they run in GitHub Actions.
@@ -96,7 +94,7 @@ The hidden files that dictate environment variables, Git behavior, and tool inte
 
 \*\*`.gitignore`\*\*: Specifies intentionally untracked files and directories. Ignores local secrets (`.env` while keeping `.env.example`), scratch files, logs, OS/editor files, dependency folders, language caches/build outputs, container runtime state, local database files, and generated artifacts while preserving `tmp/.gitkeep`.
 
-\*\*`.gitattributes`\*\*: Git behavior rules for line endings, binary files, and GitHub Linguist classification. Normalizes source/config/Quadlet files to LF, keeps Windows scripts as CRLF, treats lockfiles and SVGs as reviewable text, marks common media/archive/font files as binary, and classifies `docs/`, `generated/`, and `vendor/` for cleaner GitHub language stats.
+\*\*`.gitattributes`\*\*: Git behavior rules for line endings, binary files, and GitHub Linguist classification. Normalizes source and config files to LF, keeps Windows scripts as CRLF, treats lockfiles and SVGs as reviewable text, marks common media/archive/font files as binary, and classifies `docs/`, `generated/`, and `vendor/` for cleaner GitHub language stats.
 
 \*\*`.pre-commit-config.yaml`\*\*: Local guardrails that run formatters and linters automatically before code gets committed, catching AI syntax mistakes early.
 
