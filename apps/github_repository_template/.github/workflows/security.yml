@@ -66,13 +66,18 @@ jobs:
         with:
           go-version: stable
 
+      # Both audit tools are pinned to a version rather than tracking latest, so
+      # that what runs here is a version someone chose. An unpinned install also
+      # decides supply-chain trust at job start, in the job that exists to check
+      # supply-chain safety, and Dependabot cannot review either: it reads no
+      # version from a run step, so these two upgrade by hand.
       - name: Install govulncheck
         if: steps.detect.outputs.go == 'true'
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
 
       - name: Install cargo-audit
         if: steps.detect.outputs.rust == 'true'
-        run: cargo install cargo-audit --locked
+        run: cargo install cargo-audit --locked --version 0.22.2
 
       - name: Install trivy
         if: steps.detect.outputs.trivy == 'true'
