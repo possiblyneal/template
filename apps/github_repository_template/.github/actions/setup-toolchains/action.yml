@@ -1,0 +1,71 @@
+name: Set up toolchains
+description: Installs a toolchain for each language manifest present in the repository.
+
+runs:
+  using: composite
+  steps:
+    # tools/ci/ci fails when a manifest is present but its toolchain is
+    # missing, so each toolchain installs only when this repository uses it.
+    - name: Detect toolchains
+      id: detect
+      shell: bash
+      run: |
+        {
+          echo "node=$([[ -s package.json ]] && echo true || echo false)"
+          echo "python=$([[ -s pyproject.toml ]] && echo true || echo false)"
+          echo "go=$([[ -s go.mod || -s go.work ]] && echo true || echo false)"
+          echo "rust=$([[ -s Cargo.toml ]] && echo true || echo false)"
+          echo "swift=$([[ -s Package.swift ]] && echo true || echo false)"
+          echo "kotlin=$([[ -s settings.gradle.kts || -s build.gradle.kts ]] && echo true || echo false)"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Set up Node
+      if: steps.detect.outputs.node == 'true'
+      uses: actions/setup-node@v7
+      with:
+        node-version: lts/*
+
+    - name: Install Node dependencies
+      if: steps.detect.outputs.node == 'true'
+      shell: bash
+      run: |
+        if [[ -s package-lock.json ]]; then
+          npm ci --no-audit --no-fund
+        else
+          npm install --no-audit --no-fund
+        fi
+
+    - name: Set up Python
+      if: steps.detect.outputs.python == 'true'
+      uses: astral-sh/setup-uv@v9.0.0
+      with:
+        enable-cache: true
+
+    - name: Set up Go
+      if: steps.detect.outputs.go == 'true'
+      uses: actions/setup-go@v7
+      with:
+        go-version: stable
+
+    - name: Set up Rust
+      if: steps.detect.outputs.rust == 'true'
+      shell: bash
+      run: rustup component add clippy rustfmt
+
+    # ubuntu-latest ships no Swift toolchain, unlike Node, Go, and Rust.
+    - name: Set up Swift
+      if: steps.detect.outputs.swift == 'true'
+      uses: SwiftyLab/setup-swift@v1
+      with:
+        swift-version: latest
+
+    - name: Set up Java
+      if: steps.detect.outputs.kotlin == 'true'
+      uses: actions/setup-java@v5
+      with:
+        distribution: temurin
+        java-version: "21"
+
+    - name: Set up Gradle
+      if: steps.detect.outputs.kotlin == 'true'
+      uses: gradle/actions/setup-gradle@v6

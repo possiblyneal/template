@@ -14,6 +14,8 @@ This section establishes the continuous integration guardrails.
 
 \*\*`.github/workflows/security.yml`\*\*: Runs dependency audits, plus a secret scan when a scanner is present. Should be kept as simple as possible, the bulk of the code will go in the tools folder, so this can be run independently of pushing to GitHub.
 
+\*\*`.github/actions/setup-toolchains/`\*\*: A composite action that detects which language manifests are present and installs a toolchain for each. `ci.yml` and `release.yml` both need every toolchain the repository uses, because `tools/ci/release` runs `tools/ci/ci` before publishing and that fails when a manifest is present but its toolchain is missing. Held in one place because the same sixty lines in two workflows drift, and the copy that drifts is the release one, which fails at the moment a release is being cut. `security.yml` keeps its own detection: it installs audit tools rather than toolchains, and needs trivy for Swift and Gradle lockfiles.
+
 Rule of thumb:
 
 - **`ci.yml`**: Thinnest. One call to `tools/ci/ci` is often enough.
