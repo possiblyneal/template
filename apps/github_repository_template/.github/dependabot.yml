@@ -2,8 +2,15 @@ version: 2
 updates:
   # Keeps the action pins in .github/workflows/ current, so pinning costs a
   # pull request to review rather than version tracking by hand.
+  #
+  # "/" covers .github/workflows/ and a root action.yml only. Composite actions
+  # under .github/actions/ are not reached from it, so their pins would age
+  # silently while the workflow copies stay current. The glob below covers them,
+  # and needs `directories`, which supports globbing where `directory` does not.
   - package-ecosystem: github-actions
-    directory: /
+    directories:
+      - /
+      - /.github/actions/*
     schedule:
       interval: weekly
     groups:
