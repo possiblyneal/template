@@ -12,12 +12,33 @@ failed=()
 unavailable=()
 
 project_detected() {
-  [[ -s package.json || -s pyproject.toml || -s go.mod || -s go.work || -s Cargo.toml || -s Package.swift ]] ||
-    is_gradle
+  [[ -s package.json || -s pyproject.toml || -s go.mod || -s go.work || -s Cargo.toml ]] ||
+    has_swift || is_gradle
 }
 
 is_gradle() {
   [[ -s settings.gradle.kts || -s build.gradle.kts ]]
+}
+
+# Every other language here has a root manifest. SwiftPM has no workspace file,
+# so packages sit at apps/<name>/ and libs/<name>/ and are found by search.
+# .build holds checked-out dependencies, each with a Package.swift of its own.
+swift_find() {
+  find . -name "$1" -not -path '*/.build/*' "${@:2}"
+}
+
+has_swift() {
+  [[ -n "$(swift_find Package.swift -print -quit)" ]]
+}
+
+# Every package runs, rather than stopping at the first failure, so one broken
+# package does not hide the state of the rest.
+swift_each() {
+  local manifest status=0
+  while IFS= read -r manifest; do
+    ( cd "$(dirname "$manifest")" && "$@" ) || status=1
+  done < <(swift_find Package.swift -print)
+  return "$status"
 }
 
 # Gradle exposes lint and format tasks only when the matching plugin is applied,
@@ -44,7 +65,7 @@ check_lint() {
   if [[ -s pyproject.toml ]] && command -v uv >/dev/null 2>&1; then uv run ruff check .; return; fi
   if [[ -s go.mod || -s go.work ]]; then go vet ./...; return; fi
   if [[ -s Cargo.toml ]]; then cargo clippy -- -D warnings; return; fi
-  if [[ -s Package.swift ]] && command -v swift >/dev/null 2>&1; then swift format lint --recursive --strict .; return; fi
+  if has_swift && command -v swift >/dev/null 2>&1; then swift_each swift format lint --recursive --strict .; return; fi
   if gradle_has_task ktlintCheck; then ./gradlew ktlintCheck; return; fi
   if gradle_has_task detekt; then ./gradlew detekt; return; fi
   return $NO_RUNNER
@@ -61,7 +82,7 @@ check_format() {
   fi
   if [[ -s Cargo.toml ]]; then cargo fmt --check; return; fi
   # Lint mode, not the default format mode, which rewrites files in place.
-  if [[ -s Package.swift ]] && command -v swift >/dev/null 2>&1; then swift format lint --recursive .; return; fi
+  if has_swift && command -v swift >/dev/null 2>&1; then swift_each swift format lint --recursive .; return; fi
   if gradle_has_task ktlintCheck; then ./gradlew ktlintCheck; return; fi
   return $NO_RUNNER
 }
@@ -70,8 +91,8 @@ check_typecheck() {
   if has_npm_script typecheck; then npm run typecheck; return; fi
   if [[ -s pyproject.toml ]] && command -v uv >/dev/null 2>&1; then uv run mypy .; return; fi
   # Go, Rust, Swift, and Kotlin type-check as part of build.
-  if [[ -s go.mod || -s go.work || -s Cargo.toml || -s Package.swift ]]; then return; fi
-  if is_gradle; then return; fi
+  if [[ -s go.mod || -s go.work || -s Cargo.toml ]]; then return; fi
+  if has_swift || is_gradle; then return; fi
   return $NO_RUNNER
 }
 
@@ -80,7 +101,7 @@ check_test() {
   if [[ -s pyproject.toml ]] && command -v uv >/dev/null 2>&1; then uv run pytest; return; fi
   if [[ -s go.mod || -s go.work ]]; then go test ./...; return; fi
   if [[ -s Cargo.toml ]]; then cargo test; return; fi
-  if [[ -s Package.swift ]] && command -v swift >/dev/null 2>&1; then swift test; return; fi
+  if has_swift && command -v swift >/dev/null 2>&1; then swift_each swift test; return; fi
   if is_gradle && [[ -x ./gradlew ]]; then ./gradlew test; return; fi
   return $NO_RUNNER
 }
@@ -89,7 +110,7 @@ check_build() {
   if has_npm_script build; then npm run build; return; fi
   if [[ -s go.mod || -s go.work ]]; then go build ./...; return; fi
   if [[ -s Cargo.toml ]]; then cargo build --locked; return; fi
-  if [[ -s Package.swift ]] && command -v swift >/dev/null 2>&1; then swift build; return; fi
+  if has_swift && command -v swift >/dev/null 2>&1; then swift_each swift build; return; fi
   if is_gradle && [[ -x ./gradlew ]]; then ./gradlew build -x test; return; fi
   # An interpreted project has nothing to build.
   if [[ -s pyproject.toml ]]; then return; fi

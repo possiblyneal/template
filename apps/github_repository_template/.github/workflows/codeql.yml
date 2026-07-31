@@ -44,8 +44,11 @@ jobs:
           if [[ -s go.mod || -s go.work ]]; then add go autobuild ubuntu-latest; fi
           if [[ -s Cargo.toml ]]; then add rust none ubuntu-latest; fi
           if [[ -s settings.gradle.kts || -s build.gradle.kts ]]; then add java-kotlin autobuild ubuntu-latest; fi
+          # Swift alone has no root manifest, so packages are found by search.
           # CodeQL analyzes Swift on macOS runners only.
-          if [[ -s Package.swift ]]; then add swift autobuild macos-latest; fi
+          if [[ -n "$(find . -name Package.swift -not -path '*/.build/*' -print -quit)" ]]; then
+            add swift autobuild macos-latest
+          fi
 
           # The workflows are themselves attackable, and they exist before any
           # application code does, so this entry keeps the matrix non-empty and

@@ -15,7 +15,17 @@ runs:
           echo "python=$([[ -s pyproject.toml ]] && echo true || echo false)"
           echo "go=$([[ -s go.mod || -s go.work ]] && echo true || echo false)"
           echo "rust=$([[ -s Cargo.toml ]] && echo true || echo false)"
-          echo "swift=$([[ -s Package.swift ]] && echo true || echo false)"
+
+          # Swift alone has no root manifest: SwiftPM has no workspace file, so
+          # packages sit at apps/<name>/ and libs/<name>/ and are found by
+          # search. .build holds checked-out dependencies, each with a
+          # Package.swift of its own.
+          swift=false
+          if [[ -n "$(find . -name Package.swift -not -path '*/.build/*' -print -quit)" ]]; then
+            swift=true
+          fi
+          echo "swift=$swift"
+
           echo "kotlin=$([[ -s settings.gradle.kts || -s build.gradle.kts ]] && echo true || echo false)"
         } >> "$GITHUB_OUTPUT"
 

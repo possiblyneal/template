@@ -9,9 +9,17 @@ readonly NO_RUNNER=199
 failed=()
 unavailable=()
 
+# Every other language here has a root manifest. SwiftPM has no workspace file,
+# so packages sit at apps/<name>/ and libs/<name>/ and are found by search.
+# .build holds checked-out dependencies, each with a manifest of its own.
+swift_find() {
+  find . -name "$1" -not -path '*/.build/*' -print -quit
+}
+
 has_manifest() {
   [[ -s package.json || -s pyproject.toml || -s go.mod || -s go.work || -s Cargo.toml ||
-     -s Package.swift || -s settings.gradle.kts || -s build.gradle.kts ]]
+     -s settings.gradle.kts || -s build.gradle.kts ]] ||
+    [[ -n "$(swift_find Package.swift)" ]]
 }
 
 check_audit() {
@@ -25,9 +33,12 @@ check_audit() {
   # resolved lockfiles instead, so it is the runner for both. Gradle locking is
   # opt-in, so a repository without gradle.lockfile has no resolved versions to
   # audit and this reports no runner rather than scanning declared ranges.
-  if [[ -s Package.resolved ]] && command -v trivy >/dev/null 2>&1; then
-    trivy fs --exit-code 1 --severity HIGH,CRITICAL --scanners vuln Package.resolved
-    return
+  if [[ -n "$(swift_find Package.resolved)" ]] && command -v trivy >/dev/null 2>&1; then
+    local resolved status=0
+    while IFS= read -r resolved; do
+      trivy fs --exit-code 1 --severity HIGH,CRITICAL --scanners vuln "$resolved" || status=1
+    done < <(find . -name Package.resolved -not -path '*/.build/*' -print)
+    return "$status"
   fi
   if [[ -n "$(find . -name gradle.lockfile -print -quit)" ]] && command -v trivy >/dev/null 2>&1; then
     trivy fs --exit-code 1 --severity HIGH,CRITICAL --scanners vuln .

@@ -42,7 +42,7 @@ jobs:
             # only once dependency locking is enabled, so both are read from the
             # checkout rather than produced here.
             trivy=false
-            if [[ -s Package.resolved ]] || [[ -n "$(find . -name gradle.lockfile -print -quit)" ]]; then
+            if [[ -n "$(find . \( -name Package.resolved -o -name gradle.lockfile \) -not -path '*/.build/*' -print -quit)" ]]; then
               trivy=true
             fi
             echo "trivy=$trivy"
