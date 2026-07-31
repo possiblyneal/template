@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # Keeps the action pins in .github/workflows/ current, so pinning costs a
+  # pull request to review rather than version tracking by hand.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns:
+          - "*"
