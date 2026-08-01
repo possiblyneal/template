@@ -45,4 +45,12 @@ if [[ "$resolved_target" == "$resolved_project" || "$resolved_target" == "$resol
   allow
 fi
 
+# Background jobs get a sanctioned scratch directory outside the repository.
+if [[ -n "${CLAUDE_JOB_DIR:-}" ]]; then
+  resolved_job_dir="$(realpath -m -- "$CLAUDE_JOB_DIR")"
+  if [[ "$resolved_target" == "$resolved_job_dir"/* ]]; then
+    allow
+  fi
+fi
+
 ask "$resolved_target is outside the repository at $resolved_project."

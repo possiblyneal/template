@@ -45,9 +45,7 @@ States the specific operating parameters for the AI agent.
 
 \*\*`.claude/rules/`\*\*: Core behavioral constraints, domain-specific heuristics, and strict formatting requirements the AI must follow during generation.
 
-\*\*`.claude/skills/`\*\*: Reusable, parameterized prompts that you or the AI can invoke by name to execute complex, multi-step actions.
-
-\*\*`.claude/commands/`\*\*: Single-file prompts invoked with a `/name` shortcut for rapid, distinct terminal tasks. Kept strictly separate from skills to maintain clear execution boundaries.
+\*\*`.claude/skills/`\*\*: Reusable, parameterized prompts that you or the AI can invoke by name to execute complex, multi-step actions. Each `<name>/SKILL.md` is also invocable as `/name`, which is why the template ships no `.claude/commands/`: commands are the legacy single-file form of the same shortcut, and one directory holding both roles beats two directories whose boundary needs explaining.
 
 \*\*`.claude/output-styles/`\*\*: Templates dictating the exact format of generated code, logs, or documentation to ensure the AI's output matches your personal conventions.
 
@@ -57,9 +55,19 @@ States the specific operating parameters for the AI agent.
 
 \*\*`.claude/agent-memory/`\*\*: Subagent persistent memory, maintaining state across sessions separately from the main session auto-memory.
 
-\*\*`.claude/hooks/`\*\*: Shell scripts wired to tool events by `.claude/settings.json`. Ships `ask-outside-repo.sh`, a `PreToolUse` hook that prompts before `Edit`, `Write`, or `NotebookEdit` touches a path outside the repository. Claude Code already prompts for those writes in most permission modes, but `bypassPermissions` skips the check, and permission rules cannot cover it: rules are evaluated deny, then ask, then allow, first match wins, and the syntax has no negation, so an ask rule broad enough to catch everything outside the repository also catches everything inside it. The hook resolves symlinks and `..` before comparing against `CLAUDE_PROJECT_DIR`, so a path inside the repository cannot be used to reach outside it, and asks rather than allowing when the root cannot be determined. Writes made through Bash redirection are not covered.
+\*\*`.claude/hooks/`\*\*: Shell scripts wired to tool events by `.claude/settings.json`. Ships three, each parsing its input with `jq`, which is why `tools/scripts/doctor` requires that tool while any of them is present.
 
-\*\*`.claude/settings.json`\*\*: Overrides for global `settings.json`. The template fills `hooks` with the entry above, `permissions.ask`, `permissions.deny`, `plansDirectory`, and `attribution`, and ships the remaining containers empty so a new project sees the available sections without inheriting rules: `permissions.allow`, `permissions.additionalDirectories`, `env`, `sandbox`, `enabledPlugins`, `modelOverrides`, and `skillOverrides`.
+`ask-outside-repo.sh` is a `PreToolUse` hook that prompts before `Edit`, `Write`, or `NotebookEdit` touches a path outside the repository. Claude Code already prompts for those writes in most permission modes, but `bypassPermissions` skips the check, and permission rules cannot cover it: rules are evaluated deny, then ask, then allow, first match wins, and the syntax has no negation, so an ask rule broad enough to catch everything outside the repository also catches everything inside it. The hook resolves symlinks and `..` before comparing against `CLAUDE_PROJECT_DIR`, so a path inside the repository cannot be used to reach outside it, and asks rather than allowing when the root cannot be determined. Writes under `CLAUDE_JOB_DIR` are allowed when that variable is set, because background sessions are told to use `$CLAUDE_JOB_DIR/tmp` as scratch space, and a prompt on sanctioned writes trains the operator to approve the prompt without reading it. Writes made through Bash redirection are not covered.
+
+`block-config-change.sh` is a `ConfigChange` hook that blocks edits to `.claude/settings.json`, `.claude/settings.local.json`, or `.claude/skills/` from hot-reloading into the running session. Without it, a session that edits its own settings gets the new permissions immediately, which unwinds the ask gates above from inside; the same mid-session path is how a malicious skill file would take effect. The edit itself is not prevented, only the reload: the change stays on disk as an ordinary reviewable diff and applies on the next session. The matcher deliberately omits `user_settings`, which is the human's own file outside the repository, and `policy_settings`, which cannot be blocked.
+
+`session-start.sh` is a `SessionStart` hook that prints the current branch, uncommitted changes, and recent commits as session context, restates the DocSync read-before-edit obligation, and runs `pre-commit install` when the config is present but the hook is not yet in `.git/hooks`. It runs on `startup`, `resume`, `clear`, and `compact`, which matters for the last two: `/clear` and compaction are where an agent loses its orientation, and this is what re-establishes it. The install step exists because a fresh clone has `.pre-commit-config.yaml` and none of the enforcement until someone runs the install, and the agent opening a session is the earliest moment that reliably happens.
+
+\*\*`.claude/settings.json`\*\*: Overrides for global `settings.json`. The template fills `hooks` with the three entries above, `permissions.ask`, `permissions.deny`, `plansDirectory`, `attribution`, `allowedHttpHookUrls`, and `disableClaudeAiConnectors`, and ships the remaining containers empty so a new project sees the available sections without inheriting rules: `permissions.allow`, `permissions.additionalDirectories`, `env`, `sandbox`, `enabledPlugins`, `modelOverrides`, and `skillOverrides`. The `$schema` key points editors and agents at the schemastore definition, so an invalid key or misshapen value is flagged at edit time rather than discovered as a silently rejected settings file.
+
+Each hook entry sets `"args": []`, which switches Claude Code from passing the command string to a shell to spawning the executable directly. With no shell in the path, a repository path containing spaces or shell metacharacters cannot break the invocation, and nothing a shell profile prints can contaminate a hook's JSON output.
+
+`allowedHttpHookUrls: []` blocks HTTP hooks entirely. The template's hooks are all local scripts, so the only thing an HTTP hook endpoint could add here is an exfiltration channel for hook payloads, which carry file paths and tool inputs. `disableClaudeAiConnectors: true` keeps claude.ai MCP connectors from auto-connecting into sessions; the template ships `.mcp.json` empty on the same principle, that a tool surface should appear in the diff before it appears in a session.
 
 `permissions.ask` covers the operations that are hard to undo or visible outside the repository: `git push`, `git reset --hard`, `git clean`, `git rebase`, and the `gh` commands that create or merge pull requests, cut releases, or delete the repository. Rules merge across scopes and a matching ask rule prompts in every permission mode, `bypassPermissions` included, so these hold for a clone regardless of how the session was started.
 
@@ -73,7 +81,9 @@ Keys are omitted rather than blanked when an empty value would be invalid, becau
 
 \*\*`.mcp.json`\*\*: Configures Model Context Protocol \(MCP\) servers exclusively for this project, granting the AI read/write access to external tools like databases, APIs, or local browsers.
 
-\*\*`CLAUDE.md`\*\*: The project-specific system prompt. Houses your conventions, common commands, and architectural context so the AI operates with the same baseline assumptions as a human developer.
+\*\*`CLAUDE.md`\*\*: The project-specific system prompt. Houses your conventions, common commands, and architectural context so the AI operates with the same baseline assumptions as a human developer. The template ships it with a Commands section naming the `tools/scripts/` entry points, since an agent that does not know `check` exists reaches for `npm run lint` instead; the DocSync framework, including a Delegation rule that the built-in Explore and Plan subagents never load this file, so DocSync obligations must be restated in prompts delegated to them; and a `# Compact instructions` section, which Claude Code reads during compaction to decide what survives into the summarized context.
+
+\*\*`CLAUDE.local.md`\*\*: Personal, per-machine instructions loaded alongside `CLAUDE.md` and excluded by `.gitignore`. Not shipped; the entry exists so local preferences have a home that is not a diff.
 
 ### Source Code, Tests & Infrastructure
 
@@ -143,7 +153,7 @@ The hidden files that dictate environment variables, Git behavior, and tool inte
 
 \*\*`.env`\*\*: The git-ignored config file for storing active sensitive environment variables.
 
-\*\*`.gitignore`\*\*: Specifies intentionally untracked files and directories. Ignores local secrets (`.env` while keeping `.env.example`), private keys and credential files, Terraform state, scratch files, logs, OS/editor files, dependency folders, language caches/build outputs, container runtime state, local database files, and generated artifacts while preserving `tmp/.gitkeep`.
+\*\*`.gitignore`\*\*: Specifies intentionally untracked files and directories. Ignores local secrets (`.env` while keeping `.env.example`), private keys and credential files, Terraform state, scratch files, logs, OS/editor files, dependency folders, language caches/build outputs, container runtime state, local database files, and generated artifacts while preserving `tmp/.gitkeep`. Also excludes the per-machine Claude overrides, `.claude/settings.local.json` and `CLAUDE.local.md`: Claude Code only adds the former to git excludes when it writes the file itself, so a hand-created one would land in a commit, and in a public repository both files carry local paths and personal preferences.
 
 Build output directories whose names also occur in source trees are anchored with a leading slash, so `/bin/` ignores a root build directory without swallowing the `src/bin/` and `cmd/*/bin/` source layouts that Rust and Go use. Patterns that nest legitimately, such as `node_modules/` and `coverage/`, stay unanchored.
 

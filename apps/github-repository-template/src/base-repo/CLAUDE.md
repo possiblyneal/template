@@ -1,3 +1,13 @@
+# Commands
+
+Use these instead of per-language tools; each detects the languages present and fails when an expected check cannot run.
+
+- `tools/scripts/doctor` — verify required tools are installed
+- `tools/scripts/check` — full local gate: doctor, CI checks, security audit, pre-commit across all files
+- `tools/scripts/fix` — repair formatting; the write half of the format check in `check`
+- `tools/scripts/clean` — remove generated and cache files
+- `tools/scripts/dev` — start the local dev command when configured
+
 # DocSync framework
 
 - DocSync keeps `CLAUDE.md` files aligned with repo structure, workflows, and durable conventions.
@@ -69,6 +79,10 @@ Default section order:
 - Delete stale notes instead of explaining history
 - Trim obvious statements, repeated rules, misplaced detail, and warnings for risks that no longer exist
 
+## Delegation
+
+- Built-in Explore and Plan subagents do not load `CLAUDE.md`. When delegating to them, restate the DocSync obligations that apply to the delegated work in the prompt, or use a custom subagent, which does load `CLAUDE.md`.
+
 ## Closeout
 
 1. Re-check changed paths against the DocSync chain
@@ -89,3 +103,7 @@ When you discover a recurring repo-specific mistake, stale doc, missing command,
 ## Child DocSync Index
 
 This project is not yet indexed. Before continuing you must scan the project, build the DocSync tree and replace this message with the actual index. Go deep and scan files recursively to properly evaluate complexity and create nested DocSync files where needed.
+
+# Compact instructions
+
+When compacting, preserve: the current task and its acceptance criteria, decisions the user made and their reasons, the DocSync chain already read, files changed so far, and unresolved test failures or errors. Drop exploratory dead ends and raw command output already acted on.
