@@ -16,9 +16,15 @@ Use these instead of per-language tools; each detects the languages present and 
 - Work reaches `main` through a pull request, where `.github/PULL_REQUEST_TEMPLATE.md` applies.
 - Plan mode writes to `docs/plans/`, which is tracked. A plan lands in the diff alongside the code it describes.
 
-## Compact instructions
+## Placeholders
 
-When compacting, preserve: the current task and its acceptance criteria, decisions the user made and their reasons, the `CLAUDE.md` chain already read, files changed so far, and unresolved test failures or errors. Drop exploratory dead ends and raw command output already acted on.
+`apps/app-name/` is a placeholder, not a real unit. Before writing any code into it, ask the user what the unit is called, then rename the directory to that name in kebab-case.
+
+Ask with the question the answer has to fit: an `apps/` entry is one deployable service or one durable domain boundary, the unit that owns its own dependencies, tests, and specs. Offer the user the name you would pick from what the repository already shows, so a nod is enough when it is right.
+
+Convert whatever they answer to kebab-case: lowercase, words joined by hyphens, no spaces, underscores, or capitals. `Billing API` becomes `billing-api`.
+
+Rename with `git mv`, then grep for the old name and update every reference before continuing. Delete this section once no placeholder remains.
 
 ## Child Index
 
