@@ -10,9 +10,7 @@
       "Bash(gh pr create:*)",
       "Bash(gh pr merge:*)",
       "Bash(gh release:*)",
-      "Bash(gh repo delete:*)"
-    ],
-    "deny": [
+      "Bash(gh repo delete:*)",
       "Read(.env)",
       "Read(.env.local)",
       "Read(.env.*.local)",
@@ -48,8 +46,13 @@
       "Edit(.npmrc)",
       "Edit(.pypirc)",
       "Edit(*.tfstate)",
-      "Edit(*.tfstate.*)"
+      "Edit(*.tfstate.*)",
+      "Edit(.*)",
+      "Edit(.*/**)",
+      "Edit(**/.*)",
+      "Edit(**/.*/**)"
     ],
+    "deny": [],
     "additionalDirectories": []
   },
   "env": {},
