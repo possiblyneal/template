@@ -144,8 +144,21 @@ fi
 if (( ${#unavailable[@]} > 0 )); then
   if project_detected; then
     echo "No runner for: ${unavailable[*]}"
-    echo "This repository has a project manifest, so these checks are expected to run."
-    echo "Wire them up in tools/ci/ci, or add the missing tool to the CI workflow."
+    echo "A manifest is present, so every check is expected to run. Each one above"
+    echo "reached the end of its check_<name> function without matching a language."
+    echo
+    echo "Two causes, and they need different fixes:"
+    echo
+    echo "  The language is not wired up yet. Add a branch to each check_<name>"
+    echo "  function listed above, in tools/ci/ci, following the branches already"
+    echo "  there. Add its toolchain to .github/actions/setup-toolchains/action.yml"
+    echo "  and its tools to tools/scripts/doctor, or CI fails here instead."
+    echo
+    echo "  The language is wired up but its tool is missing from this machine."
+    echo "  Run tools/scripts/doctor, which names the tool and how to install it."
+    echo
+    echo "A check with nothing to do should return 0 with a comment saying why,"
+    echo "the way check_build does for Python. Returning NO_RUNNER means unwired."
     exit 1
   fi
   echo "No project manifest found, so there is nothing to check yet."
