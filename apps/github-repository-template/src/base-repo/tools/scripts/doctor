@@ -90,10 +90,11 @@ if [[ -s .pre-commit-config.yaml ]]; then
   fi
 fi
 
-# The PreToolUse hook parses its input with jq. A hook that exits non-zero for
-# any reason other than a deliberate block is a non-blocking error, so a missing
-# jq lets writes outside the repository through without a prompt.
-if [[ -x .claude/hooks/ask-outside-repo.sh ]]; then
+# The PreToolUse and ConfigChange hooks parse their input with jq. A hook that
+# exits non-zero for any reason other than a deliberate block is a non-blocking
+# error, so a missing jq lets writes outside the repository and mid-session
+# settings reloads through without a prompt or a block.
+if [[ -x .claude/hooks/ask-outside-repo.sh || -x .claude/hooks/block-config-change.sh ]]; then
   check_required jq
 fi
 

@@ -1,91 +1,31 @@
-# DocSync framework
+## Commands
 
-- DocSync keeps `CLAUDE.md` files aligned with repo structure, workflows, and durable conventions.
-- Agent must follow DocSync instructions across any edits
+Use these instead of per-language tools; each detects the languages present and fails when an expected check cannot run.
 
-## Core Contract
+- `tools/scripts/doctor` — verify the tools each present manifest needs, and that the pre-commit hook is installed in this clone
+- `tools/scripts/check` — full local gate: `doctor`, then lint, format, type check, test, build, then the security audit and pre-commit across every file, not just staged ones
+- `tools/scripts/fix` — rewrite formatting for the detected stack; the write half of `check`'s format check, no lint autofixes
+- `tools/scripts/clean` — recursively delete build output and tool caches (`dist`, `build`, `coverage`, `__pycache__`, `.*_cache`, `*.pyc`)
+- `tools/scripts/dev [app-name]` — start the dev server for the detected stack, inside `apps/<name>` if given; prints what to add when the stack has no default
 
-- `CLAUDE.md` files are binding work contracts for their subtrees
-- Work products, source materials, instructions, records, assets, and durable docs must stay understandable from the nearest applicable `CLAUDE.md` plus every parent `CLAUDE.md` above it
-- Root `CLAUDE.md` contains DocSync information regarding maintenance, style, and structure.
+## Git
 
-## Read Before Editing
+- Pre-commit blocks direct commits to `main` and `master`. Branch before you start; a commit attempted on either fails at the hook, not at review.
+- Run `tools/scripts/check` before committing. It runs the same checks CI does, plus pre-commit across every file rather than the staged ones.
+- These prompt for approval and cannot be assumed: `git push`, `git reset --hard`, `git clean`, `git rebase`, and the `gh` commands that create or merge pull requests, cut releases, or delete the repository.
+- Work reaches `main` through a pull request, where `.github/PULL_REQUEST_TEMPLATE.md` applies.
+- Plan mode writes to `docs/plans/`, which is tracked. A plan lands in the diff alongside the code it describes.
 
-1. Read the root `CLAUDE.md`
-2. Identify every file or folder you expect to touch
-3. Walk from the repository root to each target path
-4. Read every `CLAUDE.md` found along each route
-5. If a parent `CLAUDE.md` lists a child `CLAUDE.md` whose scope contains the path, read that child and continue from there
-6. Use the nearest `CLAUDE.md` as the local contract and parent docs for repo-wide rules
-7. If docs conflict, the closer doc controls local work details, but no child doc may weaken DocSync
+## Placeholders
 
-Do not rely on memory. Re-read the applicable DocSync chain in the current session before editing.
+`apps/app-name/` is a placeholder, not a real unit. Before writing any code into it, ask the user what the unit is called, then rename the directory to that name in kebab-case.
 
-## Update After Editing
+Ask with the question the answer has to fit: an `apps/` entry is one deployable service or one durable domain boundary, the unit that owns its own dependencies, tests, and specs. Offer the user the name you would pick from what the repository already shows, so a nod is enough when it is right.
 
-Every meaningful change requires a DocSync pass before the task is done. A meaningful change is one that changes durable behavior, structure, workflow, ownership, commands, interfaces, or conventions.
+Convert whatever they answer to kebab-case: lowercase, words joined by hyphens, no spaces, underscores, or capitals. `Billing API` becomes `billing-api`.
 
-Update the closest owning `CLAUDE.md` when a change affects:
+Rename with `git mv`, then grep for the old name and update every reference before continuing. Delete this section once no placeholder remains.
 
-- purpose, scope, ownership, or responsibilities
-- durable structure, contracts, workflows, or operating rules
-- required inputs, outputs, permissions, constraints, side effects, or artifacts
-- durable user preferences that should affect future work in this repo
-- `CLAUDE.md` creation, deletion, move, rename, or index contents
+## Child Index
 
-Update parent docs when parent-level structure, ownership, workflow, or child index changes. Update child docs when parent changes alter local rules. Remove stale or contradictory text immediately. Small edits that do not change behavior or contracts may leave docs unchanged, but the DocSync pass still must happen.
-
-## Hierarchy
-
-- Root `CLAUDE.md` is the DocSync rail: project-wide instructions, global preferences, durable workflow rules, and the top-level Child DocSync Index
-- Child `CLAUDE.md` files own domain-specific instructions and their own Child DocSync Index
-- Each parent explains what its direct children cover and what stays owned by the parent
-- The closer a doc is to the work, the more specific and practical it must be
-
-## Child Doc Shape
-
-- Create a child `CLAUDE.md` when a folder becomes a durable boundary with its own purpose, rules, responsibilities, workflow, materials, or quality standards
-- Work Guidance must reflect the current standards of the project or user instructions; if there are no specific standards or instructions yet, leave it empty
-- Verification must reflect an existing check; if no verification framework exists yet, leave it empty and update it when one exists
-
-Default section order:
-
-- Purpose
-- Ownership
-- Local Contracts
-- Work Guidance
-- Verification
-- Child DocSync Index
-
-**Note:** Root `CLAUDE.md` is exempt from the child document shape. It may evolve as the project-wide DocSync contract changes, but it must remain concise and operational.
-
-## Style
-
-- Keep docs concise, current, and operational
-- Document stable contracts, not diary entries
-- Put broad rules in parent docs and concrete details in child docs
-- Prefer direct bullets with explicit names
-- Do not duplicate rules across many files unless each scope needs a local version
-- Delete stale notes instead of explaining history
-- Trim obvious statements, repeated rules, misplaced detail, and warnings for risks that no longer exist
-
-## Closeout
-
-1. Re-check changed paths against the DocSync chain
-2. Update nearest owning docs and any affected parents or children
-3. Refresh every affected Child DocSync Index
-4. Remove stale or contradictory text
-5. Run existing verification when relevant
-6. Report any docs intentionally left unchanged and why
-
-## User Preferences
-
-When the user requests a durable behavior change, record it here or in the relevant child `CLAUDE.md`
-
-## Continuous improvement
-
-When you discover a recurring repo-specific mistake, stale doc, missing command, missing script, or missing convention that would help future agents, propose a minimal update to this file or the relevant doc. Do not add broad rules from one-off incidents.
-
-## Child DocSync Index
-
-This project is not yet indexed. Before continuing you must scan the project, build the DocSync tree and replace this message with the actual index. Go deep and scan files recursively to properly evaluate complexity and create nested DocSync files where needed.
+This project is not yet indexed. Before continuing you must read `.claude/rules/documentation.md`, scan the project, build the `CLAUDE.md` tree and replace this message with the actual index. Go deep and scan files recursively to properly evaluate complexity and create nested `CLAUDE.md` files where needed.

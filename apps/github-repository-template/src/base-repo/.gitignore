@@ -24,6 +24,11 @@ service-account*.json
 # entire file tree shows up as untracked noise in the main checkout.
 .claude/worktrees/
 
+# Per-machine Claude overrides. Both are personal, not part of the repo
+# contract, and may hold local paths or preferences.
+.claude/settings.local.json
+CLAUDE.local.md
+
 # Local scratch
 tmp/*
 !tmp/.gitkeep
