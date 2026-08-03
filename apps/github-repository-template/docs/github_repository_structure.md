@@ -197,11 +197,11 @@ The two shebang hooks keep shellcheck honest rather than enforcing tidiness. Eve
 
 ### Public / Open Source Additions
 
-These files govern community interaction and legal usage. They are only necessary if the repository is public and accepting external contributions.
+These files govern community interaction and legal usage. They are only necessary if the repository is public and accepting external contributions. GitHub reads most of them from the repository root, `.github/`, or `docs/`, and shows the same file in the same places wherever it sits; `CODEOWNERS`, `FUNDING.yml`, and `CITATION.cff` are the exceptions noted below. None of them ship with the template, which is a private-repository baseline; this section is the checklist for the day one goes public.
 
 \*\*`README.md`\*\*: The public orientation page: what the project does, how to install it, and how to use it.
 
-\*\*`FUNDING.yml`\*\*: Displays a sponsor button in your repository, raising the visibility of funding options for your open source project. 
+\*\*`.github/FUNDING.yml`\*\*: Displays a sponsor button in your repository, raising the visibility of funding options for your open source project. Unlike the rest of this section it is read only from `.github/`; a copy at the repository root is ignored, and the missing button is the only symptom.
 
 \*\*`CONTRIBUTING.md`\*\*: Guidelines for external developers on submitting pull requests, running tests, and adhering to code style.
 
@@ -213,9 +213,17 @@ These files govern community interaction and legal usage. They are only necessar
 
 \*\*`SUPPORT.md`\*\*: Routes users to help, filtering general troubleshooting out of the core issue tracker.
 
-\*\*`CONTRIBUTORS.md`\*\*: A public ledger crediting individuals who have contributed code or documentation.
+\*\*`CONTRIBUTORS.md`\*\*: A public ledger crediting individuals who have contributed code or documentation. GitHub also recognizes `AUTHORS`, which is a narrower list: the people whose contributions are legally significant for copyright. The two only need to be separate files under a contributor licence agreement or copyright assignment, where who holds the copyright is a different question from who to thank.
 
-\*\*`CODEOWNERS`\*\*: The definitive list of core team members with write access and merge authority.
+\*\*`CODEOWNERS`\*\*: The definitive list of core team members with write access and merge authority. Read from the repository root, `.github/`, or `docs/`, and nowhere else. On its own it only requests reviewers; a branch protection rule requiring code owner review is what makes that request binding.
+
+\*\*`CHANGELOG.md`\*\*: A per-version record of what changed. GitHub Releases already is one — each release carries a tag, a date, and notes, and its generated notes list the merged pull requests — so the question is not whether to keep a changelog but whether to keep a second copy of it in the tree.
+
+A file earns its place when a reader needs the history without the network: someone reading a vendored dependency, an offline checkout, or a diff. It also holds what generated notes cannot produce, since a list of merged pull request titles describes the work rather than its consequences, and the entry a user needs is the breaking change and the upgrade step. Against that, a hand-maintained file drifts from the tags the moment a release is cut without updating it, and a changelog that disagrees with the releases page is worse than neither.
+
+Pick one and let the other point at it. Publishing from the file is the common resolution: the release step reads the section for the tag and posts it as the release body, so one edit produces both and they cannot disagree. `tools/ci/release` currently refuses to publish while packaging is unconfigured, and that is where the wiring goes; `release.yml` already fetches full history so a generator can reach the previous tag.
+
+\*\*`CITATION.cff`\*\*: Machine-readable citation metadata, which GitHub surfaces as a "Cite this repository" button. Root only. Worth adding for research software and academic work, and nothing otherwise.
 
 \*\*`GOVERNANCE.md`\*\*: The political structure of the repository: how decisions are made, how maintainers are elected, and how disputes are resolved.
 
