@@ -4,152 +4,45 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-# Sourced by absolute path so this works from any working directory, and marked
-# SCRIPTDIR-relative so shellcheck follows it without being run from the root.
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=libs/detect.sh
 source "$repo_root/scripts/libs/detect.sh"
 
 failed=()
-unavailable=()
+advisory_missing=()
 
-# One audit function per language, dispatched by name over every language
-# present. This used to be a single chain that returned at its first match, so a
-# repository with two stacks had one audited and the other silently skipped —
-# the same first-match-wins bug scripts/ci had, and worse here, because
-# the unaudited half is the one whose vulnerable dependency nobody sees.
-#
-# Each returns NO_RUNNER when its audit tool is absent rather than failing, so a
-# missing tool is reported as a gap to close instead of as a vulnerability.
-
-# Lockfile decides the package manager: the audit reads resolved versions, and
-# each manager can only read the lockfile it writes.
-audit_node() {
-  if [[ -s package-lock.json ]] && command -v npm >/dev/null 2>&1; then
-    npm audit --audit-level=moderate
-    return
-  fi
-  if [[ -s pnpm-lock.yaml ]] && command -v pnpm >/dev/null 2>&1; then
-    pnpm audit --audit-level moderate
-    return
-  fi
-  if [[ -s yarn.lock ]] && command -v yarn >/dev/null 2>&1; then
-    yarn npm audit --severity moderate
-    return
-  fi
-  return "$NO_RUNNER"
-}
-
-audit_python() { uv_run pip-audit; }
-
-audit_go() {
-  command -v govulncheck >/dev/null 2>&1 || return "$NO_RUNNER"
-  govulncheck ./...
-}
-
-audit_rust() {
-  command -v cargo-audit >/dev/null 2>&1 || return "$NO_RUNNER"
-  cargo audit
-}
-
-# Swift and Gradle have no first-party audit command, so trivy reads their
-# resolved lockfiles instead.
-audit_swift() {
-  command -v trivy >/dev/null 2>&1 || return "$NO_RUNNER"
-  trivy_each Package.resolved
-}
-
-# Gradle dependency locking is opt-in. Without gradle.lockfile there are no
-# resolved versions to audit, and trivy_each reports no runner rather than
-# scanning the declared ranges, which would report on versions nobody installs.
-audit_kotlin() {
-  command -v trivy >/dev/null 2>&1 || return "$NO_RUNNER"
-  trivy_each gradle.lockfile
-}
-
-# Runs the audit for every present language and reports each result. A failure
-# in any language fails the check, and the rest still run, so one vulnerable
-# stack does not hide the state of the others.
-run_audit() {
-  local lang status
-  local ran=() audit_failed=() audit_unavailable=()
-
-  while IFS= read -r lang; do
-    [[ -n "$lang" ]] || continue
-
-    if ! declare -F "audit_${lang}" >/dev/null; then
-      audit_unavailable+=("$lang")
-      continue
-    fi
-
-    status=0
-    "audit_${lang}" || status=$?
-
-    case "$status" in
-      0) ran+=("$lang") ;;
-      "$NO_RUNNER") audit_unavailable+=("$lang") ;;
-      *) audit_failed+=("$lang (exit $status)") ;;
-    esac
-  done < <(detect_present_languages)
-
-  # Every category that occurred is printed, rather than the worst one, so a
-  # language that audited cleanly stays visible next to one that did not run.
-  if (( ${#ran[@]} > 0 )); then
-    printf 'pass         %-17s %s\n' dependency-audit "${ran[*]}"
-  fi
-
-  if (( ${#audit_unavailable[@]} > 0 )); then
-    printf 'unavailable  %-17s %s\n' dependency-audit "${audit_unavailable[*]}"
-    unavailable+=("dependency-audit: ${audit_unavailable[*]}")
-  fi
-
-  if (( ${#audit_failed[@]} > 0 )); then
-    printf 'FAIL         %-17s %s\n' dependency-audit "${audit_failed[*]}"
-    failed+=("dependency-audit: ${audit_failed[*]}")
-  fi
-}
-
-# A backstop, not the primary control. GitHub push protection blocks a secret
-# before it reaches the remote; this only reports one that is already pushed,
-# by which time rotation is the remedy. Run gitleaks from .pre-commit-config.yaml
-# to catch secrets before the commit exists.
 run_secret_scan() {
   local status=0
 
   if ! command -v gitleaks >/dev/null 2>&1; then
-    echo "unavailable  secret-scan"
+    echo "unavailable   secret-scan"
     advisory_missing+=("secret-scan")
     return
   fi
 
   gitleaks detect --source . --redact --verbose || status=$?
-
   if (( status == 0 )); then
-    echo "pass         secret-scan"
+    echo "pass          secret-scan"
   else
-    echo "FAIL         secret-scan (exit $status)"
+    echo "FAIL (exit $status) secret-scan"
     failed+=("secret-scan")
   fi
 }
 
-advisory_missing=()
-
-# A package nested under apps/ or libs/ whose language has no root manifest is
-# invisible to an audit that runs from the repository root, so its dependencies
-# are never resolved and never scanned.
-orphans="$(detect_orphan_manifests || true)"
+orphans="$(language_capabilities check-orphans || true)"
 if [[ -n "$orphans" ]]; then
-  echo "FAIL         detection"
+  echo "FAIL          detection"
   echo
   echo "$orphans"
   exit 1
 fi
 
-if has_any_manifest; then
-  run_audit
+audit_status=0
+if language_capabilities has-any; then
+  language_capabilities run audit || audit_status=$?
 else
-  echo "unavailable  dependency-audit  (no project manifest)"
-  advisory_missing+=("dependency-audit")
+  echo "unavailable   audit (no project manifest)"
+  advisory_missing+=("audit")
 fi
 
 run_secret_scan
@@ -166,13 +59,13 @@ if (( ${#advisory_missing[@]} > 0 )); then
   echo "Install the matching tool to enable these; they do not block on their own."
 fi
 
-# A manifest is present and its dependencies went unscanned. That is a gap in
-# coverage rather than a clean run, so it blocks.
-if (( ${#unavailable[@]} > 0 )); then
-  echo
-  echo "No runner for: ${unavailable[*]}"
-  echo "Each language above has a manifest here, so its dependencies are expected to"
-  echo "be audited. Install the audit tool for that language, or add an audit_<language>"
-  echo "function to scripts/security."
-  exit 1
-fi
+case "$audit_status" in
+  0) ;;
+  "$NO_RUNNER")
+    echo
+    echo "A present language has no dependency-audit runner."
+    echo "Install its audit tool or add its private audit adapter to scripts/libs/detect.sh."
+    exit 1
+    ;;
+  *) exit "$audit_status" ;;
+esac

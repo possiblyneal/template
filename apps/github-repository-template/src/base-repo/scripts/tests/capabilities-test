@@ -44,10 +44,17 @@ cleanup() {
 }
 
 assert_dispatches() {
-  local lang="$1" out="$2" check
-  for check in lint format typecheck test build; do
-    if ! grep -qx "would-run     $check $lang" <<<"$out"; then
-      fail "$check does not dispatch for $lang"
+  local lang="$1" out="$2" check expected
+  for check in lint format-check typecheck test build; do
+    expected=would-run
+    case "$check:$lang" in
+      typecheck:go|typecheck:rust|typecheck:swift|typecheck:kotlin|build:python)
+        expected=not-applicable
+        ;;
+    esac
+
+    if ! grep -qE "^${expected} +$check $lang$" <<<"$out"; then
+      fail "$check does not report $expected for $lang"
       return
     fi
   done
@@ -63,9 +70,35 @@ assert_absent() {
   pass
 }
 
-echo "detect-test"
+echo "capabilities-test"
+
+# The supported set is the module's interface. Callers do not know its private
+# per-language adapters; adding a language changes this one public answer.
+# shellcheck source-path=SCRIPTDIR/..
+# shellcheck source=libs/detect.sh
+source "$repo_root/scripts/libs/detect.sh"
+current="supported languages"
+expected=$'node\npython\ngo\nrust\nswift\nkotlin'
+if [[ "$(language_capabilities supported)" == "$expected" ]]; then
+  pass
+else
+  fail "the interface does not report the six supported languages in order"
+fi
 
 # --- one language, and only that one -----------------------------------------
+
+fixture "capability outcomes"
+printf 'module example.com/m\n\ngo 1.22\n' > go.mod
+out="$(language_capabilities run --dry-run lint typecheck)"
+status=$?
+if (( status == 0 )) &&
+  grep -qx "would-run      lint go" <<<"$out" &&
+  grep -qx "not-applicable typecheck go" <<<"$out"; then
+  pass
+else
+  fail "the interface does not distinguish runnable and inapplicable capabilities"
+fi
+cleanup
 
 fixture "python only"
 printf '[project]\nname = "p"\nversion = "0.1.0"\n' > pyproject.toml
@@ -180,6 +213,34 @@ cleanup
 
 # --- the workflows read this ---------------------------------------------------
 
+fixture "github output"
+printf '[project]\nname = "p"\nversion = "0.1.0"\n' > pyproject.toml
+output="$(language_capabilities github-output)"
+if grep -qx 'python=true' <<<"$output" &&
+  grep -qx 'node=false' <<<"$output" &&
+  [[ "$(grep -Ec '^(node|python|go|rust|swift|kotlin)=(true|false)$' <<<"$output")" -eq 6 ]]; then
+  pass
+else
+  fail "github-output does not return one boolean for every supported language"
+fi
+cleanup
+
+current="setup-toolchains adapter"
+supported="$(language_capabilities supported)"
+action="$repo_root/.github/actions/setup-toolchains/action.yml"
+missing=""
+while IFS= read -r lang; do
+  [[ -n "$lang" ]] || continue
+  if ! grep -q "steps.detect.outputs.$lang" "$action"; then
+    missing="$missing $lang"
+  fi
+done <<<"$supported"
+if [[ -z "$missing" ]]; then
+  pass
+else
+  fail "setup-toolchains has no adapter guard for:$missing"
+fi
+
 fixture "codeql matrix"
 printf '[project]\nname = "p"\nversion = "0.1.0"\n' > pyproject.toml
 matrix="$(scripts/detect codeql-matrix)"
@@ -194,6 +255,42 @@ else
   # jq is not required to run the checks, so its absence skips this one rather
   # than failing a machine that is otherwise correctly set up.
   echo "  skip  $current: jq is not installed"
+fi
+cleanup
+
+# --- aggregate outcomes ------------------------------------------------------
+
+fixture "unavailable capability"
+printf '{"name":"n","version":"1.0.0"}\n' > package.json
+out="$(language_capabilities run lint 2>&1)"
+status=$?
+if (( status == NO_RUNNER )) && grep -qE '^unavailable +lint node$' <<<"$out"; then
+  pass
+else
+  fail "an absent runner is not reported as unavailable with the sentinel status"
+fi
+cleanup
+
+fixture "failure does not stop polyglot dispatch"
+printf '{"name":"n","version":"1.0.0","scripts":{"lint":"exit 7"}}\n' > package.json
+printf '[project]\nname = "p"\nversion = "0.1.0"\n' > pyproject.toml
+mkdir bin
+cat > bin/uv <<'EOF'
+#!/usr/bin/env bash
+if [[ "${3:-}" == "--version" ]]; then exit 0; fi
+if [[ "${1:-}" == "run" && "${2:-}" == "--quiet" ]]; then exit 0; fi
+if [[ "${1:-}" == "run" && "${2:-}" == "ruff" ]]; then exit 0; fi
+exit 1
+EOF
+chmod +x bin/uv
+out="$(PATH="$PWD/bin:$PATH" language_capabilities run lint 2>&1)"
+status=$?
+if (( status == 1 )) &&
+  grep -qE '^FAIL \(exit 7\) +lint node$' <<<"$out" &&
+  grep -qE '^pass +lint python$' <<<"$out"; then
+  pass
+else
+  fail "a failed adapter hides a later language or returns the wrong aggregate status"
 fi
 cleanup
 

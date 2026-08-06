@@ -8,7 +8,7 @@ Use these instead of per-language tools; each detects the languages present and 
 - `scripts/clean` — recursively delete build output and tool caches (`dist`, `build`, `coverage`, `__pycache__`, `.*_cache`, `*.pyc`)
 - `scripts/dev [app-name]` — start the dev server; requires the app name when several stacks are present, since only one process can run
 
-Every check runs for every language present, not the first one detected. Shared script libraries live in `scripts/libs/`; detection lives once in `scripts/libs/detect.sh`, and `scripts/detect` exposes it to the workflows. Adding a language means adding a `<check>_<language>` function in each file the "no runner" message lists — that message is the authority, and wiring only some of the files leaves the language checked in one place and silently skipped in another while the run stays green.
+Every check runs for every language present, not the first one detected. `scripts/libs/detect.sh` owns language detection and every language-specific capability behind the `language_capabilities` interface; command scripts name capabilities rather than language adapters, and `scripts/detect` exposes workflow projections. Results distinguish `pass`, `not-applicable`, `unavailable`, and `FAIL`, so an intentional no-op cannot look like a runner that executed. Adding a language is local to the module plus the hand-written CI toolchain adapter, whose coverage test fails when it is missing.
 
 A package under `apps/` or `libs/` whose language has no root manifest fails the run rather than passing. Every check runs from the repository root, so nothing would look at it. The failure names the root manifest to add.
 

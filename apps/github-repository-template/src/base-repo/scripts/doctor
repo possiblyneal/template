@@ -36,49 +36,23 @@ check_optional() {
 check_required git
 check_required bash
 
-# The tool each language's checks are driven through. Reported per present
-# language rather than for the first one detected, so a repository that gained
-# a second stack is told about the toolchain that stack needs.
-toolchain_node() { check_required npm; }
-toolchain_python() { check_required uv; }
-toolchain_go() { check_required go; }
-toolchain_rust() { check_required cargo; }
-toolchain_swift() { check_required swift; }
+# Language toolchains are private adapters in the capabilities module. Doctor
+# treats unavailable as a missing required tool without knowing its command.
+toolchain_status=0
+language_capabilities run toolchain || toolchain_status=$?
+if (( toolchain_status != 0 )); then
+  missing=1
+fi
 
-# scripts/ci drives Gradle through ./gradlew, which needs a JDK. A missing
-# wrapper leaves those checks with no runner, which fails the run because a
-# manifest is present, so it is a missing tool here rather than a silent skip.
-toolchain_kotlin() {
-  check_required java
-
-  if [[ -x ./gradlew ]]; then
-    echo "ok: gradlew"
-  else
-    echo "missing: gradlew (a Gradle manifest is present but the wrapper is not executable here)"
-    echo "  Generate it with: gradle wrapper"
-    missing=1
-  fi
-}
-
-while IFS= read -r lang; do
-  [[ -n "$lang" ]] || continue
-
-  # A language detected here with no toolchain check is the half-wired state
-  # scripts/ci reports: detection knows about it and this script does not.
-  if ! declare -F "toolchain_${lang}" >/dev/null; then
-    echo "missing: a toolchain check for $lang"
-    echo "  Detection knows this language but scripts/doctor does not name its tool."
-    echo "  Add a toolchain_${lang} function there."
-    missing=1
-    continue
-  fi
-
-  "toolchain_${lang}"
-done < <(detect_present_languages)
+if (( toolchain_status == NO_RUNNER )); then
+  echo "Install each missing toolchain, then rerun scripts/doctor."
+elif (( toolchain_status != 0 )); then
+  echo "A language toolchain check failed."
+fi
 
 # A package nested under apps/ or libs/ whose language has no root manifest is
 # invisible to every check, so its toolchain goes unreported here too.
-orphans="$(detect_orphan_manifests || true)"
+orphans="$(language_capabilities check-orphans || true)"
 if [[ -n "$orphans" ]]; then
   echo
   echo "$orphans"

@@ -11,15 +11,14 @@ fi
 
 scripts/doctor
 
-# Runs before the checks it guards. It asserts that every language present is
-# dispatched to every check, which is the property nothing else here reports on:
-# a language dropped from dispatch produces a shorter green run, not a failure.
-if [[ ! -x scripts/tests/detect-test ]]; then
-  echo "scripts/tests/detect-test is missing or not executable."
+# Runs before the checks it guards. It verifies the language-capabilities
+# interface, its aggregate outcomes, and the workflow adapters that consume it.
+if [[ ! -x scripts/tests/capabilities-test ]]; then
+  echo "scripts/tests/capabilities-test is missing or not executable."
   exit 1
 fi
 
-scripts/tests/detect-test
+scripts/tests/capabilities-test
 
 if [[ ! -x scripts/ci ]]; then
   echo "scripts/ci is missing or not executable."

@@ -4,16 +4,9 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-# Sourced by absolute path so this works from any working directory, and marked
-# SCRIPTDIR-relative so shellcheck follows it without being run from the root.
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=libs/detect.sh
 source "$repo_root/scripts/libs/detect.sh"
-
-# A workflow cannot source a bash library, so this exposes the detection library
-# over a command line. Without it the workflows keep their own copy of detection
-# and drift from the scripts, which is how a language ends up checked locally and
-# unscanned in CI while the run stays green.
 
 usage() {
   cat <<'EOF'
@@ -26,83 +19,11 @@ Usage: scripts/detect <command>
 EOF
 }
 
-cmd_languages() {
-  detect_present_languages
-}
-
-# Written as a flag per language rather than a list, because a workflow step's
-# `if:` compares a value and cannot search one.
-cmd_github_output() {
-  local lang
-
-  for lang in "${DETECT_LANGUAGES[@]}"; do
-    if has_language "$lang"; then
-      echo "$lang=true"
-    else
-      echo "$lang=false"
-    fi
-  done
-
-  if has_trivy_target; then
-    echo "trivy=true"
-  else
-    echo "trivy=false"
-  fi
-}
-
-# CodeQL's own language name, its build mode, and the runner it needs. These are
-# CodeQL's vocabulary, not this repository's, so the mapping lives here rather
-# than in the detection library.
-_codeql_entry() {
-  case "$1" in
-    node) echo 'javascript-typescript none ubuntu-latest' ;;
-    python) echo 'python none ubuntu-latest' ;;
-    go) echo 'go autobuild ubuntu-latest' ;;
-    rust) echo 'rust none ubuntu-latest' ;;
-    kotlin) echo 'java-kotlin autobuild ubuntu-latest' ;;
-    # CodeQL analyzes Swift on macOS runners only.
-    swift) echo 'swift autobuild macos-latest' ;;
-    *) return 1 ;;
-  esac
-}
-
-cmd_codeql_matrix() {
-  local lang entry language build_mode runner
-  local entries=()
-
-  while IFS= read -r lang; do
-    [[ -n "$lang" ]] || continue
-
-    # A language CodeQL has no analyzer for is skipped rather than failing the
-    # job, since not every language this repository checks is one CodeQL scans.
-    entry="$(_codeql_entry "$lang")" || continue
-    read -r language build_mode runner <<<"$entry"
-    entries+=("{\"language\":\"$language\",\"build-mode\":\"$build_mode\",\"runner\":\"$runner\"}")
-  done < <(detect_present_languages)
-
-  # The workflows are themselves attackable, and they exist before any
-  # application code does, so this entry keeps the matrix non-empty and makes
-  # the scan useful on a repository that is still a skeleton.
-  entries+=('{"language":"actions","build-mode":"none","runner":"ubuntu-latest"}')
-
-  printf 'matrix={"include":[%s]}\n' "$(IFS=,; echo "${entries[*]}")"
-}
-
-cmd_check_orphans() {
-  local orphans
-  orphans="$(detect_orphan_manifests || true)"
-
-  [[ -n "$orphans" ]] || return 0
-
-  echo "$orphans"
-  return 1
-}
-
 case "${1:-}" in
-  languages) cmd_languages ;;
-  github-output) cmd_github_output ;;
-  codeql-matrix) cmd_codeql_matrix ;;
-  check-orphans) cmd_check_orphans ;;
+  languages) language_capabilities present ;;
+  github-output) language_capabilities github-output ;;
+  codeql-matrix) language_capabilities codeql-matrix ;;
+  check-orphans) language_capabilities check-orphans ;;
   ""|-h|--help|help) usage ;;
   *)
     echo "Unknown command: $1" >&2

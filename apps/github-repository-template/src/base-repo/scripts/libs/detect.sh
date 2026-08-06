@@ -256,19 +256,263 @@ detect_orphan_manifests() {
   return "$found"
 }
 
-# Every file a new language has to reach. It lives next to the detection it
-# describes so it cannot age separately from it, and `ci` prints it
-# when a check has no runner. Naming only some of these is how a language ends
-# up half-wired: checked locally, unchecked in CI, and green either way.
-# shellcheck disable=SC2034  # read by ci, which sources this file.
-DETECT_WIRING_FILES=(
-  "scripts/libs/detect.sh — has_<language>, so it is detected at all"
-  "scripts/ci — lint_, format_, typecheck_, test_, build_<language>"
-  "scripts/security — audit_<language>"
-  "scripts/detect — _codeql_entry, which the CodeQL matrix reads"
-  "scripts/doctor — toolchain_<language>, naming the tool it needs"
-  "scripts/fix — format_<language>, the formatter"
-  "scripts/dev — dev_<language>, when the stack has a dev server"
-  "scripts/tests/detect-test — a fixture asserting the language dispatches"
-  ".github/actions/setup-toolchains/action.yml — installing the toolchain in CI"
-)
+# The module's external interface is `language_capabilities` below. Everything
+# after this point is its private per-language implementation. Callers name a
+# capability; they do not know which command, manifest, or tool provides it.
+
+_capability_lint_node() { has_npm_script lint || return "$NO_RUNNER"; npm run lint; }
+_capability_lint_python() { uv_run ruff check .; }
+_capability_lint_go() { go vet ./...; }
+_capability_lint_rust() { cargo clippy -- -D warnings; }
+_capability_lint_swift() { command -v swift >/dev/null 2>&1 || return "$NO_RUNNER"; swift_each swift format lint --recursive --strict .; }
+_capability_lint_kotlin() {
+  if gradle_has_task ktlintCheck; then ./gradlew ktlintCheck; return; fi
+  if gradle_has_task detekt; then ./gradlew detekt; return; fi
+  return "$NO_RUNNER"
+}
+
+_capability_format_check_node() { has_npm_script format:check || return "$NO_RUNNER"; npm run format:check; }
+_capability_format_check_python() { uv_run ruff format --check .; }
+_capability_format_check_go() {
+  local unformatted
+  unformatted="$(gofmt -l .)"
+  [[ -z "$unformatted" ]] || { echo "gofmt needed: $unformatted"; return 1; }
+}
+_capability_format_check_rust() { cargo fmt --check; }
+_capability_format_check_swift() { command -v swift >/dev/null 2>&1 || return "$NO_RUNNER"; swift_each swift format lint --recursive .; }
+_capability_format_check_kotlin() { gradle_has_task ktlintCheck || return "$NO_RUNNER"; ./gradlew ktlintCheck; }
+
+_capability_typecheck_node() { has_npm_script typecheck || return "$NO_RUNNER"; npm run typecheck; }
+_capability_typecheck_python() { uv_run mypy .; }
+
+_capability_test_node() { has_npm_script test || return "$NO_RUNNER"; npm run test; }
+_capability_test_python() {
+  local status=0
+  uv_run pytest || status=$?
+  if (( status == 5 )); then
+    echo "pytest collected no tests."
+    return 0
+  fi
+  return "$status"
+}
+_capability_test_go() { go test ./...; }
+_capability_test_rust() { cargo test; }
+_capability_test_swift() { command -v swift >/dev/null 2>&1 || return "$NO_RUNNER"; swift_each swift test; }
+_capability_test_kotlin() { [[ -x ./gradlew ]] || return "$NO_RUNNER"; ./gradlew test; }
+
+_capability_build_node() { has_npm_script build || return "$NO_RUNNER"; npm run build; }
+_capability_build_go() { go build ./...; }
+_capability_build_rust() { cargo build --locked; }
+_capability_build_swift() { command -v swift >/dev/null 2>&1 || return "$NO_RUNNER"; swift_each swift build; }
+_capability_build_kotlin() { [[ -x ./gradlew ]] || return "$NO_RUNNER"; ./gradlew build -x test; }
+
+_capability_audit_node() {
+  if [[ -s package-lock.json ]] && command -v npm >/dev/null 2>&1; then
+    npm audit --audit-level=moderate
+    return
+  fi
+  if [[ -s pnpm-lock.yaml ]] && command -v pnpm >/dev/null 2>&1; then
+    pnpm audit --audit-level moderate
+    return
+  fi
+  if [[ -s yarn.lock ]] && command -v yarn >/dev/null 2>&1; then
+    yarn npm audit --severity moderate
+    return
+  fi
+  return "$NO_RUNNER"
+}
+_capability_audit_python() { uv_run pip-audit; }
+_capability_audit_go() { command -v govulncheck >/dev/null 2>&1 || return "$NO_RUNNER"; govulncheck ./...; }
+_capability_audit_rust() { command -v cargo-audit >/dev/null 2>&1 || return "$NO_RUNNER"; cargo audit; }
+_capability_audit_swift() { command -v trivy >/dev/null 2>&1 || return "$NO_RUNNER"; trivy_each Package.resolved; }
+_capability_audit_kotlin() { command -v trivy >/dev/null 2>&1 || return "$NO_RUNNER"; trivy_each gradle.lockfile; }
+
+_capability_toolchain_node() { command -v npm >/dev/null 2>&1 || return "$NO_RUNNER"; }
+_capability_toolchain_python() { command -v uv >/dev/null 2>&1 || return "$NO_RUNNER"; }
+_capability_toolchain_go() { command -v go >/dev/null 2>&1 || return "$NO_RUNNER"; }
+_capability_toolchain_rust() { command -v cargo >/dev/null 2>&1 || return "$NO_RUNNER"; }
+_capability_toolchain_swift() { command -v swift >/dev/null 2>&1 || return "$NO_RUNNER"; }
+_capability_toolchain_kotlin() {
+  command -v java >/dev/null 2>&1 || return "$NO_RUNNER"
+  [[ -x ./gradlew ]] || return "$NO_RUNNER"
+}
+
+_capability_format_write_node() { has_npm_script format || return "$NO_RUNNER"; npm run format; }
+_capability_format_write_python() { uv_run ruff format .; }
+_capability_format_write_go() { gofmt -w .; }
+_capability_format_write_rust() { cargo fmt; }
+_capability_format_write_swift() { command -v swift >/dev/null 2>&1 || return "$NO_RUNNER"; swift_each swift format --in-place --recursive .; }
+_capability_format_write_kotlin() { gradle_has_task ktlintFormat || return "$NO_RUNNER"; ./gradlew ktlintFormat; }
+
+_capability_dev_node() { has_npm_script dev || return "$NO_RUNNER"; npm run dev; }
+_capability_dev_python() { return "$NO_RUNNER"; }
+_capability_dev_go() { go run .; }
+_capability_dev_rust() { cargo run; }
+_capability_dev_swift() { return "$NO_RUNNER"; }
+_capability_dev_kotlin() { gradle_has_task run || return "$NO_RUNNER"; ./gradlew run; }
+
+_capability_is_not_applicable() {
+  case "$1:$2" in
+    typecheck:go|typecheck:rust|typecheck:swift|typecheck:kotlin|build:python) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+_capability_is_supported() {
+  case "$1" in
+    lint|format-check|typecheck|test|build|audit|toolchain|format-write|dev) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+_language_is_supported() {
+  local supported
+  for supported in "${DETECT_LANGUAGES[@]}"; do
+    [[ "$1" == "$supported" ]] && return 0
+  done
+  return 1
+}
+
+_capability_result() {
+  printf '%-14s %s %s\n' "$1" "$2" "$3"
+}
+
+_language_capabilities_run() {
+  local dry_run="" selected="" cap lang function status
+  local failed=0 unavailable=0
+  local -a capabilities=() languages=()
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --dry-run) dry_run=1; shift ;;
+      --language)
+        (( $# >= 2 )) || { echo "--language needs a value" >&2; return 2; }
+        selected="$2"
+        shift 2
+        ;;
+      --) shift; break ;;
+      *) break ;;
+    esac
+  done
+
+  (( $# > 0 )) || { echo "run needs at least one capability" >&2; return 2; }
+  capabilities=("$@")
+
+  for cap in "${capabilities[@]}"; do
+    _capability_is_supported "$cap" || { echo "Unknown capability: $cap" >&2; return 2; }
+  done
+
+  if [[ -n "$selected" ]]; then
+    _language_is_supported "$selected" || { echo "Unsupported language: $selected" >&2; return 2; }
+    has_language "$selected" || { echo "Language is not present: $selected" >&2; return 2; }
+    languages=("$selected")
+  else
+    mapfile -t languages < <(detect_present_languages)
+  fi
+
+  for cap in "${capabilities[@]}"; do
+    for lang in "${languages[@]}"; do
+      if _capability_is_not_applicable "$cap" "$lang"; then
+        _capability_result not-applicable "$cap" "$lang"
+        continue
+      fi
+
+      function="_capability_${cap//-/_}_${lang}"
+      if ! declare -F "$function" >/dev/null; then
+        _capability_result unavailable "$cap" "$lang"
+        unavailable=1
+        continue
+      fi
+
+      if [[ -n "$dry_run" ]]; then
+        _capability_result would-run "$cap" "$lang"
+        continue
+      fi
+
+      status=0
+      "$function" || status=$?
+      case "$status" in
+        0) _capability_result pass "$cap" "$lang" ;;
+        "$NO_RUNNER")
+          _capability_result unavailable "$cap" "$lang"
+          unavailable=1
+          ;;
+        *)
+          _capability_result "FAIL (exit $status)" "$cap" "$lang"
+          failed=1
+          ;;
+      esac
+    done
+  done
+
+  (( failed == 0 )) || return 1
+  (( unavailable == 0 )) || return "$NO_RUNNER"
+  return 0
+}
+
+_codeql_entry() {
+  case "$1" in
+    node) echo 'javascript-typescript none ubuntu-latest' ;;
+    python) echo 'python none ubuntu-latest' ;;
+    go) echo 'go autobuild ubuntu-latest' ;;
+    rust) echo 'rust none ubuntu-latest' ;;
+    kotlin) echo 'java-kotlin autobuild ubuntu-latest' ;;
+    swift) echo 'swift autobuild macos-latest' ;;
+    *) return 1 ;;
+  esac
+}
+
+_language_capabilities_github_output() {
+  local lang
+  for lang in "${DETECT_LANGUAGES[@]}"; do
+    if has_language "$lang"; then
+      echo "$lang=true"
+    else
+      echo "$lang=false"
+    fi
+  done
+
+  if has_trivy_target; then echo "trivy=true"; else echo "trivy=false"; fi
+}
+
+_language_capabilities_check_orphans() {
+  local orphans
+  orphans="$(detect_orphan_manifests || true)"
+  [[ -n "$orphans" ]] || return 0
+  echo "$orphans"
+  return 1
+}
+
+_language_capabilities_codeql_matrix() {
+  local lang entry language build_mode runner
+  local -a entries=()
+
+  while IFS= read -r lang; do
+    [[ -n "$lang" ]] || continue
+    entry="$(_codeql_entry "$lang")" || continue
+    read -r language build_mode runner <<<"$entry"
+    entries+=("{\"language\":\"$language\",\"build-mode\":\"$build_mode\",\"runner\":\"$runner\"}")
+  done < <(detect_present_languages)
+
+  entries+=('{"language":"actions","build-mode":"none","runner":"ubuntu-latest"}')
+  printf 'matrix={"include":[%s]}\n' "$(IFS=,; echo "${entries[*]}")"
+}
+
+language_capabilities() {
+  local command="${1:-}"
+  (( $# == 0 )) || shift
+
+  case "$command" in
+    supported) printf '%s\n' "${DETECT_LANGUAGES[@]}" ;;
+    present) detect_present_languages ;;
+    has-any) has_any_manifest ;;
+    check-orphans) _language_capabilities_check_orphans ;;
+    github-output) _language_capabilities_github_output ;;
+    codeql-matrix) _language_capabilities_codeql_matrix ;;
+    run) _language_capabilities_run "$@" ;;
+    ""|-h|--help|help)
+      echo "Usage: language_capabilities supported|present|has-any|check-orphans|github-output|codeql-matrix|run"
+      ;;
+    *) echo "Unknown language capabilities command: $command" >&2; return 2 ;;
+  esac
+}
