@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+# A new push to the same branch makes the previous run's result obsolete, and
+# leaving it running lets a stale result report after the newer one.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Before the toolchains, since these install none and verify both the
+      # language-capabilities wiring and the local/hosted check boundary.
+      - name: Verify repository scripts
+        run: |
+          for test_script in scripts/tests/*-test; do
+            "$test_script"
+          done
+
+      - name: Set up toolchains
+        uses: ./.github/actions/setup-toolchains
+
+      - name: Run CI checks
+        run: scripts/ci

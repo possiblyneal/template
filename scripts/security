@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/detect.sh
+source "$repo_root/scripts/libs/detect.sh"
+
+failed=()
+advisory_missing=()
+
+run_secret_scan() {
+  local status=0
+
+  if ! command -v gitleaks >/dev/null 2>&1; then
+    echo "unavailable   secret-scan"
+    advisory_missing+=("secret-scan")
+    return
+  fi
+
+  gitleaks detect --source . --redact --verbose || status=$?
+  if (( status == 0 )); then
+    echo "pass          secret-scan"
+  else
+    echo "FAIL (exit $status) secret-scan"
+    failed+=("secret-scan")
+  fi
+}
+
+orphans="$(language_capabilities check-orphans || true)"
+if [[ -n "$orphans" ]]; then
+  echo "FAIL          detection"
+  echo
+  echo "$orphans"
+  exit 1
+fi
+
+audit_status=0
+if language_capabilities has-any; then
+  language_capabilities run audit || audit_status=$?
+else
+  echo "unavailable   audit (no project manifest)"
+  advisory_missing+=("audit")
+fi
+
+run_secret_scan
+
+echo
+
+if (( ${#failed[@]} > 0 )); then
+  echo "Failed: ${failed[*]}"
+  exit 1
+fi
+
+if (( ${#advisory_missing[@]} > 0 )); then
+  echo "Not run: ${advisory_missing[*]}"
+  echo "Install the matching tool to enable these; they do not block on their own."
+fi
+
+case "$audit_status" in
+  0) ;;
+  "$NO_RUNNER")
+    echo
+    echo "A present language has no dependency-audit runner."
+    echo "Install its audit tool or add its private audit adapter to scripts/libs/detect.sh."
+    exit 1
+    ;;
+  *) exit "$audit_status" ;;
+esac

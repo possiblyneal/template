@@ -1,0 +1,78 @@
+# Install once per clone with `pre-commit install`, otherwise these never run.
+repos:
+  # Catches a secret while it is still only in the working tree, which is the
+  # one point where the fix is editing a file rather than rotating a credential.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  # The only static analysis the shell scripts in scripts/ get. Every one there
+  # is extensionless, so pre-commit recognizes it as shell by reading its
+  # shebang, which it only does for files that are executable. The two shebang
+  # hooks below keep that true; without them a script committed without its
+  # executable bit is skipped silently rather than reported.
+  #
+  # -x follows `source` into the detection library, so it is analyzed with
+  # its caller rather than reported as unreadable. Without it every script that
+  # sources the detection library fails on SC1091.
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        args: [-x]
+
+  # Workflow errors otherwise surface as a failed run after the push, since
+  # nothing validates workflow syntax, action inputs, or shell snippets locally.
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+
+      # Guards against a file committed by accident, not against a large
+      # repository: only newly added files are weighed, so anything already
+      # tracked may grow past the limit freely, and a file matched by a
+      # git-lfs filter in .gitattributes is exempt whatever its size.
+      #
+      # The 500KB default is deliberately left as it is. A file that large
+      # arriving in a commit is more often a build artifact, a database
+      # dump, or a stray recording than something intended, and reversing it
+      # after the fact means rewriting history rather than deleting a file.
+      # Raise it here only when the whole repository's floor has moved;
+      # a known large file belongs in `exclude` below it, named, where the
+      # exception stays visible instead of widening the limit for everything.
+      - id: check-added-large-files
+
+      # scripts/check exits early when a script it calls is not executable,
+      # and shell detection depends on the same bit.
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+
+      # Catches a key committed under a name the ignore rules do not cover.
+      - id: detect-private-key
+
+      # A submodule adds code from another repository that arrives without
+      # review here and is pinned by a commit no tool in this repo audits.
+      - id: forbid-submodules
+
+      # A path that differs only by case is one file on macOS or Windows and
+      # two on Linux, so the clone that lands second silently overwrites.
+      - id: check-case-conflict
+
+      # Enforces the LF rule in .gitattributes at commit time. Defaults to
+      # rewriting to the majority ending in the file.
+      - id: mixed-line-ending
+
+      # Keeps main reviewable: work lands through a pull request, where the
+      # template and CODEOWNERS apply, rather than as a direct commit.
+      - id: no-commit-to-branch

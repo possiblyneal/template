@@ -1,0 +1,299 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+# Guards the one bug this detection work exists to prevent: a repository that
+# gains a second language has that language silently skipped while the run stays
+# green. Nothing else here fails visibly when it regresses, which is why it is
+# worth a test at all.
+#
+# Every case runs against CI_DRY_RUN, which reports the check and language pairs
+# scripts/ci would dispatch and runs none of them. Dispatch comes from
+# wiring alone, so this is the same result on any machine and in CI, with no
+# toolchain installed for any language under test.
+#
+# Not `set -e`: a failing assertion is recorded and the remaining cases still
+# run, so one break does not hide the rest.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+passed=0
+failed=0
+current=""
+
+fail() {
+  echo "  FAIL  $current: $1"
+  failed=$((failed + 1))
+}
+
+pass() {
+  passed=$((passed + 1))
+}
+
+# Each case runs in its own directory holding nothing but the manifests it
+# names, so a fixture cannot see another's files or this repository's.
+fixture() {
+  current="$1"
+  work="$(mktemp -d)"
+  cp -r "$repo_root/scripts" "$work/"
+  cd "$work" || exit 1
+}
+
+cleanup() {
+  cd /
+  [[ -n "${work:-}" && "$work" == /tmp/* ]] && rm -rf "$work"
+}
+
+assert_dispatches() {
+  local lang="$1" out="$2" check expected
+  for check in lint format-check typecheck test build; do
+    expected=would-run
+    case "$check:$lang" in
+      typecheck:go|typecheck:rust|typecheck:swift|typecheck:kotlin|build:python)
+        expected=not-applicable
+        ;;
+    esac
+
+    if ! grep -qE "^${expected} +$check $lang$" <<<"$out"; then
+      fail "$check does not report $expected for $lang"
+      return
+    fi
+  done
+  pass
+}
+
+assert_absent() {
+  local lang="$1" out="$2"
+  if grep -q " $lang\$" <<<"$out"; then
+    fail "$lang dispatches in a repository that does not contain it"
+    return
+  fi
+  pass
+}
+
+echo "capabilities-test"
+
+# The supported set is the module's interface. Callers do not know its private
+# per-language adapters; adding a language changes this one public answer.
+# shellcheck source-path=SCRIPTDIR/..
+# shellcheck source=libs/detect.sh
+source "$repo_root/scripts/libs/detect.sh"
+current="supported languages"
+expected=$'node\npython\ngo\nrust\nswift\nkotlin'
+if [[ "$(language_capabilities supported)" == "$expected" ]]; then
+  pass
+else
+  fail "the interface does not report the six supported languages in order"
+fi
+
+# --- one language, and only that one -----------------------------------------
+
+fixture "capability outcomes"
+printf 'module example.com/m\n\ngo 1.22\n' > go.mod
+out="$(language_capabilities run --dry-run lint typecheck)"
+status=$?
+if (( status == 0 )) &&
+  grep -qx "would-run      lint go" <<<"$out" &&
+  grep -qx "not-applicable typecheck go" <<<"$out"; then
+  pass
+else
+  fail "the interface does not distinguish runnable and inapplicable capabilities"
+fi
+cleanup
+
+fixture "python only"
+printf '[project]\nname = "p"\nversion = "0.1.0"\n' > pyproject.toml
+out="$(CI_DRY_RUN=1 scripts/ci)"
+assert_dispatches python "$out"
+assert_absent node "$out"
+cleanup
+
+fixture "node only"
+printf '{"name":"n","version":"1.0.0"}\n' > package.json
+out="$(CI_DRY_RUN=1 scripts/ci)"
+assert_dispatches node "$out"
+assert_absent python "$out"
+cleanup
+
+# --- the regression this file exists for -------------------------------------
+
+# A Python CLI that gains a JavaScript UI. Every check used to stop at its first
+# match, so package.json arriving meant pytest, ruff, and mypy silently stopped
+# running while CI stayed green.
+fixture "python + node"
+printf '[project]\nname = "p"\nversion = "0.1.0"\n' > pyproject.toml
+printf '{"name":"n","version":"1.0.0","scripts":{"test":"exit 0"}}\n' > package.json
+out="$(CI_DRY_RUN=1 scripts/ci)"
+assert_dispatches python "$out"
+assert_dispatches node "$out"
+cleanup
+
+fixture "go + rust + kotlin"
+printf 'module example.com/m\n\ngo 1.22\n' > go.mod
+printf '[package]\nname = "c"\nversion = "0.1.0"\n' > Cargo.toml
+printf 'rootProject.name = "k"\n' > settings.gradle.kts
+out="$(CI_DRY_RUN=1 scripts/ci)"
+assert_dispatches go "$out"
+assert_dispatches rust "$out"
+assert_dispatches kotlin "$out"
+cleanup
+
+# Swift is the one language with no root manifest, so it is detected by search
+# and must not be reported as an orphan.
+fixture "swift package"
+mkdir -p apps/ios
+printf '// swift-tools-version:5.9\n' > apps/ios/Package.swift
+out="$(CI_DRY_RUN=1 scripts/ci)"
+assert_dispatches swift "$out"
+if scripts/detect check-orphans >/dev/null 2>&1; then
+  pass
+else
+  fail "a Swift package with no root manifest is reported as an orphan"
+fi
+cleanup
+
+# --- a manifest no check can see ---------------------------------------------
+
+# The failure mode that has no symptom: nothing at the root names this package,
+# so every check runs from the root and reports a clean pass over code it never
+# read.
+fixture "nested manifest, no root"
+mkdir -p apps/web
+printf '{"name":"w","version":"1.0.0"}\n' > apps/web/package.json
+if scripts/detect check-orphans >/dev/null 2>&1; then
+  fail "an orphaned nested manifest passed"
+else
+  pass
+fi
+out="$(scripts/ci 2>&1)"
+status=$?
+if (( status != 0 )) && grep -q "apps/web/package.json" <<<"$out"; then
+  pass
+else
+  fail "scripts/ci did not fail naming the orphaned manifest"
+fi
+cleanup
+
+# A root manifest makes nested ones ordinary workspace members.
+fixture "nested manifest under a root"
+mkdir -p apps/web
+printf '{"name":"root","version":"1.0.0","workspaces":["apps/*"]}\n' > package.json
+printf '{"name":"w","version":"1.0.0"}\n' > apps/web/package.json
+if scripts/detect check-orphans >/dev/null 2>&1; then
+  pass
+else
+  fail "a workspace member under a root manifest was reported as an orphan"
+fi
+cleanup
+
+# node_modules holds another project's manifests, and reporting them as this
+# project's would fail every repository that has ever run npm install.
+fixture "node_modules is not searched"
+mkdir -p node_modules/dep
+printf '{"name":"dep","version":"1.0.0"}\n' > node_modules/dep/package.json
+if scripts/detect check-orphans >/dev/null 2>&1; then
+  pass
+else
+  fail "a manifest inside node_modules was reported as an orphan"
+fi
+cleanup
+
+# --- nothing to check yet -----------------------------------------------------
+
+# A repository with no manifest has to say so. Reporting it as a pass makes the
+# first real run indistinguishable from the empty one before it.
+fixture "empty repository"
+out="$(scripts/ci 2>&1)"
+status=$?
+if (( status == 0 )) && grep -q "nothing to check yet" <<<"$out"; then
+  pass
+else
+  fail "an empty repository did not report that there is nothing to check"
+fi
+cleanup
+
+# --- the workflows read this ---------------------------------------------------
+
+fixture "github output"
+printf '[project]\nname = "p"\nversion = "0.1.0"\n' > pyproject.toml
+output="$(language_capabilities github-output)"
+if grep -qx 'python=true' <<<"$output" &&
+  grep -qx 'node=false' <<<"$output" &&
+  [[ "$(grep -Ec '^(node|python|go|rust|swift|kotlin)=(true|false)$' <<<"$output")" -eq 6 ]]; then
+  pass
+else
+  fail "github-output does not return one boolean for every supported language"
+fi
+cleanup
+
+current="setup-toolchains adapter"
+supported="$(language_capabilities supported)"
+action="$repo_root/.github/actions/setup-toolchains/action.yml"
+missing=""
+while IFS= read -r lang; do
+  [[ -n "$lang" ]] || continue
+  if ! grep -q "steps.detect.outputs.$lang" "$action"; then
+    missing="$missing $lang"
+  fi
+done <<<"$supported"
+if [[ -z "$missing" ]]; then
+  pass
+else
+  fail "setup-toolchains has no adapter guard for:$missing"
+fi
+
+fixture "codeql matrix"
+printf '[project]\nname = "p"\nversion = "0.1.0"\n' > pyproject.toml
+matrix="$(scripts/detect codeql-matrix)"
+matrix="${matrix#matrix=}"
+if command -v jq >/dev/null 2>&1; then
+  if jq -e '.include | map(.language) | index("python") and index("actions")' <<<"$matrix" >/dev/null 2>&1; then
+    pass
+  else
+    fail "the CodeQL matrix is not valid JSON naming python and actions"
+  fi
+else
+  # jq is not required to run the checks, so its absence skips this one rather
+  # than failing a machine that is otherwise correctly set up.
+  echo "  skip  $current: jq is not installed"
+fi
+cleanup
+
+# --- aggregate outcomes ------------------------------------------------------
+
+fixture "unavailable capability"
+printf '{"name":"n","version":"1.0.0"}\n' > package.json
+out="$(language_capabilities run lint 2>&1)"
+status=$?
+if (( status == NO_RUNNER )) && grep -qE '^unavailable +lint node$' <<<"$out"; then
+  pass
+else
+  fail "an absent runner is not reported as unavailable with the sentinel status"
+fi
+cleanup
+
+fixture "failure does not stop polyglot dispatch"
+printf '{"name":"n","version":"1.0.0","scripts":{"lint":"exit 7"}}\n' > package.json
+printf '[project]\nname = "p"\nversion = "0.1.0"\n' > pyproject.toml
+mkdir bin
+cat > bin/uv <<'EOF'
+#!/usr/bin/env bash
+if [[ "${3:-}" == "--version" ]]; then exit 0; fi
+if [[ "${1:-}" == "run" && "${2:-}" == "--quiet" ]]; then exit 0; fi
+if [[ "${1:-}" == "run" && "${2:-}" == "ruff" ]]; then exit 0; fi
+exit 1
+EOF
+chmod +x bin/uv
+out="$(PATH="$PWD/bin:$PATH" language_capabilities run lint 2>&1)"
+status=$?
+if (( status == 1 )) &&
+  grep -qE '^FAIL \(exit 7\) +lint node$' <<<"$out" &&
+  grep -qE '^pass +lint python$' <<<"$out"; then
+  pass
+else
+  fail "a failed adapter hides a later language or returns the wrong aggregate status"
+fi
+cleanup
+
+echo
+echo "$passed passed, $failed failed"
+(( failed == 0 ))

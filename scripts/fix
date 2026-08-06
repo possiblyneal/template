@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/detect.sh
+source "$repo_root/scripts/libs/detect.sh"
+
+if ! language_capabilities has-any; then
+  echo "No project manifest found, so there is nothing to format yet."
+  exit 0
+fi
+
+status=0
+language_capabilities run format-write || status=$?
+
+case "$status" in
+  0) echo "Review the diff before committing." ;;
+  "$NO_RUNNER")
+    echo "One or more present languages have no formatter."
+    echo "Add a private format-write adapter to scripts/libs/detect.sh."
+    ;;
+  *) exit "$status" ;;
+esac

@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+# An explicit argument wins over GITHUB_REF_NAME so a workflow_dispatch run,
+# where the ref is a branch rather than the tag being released, can pass the
+# tag directly.
+tag="${1:-${GITHUB_REF_NAME:-}}"
+
+if [[ -z "$tag" ]]; then
+  echo "No release tag detected. Pass tag as first argument when running locally."
+  echo "Example: scripts/release v1.2.3"
+  exit 1
+fi
+
+case "$tag" in
+  v[0-9]*.[0-9]*.[0-9]*) ;;
+  *)
+    echo "Release tag should look like v1.2.3. Got: $tag"
+    exit 1
+    ;;
+esac
+
+echo "Preparing release for $tag"
+
+if [[ ! -x scripts/ci ]]; then
+  echo "scripts/ci is missing or not executable, so this release would ship unverified."
+  exit 1
+fi
+
+scripts/ci
+
+# Packaging is project-specific, so the template cannot supply it. Until it is
+# filled in there is nothing to publish, and exiting 0 here would report a
+# successful release that produced no artifact and no changelog.
+echo
+echo "No release packaging configured, so there is nothing to publish for $tag."
+echo "Add artifact build and changelog steps to scripts/release, then remove this block."
+exit 1
