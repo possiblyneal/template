@@ -14,11 +14,13 @@ Read `references/lifecycle.md` before acting. It defines the manifest, ownership
 - **Update:** The destination has `.repo-template.json`; reconcile its recorded template commit with a requested descendant commit.
 - If the requested operation and destination state disagree, stop and explain the mismatch.
 
+Generation into a destination that already has content is still a generate, but its collisions are decided by hand and it never resolves one by deleting. `references/lifecycle.md` carries those rules; read them before writing to a non-empty destination.
+
 ## Preflight before editing
 
 Use `scripts/preflight.py` for deterministic validation and retain its JSON in the work record.
 
-- `generate` resolves the exact source commit and verifies its payload subtree.
+- `generate` resolves the exact source commit and verifies its payload subtree. It never inspects the destination, so an occupied destination looks identical to an empty one; establish that yourself.
 - `update` validates provenance, repository identities, a clean destination, strict ancestry, and the bounded template delta.
 
 The helper is read-only and only authorizes the next stage. Claude owns personalization and semantic reconciliation; do not replace judgment with a blind copy, overlay, or text merge. Keep provenance, ancestry, ownership, validation, and remote-action gates even when simplifying the work. Unless preflight rejects the operation or reconciliation finds a real conflict, continue through materialization, local edits, manifest advancement, and verification. A preflight report alone is not a completed build or update.
@@ -27,10 +29,11 @@ The helper is read-only and only authorizes the next stage. Claude owns personal
 
 1. Build an isolated local candidate from the exact source commit. For updates, read the old and new blobs for every preflight delta, compare them with the destination blob, and edit the destination candidate; do not stop at a proposed classification.
 2. Preserve product-owned content and reconcile managed content against destination intent. Apply every conflict-free managed delta to disk. When the template renames an unchanged managed file, move the destination file to the new path rather than retaining both names. If the destination also changed the file non-overlappingly, move it and carry those edits into the new template version.
-3. Verify the candidate files contain the intended new template behavior and preserved destination behavior. Run documented checks and report unavailable checks as unavailable, not passed.
-4. Show the candidate diff, reconciliation summary, repository settings, and exact remote operations.
-5. Obtain confirmation immediately before repository creation, settings changes, pushes, or PR creation unless those exact actions and target were explicitly authorized in the invocation.
-6. Open the pull request and verify it. Never merge it.
+3. Verify the candidate files contain the intended new template behavior and preserved destination behavior. Stage the candidate before running checks, since `pre-commit run --all-files` reads the Git index and passes trivially over unstaged work. Run documented checks and report unavailable checks as unavailable, not passed.
+4. Verify the file list against the payload's tracked paths, not only the content of the files present. Absence has no runner, so a dropped file produces a green run.
+5. Show the candidate diff, reconciliation summary, file-list account, repository settings, and exact remote operations.
+6. Obtain confirmation immediately before repository creation, settings changes, pushes, or PR creation unless those exact actions and target were explicitly authorized in the invocation.
+7. Open the pull request and verify it. Never merge it. A pull request that introduces `.github/workflows/` for the first time triggers no runs, because GitHub registers workflows from the default branch; report that as unverified rather than as passing.
 
 On update, advance `.repo-template.json` only after the candidate validates, and include that advance in the same pull request. On conflict or failure, keep the recorded commit unchanged and stop with the evidence and decision needed.
 
