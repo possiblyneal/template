@@ -33,7 +33,7 @@ The helper is read-only and only authorizes the next stage. Claude owns personal
 4. Verify the file list against the payload's tracked paths, not only the content of the files present. Absence has no runner, so a dropped file produces a green run.
 5. Show the candidate diff, reconciliation summary, file-list account, repository settings, and exact remote operations.
 6. Obtain confirmation immediately before repository creation, settings changes, pushes, or PR creation unless those exact actions and target were explicitly authorized in the invocation.
-7. Open the pull request and verify it. Never merge it. A pull request that introduces `.github/workflows/` for the first time triggers no runs, because GitHub registers workflows from the default branch; report that as unverified rather than as passing.
+7. Open the pull request and verify it. Never merge it. An empty check list means the workflows are unverified, not that they passed; check the commit's check-suites and [githubstatus.com](https://www.githubstatus.com/) before calling it a defect.
 
 On update, advance `.repo-template.json` only after the candidate validates, and include that advance in the same pull request. On conflict or failure, keep the recorded commit unchanged and stop with the evidence and decision needed.
 

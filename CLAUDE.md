@@ -55,6 +55,7 @@ Some guarantees these files make are only half-kept by the files themselves. Cur
 - Dependabot alerts and security updates: **enabled**. `scripts/security` fails a pull request introducing a CVE; these open the pull request that resolves it.
 - Push protection and branch rulesets: **unavailable** on this plan. So `no-commit-to-branch` in each clone is the only thing keeping commits off `main`, and gitleaks in `.pre-commit-config.yaml` is the only check seeing a secret before it is pushed.
 - Code scanning: **unavailable**. `.github/workflows/codeql.yml` ships unmodified and fails at its upload step. That failure is the plan, not a finding — see `docs/lessons.md`.
+- GitHub Actions: **unverified**. `ci.yml` and `security.yml` have never run here, because they landed during a GitHub Actions outage that suppressed run dispatch account-wide. Nothing is known to be wrong with them, and nothing is known to be right either. `scripts/check` locally is the only gate that has actually run.
 
 ## Child Index
 

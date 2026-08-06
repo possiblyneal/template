@@ -112,10 +112,19 @@ A rename or delete of a destination-modified managed file needs semantic review.
 7. Present the local diff, the file-list reconciliation, checks, repository settings, and exact pending remote commands at the remote action gate.
 8. Create the GitHub repository without auto-initialization. Create and push one empty root commit to the default branch so the full generated payload can be reviewed in a PR.
 9. Configure supported settings after the default branch exists: Dependabot alerts/security updates, push protection where available, and a branch ruleset appropriate to the repository. Confirm plan/visibility limitations instead of treating API success as proof a feature is active.
+
 10. Branch from the empty base, add the entire candidate and manifest, commit, push, and open a PR. Supply an explicit PR body because the empty base does not yet contain the repository's PR template.
 11. Verify the remote default branch, PR base/head, URL, settings state, and available checks. Do not merge.
 
-    A first-generation pull request has no checks, and that is not a failure. GitHub registers workflows from the default branch, so a PR introducing `.github/workflows/` triggers no runs at all. Report the absence as unverified rather than passing: an empty check list and a green one are both "no failures", and only one of them means the workflows ran.
+    A pull request with no checks means the workflows are unverified, never that they passed. Establish which one it is before reporting:
+
+    ```bash
+    gh api repos/<owner>/<name>/commits/<head-sha>/check-suites --jq '[.check_suites[].app.slug]'
+    ```
+
+    No GitHub Actions suite means no run was ever dispatched. Check [githubstatus.com](https://www.githubstatus.com/) before treating that as a defect in the generated repository — dispatch and registration are separate services, and an outage suppresses runs while every permissions and workflow API still reports healthy.
+
+    Note that `/actions/workflows` lists the default branch only, so it reads zero on a first-generation PR whose default branch has no `.github/` yet. That is expected, not evidence.
 
 ## Generate into a repository that already has content
 

@@ -109,12 +109,12 @@ The root `.gitignore` pattern does not reach `apps/.../src/base-repo/.env`, so i
 
 **Source:** [.pre-commit-config.yaml](../.pre-commit-config.yaml)
 
-## Workflows do not run until they exist on the default branch
+## Check GitHub status before diagnosing a workflow that never runs
 
-GitHub registers workflows from the default branch. A pull request that introduces `.github/workflows/` for the first time gets no checks — not a failure, no runs at all.
+Workflow registration and run dispatch are separate services. A workflow can register as `active` while no run is ever created and no Actions check suite appears on the commit — which is what an Actions outage looks like from every API surface, since each one keeps reporting healthy.
 
-**Do:** On a first-generation pull request, expect zero checks and say so. Do not read an empty check list as a passing one, and do not wait on runs that cannot start.
+**Do:** Check [githubstatus.com](https://www.githubstatus.com/) first when a workflow registers but dispatches nothing. Confirm the blast radius with a scratch repository: a new public repo with a single `on: push` job that registers and never runs is not a repository problem.
 
-**Why:** An empty `statusCheckRollup` and a green one are both "no failures". Reporting CI as passing when nothing ran is the exact substitution this repository's scripts exist to prevent.
+**Why:** Every repo-level explanation — visibility, plan minutes, the `is_template` flag, trigger config, branch — is testable and wrong here, and each costs a push-and-wait cycle to eliminate. An outage is one page load.
 
-**Source:** [Repository settings](../CLAUDE.md)
+**Source:** [githubstatus.com](https://www.githubstatus.com/)
