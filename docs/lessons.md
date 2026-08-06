@@ -69,21 +69,21 @@ The ownership rules in `.repo-template.json` match `scripts/**`, `.github/**`, a
 
 **Source:** [Ownership rules](../.repo-template.json)
 
-## The payload's .env cannot be materialized by copying
+## The payload's .env is per-machine and reaches no clone
 
-`apps/github-repository-template/src/base-repo/.env` is a tracked empty file, but the payload's own `.gitignore` ignores `.env`. Copying the payload to a destination root produces a file `git add -A` will not stage.
+`.env` is tracked inside the payload, where the root `.gitignore` pattern does not reach it, and ignored at a destination root, where it does. It copies to a destination fine and can never be committed there, so it exists for whoever ran the generator and for nobody who clones.
 
-**Do:** After generating, compare the payload's tracked file list against the destination's. Create `.env` explicitly, or accept its absence deliberately rather than by accident.
+**Do:** Create the empty `.env` explicitly during generation and state that it is intentionally untracked. Do not try to commit it, and do not read its absence from a fresh clone as a generation defect.
 
-**Why:** A file present in the payload and absent from the result is indistinguishable from a copy step that silently dropped it. Generation of this repository lost exactly this file, and nothing reported it.
+**Why:** The file is a place to put secrets, so untracked is correct. What misleads is that it is tracked in the template, which reads as a file the generated repository will have.
 
-**Source:** [Payload contract](../apps/github-repository-template/CLAUDE.md)
+**Source:** [Root configuration files](../apps/github-repository-template/docs/github_repository_structure.md)
 
 ## Verify a generation by file-list diff, not by the checks passing
 
 `scripts/check` passing says the files present are valid. It says nothing about files that should be there and are not.
 
-**Do:** Diff the payload's tracked paths against the destination's tracked paths as a generation step. Investigate every difference, then state which are intentional.
+**Do:** Diff the payload's tracked paths against the destination's tracked paths as a generation step. Investigate every difference, then state which are intentional. Compare against the working tree as well as the index, since an ignored file is present and untracked rather than missing.
 
 **Why:** Every check in this repository is a check on content. Absence has no runner, so a missing file produces a green run.
 

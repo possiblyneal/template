@@ -101,6 +101,7 @@ A rename or delete of a destination-modified managed file needs semantic review.
    - initialize `docs/lessons.md` metadata and remove generation placeholders while retaining its durable writing guidance;
    - keep `docs/adr/0000-template.md` as the reusable ADR template;
    - create `.repo-template.json`;
+   - create an empty `.env` at the destination root, and report it as intentionally untracked. It is tracked inside the payload, where the `.gitignore` pattern does not reach it, and ignored at a destination root, where it does — so it can never be committed there and reaches no clone. Do not force it into the index;
    - render visibility and feature choices honestly. In particular, omit or explicitly disable CodeQL for a private repository without GitHub Advanced Security rather than leaving a workflow known to fail.
 5. Initialize Git locally with no remote and run the candidate's documented checks. Install the local pre-commit hook if the candidate requires it. Report skipped or unavailable checks; do not call them passes.
 
@@ -108,7 +109,7 @@ A rename or delete of a destination-modified managed file needs semantic review.
 
    Tools the candidate's scripts look up on `PATH` may also run inside pre-commit's pinned environments. A tool reported unavailable by a script and passing under pre-commit in the same run was not skipped; report what each surface actually did.
 
-6. Verify the file list, not only the content. Compare the payload's tracked paths at the source commit against the candidate's, and account for every difference as intended or as a defect. A file the payload ships and the candidate lacks is invisible to every check, because a check reads content and absence has no runner. The payload's `.env` is the known instance: it is tracked in the template and matched by the template's own `.gitignore`, so copying the tree produces a file the destination will not stage.
+6. Verify the file list, not only the content. Compare the payload's tracked paths at the source commit against the candidate's, and account for every difference as intended or as a defect. A file the payload ships and the candidate lacks is invisible to every check, because a check reads content and absence has no runner. Compare against the working tree as well as the index: a path the destination ignores is present and untracked rather than missing, and `.env` is the one the payload ships that way.
 7. Present the local diff, the file-list reconciliation, checks, repository settings, and exact pending remote commands at the remote action gate.
 8. Create the GitHub repository without auto-initialization. Create and push one empty root commit to the default branch so the full generated payload can be reviewed in a PR.
 9. Configure supported settings after the default branch exists: Dependabot alerts/security updates, push protection where available, and a branch ruleset appropriate to the repository. Confirm plan/visibility limitations instead of treating API success as proof a feature is active.
