@@ -7,23 +7,37 @@ Owns the payload copied into every repository generated from this template, and 
 ## Ownership
 
 - `src/base-repo/` — the payload. Every file here is destined for other repositories.
-- `docs/` — reference material about the payload. Not copied anywhere; read by whoever edits the payload.
+- `docs/github_repository_structure.md` — the authoritative rationale for every payload file: what it prevents, and why the alternative was rejected. Read it before changing what the template ships.
+- `docs/choosing_a_language.md` — evidence on language choice for AI-assisted work.
+- `docs/claude_code_settings_reference.md` — pointer to the upstream settings documentation index.
 
-The `repo-builder` skill reads `src/base-repo` at a specific commit. It never reads the working tree, so an uncommitted payload edit does not reach a generated repository.
+The `repo-builder` skill reads `src/base-repo` at a specific commit, never the working tree, so an uncommitted payload edit does not reach a generated repository.
 
 ## Local Contracts
 
-- A file under `src/base-repo/` is not this repository's configuration. It is data. `src/base-repo/scripts/check` never runs here; the root `scripts/check` does.
-- Payload changes and root changes are separate edits. When a change should apply to both, make it in both places in the same commit, so the two do not drift.
-- `src/base-repo/apps/app-name/` is a deliberate placeholder. It is renamed during generation, not here.
-- `src/base-repo/.env` is an intentionally empty tracked file that gives a generated repository somewhere to put local variables. Do not add content to it.
-- Payload paths appear in the generated repository without the `src/base-repo/` prefix, so a reference written inside the payload must be relative to the generated root.
+**A file under `src/base-repo/` is not this repository's configuration. It is data.** `src/base-repo/scripts/check` never runs here; the root `scripts/check` does.
+
+**Payload and root are separate edits.** When a change should apply to both, make it in both places in the same commit. A fix at the root only leaves the template shipping the bug to every repository generated afterward.
+
+**Payload paths lose the `src/base-repo/` prefix when generated**, so a relative reference written inside the payload must be relative to the generated repository's root, not to this one.
+
+**Deliberate placeholders, not omissions:**
+
+- `src/base-repo/apps/app-name/` is renamed during generation. The root `CLAUDE.md` of the payload carries the Placeholders section instructing that rename; a placeholder that only looks like a convention gets kept rather than replaced.
+- `src/base-repo/.env` is an intentionally empty tracked file giving a generated repository somewhere to put local variables. Do not add content.
+- `.mcp.json` ships empty, and `.claude/` ships empty `agents/`, `output-styles/`, `skills/`, and `workflows/`, so a new project sees the available surfaces without inheriting rules.
+
+**`.github/dependabot.yml` lists only actions and pre-commit**, and that is not an oversight. An entry naming a manifest the repository does not have fails with `dependency_file_not_found` rather than being skipped, and a template cannot know which ecosystem a clone will use — listing five guarantees four broken entries in every one. The file carries the entry to copy when a real manifest arrives.
+
+**Nothing public ships.** The template is a private-repository baseline. `README.md`, `LICENSE`, `CONTRIBUTING.md`, `CODEOWNERS`, and the rest are the checklist in the structure doc for the day a generated repository goes public.
 
 ## Work Guidance
 
-Editing under `src/` prompts for approval, per `.claude/settings.json`. Treat the prompt as the question "is this a payload change or a root change?"
+Editing under `src/` prompts for approval, per `.claude/settings.json`. Treat that prompt as the question: is this a payload change or a root change?
 
-A payload change ships to repositories that cannot be inspected from here. Prefer changes that fail loudly in a generated repository over changes that silently do nothing: the payload's own scripts distinguish `pass`, `not-applicable`, `unavailable`, and `FAIL` for exactly this reason.
+A payload change ships to repositories that cannot be inspected from here, so prefer changes that fail loudly in a generated repository over changes that silently do nothing. The payload's scripts distinguish `pass`, `not-applicable`, `unavailable`, and `FAIL` for exactly that reason.
+
+When the structure doc and the payload disagree, one of them is wrong — fix both in the same commit rather than leaving the rationale describing a file that no longer behaves that way.
 
 ## Verification
 
