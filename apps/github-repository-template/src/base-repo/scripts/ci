@@ -1,0 +1,201 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+# Sourced by absolute path so this works from any working directory, and marked
+# SCRIPTDIR-relative so shellcheck follows it without being run from the root.
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/detect.sh
+source "$repo_root/scripts/libs/detect.sh"
+
+# Prints the check and language pairs that would run, then exits without running
+# them. Dispatch is reported from wiring alone, so a test can assert that a
+# language is checked without installing its toolchain.
+DRY_RUN="${CI_DRY_RUN:-}"
+
+failed=()
+unavailable=()
+
+# Each check is one function per language, dispatched by name. Every present
+# language runs: this used to be a chain of `if <language>; then ...; return`,
+# which stopped at the first match, so a repository that gained a second
+# language had it silently skipped while the run stayed green.
+#
+# A function that returns NO_RUNNER means the language is not wired up for that
+# check. A check with genuinely nothing to do returns 0 with a comment saying
+# why, the way build_python does.
+
+lint_node() { has_npm_script lint || return "$NO_RUNNER"; npm run lint; }
+lint_python() { uv_run ruff check .; }
+lint_go() { go vet ./...; }
+lint_rust() { cargo clippy -- -D warnings; }
+lint_swift() { command -v swift >/dev/null 2>&1 || return "$NO_RUNNER"; swift_each swift format lint --recursive --strict .; }
+lint_kotlin() {
+  if gradle_has_task ktlintCheck; then ./gradlew ktlintCheck; return; fi
+  if gradle_has_task detekt; then ./gradlew detekt; return; fi
+  return "$NO_RUNNER"
+}
+
+format_node() { has_npm_script format:check || return "$NO_RUNNER"; npm run format:check; }
+format_python() { uv_run ruff format --check .; }
+format_go() {
+  local unformatted
+  unformatted="$(gofmt -l .)"
+  [[ -z "$unformatted" ]] || { echo "gofmt needed: $unformatted"; return 1; }
+}
+format_rust() { cargo fmt --check; }
+# Lint mode, not the default format mode, which rewrites files in place.
+format_swift() { command -v swift >/dev/null 2>&1 || return "$NO_RUNNER"; swift_each swift format lint --recursive .; }
+format_kotlin() { gradle_has_task ktlintCheck || return "$NO_RUNNER"; ./gradlew ktlintCheck; }
+
+typecheck_node() { has_npm_script typecheck || return "$NO_RUNNER"; npm run typecheck; }
+typecheck_python() { uv_run mypy .; }
+# Go, Rust, Swift, and Kotlin type-check as part of build.
+typecheck_go() { return 0; }
+typecheck_rust() { return 0; }
+typecheck_swift() { return 0; }
+typecheck_kotlin() { return 0; }
+
+test_node() { has_npm_script test || return "$NO_RUNNER"; npm run test; }
+# pytest exits 5 when it collected no tests, where every other runner here exits
+# 0. Passing that through fails the first run of a project with no tests written
+# yet, so it is matched and reported. The line is printed rather than swallowed:
+# on a repository that does have tests, seeing it means collection stopped
+# finding them.
+test_python() {
+  local status=0
+  uv_run pytest || status=$?
+  if (( status == 5 )); then
+    echo "pytest collected no tests."
+    return 0
+  fi
+  return "$status"
+}
+test_go() { go test ./...; }
+test_rust() { cargo test; }
+test_swift() { command -v swift >/dev/null 2>&1 || return "$NO_RUNNER"; swift_each swift test; }
+test_kotlin() { [[ -x ./gradlew ]] || return "$NO_RUNNER"; ./gradlew test; }
+
+build_node() { has_npm_script build || return "$NO_RUNNER"; npm run build; }
+# An interpreted project has nothing to build.
+build_python() { return 0; }
+build_go() { go build ./...; }
+build_rust() { cargo build --locked; }
+build_swift() { command -v swift >/dev/null 2>&1 || return "$NO_RUNNER"; swift_each swift build; }
+build_kotlin() { [[ -x ./gradlew ]] || return "$NO_RUNNER"; ./gradlew build -x test; }
+
+# Runs one check across every present language and reports which ran. A failure
+# in any language fails the check, and the remaining languages still run, so one
+# broken stack does not hide the state of the rest.
+run_check() {
+  local name="$1" lang status
+  local ran=() check_failed=() check_unavailable=()
+
+  while IFS= read -r lang; do
+    [[ -n "$lang" ]] || continue
+
+    if ! declare -F "${name}_${lang}" >/dev/null; then
+      check_unavailable+=("$lang")
+      continue
+    fi
+
+    if [[ -n "$DRY_RUN" ]]; then
+      echo "would-run     $name $lang"
+      ran+=("$lang")
+      continue
+    fi
+
+    status=0
+    "${name}_${lang}" || status=$?
+
+    case "$status" in
+      0) ran+=("$lang") ;;
+      "$NO_RUNNER") check_unavailable+=("$lang") ;;
+      *) check_failed+=("$lang (exit $status)") ;;
+    esac
+  done < <(detect_present_languages)
+
+  [[ -n "$DRY_RUN" ]] && return 0
+
+  # Every category that occurred is printed, rather than the worst one. A single
+  # line per check would report "unavailable lint" for a repository whose other
+  # language linted cleanly, hiding a real result behind an unwired one.
+  if (( ${#ran[@]} > 0 )); then
+    printf 'pass         %-11s %s\n' "$name" "${ran[*]}"
+  fi
+
+  if (( ${#check_unavailable[@]} > 0 )); then
+    printf 'unavailable  %-11s %s\n' "$name" "${check_unavailable[*]}"
+    unavailable+=("$name: ${check_unavailable[*]}")
+  fi
+
+  if (( ${#check_failed[@]} > 0 )); then
+    printf 'FAIL         %-11s %s\n' "$name" "${check_failed[*]}"
+    failed+=("$name: ${check_failed[*]}")
+  fi
+}
+
+# A package nested under apps/ or libs/ whose language has no root manifest is
+# invisible to every check below, which all run from the repository root. It has
+# to fail here rather than pass quietly, since a green run over unchecked code
+# is the failure this script exists to prevent.
+orphans="$(detect_orphan_manifests || true)"
+if [[ -n "$orphans" ]]; then
+  echo "FAIL         detection"
+  echo
+  echo "$orphans"
+  exit 1
+fi
+
+# Stated rather than left to the empty check output below. With no language
+# detected nothing populates the counters, so the run would otherwise print a
+# blank line and exit 0, which reads the same as a full pass.
+if ! has_any_manifest; then
+  echo "No project manifest found, so there is nothing to check yet."
+  echo "Every check becomes required as soon as a manifest is added."
+  exit 0
+fi
+
+for check in lint format typecheck test build; do
+  run_check "$check"
+done
+
+if [[ -n "$DRY_RUN" ]]; then
+  exit 0
+fi
+
+echo
+
+if (( ${#failed[@]} > 0 )); then
+  printf 'Failed: %s\n' "${failed[*]}"
+  exit 1
+fi
+
+# Reached only with a manifest present, since the no-manifest case exited above.
+# A language was detected and its check had no runner, which is a wiring gap
+# rather than a state to report and pass over.
+if (( ${#unavailable[@]} > 0 )); then
+  printf 'No runner for: %s\n' "${unavailable[*]}"
+  echo "A manifest is present, so every check is expected to run for every language"
+  echo "detected. Each pair above reached its check without a wired-up runner."
+  echo
+  echo "Two causes, and they need different fixes:"
+  echo
+  echo "  The language is not wired up yet. Add a <check>_<language> function to"
+  echo "  scripts/ci following the ones already there, and reach every"
+  echo "  below — a language wired into some of them is checked in one place and"
+  echo "  silently skipped in another, while the run stays green:"
+  echo
+  for file in "${DETECT_WIRING_FILES[@]}"; do
+    echo "    $file"
+  done
+  echo
+  echo "  The language is wired up but its tool is missing from this machine."
+  echo "  Run scripts/doctor, which names the tool and how to install it."
+  echo
+  echo "A check with nothing to do should return 0 with a comment saying why,"
+  echo "the way build_python does. Returning NO_RUNNER means unwired."
+  exit 1
+fi

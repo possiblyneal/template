@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+# Sourced by absolute path so this works from any working directory, and marked
+# SCRIPTDIR-relative so shellcheck follows it without being run from the root.
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/detect.sh
+source "$repo_root/scripts/libs/detect.sh"
+
+# The write half of the format check in scripts/ci, which only reports.
+# Same runners for the same languages, so this repairs what that check fails on. Lint
+# autofixes stay out: they rewrite code rather than whitespace, and the point of
+# this script is a diff a reviewer can skim.
+#
+# Every present language is formatted, not the first one detected. This used to
+# stop at its first match, so a repository with two stacks had one formatted
+# while scripts/ci went on failing the format check for the other, with no
+# command here that would fix it.
+
+format_node() { has_npm_script format || return "$NO_RUNNER"; npm run format; }
+format_python() { uv_run ruff format .; }
+format_go() { gofmt -w .; }
+format_rust() { cargo fmt; }
+format_swift() {
+  command -v swift >/dev/null 2>&1 || return "$NO_RUNNER"
+  swift_each swift format --in-place --recursive .
+}
+format_kotlin() { gradle_has_task ktlintFormat || return "$NO_RUNNER"; ./gradlew ktlintFormat; }
+
+formatted=()
+unformatted=()
+failed=()
+
+while IFS= read -r lang; do
+  [[ -n "$lang" ]] || continue
+
+  if ! declare -F "format_${lang}" >/dev/null; then
+    unformatted+=("$lang")
+    continue
+  fi
+
+  status=0
+  "format_${lang}" || status=$?
+
+  case "$status" in
+    0) formatted+=("$lang") ;;
+    "$NO_RUNNER") unformatted+=("$lang") ;;
+    # Formatting continues for the remaining languages, so one broken formatter
+    # does not leave the rest of the repository unformatted.
+    *) failed+=("$lang (exit $status)") ;;
+  esac
+done < <(detect_present_languages)
+
+if (( ${#formatted[@]} > 0 )); then
+  echo "Formatted: ${formatted[*]}"
+  echo "Review the diff before committing."
+fi
+
+# Named rather than reported as one "no formatter configured" line, since with
+# several languages present the difference is which one still has no formatter.
+if (( ${#unformatted[@]} > 0 )); then
+  echo "No formatter for: ${unformatted[*]}"
+  echo "Add one to scripts/fix, and the matching check to scripts/ci."
+fi
+
+if (( ${#failed[@]} > 0 )); then
+  echo "Formatter failed: ${failed[*]}"
+  exit 1
+fi
+
+if (( ${#formatted[@]} == 0 && ${#unformatted[@]} == 0 )); then
+  echo "No project manifest found, so there is nothing to format yet."
+fi

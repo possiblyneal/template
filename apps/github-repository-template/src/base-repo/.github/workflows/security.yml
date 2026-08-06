@@ -28,25 +28,13 @@ jobs:
           # secret that was committed earlier and later removed from the tip.
           fetch-depth: 0
 
+      # Detection comes from scripts/detect rather than being written out
+      # again here, so the audit tools installed are the ones
+      # scripts/security looks for. The trivy flag covers Swift and Gradle, which have no first-party
+      # audit command and are scanned through their committed lockfiles.
       - name: Detect toolchains
         id: detect
-        run: |
-          {
-            echo "node=$([[ -s package.json ]] && echo true || echo false)"
-            echo "python=$([[ -s pyproject.toml ]] && echo true || echo false)"
-            echo "go=$([[ -s go.mod || -s go.work ]] && echo true || echo false)"
-            echo "rust=$([[ -s Cargo.toml ]] && echo true || echo false)"
-
-            # Swift and Gradle audit through trivy, which reads their lockfiles.
-            # Package.resolved is committed, and Gradle writes gradle.lockfile
-            # only once dependency locking is enabled, so both are read from the
-            # checkout rather than produced here.
-            trivy=false
-            if [[ -n "$(find . \( -name Package.resolved -o -name gradle.lockfile \) -not -path '*/.build/*' -print -quit)" ]]; then
-              trivy=true
-            fi
-            echo "trivy=$trivy"
-          } >> "$GITHUB_OUTPUT"
+        run: scripts/detect github-output >> "$GITHUB_OUTPUT"
 
       - name: Set up Node
         if: steps.detect.outputs.node == 'true'
@@ -56,7 +44,7 @@ jobs:
 
       - name: Set up Python
         if: steps.detect.outputs.python == 'true'
-        uses: astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           enable-cache: true
 
@@ -83,7 +71,7 @@ jobs:
 
       - name: Install trivy
         if: steps.detect.outputs.trivy == 'true'
-        uses: aquasecurity/setup-trivy@v0.3.1
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
 
       # No gitleaks install. Secret prevention belongs to GitHub push protection,
       # which blocks a secret before it reaches the remote; a CI scan only finds
@@ -92,4 +80,4 @@ jobs:
       # Enable push protection in repository settings, and run gitleaks locally
       # from .pre-commit-config.yaml.
       - name: Run local security checks
-        run: tools/ci/security
+        run: scripts/security

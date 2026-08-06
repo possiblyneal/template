@@ -10,10 +10,13 @@ on:
     tags:
       - "v*"
 
+# This workflow validates a release but does not publish yet, so checkout and
+# the build need only a read token. When publishing is added, put a
+# contents: write permission on its separate job rather than widening this one.
 permissions:
-  contents: write
+  contents: read
 
-# Not cancel-in-progress, unlike the other workflows: a cancelled release can
+# Not cancel-in-progress, unlike the other workflows: a future publisher can
 # stop after publishing some artifacts and none of the rest. Overlapping runs
 # queue instead.
 concurrency:
@@ -32,8 +35,9 @@ jobs:
           # Full history so changelog generation can reach the previous tag.
           fetch-depth: 0
 
-      # tools/ci/release runs tools/ci/ci before publishing, and that fails when
-      # a manifest is present but its toolchain is missing.
+      # scripts/release runs scripts/ci before packaging and publishing are
+      # added, and that fails when a manifest is present but its toolchain is
+      # missing.
       - name: Set up toolchains
         uses: ./.github/actions/setup-toolchains
 
@@ -45,4 +49,4 @@ jobs:
       - name: Build release artifacts
         env:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-        run: tools/ci/release "$RELEASE_TAG"
+        run: scripts/release "$RELEASE_TAG"

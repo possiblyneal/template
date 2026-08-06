@@ -7,15 +7,20 @@ repos:
     hooks:
       - id: gitleaks
 
-  # The only static analysis the shell scripts in tools/ get. Every script there
+  # The only static analysis the shell scripts in scripts/ get. Every one there
   # is extensionless, so pre-commit recognizes it as shell by reading its
   # shebang, which it only does for files that are executable. The two shebang
   # hooks below keep that true; without them a script committed without its
   # executable bit is skipped silently rather than reported.
+  #
+  # -x follows `source` into the detection library, so it is analyzed with
+  # its caller rather than reported as unreadable. Without it every script that
+  # sources the detection library fails on SC1091.
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.11.0.1
     hooks:
       - id: shellcheck
+        args: [-x]
 
   # Workflow errors otherwise surface as a failed run after the push, since
   # nothing validates workflow syntax, action inputs, or shell snippets locally.
@@ -28,15 +33,28 @@ repos:
     rev: v6.0.0
     hooks:
       - id: check-merge-conflict
-      - id: check-added-large-files
       - id: end-of-file-fixer
       - id: trailing-whitespace
       - id: check-yaml
       - id: check-json
       - id: check-toml
 
-      # tools/scripts/check exits early when a script it calls is not
-      # executable, and shell detection depends on the same bit.
+      # Guards against a file committed by accident, not against a large
+      # repository: only newly added files are weighed, so anything already
+      # tracked may grow past the limit freely, and a file matched by a
+      # git-lfs filter in .gitattributes is exempt whatever its size.
+      #
+      # The 500KB default is deliberately left as it is. A file that large
+      # arriving in a commit is more often a build artifact, a database
+      # dump, or a stray recording than something intended, and reversing it
+      # after the fact means rewriting history rather than deleting a file.
+      # Raise it here only when the whole repository's floor has moved;
+      # a known large file belongs in `exclude` below it, named, where the
+      # exception stays visible instead of widening the limit for everything.
+      - id: check-added-large-files
+
+      # scripts/check exits early when a script it calls is not executable,
+      # and shell detection depends on the same bit.
       - id: check-executables-have-shebangs
       - id: check-shebang-scripts-are-executable
 

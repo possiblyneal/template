@@ -24,8 +24,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # Before the toolchains, since it installs none and asserts only that every
+      # language present reaches every check. A language dropped from dispatch
+      # makes the run below shorter and still green, so nothing after this step
+      # would report it.
+      - name: Verify check dispatch
+        run: scripts/tests/detect-test
+
       - name: Set up toolchains
         uses: ./.github/actions/setup-toolchains
 
       - name: Run CI checks
-        run: tools/ci/ci
+        run: scripts/ci

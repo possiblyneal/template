@@ -15,7 +15,12 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   branch="$(git branch --show-current 2>/dev/null || true)"
   echo "Branch: ${branch:-(detached HEAD)}"
 
-  status="$(git status --short 2>/dev/null | head -20)"
+  # head closes the pipe once it has its 20 lines, so git dies of SIGPIPE on a
+  # large working tree and pipefail propagates 141. Without the `|| true` that
+  # exit status ends the hook under `set -e`, and the branch, commits, and
+  # documentation reminder below are all lost — on exactly the messy tree that
+  # needs them most.
+  status="$(git status --short 2>/dev/null | head -20 || true)"
   if [[ -n "$status" ]]; then
     echo "Uncommitted changes:"
     echo "$status"

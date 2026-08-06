@@ -4,30 +4,16 @@ description: Installs a toolchain for each language manifest present in the repo
 runs:
   using: composite
   steps:
-    # tools/ci/ci fails when a manifest is present but its toolchain is
+    # scripts/ci fails when a manifest is present but its toolchain is
     # missing, so each toolchain installs only when this repository uses it.
+    #
+    # Detection comes from scripts/detect rather than being written out
+    # again here. This file used to carry its own copy, which is how a language ends
+    # up installed for the local scripts and missing in CI.
     - name: Detect toolchains
       id: detect
       shell: bash
-      run: |
-        {
-          echo "node=$([[ -s package.json ]] && echo true || echo false)"
-          echo "python=$([[ -s pyproject.toml ]] && echo true || echo false)"
-          echo "go=$([[ -s go.mod || -s go.work ]] && echo true || echo false)"
-          echo "rust=$([[ -s Cargo.toml ]] && echo true || echo false)"
-
-          # Swift alone has no root manifest: SwiftPM has no workspace file, so
-          # packages sit at apps/<name>/ and libs/<name>/ and are found by
-          # search. .build holds checked-out dependencies, each with a
-          # Package.swift of its own.
-          swift=false
-          if [[ -n "$(find . -name Package.swift -not -path '*/.build/*' -print -quit)" ]]; then
-            swift=true
-          fi
-          echo "swift=$swift"
-
-          echo "kotlin=$([[ -s settings.gradle.kts || -s build.gradle.kts ]] && echo true || echo false)"
-        } >> "$GITHUB_OUTPUT"
+      run: scripts/detect github-output >> "$GITHUB_OUTPUT"
 
     - name: Set up Node
       if: steps.detect.outputs.node == 'true'
@@ -47,7 +33,7 @@ runs:
 
     - name: Set up Python
       if: steps.detect.outputs.python == 'true'
-      uses: astral-sh/setup-uv@v9.0.0
+      uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
       with:
         enable-cache: true
 
@@ -62,10 +48,11 @@ runs:
       shell: bash
       run: rustup component add clippy rustfmt
 
-    # ubuntu-latest ships no Swift toolchain, unlike Node, Go, and Rust.
+    # GitHub's Ubuntu runners include Swift, but this controls the requested
+    # version rather than inheriting whatever the runner image happens to ship.
     - name: Set up Swift
       if: steps.detect.outputs.swift == 'true'
-      uses: SwiftyLab/setup-swift@v1
+      uses: swift-actions/setup-swift@7ca6abe6b3b0e8b5421b88be48feee39cbf52c6a # v2.4.0
       with:
         swift-version: latest
 
@@ -78,4 +65,4 @@ runs:
 
     - name: Set up Gradle
       if: steps.detect.outputs.kotlin == 'true'
-      uses: gradle/actions/setup-gradle@v6
+      uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6

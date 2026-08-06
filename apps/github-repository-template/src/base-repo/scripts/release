@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 # An explicit argument wins over GITHUB_REF_NAME so a workflow_dispatch run,
@@ -11,7 +11,7 @@ tag="${1:-${GITHUB_REF_NAME:-}}"
 
 if [[ -z "$tag" ]]; then
   echo "No release tag detected. Pass tag as first argument when running locally."
-  echo "Example: tools/ci/release v1.2.3"
+  echo "Example: scripts/release v1.2.3"
   exit 1
 fi
 
@@ -25,17 +25,17 @@ esac
 
 echo "Preparing release for $tag"
 
-if [[ ! -x tools/ci/ci ]]; then
-  echo "tools/ci/ci is missing or not executable, so this release would ship unverified."
+if [[ ! -x scripts/ci ]]; then
+  echo "scripts/ci is missing or not executable, so this release would ship unverified."
   exit 1
 fi
 
-tools/ci/ci
+scripts/ci
 
 # Packaging is project-specific, so the template cannot supply it. Until it is
 # filled in there is nothing to publish, and exiting 0 here would report a
 # successful release that produced no artifact and no changelog.
 echo
 echo "No release packaging configured, so there is nothing to publish for $tag."
-echo "Add artifact build and changelog steps to tools/ci/release, then remove this block."
+echo "Add artifact build and changelog steps to scripts/release, then remove this block."
 exit 1

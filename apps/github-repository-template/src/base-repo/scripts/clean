@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 # Build output lands under apps/<name>/ and libs/<name>/ in this layout, so a
@@ -27,4 +27,4 @@ find . \( "${prune[@]}" \) -prune -o \
 # paths are removed rather than every directory sharing their names.
 rm -rf node_modules/.cache target/debug/.fingerprint
 
-echo "Cleaned common generated files and caches. Add project-specific cleanup to tools/scripts/clean."
+echo "Cleaned common generated files and caches. Add project-specific cleanup to scripts/clean."

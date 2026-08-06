@@ -1,0 +1,216 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+# Sourced by absolute path so this works from any working directory, and marked
+# SCRIPTDIR-relative so shellcheck follows it without being run from the root.
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/detect.sh
+source "$repo_root/scripts/libs/detect.sh"
+
+missing=0
+
+check_required() {
+  local tool="$1"
+
+  if command -v "$tool" >/dev/null 2>&1; then
+    echo "ok: $tool"
+  else
+    echo "missing: $tool"
+    missing=1
+  fi
+}
+
+check_optional() {
+  local tool="$1"
+
+  if command -v "$tool" >/dev/null 2>&1; then
+    echo "ok: $tool"
+  else
+    echo "optional missing: $tool"
+  fi
+}
+
+check_required git
+check_required bash
+
+# The tool each language's checks are driven through. Reported per present
+# language rather than for the first one detected, so a repository that gained
+# a second stack is told about the toolchain that stack needs.
+toolchain_node() { check_required npm; }
+toolchain_python() { check_required uv; }
+toolchain_go() { check_required go; }
+toolchain_rust() { check_required cargo; }
+toolchain_swift() { check_required swift; }
+
+# scripts/ci drives Gradle through ./gradlew, which needs a JDK. A missing
+# wrapper leaves those checks with no runner, which fails the run because a
+# manifest is present, so it is a missing tool here rather than a silent skip.
+toolchain_kotlin() {
+  check_required java
+
+  if [[ -x ./gradlew ]]; then
+    echo "ok: gradlew"
+  else
+    echo "missing: gradlew (a Gradle manifest is present but the wrapper is not executable here)"
+    echo "  Generate it with: gradle wrapper"
+    missing=1
+  fi
+}
+
+while IFS= read -r lang; do
+  [[ -n "$lang" ]] || continue
+
+  # A language detected here with no toolchain check is the half-wired state
+  # scripts/ci reports: detection knows about it and this script does not.
+  if ! declare -F "toolchain_${lang}" >/dev/null; then
+    echo "missing: a toolchain check for $lang"
+    echo "  Detection knows this language but scripts/doctor does not name its tool."
+    echo "  Add a toolchain_${lang} function there."
+    missing=1
+    continue
+  fi
+
+  "toolchain_${lang}"
+done < <(detect_present_languages)
+
+# A package nested under apps/ or libs/ whose language has no root manifest is
+# invisible to every check, so its toolchain goes unreported here too.
+orphans="$(detect_orphan_manifests || true)"
+if [[ -n "$orphans" ]]; then
+  echo
+  echo "$orphans"
+  missing=1
+fi
+
+# -print -quit rather than a pipe into `grep -q`: grep exits at its first match
+# and closes the pipe, so find dies of SIGPIPE and pipefail reports 141, which
+# reads as "no container files" and silently skips the check.
+if [[ -n "$(detect_find Dockerfile -print -quit)$(detect_find compose.yml -print -quit)$(detect_find docker-compose.yml -print -quit)" ]]; then
+  check_optional docker
+fi
+
+# A pre-commit config does nothing until `pre-commit install` writes a hook
+# into .git/hooks, which is local to each clone and never checked in. Both
+# failures are silent: commits succeed as normal while the configured hooks,
+# including the secret scan, never run.
+if [[ -s .pre-commit-config.yaml ]]; then
+  if ! command -v pre-commit >/dev/null 2>&1; then
+    echo "missing: pre-commit (.pre-commit-config.yaml is present but the tool is not installed)"
+    echo "  Install it, then run: pre-commit install"
+    missing=1
+  elif [[ ! -e .git/hooks/pre-commit ]]; then
+    echo "missing: pre-commit hook (installed tool, but no hook in this clone)"
+    echo "  Run: pre-commit install"
+    missing=1
+  else
+    echo "ok: pre-commit"
+  fi
+fi
+
+# The PreToolUse and ConfigChange hooks parse their input with jq. A hook that
+# exits non-zero for any reason other than a deliberate block is a non-blocking
+# error, so a missing jq lets writes outside the repository and mid-session
+# settings reloads through without a prompt or a block.
+if [[ -x .claude/hooks/ask-outside-repo.sh || -x .claude/hooks/block-config-change.sh ]]; then
+  check_required jq
+fi
+
+# Two guarantees this repository makes are settings on the remote rather than
+# files in the tree, so nothing in a clone reports on them. The pre-commit hook
+# blocking a commit to main is local and absent in a fresh clone, and the CI
+# secret scan runs after a push rather than before it. A branch ruleset and push
+# protection are the halves that hold on the remote.
+#
+# Reported, never changed. Enabling either is a write to state the whole
+# organization sees, and doctor runs from check on every commit; a ruleset PUT
+# also overwrites, so a doctor that corrected drift would silently revert a
+# deliberate change every time it ran. This names the fix the way the pre-commit
+# and gradlew checks above do.
+#
+# Nothing here is required: a clone with no remote yet, or without gh, is a
+# normal state to be in and not a broken environment.
+check_github_settings() {
+  local repo json admin
+
+  if ! command -v gh >/dev/null 2>&1; then
+    echo "optional missing: gh (cannot check the remote's branch and secret settings)"
+    return
+  fi
+
+  if ! gh auth status >/dev/null 2>&1; then
+    echo "optional missing: gh auth (run: gh auth login)"
+    return
+  fi
+
+  # Parsing the responses below needs jq, which is only required above when a
+  # hook that uses it is present. Reported rather than assumed, so this reads as
+  # a check that could not run instead of a remote that is configured.
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "optional missing: jq (cannot read the remote's branch and secret settings)"
+    return
+  fi
+
+  if ! repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)"; then
+    echo "optional missing: a GitHub remote (nothing to check settings on yet)"
+    return
+  fi
+
+  if ! json="$(gh api "repos/$repo" 2>/dev/null)"; then
+    echo "optional missing: read access to $repo's settings"
+    return
+  fi
+
+  # security_and_analysis is absent for a non-admin and for a plan that does not
+  # offer the feature, so admin tells the two apart. Reporting "disabled" for a
+  # setting the account cannot see would send someone to a page they cannot act
+  # on, and reporting it as fine would be worse.
+  admin="$(jq -r '.permissions.admin // false' <<<"$json")"
+
+  if [[ "$admin" != "true" ]]; then
+    echo "optional missing: admin on $repo (its settings cannot be read from here)"
+    return
+  fi
+
+  case "$(jq -r '.security_and_analysis.secret_scanning_push_protection.status // "unavailable"' <<<"$json")" in
+    enabled) echo "ok: push protection" ;;
+    unavailable)
+      echo "optional missing: push protection (not offered for $repo's plan and visibility)"
+      echo "  It needs GitHub Advanced Security on a private repository, and is free on a public one."
+      echo "  Until then gitleaks in .pre-commit-config.yaml is the only check that sees a secret before it is pushed."
+      ;;
+    *)
+      echo "optional missing: push protection (disabled on $repo)"
+      echo "  Enable it in Settings, under Advanced Security."
+      ;;
+  esac
+
+  # A 403 here is the plan refusing the endpoint rather than an error to report
+  # as a missing ruleset, which would name a fix that cannot be applied.
+  local rulesets
+  if ! rulesets="$(gh api "repos/$repo/rulesets" 2>/dev/null)"; then
+    echo "optional missing: branch rulesets (not offered for $repo's plan and visibility)"
+    echo "  They need GitHub Pro on a private repository, and are free on a public one."
+    echo "  Until then no-commit-to-branch in this clone is the only thing keeping commits off main."
+    return
+  fi
+
+  if [[ "$(jq -r '[.[] | select(.target == "branch" and .enforcement == "active")] | length' <<<"$rulesets")" -gt 0 ]]; then
+    echo "ok: branch ruleset"
+  else
+    echo "optional missing: an active branch ruleset on $repo"
+    echo "  Add one in Settings, under Rules, requiring a pull request and the CI check."
+    echo "  Without it the pre-commit hook is the only thing keeping commits off main, and a fresh clone does not have it."
+  fi
+}
+
+check_github_settings
+
+if [[ "$missing" -ne 0 ]]; then
+  echo "Required tools missing. Install them, then rerun scripts/doctor."
+  exit 1
+fi
+
+echo "Environment checks passed. Add project-specific checks to scripts/doctor."
