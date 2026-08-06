@@ -101,7 +101,6 @@ A rename or delete of a destination-modified managed file needs semantic review.
    - initialize `docs/lessons.md` metadata and remove generation placeholders while retaining its durable writing guidance;
    - keep `docs/adr/0000-template.md` as the reusable ADR template;
    - create `.repo-template.json`;
-   - create an empty `.env` at the destination root, and report it as intentionally untracked. It is tracked inside the payload, where the `.gitignore` pattern does not reach it, and ignored at a destination root, where it does — so it can never be committed there and reaches no clone. Do not force it into the index;
    - render visibility and feature choices honestly. In particular, omit or explicitly disable CodeQL for a private repository without GitHub Advanced Security rather than leaving a workflow known to fail.
 5. Initialize Git locally with no remote and run the candidate's documented checks. Install the local pre-commit hook if the candidate requires it. Report skipped or unavailable checks; do not call them passes.
 

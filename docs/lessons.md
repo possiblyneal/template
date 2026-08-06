@@ -69,13 +69,13 @@ The ownership rules in `.repo-template.json` match `scripts/**`, `.github/**`, a
 
 **Source:** [Ownership rules](../.repo-template.json)
 
-## The payload's .env is per-machine and reaches no clone
+## .env is tracked in the payload and ignored at a destination root
 
-`.env` is tracked inside the payload, where the root `.gitignore` pattern does not reach it, and ignored at a destination root, where it does. It copies to a destination fine and can never be committed there, so it exists for whoever ran the generator and for nobody who clones.
+The root `.gitignore` pattern does not reach `apps/.../src/base-repo/.env`, so it is tracked there. At a destination root the same pattern matches, so the copied file is present and untracked.
 
-**Do:** Create the empty `.env` explicitly during generation and state that it is intentionally untracked. Do not try to commit it, and do not read its absence from a fresh clone as a generation defect.
+**Do:** Read its absence from a fresh clone as correct. Do not force it into the index.
 
-**Why:** The file is a place to put secrets, so untracked is correct. What misleads is that it is tracked in the template, which reads as a file the generated repository will have.
+**Why:** Tracked in the template reads as a file the generated repository will commit, and it is a place for secrets, so untracked is the right end state.
 
 **Source:** [Root configuration files](../apps/github-repository-template/docs/github_repository_structure.md)
 
