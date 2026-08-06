@@ -74,4 +74,6 @@ docker-data/
 # Generated artifacts
 artifacts/
 downloads/
+.claude/worktrees/
+.claude/skills/repo-builder-workspace/
 
