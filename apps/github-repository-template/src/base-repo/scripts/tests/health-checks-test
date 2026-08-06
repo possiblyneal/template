@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+# Keeps local startup checks offline while proving hosted repository checks stay
+# available through their explicit command.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+passed=0
+failed=0
+current=""
+work=""
+
+fail() {
+  echo "  FAIL  $current: $1"
+  failed=$((failed + 1))
+}
+
+pass() {
+  passed=$((passed + 1))
+}
+
+fixture() {
+  current="$1"
+  work="$(mktemp -d)"
+  cp -r "$repo_root/scripts" "$work/"
+  mkdir "$work/bin"
+  cat > "$work/bin/gh" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${GH_TRACE:?}"
+exit 1
+EOF
+  chmod +x "$work/bin/gh"
+}
+
+cleanup() {
+  [[ -n "$work" && "$work" == /tmp/* ]] && rm -rf "$work"
+  work=""
+}
+
+trap cleanup EXIT
+
+echo "health-checks-test"
+
+fixture "doctor stays offline"
+out="$(cd "$work" && GH_TRACE="$work/gh-called" PATH="$work/bin:$PATH" scripts/doctor 2>&1)"
+status=$?
+if (( status == 0 )) && [[ ! -e "$work/gh-called" ]]; then
+  pass
+else
+  fail "scripts/doctor contacted GitHub or failed in an otherwise healthy local fixture"
+fi
+cleanup
+
+fixture "dev stays offline"
+out="$(cd "$work" && GH_TRACE="$work/gh-called" PATH="$work/bin:$PATH" scripts/dev 2>&1)"
+status=$?
+if (( status == 0 )) && [[ ! -e "$work/gh-called" ]]; then
+  pass
+else
+  fail "scripts/dev contacted GitHub or failed in an empty local fixture"
+fi
+cleanup
+
+fixture "repository settings are explicit"
+out="$(cd "$work" && GH_TRACE="$work/gh-called" PATH="$work/bin:$PATH" scripts/repo-settings check 2>&1)"
+status=$?
+if (( status == 0 )) &&
+  grep -qx 'auth status' "$work/gh-called" &&
+  grep -q 'optional missing: gh auth' <<<"$out"; then
+  pass
+else
+  fail "scripts/repo-settings check did not perform the hosted GitHub preflight"
+fi
+cleanup
+
+fixture "repository settings require a subcommand"
+out="$(cd "$work" && GH_TRACE="$work/gh-called" PATH="$work/bin:$PATH" scripts/repo-settings 2>&1)"
+status=$?
+if (( status != 0 )) && grep -q 'Usage: scripts/repo-settings check' <<<"$out"; then
+  pass
+else
+  fail "scripts/repo-settings accepted a missing subcommand"
+fi
+cleanup
+
+echo
+echo "$passed passed, $failed failed"
+(( failed == 0 ))

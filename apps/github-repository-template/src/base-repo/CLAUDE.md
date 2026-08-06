@@ -2,8 +2,9 @@
 
 Use these instead of per-language tools; each detects the languages present and fails when an expected check cannot run.
 
-- `scripts/doctor` — verify the tools each present manifest needs, and that the pre-commit hook is installed in this clone
-- `scripts/check` — full local gate: `doctor`, the detection test, then lint, format, type check, test, build, then the security audit and pre-commit across every file, not just staged ones
+- `scripts/doctor` — verify local toolchains, dependencies, hooks, and configuration without contacting hosted services
+- `scripts/repo-settings check` — inspect GitHub-hosted security and branch settings; run explicitly because it needs network access and repository administration visibility
+- `scripts/check` — full local gate: `doctor`, the script tests, then lint, format, type check, test, build, then the security audit and pre-commit across every file, not just staged ones
 - `scripts/fix` — rewrite formatting for every detected stack; the write half of `check`'s format check, no lint autofixes
 - `scripts/clean` — recursively delete build output and tool caches (`dist`, `build`, `coverage`, `__pycache__`, `.*_cache`, `*.pyc`)
 - `scripts/dev [app-name]` — start the dev server; requires the app name when several stacks are present, since only one process can run

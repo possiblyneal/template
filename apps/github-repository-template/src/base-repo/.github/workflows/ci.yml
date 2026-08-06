@@ -24,10 +24,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # Before the toolchains, since it installs none and verifies the public
-      # language-capabilities interface plus its workflow adapters.
-      - name: Verify language capabilities
-        run: scripts/tests/capabilities-test
+      # Before the toolchains, since these install none and verify both the
+      # language-capabilities wiring and the local/hosted check boundary.
+      - name: Verify repository scripts
+        run: |
+          for test_script in scripts/tests/*-test; do
+            "$test_script"
+          done
 
       - name: Set up toolchains
         uses: ./.github/actions/setup-toolchains

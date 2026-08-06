@@ -11,14 +11,15 @@ fi
 
 scripts/doctor
 
-# Runs before the checks it guards. It verifies the language-capabilities
-# interface, its aggregate outcomes, and the workflow adapters that consume it.
-if [[ ! -x scripts/tests/capabilities-test ]]; then
-  echo "scripts/tests/capabilities-test is missing or not executable."
-  exit 1
-fi
-
-scripts/tests/capabilities-test
+# Run before the checks they guard. They verify the language-capabilities
+# interface, its workflow adapters, and that routine local commands stay offline.
+for test_script in scripts/tests/*-test; do
+  if [[ ! -x "$test_script" ]]; then
+    echo "$test_script is missing or not executable."
+    exit 1
+  fi
+  "$test_script"
+done
 
 if [[ ! -x scripts/ci ]]; then
   echo "scripts/ci is missing or not executable."
