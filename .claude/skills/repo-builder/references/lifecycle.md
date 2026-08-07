@@ -42,6 +42,11 @@ Every built repository tracks `.repo-template.json`:
     {"path": ".claude/hooks/**", "mode": "managed"},
     {"path": ".claude/rules/**", "mode": "managed"},
     {"path": ".claude/settings.json", "mode": "managed"},
+    {"path": ".pre-commit-config.yaml", "mode": "managed"},
+    {"path": ".gitattributes", "mode": "managed"},
+    {"path": ".gitignore", "mode": "managed"},
+    {"path": ".worktreeinclude", "mode": "managed"},
+    {"path": ".mcp.json", "mode": "managed"},
     {"path": "apps/**", "mode": "product"},
     {"path": "libs/**", "mode": "product"},
     {"path": "tests/**", "mode": "product"},
@@ -69,6 +74,8 @@ Ownership answers whether a path participates in template updates:
 
 The longest matching path wins; equal patterns are invalid. The old-to-new template delta bounds update scope. Do not edit an unrelated destination path merely because a broad ownership rule matches it.
 
+Unmatched defaulting to product is the safe direction for a path the template does not ship, and the wrong one for a path it does. A root dotfile matches no directory pattern, so `.pre-commit-config.yaml`, `.gitattributes`, and `.gitignore` fall through to product unless named individually — and those files carry the pinned hook revisions behind the secret scanner and the merge policy keeping a lockfile from being line-merged. A payload fix to any of them would land nowhere while the update reported success. Every path the template ships needs an ownership rule that reaches it; verify with `classify_path` rather than assuming a directory pattern covers a file at the root.
+
 A rename or delete of a destination-modified managed file needs semantic review. Product-created files under managed directories remain untouched unless the new template introduces the same path.
 
 ## Generate
@@ -84,6 +91,8 @@ A rename or delete of a destination-modified managed file needs semantic review.
      --default-branch main
    ```
 
+   `generate` validates the source only. It takes the destination as a name, never inspects it, and so cannot tell an empty repository from one with content. Establish that yourself before materializing.
+
 2. Collect only unresolved decisions: owner/name, visibility, application boundary/name, stacks and package managers, public-repository files, release behavior, and feature availability.
 3. Materialize the subtree from that exact commit into an isolated local directory. Do not substitute the current working tree.
 4. Personalize the candidate:
@@ -94,11 +103,41 @@ A rename or delete of a destination-modified managed file needs semantic review.
    - create `.repo-template.json`;
    - render visibility and feature choices honestly. In particular, omit or explicitly disable CodeQL for a private repository without GitHub Advanced Security rather than leaving a workflow known to fail.
 5. Initialize Git locally with no remote and run the candidate's documented checks. Install the local pre-commit hook if the candidate requires it. Report skipped or unavailable checks; do not call them passes.
-6. Present the local diff, checks, repository settings, and exact pending remote commands at the remote action gate.
-7. Create the GitHub repository without auto-initialization. Create and push one empty root commit to the default branch so the full generated payload can be reviewed in a PR.
-8. Configure supported settings after the default branch exists: Dependabot alerts/security updates, push protection where available, and a branch ruleset appropriate to the repository. Confirm plan/visibility limitations instead of treating API success as proof a feature is active.
-9. Branch from the empty base, add the entire candidate and manifest, commit, push, and open a PR. Supply an explicit PR body because the empty base does not yet contain the repository's PR template.
-10. Verify the remote default branch, PR base/head, URL, settings state, and available checks. Do not merge.
+
+   Stage the candidate before running the checks. `pre-commit run --all-files` enumerates through the Git index, so an unstaged candidate is checked as the empty set and reports a pass over nothing.
+
+   Tools the candidate's scripts look up on `PATH` may also run inside pre-commit's pinned environments. A tool reported unavailable by a script and passing under pre-commit in the same run was not skipped; report what each surface actually did.
+
+6. Verify the file list, not only the content. Compare the payload's tracked paths at the source commit against the candidate's, and account for every difference as intended or as a defect. A file the payload ships and the candidate lacks is invisible to every check, because a check reads content and absence has no runner. Compare against the working tree as well as the index: a path the destination ignores is present and untracked rather than missing, and `.env` is the one the payload ships that way.
+7. Present the local diff, the file-list reconciliation, checks, repository settings, and exact pending remote commands at the remote action gate.
+8. Create the GitHub repository without auto-initialization. Create and push one empty root commit to the default branch so the full generated payload can be reviewed in a PR.
+9. Configure supported settings after the default branch exists: Dependabot alerts/security updates, push protection where available, and a branch ruleset appropriate to the repository. Confirm plan/visibility limitations instead of treating API success as proof a feature is active.
+
+10. Branch from the empty base, add the entire candidate and manifest, commit, push, and open a PR. Supply an explicit PR body because the empty base does not yet contain the repository's PR template.
+11. Verify the remote default branch, PR base/head, URL, settings state, and available checks. Do not merge.
+
+    A pull request with no checks means the workflows are unverified, never that they passed. Establish which one it is before reporting:
+
+    ```bash
+    gh api repos/<owner>/<name>/commits/<head-sha>/check-suites --jq '[.check_suites[].app.slug]'
+    ```
+
+    No GitHub Actions suite means no run was ever dispatched. Check [githubstatus.com](https://www.githubstatus.com/) before treating that as a defect in the generated repository — dispatch and registration are separate services, and an outage suppresses runs while every permissions and workflow API still reports healthy.
+
+    Note that `/actions/workflows` lists the default branch only, so it reads zero on a first-generation PR whose default branch has no `.github/` yet. That is expected, not evidence.
+
+## Generate into a repository that already has content
+
+The steps above assume an empty destination. A destination with existing content is a generation whose collisions are decided by hand, and it needs its own rules:
+
+1. Establish that the destination is a clean worktree, and enumerate every payload path that already exists there before writing anything.
+2. Apply non-colliding payload files as ordinary additions.
+3. For each collision, decide between the payload version, the destination version, and a merge — then state the decision and the reason per file. Verify afterwards that no destination-only content was dropped, naming what was preserved.
+4. Never delete destination content to resolve a collision. A payload path that cannot be reconciled is a conflict to report, not a file to overwrite.
+5. Record the collision decisions in `generation`, since they are choices a later update has to respect rather than re-litigate.
+6. Do not create the placeholder application when the destination already has its own application boundary. Record the real boundary in `generation.application_name` and drop the payload's Placeholders section.
+
+Ownership still governs what a later update may touch, and a hand-merged file is managed content whose destination edits are real intent. Classify deliberately: marking a whole tree product to protect it also freezes it.
 
 ## Update
 
@@ -155,6 +194,8 @@ Stop before editing when:
 - ownership is ambiguous.
 
 Stop before remote actions when semantic intent conflicts or verification fails. Keep `template.commit` at the previous version. Report exact paths, Git evidence, checks, and a recoverable next action. Do not approximate a missing old version, rebase unrelated template histories, reset/clean the destination, or claim a partial update succeeded.
+
+Report a check by what it did, and keep the four outcomes distinct: a check that passed, one that reported nothing to do, one whose runner was missing, and one that never ran. The candidate's own scripts make that distinction, and collapsing it in the report discards the thing they were built to preserve. A run reporting no project manifest checked nothing; a green pull request with no workflow runs verified nothing; a file that was never written cannot fail.
 
 ## Final report
 

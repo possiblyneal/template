@@ -4,6 +4,31 @@
 !.env.example
 !.env.*.example
 
+# Keys and credentials. A leaked key means rotation, not just a revert.
+*.pem
+*.key
+id_rsa*
+*.p12
+*.pfx
+credentials.json
+service-account*.json
+.npmrc
+.pypirc
+
+# Terraform state stores secrets in plaintext.
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Claude worktrees are checkouts of this same repo; without this their
+# entire file tree shows up as untracked noise in the main checkout.
+.claude/worktrees/
+
+# Per-machine Claude overrides. Both are personal, not part of the repo
+# contract, and may hold local paths or preferences.
+.claude/settings.local.json
+CLAUDE.local.md
+
 # Local scratch
 tmp/*
 !tmp/.gitkeep
@@ -27,7 +52,7 @@ Thumbs.db
 *.swo
 .orca/
 
-# Dependencies
+# Dependencies. Unanchored: these nest legitimately in monorepos.
 node_modules/
 .venv/
 venv/
@@ -47,16 +72,14 @@ htmlcov/
 .pnpm-store/
 .yarn/cache/
 coverage/
-dist/
-build/
+/dist/
+/build/
 .next/
 .nuxt/
 .svelte-kit/
 
-# Go
-bin/
-
-# Rust
+# Go and Rust. /bin/ is anchored: src/bin/ and cmd/*/bin/ hold real source.
+/bin/
 target/
 
 # Containers
@@ -72,8 +95,8 @@ docker-data/
 *.db
 
 # Generated artifacts
-artifacts/
-downloads/
-.claude/worktrees/
-.claude/skills/repo-builder-workspace/
+/artifacts/
+/downloads/
 
+# Scratch space for repo-builder skill iterations, not repository content.
+.claude/skills/repo-builder-workspace/

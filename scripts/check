@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+if [[ ! -x scripts/doctor ]]; then
+  echo "scripts/doctor is missing or not executable."
+  exit 1
+fi
+
+scripts/doctor
+
+# Run before the checks they guard. They verify the language-capabilities
+# interface, its workflow adapters, and that routine local commands stay offline.
+for test_script in scripts/tests/*-test; do
+  if [[ ! -x "$test_script" ]]; then
+    echo "$test_script is missing or not executable."
+    exit 1
+  fi
+  "$test_script"
+done
+
+if [[ ! -x scripts/ci ]]; then
+  echo "scripts/ci is missing or not executable."
+  exit 1
+fi
+
+scripts/ci
+
+# The security workflow blocks a pull request the same way the CI workflow does,
+# so leaving it out here means finding out on the pull request instead of before
+# the commit.
+if [[ ! -x scripts/security ]]; then
+  echo "scripts/security is missing or not executable."
+  exit 1
+fi
+
+scripts/security
+
+# The commit hooks see staged files only, so a file stays unchecked until it is
+# next touched: a hook added today never reaches the files already committed,
+# and a rename out of a recognized type stops the checks with nothing reporting
+# it. This is the sweep that covers them. doctor above already fails when the
+# config is present and the tool or the installed hook is missing.
+#
+# no-commit-to-branch is skipped rather than run. It reads the current branch
+# instead of any file, so on main it fails this whole sweep for a commit that
+# is not being made.
+if [[ -s .pre-commit-config.yaml ]]; then
+  echo
+  echo "Running pre-commit across all files"
+  SKIP=no-commit-to-branch pre-commit run --all-files
+fi

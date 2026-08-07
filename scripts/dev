@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/detect.sh
+source "$repo_root/scripts/libs/detect.sh"
+
+app_name="${1:-}"
+
+list_apps() {
+  local entry found=1
+  for entry in apps/*/; do
+    [[ -d "$entry" ]] || continue
+    found=0
+    echo "  scripts/dev $(basename "$entry")"
+  done
+  return "$found"
+}
+
+if [[ -x scripts/doctor ]]; then
+  scripts/doctor
+else
+  echo "No scripts/doctor script found; skipping environment checks."
+fi
+
+if [[ -n "$app_name" ]]; then
+  if [[ ! -d "apps/$app_name" ]]; then
+    echo "No apps/$app_name directory."
+    if list_apps >/dev/null; then
+      echo "Available:"
+      list_apps
+    else
+      echo "apps/ has no entries yet."
+    fi
+    exit 1
+  fi
+  cd "apps/$app_name"
+fi
+
+mapfile -t languages < <(language_capabilities present)
+if (( ${#languages[@]} > 1 )); then
+  echo "Several stacks here: ${languages[*]}"
+  echo "A dev server is a single foreground process, so which one to start has to be said."
+  if [[ -n "$app_name" ]]; then
+    echo "apps/$app_name holds more than one stack. Split it, or add a dev script that"
+    echo "starts what this app means by dev."
+  elif list_apps >/dev/null; then
+    echo "Name the app:"
+    list_apps
+  else
+    echo "apps/ has no entries yet, so there is nothing to name. Add a private dev"
+    echo "adapter for the stack you mean to scripts/libs/detect.sh."
+  fi
+  exit 1
+fi
+
+if (( ${#languages[@]} == 0 )); then
+  echo "No project manifest found here, so there is no dev server to start."
+  exit 0
+fi
+
+status=0
+language_capabilities run --language "${languages[0]}" dev || status=$?
+case "$status" in
+  0) ;;
+  "$NO_RUNNER") echo "No dev command configured for ${languages[0]}. Add its private adapter to scripts/libs/detect.sh." ;;
+  *) exit "$status" ;;
+esac

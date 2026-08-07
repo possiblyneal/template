@@ -1,0 +1,65 @@
+name: CodeQL
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    # CodeQL ships new queries continuously, so a weekly run finds problems in
+    # code that has not changed since the last push.
+    - cron: "41 7 * * 2"
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # CodeQL fails when told to analyze a language the repository does not
+  # contain, so the language list comes from the manifests actually present
+  # rather than from a fixed list this template cannot know.
+  detect:
+    name: Detect languages
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.detect.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # The matrix comes from scripts/detect rather than being built here,
+      # so a language this repository checks is one CodeQL scans. This step
+      # used to keep its own copy of detection, which is how a new stack ends up
+      # linted and tested while nothing scans it for vulnerabilities.
+      - name: Detect languages
+        id: detect
+        run: scripts/detect codeql-matrix >> "$GITHUB_OUTPUT"
+
+  analyze:
+    name: Analyze ${{ matrix.language }}
+    needs: detect
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect.outputs.matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}

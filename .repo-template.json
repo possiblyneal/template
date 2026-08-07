@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "template": {
+    "repository": "https://github.com/possiblyneal/template",
+    "subtree": "apps/github-repository-template/src/base-repo",
+    "commit": "3ee6c19d304ddc760f2da647e84f758aeddf4379"
+  },
+  "destination": {
+    "repository": "possiblyneal/template",
+    "default_branch": "main"
+  },
+  "generation": {
+    "application_name": "github-repository-template",
+    "languages": [],
+    "package_manager": null,
+    "visibility": "private",
+    "self_hosted": true,
+    "features": {
+      "codeql": "shipped-unmodified-fails-upload-without-ghas",
+      "python_manifest": "omitted-by-choice"
+    }
+  },
+  "ownership": [
+    {"path": ".repo-template.json", "mode": "managed"},
+    {"path": "scripts/**", "mode": "managed"},
+    {"path": ".github/**", "mode": "managed"},
+    {"path": ".claude/hooks/**", "mode": "managed"},
+    {"path": ".claude/rules/**", "mode": "managed"},
+    {"path": ".claude/settings.json", "mode": "managed"},
+    {"path": ".pre-commit-config.yaml", "mode": "managed"},
+    {"path": ".gitattributes", "mode": "managed"},
+    {"path": ".gitignore", "mode": "managed"},
+    {"path": ".worktreeinclude", "mode": "managed"},
+    {"path": ".mcp.json", "mode": "managed"},
+    {"path": "apps/**", "mode": "product"},
+    {"path": "libs/**", "mode": "product"},
+    {"path": "tests/**", "mode": "product"},
+    {"path": "tools/**", "mode": "product"},
+    {"path": "docs/**", "mode": "product"},
+    {"path": ".claude/skills/**", "mode": "product"},
+    {"path": ".claude/agents/**", "mode": "product"},
+    {"path": ".claude/output-styles/**", "mode": "product"},
+    {"path": ".claude/workflows/**", "mode": "product"}
+  ]
+}
