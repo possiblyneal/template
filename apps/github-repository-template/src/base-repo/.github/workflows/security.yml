@@ -72,6 +72,12 @@ jobs:
       - name: Install trivy
         if: steps.detect.outputs.trivy == 'true'
         uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          # Pinning the action is not enough. It downloads a trivy binary from
+          # the release page and its version input defaults to latest, so the
+          # scanner deciding whether this repository has a vulnerability would
+          # otherwise change with no diff here. Bump alongside the action pin.
+          version: v0.73.0
 
       # No gitleaks install. Secret prevention belongs to GitHub push protection,
       # which blocks a secret before it reaches the remote; a CI scan only finds
