@@ -44,7 +44,7 @@ On update, advance `.repo-template.json` only after the candidate validates, and
 
 - Operation: generate | update | stopped
 - Pull request: <URL or "not created">
-- Template: <old full commit or "none"> -> <target full commit>
+- Template: <old full commit, or "not previously generated"> -> <target full commit>
 - Destination: <owner/repository>
 
 ### Reconciliation
@@ -52,6 +52,9 @@ On update, advance `.repo-template.json` only after the candidate validates, and
 - Preserved: <paths or none>
 - Renamed/deleted: <paths or none>
 - Conflicted: <paths and competing intents, or none>
+
+### File list
+- <payload paths accounted for, and every difference named as intended or as a defect>
 
 ### Repository settings
 - <setting>: enabled | unavailable (<reason>) | not requested

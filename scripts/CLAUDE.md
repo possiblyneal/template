@@ -51,5 +51,6 @@ Changes here almost always belong in `apps/github-repository-template/src/base-r
 - `scripts/tests/capabilities-test` — dispatch coverage, using `CI_DRY_RUN=1` so the result comes from wiring alone and is identical on a machine with no toolchains
 - `scripts/tests/health-checks-test` — the offline boundary
 - `scripts/tests/adr-index-test` — the generated index converges, and pre-commit actually invokes the hook
-- `scripts/check` runs both before the checks they guard; `ci.yml` runs them before toolchain setup
+- `scripts/check` runs all three before the checks they guard; `ci.yml` runs them before toolchain setup
+- `adr-index-test` skips its hook-wiring cases when `pre-commit` is absent, so `ci.yml` installs `pre-commit` ahead of them. Without that install the suite reports a smaller green run in CI than it does locally, and the two assertions covering the wiring above are the ones lost
 - shellcheck via pre-commit, with `-x` so it follows `source` into `libs/detect.sh`

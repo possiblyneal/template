@@ -145,8 +145,6 @@ def manifest(template: Path, remote: Path, old_commit: str) -> dict[str, object]
         },
         "generation": {
             "application_name": "billing-api",
-            "languages": ["python"],
-            "package_manager": "uv",
             "visibility": "private",
             "features": {"codeql": "omitted-private-without-ghas"},
         },
