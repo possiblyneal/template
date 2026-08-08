@@ -67,15 +67,20 @@ if [[ -n "$(detect_find Dockerfile -print -quit)$(detect_find compose.yml -print
 fi
 
 # A pre-commit config does nothing until `pre-commit install` writes a hook
-# into .git/hooks, which is local to each clone and never checked in. Both
-# failures are silent: commits succeed as normal while the configured hooks,
-# including the secret scan, never run.
+# into the git hooks directory, which is local to each clone and never checked
+# in. Both failures are silent: commits succeed as normal while the configured
+# hooks, including the secret scan, never run.
+#
+# Resolve the hook path with `git rev-parse --git-path` rather than hardcoding
+# .git/hooks: in a linked worktree .git is a file, not a directory, and the
+# hooks live in the shared common dir. A literal .git/hooks/pre-commit test
+# reports the hook missing there even when it is installed and will run.
 if [[ -s .pre-commit-config.yaml ]]; then
   if ! command -v pre-commit >/dev/null 2>&1; then
     echo "missing: pre-commit (.pre-commit-config.yaml is present but the tool is not installed)"
     echo "  Install it, then run: pre-commit install"
     missing=1
-  elif [[ ! -e .git/hooks/pre-commit ]]; then
+  elif [[ ! -e "$(git rev-parse --git-path hooks/pre-commit)" ]]; then
     echo "missing: pre-commit hook (installed tool, but no hook in this clone)"
     echo "  Run: pre-commit install"
     missing=1
