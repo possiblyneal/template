@@ -16,18 +16,10 @@ set -uo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-passed=0
-failed=0
-current=""
-
-fail() {
-  echo "  FAIL  $current: $1"
-  failed=$((failed + 1))
-}
-
-pass() {
-  passed=$((passed + 1))
-}
+# Sourced before any fixture changes directory, so the path stays valid.
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/harness.sh
+source "$repo_root/scripts/tests/libs/harness.sh"
 
 # Each case runs in its own directory holding nothing but the manifests it
 # names, so a fixture cannot see another's files or this repository's.
@@ -294,6 +286,4 @@ else
 fi
 cleanup
 
-echo
-echo "$passed passed, $failed failed"
-(( failed == 0 ))
+report

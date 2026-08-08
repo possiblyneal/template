@@ -11,8 +11,10 @@ One flat directory, not a `ci/` and a `scripts/` split. The boundary that split 
 - `doctor`, `check`, `fix`, `clean`, `dev` — run by a person
 - `ci`, `security`, `release`, `detect` — called by `.github/workflows/`
 - `repo-settings check` — hosted GitHub state, run explicitly
+- `adr-index` — called by pre-commit; regenerates `docs/adr/index.md`
 - `libs/detect.sh` — the detection library, sourced by all of the above
 - `tests/*-test` — assertions about the wiring itself
+- `tests/libs/harness.sh` — the assertion counting those tests share
 
 A helper that must be built before it runs belongs in `tools/`, not here.
 
@@ -26,7 +28,11 @@ A helper that must be built before it runs belongs in `tools/`, not here.
 
 **Three runners contradict the pass/fail rule and are special-cased deliberately.** pytest exits 5 on collecting no tests; `npm init -y` writes a placeholder test script that exits 1; `uv run <tool>` exits 2 when the tool is not installed. Each is translated to "no runner" or success rather than being reported as a failing suite. Do not remove these without reading why they are there.
 
-**`libs/detect.sh` is sourced, never executed.** No shebang, no executable bit, `.sh` extension so linters recognize it. Every other script here is extensionless and executable — pre-commit identifies them as shell by reading the shebang, and only reads it on an executable file, so a script committed without that bit is skipped in silence.
+**`libs/detect.sh` and `tests/libs/harness.sh` are sourced, never executed.** No shebang, no executable bit, `.sh` extension so linters recognize it. Every other script here is extensionless and executable — pre-commit identifies them as shell by reading the shebang, and only reads it on an executable file, so a script committed without that bit is skipped in silence. `harness.sh` holds the assertion counting and the tally; each suite keeps its own `fixture`, since they scaffold different worlds and only the counting is common.
+
+**`adr-index` is a pre-commit hook, not a capability.** It does not source `libs/detect.sh` and is not dispatched by `language_capabilities`, because ADRs are prose present in every repository whatever it is written in — there is no language to detect.
+
+Two things about its wiring are load-bearing and were each a bug first. It self-reports the rewrite with a non-zero exit rather than relying on pre-commit's modified-files detection, which does not fire the first time the index is created: the file is untracked then, so pre-commit sees no change and the commit lands without it. And it runs with `always_run` and no `files:` filter, because that filter reads the staged paths, which exclude deletions — `git rm` of a record would skip the hook on the one commit that made the index stale. `tests/adr-index-test` drives a real repository through pre-commit for both.
 
 **Local commands stay offline.** `doctor`, `check`, and `dev` must not contact GitHub. Hosted inspection happens only through `repo-settings check`, so ordinary local work is not coupled to network availability or `gh` authentication. `tests/health-checks-test` enforces this by stubbing `gh`.
 
@@ -44,5 +50,6 @@ Changes here almost always belong in `apps/github-repository-template/src/base-r
 
 - `scripts/tests/capabilities-test` — dispatch coverage, using `CI_DRY_RUN=1` so the result comes from wiring alone and is identical on a machine with no toolchains
 - `scripts/tests/health-checks-test` — the offline boundary
+- `scripts/tests/adr-index-test` — the generated index converges, and pre-commit actually invokes the hook
 - `scripts/check` runs both before the checks they guard; `ci.yml` runs them before toolchain setup
 - shellcheck via pre-commit, with `-x` so it follows `source` into `libs/detect.sh`

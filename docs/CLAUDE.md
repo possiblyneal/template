@@ -6,7 +6,7 @@ Durable knowledge about this repository: why decisions were made, what contracts
 
 ## Ownership
 
-- `adr/` — architectural decision records, one repo-wide numbered sequence
+- `adr/` — architectural decision records, one repo-wide numbered sequence; `adr/index.md` is generated from their frontmatter and is never hand-edited
 - `specs/` — contracts spanning apps, such as service-to-service APIs and shared schemas
 - `plans/` — plans written in plan mode, pointed here by `plansDirectory` in `.claude/settings.json`
 - `lessons.md` — repository-specific knowledge that prevents recurring mistakes
@@ -18,6 +18,12 @@ Specs for a single unit belong to that unit, under `apps/<name>/docs/specs/`, an
 **ADRs use one repo-wide numbered sequence**, so decisions stay discoverable without knowing which app to look in. `adr/0000-template.md` is the template: copy it, replace every frontmatter line and placeholder, and number from `0001`. Never reuse a number across scopes. An app may keep its own `adr/` once local decisions would drown the repo-wide ones; link it from here when that happens.
 
 **An ADR explains why**, so an agent does not revert or fundamentally alter an established decision. Do not rewrite history in one — supersede it with a new record.
+
+**`adr/index.md` is derived, not written.** `scripts/adr-index` rebuilds it from each record's `title`, `status`, and `superseded_by`; a pre-commit hook runs on every commit and fails it when the file changed, so stage the regenerated index with the record that changed it. A hand edit does not survive the next run.
+
+- Listed records are the files named `NNNN-…`, minus `0000-template.md`. Anything else in `adr/` is left alone rather than listed.
+- `superseded_by` must name a file that exists, written from the repository root or as a bare filename when the replacement sits in `adr/`. That is the only thing the script rejects; nothing else validates frontmatter.
+- The index is absent until a real record exists, so a fresh repository carries no file listing nothing.
 
 **`plans/` is tracked**, unlike the `~/.claude/plans` default, so a plan arrives in the diff alongside the code it describes. That is the moment a human approves the plan before the work starts.
 
@@ -31,6 +37,6 @@ The repository's structural reasoning is not here — it lives in `apps/github-r
 
 ## Verification
 
-None. Documentation correctness is not machine-checkable here; pre-commit enforces only formatting and line endings.
+`scripts/adr-index` through pre-commit, covering `adr/` only: the index matches the records, and each record's frontmatter is well-formed. `scripts/tests/adr-index-test` covers the script itself. Nothing checks the prose in any document here.
 
 The closeout pass in `.claude/rules/documentation.md` is the check: re-check changed paths against the `CLAUDE.md` chain, update owning docs, refresh every affected Child Index, and remove stale text.

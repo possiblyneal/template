@@ -6,19 +6,11 @@ set -uo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-passed=0
-failed=0
-current=""
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/harness.sh
+source "$repo_root/scripts/tests/libs/harness.sh"
+
 work=""
-
-fail() {
-  echo "  FAIL  $current: $1"
-  failed=$((failed + 1))
-}
-
-pass() {
-  passed=$((passed + 1))
-}
 
 fixture() {
   current="$1"
@@ -84,6 +76,4 @@ else
 fi
 cleanup
 
-echo
-echo "$passed passed, $failed failed"
-(( failed == 0 ))
+report

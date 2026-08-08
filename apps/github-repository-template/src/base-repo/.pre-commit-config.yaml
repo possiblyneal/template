@@ -7,6 +7,26 @@ repos:
     hooks:
       - id: gitleaks
 
+  # docs/adr/index.md is derived from the records beside it. Regeneration is
+  # the check: the script rewrites the index and exits non-zero when the content
+  # changed, so a stale index fails the commit rather than being committed
+  # alongside the record that outdated it.
+  #
+  # always_run with no files filter, because a filter would decide from the
+  # staged paths whether the hook runs at all, and pre-commit's staged-file list
+  # excludes deletions. Deleting a record is exactly when the index goes stale,
+  # and it is the case a filter cannot see: `git rm` of an ADR would commit an
+  # index still listing it, linking a file that is no longer there. The script
+  # reads the whole directory and costs nothing on a commit that touches no ADR.
+  - repo: local
+    hooks:
+      - id: adr-index
+        name: regenerate the ADR index
+        entry: scripts/adr-index
+        language: script
+        always_run: true
+        pass_filenames: false
+
   # The only static analysis the shell scripts in scripts/ get. Every one there
   # is extensionless, so pre-commit recognizes it as shell by reading its
   # shebang, which it only does for files that are executable. The two shebang
