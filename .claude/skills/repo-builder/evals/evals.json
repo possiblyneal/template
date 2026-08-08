@@ -3,7 +3,7 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "Generate a local candidate for acme/billing-service from the fixture template's base-repo subtree at the exact target commit. Use application name billing-api, private visibility, Python with uv, and main as the default branch. Do not contact GitHub or mutate any remote: materialize the candidate under the requested output directory and write a report explaining the remote repository/empty-base/content-PR steps that would follow. Preserve the ADR template, replace the app-name and CLAUDE.md bootstrap placeholders, initialize lessons metadata, and record provenance in .repo-template.json.",
+      "prompt": "Generate a local candidate for acme/billing-service from the fixture template's base-repo subtree at the exact target commit. Use application name billing-api, private visibility, and main as the default branch. Do not contact GitHub or mutate any remote: materialize the candidate under the requested output directory and write a report explaining the remote repository/empty-base/content-PR steps that would follow. Preserve the ADR template, replace the app-name and CLAUDE.md bootstrap placeholders, initialize lessons metadata, and record provenance in .repo-template.json.",
       "expected_output": "A personalized local repository candidate, valid lifecycle manifest, and a report that stops before remote operations while specifying the empty main base and generated-content PR sequence.",
       "files": [],
       "expectations": [

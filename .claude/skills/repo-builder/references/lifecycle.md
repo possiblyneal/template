@@ -28,8 +28,6 @@ Every built repository tracks `.repo-template.json`:
   },
   "generation": {
     "application_name": "billing-api",
-    "languages": ["python"],
-    "package_manager": "uv",
     "visibility": "private",
     "features": {
       "codeql": "omitted-private-without-ghas"
@@ -64,6 +62,8 @@ Use a full lowercase 40-character commit. `template.commit` is the last template
 
 Record generation choices that change rendered files or repository settings. Do not record timestamps, a pending target commit, destination HEAD, or duplicate file contents.
 
+Do not record what the filesystem already answers. Language and package manager are read from the manifests present, so a recorded copy is a second source of truth that only goes stale — `libs/detect.sh` answers the question at any moment and a manifest added later never updates a field. `visibility` is recorded despite being live-readable because it is an argument to repository creation, and `features` because it records which absences were deliberate: an omitted `codeql.yml` and a dropped one look identical on disk.
+
 ## Ownership
 
 Ownership answers whether a path participates in template updates:
@@ -93,7 +93,11 @@ A rename or delete of a destination-modified managed file needs semantic review.
 
    `generate` validates the source only. It takes the destination as a name, never inspects it, and so cannot tell an empty repository from one with content. Establish that yourself before materializing.
 
-2. Collect only unresolved decisions: owner/name, visibility, application boundary/name, stacks and package managers, public-repository files, release behavior, and feature availability.
+2. Collect only unresolved decisions: owner/name, visibility, application boundary/name, public-repository files, release behavior, and feature availability.
+
+   Do not collect stacks or package managers, and do not render a root manifest. A template cannot know the ecosystem a repository will use, and a wrong guess is worse than an absent file — the same reasoning `.github/dependabot.yml` follows in listing only the two manifests the template itself ships. A generated repository with no manifest is reported honestly by `scripts/ci` as nothing to check yet, with every check becoming required the moment one is added. The first real commit brings the manifest.
+
+   Say so in the handover: the root manifest is what makes a package visible to the checks, and a manifest nested under `apps/` instead is invisible to all of them. `scripts/doctor` fails on that shape rather than passing over it.
 3. Materialize the subtree from that exact commit into an isolated local directory. Do not substitute the current working tree.
 4. Personalize the candidate:
    - move `apps/app-name` to the kebab-case application name (do not copy it), verify the old path is absent, and update every reference;
@@ -112,6 +116,12 @@ A rename or delete of a destination-modified managed file needs semantic review.
 7. Present the local diff, the file-list reconciliation, checks, repository settings, and exact pending remote commands at the remote action gate.
 8. Create the GitHub repository without auto-initialization. Create and push one empty root commit to the default branch so the full generated payload can be reviewed in a PR.
 9. Configure supported settings after the default branch exists: Dependabot alerts/security updates, push protection where available, and a branch ruleset appropriate to the repository. Confirm plan/visibility limitations instead of treating API success as proof a feature is active.
+
+    Read the result back with the repository's own `scripts/repo-settings check` rather than hand-rolling `gh api` calls. It already separates the two ways a setting reads as absent: `security_and_analysis` is missing both for a non-admin and for a plan that does not offer the feature, and it checks `.permissions.admin` to tell those apart. A hand-rolled check that misses this reports a plan limitation as a disabled setting.
+
+    Its output is the evidence for the settings section of the report, and `not offered for the plan` is a distinct outcome from disabled — do not collapse them.
+
+    A ruleset that was accepted is not a ruleset that binds. Creation returns 201 either way, so prove enforcement rather than inferring it: commit locally, attempt a direct push to the default branch, and require the `GH013` rejection. Reset the probe commit with `git reset --hard origin/<branch>` afterwards. An unprotected branch accepts that push, which is the finding.
 
 10. Branch from the empty base, add the entire candidate and manifest, commit, push, and open a PR. Supply an explicit PR body because the empty base does not yet contain the repository's PR template.
 11. Verify the remote default branch, PR base/head, URL, settings state, and available checks. Do not merge.
@@ -199,14 +209,14 @@ Report a check by what it did, and keep the four outcomes distinct: a check that
 
 ## Final report
 
-Use this stable shape:
+Use this stable shape. On a generate the Reconciliation lines are empty or trivially everything, and File list carries the weight — it is the only section reporting a file the payload ships and the candidate lacks, which no check can fail on.
 
 ```md
 ## Repo Builder Result
 
 - Operation: generate | update | stopped
 - Pull request: <URL or "not created">
-- Template: <old full commit or "none"> -> <target full commit>
+- Template: <old full commit, or "not previously generated"> -> <target full commit>
 - Destination: <owner/repository>
 
 ### Reconciliation
@@ -214,6 +224,9 @@ Use this stable shape:
 - Preserved: <paths or none>
 - Renamed/deleted: <paths or none>
 - Conflicted: <paths and competing intents, or none>
+
+### File list
+- <payload paths accounted for, and every difference named as intended or as a defect>
 
 ### Repository settings
 - <setting>: enabled | unavailable (<reason>) | not requested
