@@ -1,4 +1,12 @@
 # Install once per clone with `pre-commit install`, otherwise these never run.
+
+# commitlint runs at commit-msg, a different git hook file from the one every
+# other hook here uses. `pre-commit install` writes only the pre-commit hook
+# unless it is told otherwise, and a commit-msg hook that was never installed
+# fails silently: commits succeed, messages go unchecked, and nothing reports
+# it. This line is what makes the plain command install both.
+default_install_hook_types: [pre-commit, commit-msg]
+
 repos:
   # Catches a secret while it is still only in the working tree, which is the
   # one point where the fix is editing a file rather than rotating a credential.
@@ -96,3 +104,22 @@ repos:
       # Keeps main reviewable: work lands through a pull request, where the
       # template and CODEOWNERS apply, rather than as a direct commit.
       - id: no-commit-to-branch
+
+  # The only hook here that runs at commit-msg rather than pre-commit, because
+  # it reads the message, which does not exist yet when the others run. That is
+  # also why `pre-commit run --all-files` skips it and scripts/check does not
+  # cover it -- scripts/tests/commitlint-test drives real commits instead.
+  #
+  # Rules live in .commitlintrc.yaml. commitlint refuses to lint at all without
+  # a config naming a shared preset, so that file is required, not optional.
+  #
+  # @commitlint/config-conventional is pinned and has to be bumped by hand:
+  # Dependabot's pre-commit ecosystem updates `rev` and never reads
+  # additional_dependencies, so an unpinned entry silently follows whatever npm
+  # serves that day and a commit rule can change without a diff.
+  - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
+    rev: v9.26.0
+    hooks:
+      - id: commitlint
+        stages: [commit-msg]
+        additional_dependencies: ["@commitlint/config-conventional@21.2.0"]

@@ -75,6 +75,11 @@ fi
 # .git/hooks: in a linked worktree .git is a file, not a directory, and the
 # hooks live in the shared common dir. A literal .git/hooks/pre-commit test
 # reports the hook missing there even when it is installed and will run.
+#
+# commit-msg is a second hook file, installed by the same command only because
+# the config asks for it. The config is what decides here rather than this
+# script, so a repository that drops the commit-message check is not reported
+# as broken for having done so.
 if [[ -s .pre-commit-config.yaml ]]; then
   if ! command -v pre-commit >/dev/null 2>&1; then
     echo "missing: pre-commit (.pre-commit-config.yaml is present but the tool is not installed)"
@@ -82,6 +87,11 @@ if [[ -s .pre-commit-config.yaml ]]; then
     missing=1
   elif [[ ! -e "$(git rev-parse --git-path hooks/pre-commit)" ]]; then
     echo "missing: pre-commit hook (installed tool, but no hook in this clone)"
+    echo "  Run: pre-commit install"
+    missing=1
+  elif grep -q '^default_install_hook_types:.*commit-msg' .pre-commit-config.yaml \
+    && [[ ! -e "$(git rev-parse --git-path hooks/commit-msg)" ]]; then
+    echo "missing: commit-msg hook (installed tool, but no commit-msg hook in this clone)"
     echo "  Run: pre-commit install"
     missing=1
   else

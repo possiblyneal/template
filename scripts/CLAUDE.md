@@ -34,7 +34,9 @@ A helper that must be built before it runs belongs in `tools/`, not here.
 
 Two things about its wiring are load-bearing and were each a bug first. It self-reports the rewrite with a non-zero exit rather than relying on pre-commit's modified-files detection, which does not fire the first time the index is created: the file is untracked then, so pre-commit sees no change and the commit lands without it. And it runs with `always_run` and no `files:` filter, because that filter reads the staged paths, which exclude deletions — `git rm` of a record would skip the hook on the one commit that made the index stale. `tests/adr-index-test` drives a real repository through pre-commit for both.
 
-**Local commands stay offline.** `doctor`, `check`, and `dev` must not contact GitHub. Hosted inspection happens only through `repo-settings check`, so ordinary local work is not coupled to network availability or `gh` authentication. `tests/health-checks-test` enforces this by stubbing `gh`.
+**Local commands stay off hosted GitHub state.** `doctor`, `check`, and `dev` must not read or write repository settings, branches, or releases. Hosted inspection happens only through `repo-settings check`, so ordinary local work is not coupled to `gh` authentication. `tests/health-checks-test` enforces this by stubbing `gh`.
+
+This is not a promise that nothing reaches the network. pre-commit downloads a hook environment the first time each hook runs, which `check` has always triggered, and `tests/commitlint-test` needs one for commitlint specifically. The boundary is hosted repository state, not connectivity.
 
 **`release` is the only script here that writes to GitHub.** It creates the release from the `CHANGELOG.md` section matching the tag, and refuses when that section is missing or empty, so a version cannot be published before it has been cut in the changelog. It runs `scripts/ci` itself rather than trusting an earlier job to have done it, which is why the release workflow holds `contents: write` while the gate runs. Nothing else should call it.
 
@@ -53,6 +55,7 @@ Changes here almost always belong in `apps/github-repository-template/src/base-r
 - `scripts/tests/capabilities-test` — dispatch coverage, using `CI_DRY_RUN=1` so the result comes from wiring alone and is identical on a machine with no toolchains
 - `scripts/tests/health-checks-test` — the offline boundary
 - `scripts/tests/adr-index-test` — the generated index converges, and pre-commit actually invokes the hook
-- `scripts/check` runs all three before the checks they guard; `ci.yml` runs them before toolchain setup
-- `adr-index-test` skips its hook-wiring cases when `pre-commit` is absent, so `ci.yml` installs `pre-commit` ahead of them. Without that install the suite reports a smaller green run in CI than it does locally, and the two assertions covering the wiring above are the ones lost
+- `scripts/tests/commitlint-test` — the `commit-msg` hook is installed by a bare `pre-commit install`, and commitlint rejects a malformed message and tolerates a generated merge subject. The only suite here that needs the network, since proving a JavaScript linter rejects anything means installing and running it
+- `scripts/check` runs all four before the checks they guard; `ci.yml` runs them before toolchain setup
+- Both hook-wiring suites skip their cases when `pre-commit` is absent, so `ci.yml` installs `pre-commit` ahead of them. Without that install they report a smaller green run in CI than they do locally, and the assertions covering the wiring above are the ones lost
 - shellcheck via pre-commit, with `-x` so it follows `source` into `libs/detect.sh`

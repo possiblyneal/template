@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `CHANGELOG.md` in the template payload, so a generated repository can record a
   change from its first commit rather than from its first release.
+- Conventional Commits, enforced by commitlint at the `commit-msg` hook. A
+  malformed commit message now fails locally instead of reaching review, and
+  the commit type gives the changelog a signal about which changes are likely
+  to owe an entry. Rules live in `.commitlintrc.yaml`. An existing clone needs
+  `pre-commit install` run once more to pick up the second hook; `scripts/doctor`
+  fails until it has been.
 
 ### Changed
 
