@@ -253,25 +253,33 @@ Nothing in this section is a file. Each is a switch in the repository's Settings
 
 \*\*Secret scanning\*\* and \*\*code scanning\*\* are free on public repositories and require GitHub Advanced Security on private ones. `codeql.yml` fails at its upload step without code scanning enabled rather than reporting a silent success, so on a private repository that workflow is either paid for or removed.
 
-### Public / Open Source Additions
+### Additions by Occasion
 
-These files govern community interaction and legal usage. They are only necessary if the repository is public and accepting external contributions. GitHub reads most of them from the repository root, `.github/`, or `docs/`, and shows the same file in the same places wherever it sits; `CODEOWNERS`, `FUNDING.yml`, and `CITATION.cff` are the exceptions noted below. None of them ship with the template, which is a private-repository baseline; this section is the checklist for the day one goes public.
+Nothing in this section ships with the template, and the reason is not that these files are optional extras. Each one answers a condition the template cannot know has arrived. Grouping them by that condition rather than by kind is what makes the list checkable: the question is never "do I need a `GOVERNANCE.md`" but "is anyone other than me deciding what gets merged yet".
+
+Going public is not one of the conditions, because it is not one event. A private repository with a second engineer already needs the first two groups; a public one nobody has found needs nothing below the second. GitHub reads most of these from the repository root, `.github/`, or `docs/`, and shows the same file in the same places wherever it sits; `CODEOWNERS`, `FUNDING.yml`, and `CITATION.cff` are the exceptions noted below.
+
+#### When someone else will use it
+
+Someone who is not the author has to get the thing running, and has to know whether they are allowed to.
 
 \*\*`README.md`\*\*: The public orientation page: what the project does, how to install it, and how to use it.
 
-\*\*`.github/FUNDING.yml`\*\*: Displays a sponsor button in your repository, raising the visibility of funding options for your open source project. Unlike the rest of this section it is read only from `.github/`; a copy at the repository root is ignored, and the missing button is the only symptom.
+\*\*`LICENSE`\*\*: The legal document outlining the usage, modification, and distribution rights of the code. Absent one the default is no permission at all, so a repository with no licence is readable and not usable — a state it sits in silently, since nothing reports it.
 
-\*\*`CONTRIBUTING.md`\*\*: Guidelines for external developers on submitting pull requests, running tests, and adhering to code style.
-
-\*\*`SECURITY.md`\*\*: The project's security policy, supported versions, and the private channel for reporting vulnerabilities.
-
-\*\*`LICENSE`\*\*: The legal document outlining the usage, modification, and distribution rights of the code.
-
-\*\*`CODE_OF_CONDUCT.md`\*\*: The baseline rules for community behavior and expectations for professional interaction.
+\*\*`SECURITY.md`\*\*: The project's security policy, supported versions, and the private channel for reporting vulnerabilities. It belongs in this group rather than a later one because the occasion is not a report arriving — that can happen on day one and cannot be predicted — but the file being findable before it does. With no private channel published, the first report arrives as a public issue, and disclosure precedes the fix.
 
 \*\*`SUPPORT.md`\*\*: Routes users to help, filtering general troubleshooting out of the core issue tracker.
 
-\*\*`CONTRIBUTORS.md`\*\*: A public ledger crediting individuals who have contributed code or documentation. GitHub also recognizes `AUTHORS`, which is a narrower list: the people whose contributions are legally significant for copyright. The two only need to be separate files under a contributor licence agreement or copyright assignment, where who holds the copyright is a different question from who to thank.
+\*\*`.env.example`\*\*: A sanitized template of `.env` showing required variables without exposing actual secrets. The payload's `.env` is empty and tracked, which tells a clone where local variables go but not which ones the project needs; this is the file that names them. Both are empty on day one, which is why this one is written at the point someone other than the author has to reproduce a working environment rather than shipped alongside it.
+
+#### When someone else will contribute code
+
+The trigger is a second person with commit ambitions, not a public repository. Two engineers on a private repository are already here.
+
+\*\*`CONTRIBUTING.md`\*\*: Guidelines for external developers on submitting pull requests, running tests, and adhering to code style.
+
+\*\*`CODE_OF_CONDUCT.md`\*\*: The baseline rules for community behavior and expectations for professional interaction. Its value depends on being adopted before it is needed; written in response to an incident it is a ruling rather than a rule, and reads as one.
 
 \*\*`CODEOWNERS`\*\*: The definitive list of core team members with write access and merge authority. Read from the repository root, `.github/`, or `docs/`, and nowhere else. On its own it only requests reviewers; a branch protection rule requiring code owner review is what makes that request binding.
 
@@ -279,15 +287,25 @@ These files govern community interaction and legal usage. They are only necessar
 
 What differs is when the entry gets written. A file is edited inside the pull request that makes the change, by the author, while the reason is still in their head, and the reviewer reads the entry against the diff and can say that the return type changed and the entry does not mention it. A release note is written at tag time, by whoever cuts the release, reconstructing weeks of merged pull requests after the fact. A draft release can be edited ahead of the tag, but it is not part of the diff, so nobody reviews the entry next to the change it describes. The mechanism the file gives you is the `## [Unreleased]` section: entries accumulate there one pull request at a time and are cut into a version when the tag is made.
 
-That argument needs a reviewer who is not the author, so it buys nothing on a solo repository and grows as the project takes outside contributions. A smaller point in the file's favour is that it lives in git, while release notes live in GitHub's database and do not survive a move to another host. Against both, a hand-maintained file drifts from the tags the moment a release is cut without updating it, and a changelog that disagrees with the releases page is worse than neither.
+That argument needs a reviewer who is not the author, so it buys nothing on a solo repository and grows as the project takes outside contributions — which is why the file belongs to this occasion rather than to the first release. By tag time the entries cannot be reconstructed, so a changelog started when a release is cut has already lost the thing it was for. A smaller point in the file's favour is that it lives in git, while release notes live in GitHub's database and do not survive a move to another host. Against both, a hand-maintained file drifts from the tags the moment a release is cut without updating it, and a changelog that disagrees with the releases page is worse than neither.
 
 So pick one and let the other point at it. Publishing from the file is the common resolution: the release step reads the section for the tag and posts it as the release body, so one edit produces both and they cannot disagree. `scripts/release` currently refuses to publish while packaging is unconfigured, and that is where the wiring goes; `release.yml` already fetches full history so a generator can reach the previous tag.
 
-\*\*`CITATION.cff`\*\*: Machine-readable citation metadata, which GitHub surfaces as a "Cite this repository" button. Root only. Worth adding for research software and academic work, and nothing otherwise.
+#### When the project outlives a single maintainer
+
+Both files answer the same question — who decides, and who is owed credit for what — and neither is worth writing while the answer is obviously the author.
 
 \*\*`GOVERNANCE.md`\*\*: The political structure of the repository: how decisions are made, how maintainers are elected, and how disputes are resolved.
 
-\*\*`.env.example`\*\*: A sanitized template of `.env` showing required variables without exposing actual secrets.
+\*\*`CONTRIBUTORS.md`\*\*: A public ledger crediting individuals who have contributed code or documentation. GitHub also recognizes `AUTHORS`, which is a narrower list: the people whose contributions are legally significant for copyright. The two only need to be separate files under a contributor licence agreement or copyright assignment, where who holds the copyright is a different question from who to thank.
+
+#### When the work is academically valuable
+
+\*\*`CITATION.cff`\*\*: Machine-readable citation metadata, which GitHub surfaces as a "Cite this repository" button. Root only. The occasion is the work being the kind that gets cited — research software, a dataset, a method — not a citation request arriving, which nothing would announce. On an academic repository that is true on day one; on everything else it never becomes true.
+
+#### When the project has gained traction
+
+\*\*`.github/FUNDING.yml`\*\*: Displays a sponsor button in your repository, raising the visibility of funding options for your open source project. Unlike the rest of this section it is read only from `.github/`; a copy at the repository root is ignored, and the missing button is the only symptom. Opening a sponsors account takes minutes, so the condition worth waiting on is the audience rather than the account — the button is dead weight on a repository nobody has found, and no star count is the number that means one has been found.
 
 ### Program Language Metadata
 
