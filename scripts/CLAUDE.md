@@ -36,6 +36,8 @@ Two things about its wiring are load-bearing and were each a bug first. It self-
 
 **Local commands stay offline.** `doctor`, `check`, and `dev` must not contact GitHub. Hosted inspection happens only through `repo-settings check`, so ordinary local work is not coupled to network availability or `gh` authentication. `tests/health-checks-test` enforces this by stubbing `gh`.
 
+**`release` is the only script here that writes to GitHub.** It creates the release from the `CHANGELOG.md` section matching the tag, and refuses when that section is missing or empty, so a version cannot be published before it has been cut in the changelog. It runs `scripts/ci` itself rather than trusting an earlier job to have done it, which is why the release workflow holds `contents: write` while the gate runs. Nothing else should call it.
+
 **`repo-settings` reports and never changes.** Enabling a setting writes state the whole repository sees, and a ruleset write replaces rather than merges, so an automatic correction could silently revert a deliberate loosening. Three outcomes are distinct and the difference matters: enabled, disabled, and not offered for the plan and visibility.
 
 ## Work Guidance

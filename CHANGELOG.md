@@ -16,5 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The structure doc groups the files a repository adds later by the occasion each
   one answers, rather than as a single checklist for going public.
+- `scripts/release` publishes the GitHub release rather than stopping short of
+  it, using the `CHANGELOG.md` section for the tag as the release body. A tag
+  whose section is missing or empty fails the release, so the tree and the
+  releases page cannot disagree. `release.yml` holds `contents: write` to create
+  the release, where it previously needed only `contents: read`.
+
+### Removed
+
+- The empty `tools/` directory from the payload. Where a helper that must be
+  built before it runs belongs is still documented; the directory no longer
+  ships to assert that every generated repository will grow one.
 
 [Unreleased]: https://github.com/possiblyneal/template/commits/main
