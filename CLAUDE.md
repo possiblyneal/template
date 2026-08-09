@@ -32,6 +32,9 @@ This repository has no root language manifest, so `scripts/check` reports there 
 - Run `scripts/check` before committing. It runs the same checks CI does, plus pre-commit across every file rather than the staged ones.
 - These prompt for approval and cannot be assumed: `git push`, `git reset --hard`, `git clean`, `git rebase`, and the `gh` commands that create or merge pull requests, cut releases, or delete the repository.
 - Work reaches `main` through a pull request, where `.github/PULL_REQUEST_TEMPLATE.md` applies.
+- `CHANGELOG.md` records notable changes for the people who use this project, not commits. Add an entry under `## [Unreleased]` when behavior, an interface, a default, a requirement, or the security posture changes — for this repository that includes any change to what the payload ships. Sort it into one of the six types — Added, Changed, Deprecated, Removed, Fixed, Security — put why it matters in the wording rather than inventing a type, and prefix a breaking change with `**Breaking:**` inside its type.
+- Write the entry inside the pull request that makes the change; once that merges the entry is unreviewed and the session that made it is gone. A pull request with nothing notable in it gets none — refactors, format passes, tests, and CI changes usually have none.
+- Judging notability decides whether there is an entry at all, before any question of how to word one. Judge against Keep a Changelog 2.0.0 and against this repository's readers, which are the repositories generated from the payload. 2.0.0 reserves that judgment for a human; this repository does not, because the entry arrives in the pull request diff and is reviewed there like every other change.
 - Plan mode writes to `docs/plans/`, which is tracked. A plan lands in the diff alongside the code it describes.
 
 ## Layout
