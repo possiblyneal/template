@@ -5,10 +5,24 @@ set -euo pipefail
 # clear, and compact, so it must stay fast.
 cd "${CLAUDE_PROJECT_DIR:-.}"
 
-# Install the pre-commit hook once per clone so agent commits are checked.
-if [[ -f .pre-commit-config.yaml && ! -f .git/hooks/pre-commit ]] \
-  && command -v pre-commit >/dev/null 2>&1; then
-  pre-commit install >/dev/null 2>&1 || true
+# Install the git hooks once per clone so agent commits are checked. More than
+# one file is installed: pre-commit and, when the config asks for it,
+# commit-msg. A clone predating the commit-msg hook already has the first, so
+# testing only for that one would leave the message check permanently
+# uninstalled on exactly the clones that have been around longest.
+#
+# Which hooks are owed is scripts/libs/precommit.sh's answer, not a second copy
+# of it here. The two copies this replaced had already drifted apart in how
+# they tested for a hook file, and a startup hook that disagrees with
+# scripts/doctor about whether a clone is set up is worse than either answer.
+if [[ -f .pre-commit-config.yaml ]] && command -v pre-commit >/dev/null 2>&1 \
+  && [[ -f scripts/libs/precommit.sh ]]; then
+  # shellcheck source-path=SCRIPTDIR
+  # shellcheck source=../../scripts/libs/precommit.sh
+  source scripts/libs/precommit.sh
+  if [[ -n "$(pre_commit_hooks_missing .pre-commit-config.yaml)" ]]; then
+    pre-commit install >/dev/null 2>&1 || true
+  fi
 fi
 
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
