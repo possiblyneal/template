@@ -17,7 +17,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to owe an entry. Rules live in `.commitlintrc.yaml`. An existing clone needs
   `pre-commit install` run once more to pick up the second hook; `scripts/doctor`
   fails until it has been.
-
 - `scripts/repo-settings check` reports whether squash merging is disabled. A
   squashed commit takes its subject from the pull request title, which no local
   hook can see, so the commit-message rules hold only while that setting is off.
