@@ -9,6 +9,9 @@ cd "$repo_root"
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=libs/detect.sh
 source "$repo_root/scripts/libs/detect.sh"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/precommit.sh
+source "$repo_root/scripts/libs/precommit.sh"
 
 missing=0
 
@@ -71,31 +74,28 @@ fi
 # in. Both failures are silent: commits succeed as normal while the configured
 # hooks, including the secret scan, never run.
 #
-# Resolve the hook path with `git rev-parse --git-path` rather than hardcoding
-# .git/hooks: in a linked worktree .git is a file, not a directory, and the
-# hooks live in the shared common dir. A literal .git/hooks/pre-commit test
-# reports the hook missing there even when it is installed and will run.
-#
-# commit-msg is a second hook file, installed by the same command only because
-# the config asks for it. The config is what decides here rather than this
-# script, so a repository that drops the commit-message check is not reported
-# as broken for having done so.
+# There is more than one hook file. commit-msg is installed by the same command
+# only because the config asks for it, so the config decides what is required
+# here rather than this script, and a repository that drops the commit-message
+# check is not reported as broken for having done so. libs/precommit.sh reads
+# that list and answers which hooks this clone is missing.
 if [[ -s .pre-commit-config.yaml ]]; then
   if ! command -v pre-commit >/dev/null 2>&1; then
     echo "missing: pre-commit (.pre-commit-config.yaml is present but the tool is not installed)"
     echo "  Install it, then run: pre-commit install"
     missing=1
-  elif [[ ! -e "$(git rev-parse --git-path hooks/pre-commit)" ]]; then
-    echo "missing: pre-commit hook (installed tool, but no hook in this clone)"
-    echo "  Run: pre-commit install"
-    missing=1
-  elif grep -q '^default_install_hook_types:.*commit-msg' .pre-commit-config.yaml \
-    && [[ ! -e "$(git rev-parse --git-path hooks/commit-msg)" ]]; then
-    echo "missing: commit-msg hook (installed tool, but no commit-msg hook in this clone)"
-    echo "  Run: pre-commit install"
-    missing=1
   else
-    echo "ok: pre-commit"
+    uninstalled="$(pre_commit_hooks_missing)"
+
+    if [[ -n "$uninstalled" ]]; then
+      while IFS= read -r hook_type; do
+        echo "missing: $hook_type hook (installed tool, but no $hook_type hook in this clone)"
+      done <<<"$uninstalled"
+      echo "  Run: pre-commit install"
+      missing=1
+    else
+      echo "ok: pre-commit"
+    fi
   fi
 fi
 

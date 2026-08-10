@@ -44,6 +44,20 @@ check_github_settings() {
     return
   fi
 
+  # Squash merging has to stay off for the commit-message rules to mean
+  # anything. A squashed commit takes its message from the pull request title,
+  # written in GitHub's web interface where no local hook can reach it, so one
+  # click past every rule in .commitlintrc.yaml. Merging keeps the messages the
+  # commit-msg hook already checked. Unlike the settings below, this one is
+  # offered on every plan, so it is checked before anything can return early.
+  if [[ "$(jq -r '.allow_squash_merge // false' <<<"$json")" == "true" ]]; then
+    echo "optional missing: squash merging disabled on $repo"
+    echo "  Turn it off in Settings, under Pull Requests."
+    echo "  A squash takes its message from the pull request title, which the commit-msg hook never sees."
+  else
+    echo "ok: squash merging off"
+  fi
+
   case "$(jq -r '.security_and_analysis.secret_scanning_push_protection.status // "unavailable"' <<<"$json")" in
     enabled) echo "ok: push protection" ;;
     unavailable)

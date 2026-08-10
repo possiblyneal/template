@@ -41,6 +41,7 @@ Every built repository tracks `.repo-template.json`:
     {"path": ".claude/rules/**", "mode": "managed"},
     {"path": ".claude/settings.json", "mode": "managed"},
     {"path": ".pre-commit-config.yaml", "mode": "managed"},
+    {"path": ".commitlintrc.yaml", "mode": "managed"},
     {"path": ".gitattributes", "mode": "managed"},
     {"path": ".gitignore", "mode": "managed"},
     {"path": ".worktreeinclude", "mode": "managed"},
@@ -74,7 +75,7 @@ Ownership answers whether a path participates in template updates:
 
 The longest matching path wins; equal patterns are invalid. The old-to-new template delta bounds update scope. Do not edit an unrelated destination path merely because a broad ownership rule matches it.
 
-Unmatched defaulting to product is the safe direction for a path the template does not ship, and the wrong one for a path it does. A root dotfile matches no directory pattern, so `.pre-commit-config.yaml`, `.gitattributes`, and `.gitignore` fall through to product unless named individually — and those files carry the pinned hook revisions behind the secret scanner and the merge policy keeping a lockfile from being line-merged. A payload fix to any of them would land nowhere while the update reported success. Every path the template ships needs an ownership rule that reaches it; verify with `classify_path` rather than assuming a directory pattern covers a file at the root.
+Unmatched defaulting to product is the safe direction for a path the template does not ship, and the wrong one for a path it does. A root dotfile matches no directory pattern, so `.pre-commit-config.yaml`, `.commitlintrc.yaml`, `.gitattributes`, and `.gitignore` fall through to product unless named individually — and those files carry the pinned hook revisions behind the secret scanner, the commit-message rules, and the merge policy keeping a lockfile from being line-merged. The list grows: every dotfile the payload adds needs a line here, and the omission is invisible until a payload fix silently fails to land. A payload fix to any of them would land nowhere while the update reported success. Every path the template ships needs an ownership rule that reaches it; verify with `classify_path` rather than assuming a directory pattern covers a file at the root.
 
 A rename or delete of a destination-modified managed file needs semantic review. Product-created files under managed directories remain untouched unless the new template introduces the same path.
 

@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `pre-commit install` run once more to pick up the second hook; `scripts/doctor`
   fails until it has been.
 
+- `scripts/repo-settings check` reports whether squash merging is disabled. A
+  squashed commit takes its subject from the pull request title, which no local
+  hook can see, so the commit-message rules hold only while that setting is off.
+
 ### Changed
 
 - The structure doc groups the files a repository adds later by the occasion each
@@ -27,6 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whose section is missing or empty fails the release, so the tree and the
   releases page cannot disagree. `release.yml` holds `contents: write` to create
   the release, where it previously needed only `contents: read`.
+
+### Fixed
+
+- `.commitlintrc.yaml` is owned as a managed path, so a payload fix to the
+  commit-message rules reaches a generated repository instead of being silently
+  skipped as product. Root dotfiles match no directory pattern and need a rule
+  each; the reference manifest in the repo-builder skill was missing one too.
 
 ### Removed
 

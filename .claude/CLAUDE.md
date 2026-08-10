@@ -26,7 +26,9 @@ The agent's operating parameters for this repository: hooks wired to tool events
 
 **Every pipe in a hook ends in a variable or a herestring.** `set -euo pipefail` turns SIGPIPE into a failure, and in a hook that ends the run.
 
-**`hooks/session-start.sh` installs both git hook types, not just `pre-commit`.** A clone that predates the commit-msg hook already has `hooks/pre-commit`, so testing for that file alone reports the clone as set up and the message check never lands. It resolves the hooks directory through `git rev-parse --git-path` for the reason `scripts/doctor` does: in a linked worktree `.git` is a file and the hooks live in the shared common dir.
+**`hooks/session-start.sh` installs every git hook type the config asks for, not just `pre-commit`.** A clone that predates the commit-msg hook already has `hooks/pre-commit`, so testing for that file alone reports the clone as set up and the message check never lands.
+
+It gets that list by sourcing `scripts/libs/precommit.sh` rather than reading the config itself — the only dependency any hook here has on `scripts/`, and deliberate. `scripts/doctor` reports the same gap this closes, and when the two disagreed about whether a clone was set up, the disagreement was invisible from either file. The source is guarded on the file existing, so a tree without `scripts/` still starts a session.
 
 **`rules/documentation.md` carries no `paths:` frontmatter, deliberately.** It loads in every session. Scoping it to Markdown is the obvious economy and the wrong one: the documentation pass is owed on the source change, not on a `.md` file being open, so a rule loading only when docs are already open covers the sessions that were going to update docs anyway and misses every session that should have.
 

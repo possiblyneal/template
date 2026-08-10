@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+# Asserts that libs/precommit.sh reads the hook list out of both YAML forms.
+#
+# The failure this exists for is quiet. scripts/doctor and the session-start
+# hook both ask this module which hooks a clone owes; when it reads a config it
+# does not understand it reports nothing missing, both callers agree the clone
+# is set up, and the commit-msg hook is never installed. Commits keep
+# succeeding and no output changes, so nothing points at the cause.
+#
+# Unlike commitlint-test this suite needs neither pre-commit nor the network --
+# it is parsing, not hook execution -- so it runs everywhere and covers the
+# part that fails silently rather than loudly.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/harness.sh
+source "$repo_root/scripts/tests/libs/harness.sh"
+
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=../libs/precommit.sh
+source "$repo_root/scripts/libs/precommit.sh"
+
+work=""
+
+fixture() {
+  current="$1"
+  work="$(mktemp -d)"
+  printf '%s\n' "$2" > "$work/.pre-commit-config.yaml"
+}
+
+cleanup() {
+  [[ -n "$work" && "$work" == /tmp/* ]] && rm -rf "$work"
+  work=""
+}
+
+# The list as one space-separated line, so a case asserts against a whole
+# answer rather than grepping for one member and passing on a partial read.
+types_of() {
+  local -a parsed
+  mapfile -t parsed < <(pre_commit_hook_types "$work/.pre-commit-config.yaml")
+  printf '%s' "${parsed[*]:-}"
+}
+
+trap cleanup EXIT
+
+echo "precommit-hooks-test"
+
+fixture "flow style is read" 'default_install_hook_types: [pre-commit, commit-msg]
+repos: []'
+got="$(types_of)"
+if [[ "$got" == "pre-commit commit-msg" ]]; then
+  pass
+else
+  fail "flow style read as '$got'"
+fi
+cleanup
+
+# The form a reformat or a hand-edit produces. This is the one a single-line
+# pattern misses, and missing it is indistinguishable from a config that never
+# asked for the hook.
+fixture "block style is read" 'default_install_hook_types:
+  - pre-commit
+  - commit-msg
+repos: []'
+got="$(types_of)"
+if [[ "$got" == "pre-commit commit-msg" ]]; then
+  pass
+else
+  fail "block style read as '$got', so the commit-msg hook would never be required"
+fi
+cleanup
+
+fixture "quotes and trailing comments are tolerated" 'default_install_hook_types: ["pre-commit", "commit-msg"]  # both
+repos: []'
+got="$(types_of)"
+if [[ "$got" == "pre-commit commit-msg" ]]; then
+  pass
+else
+  fail "a quoted list with a comment read as '$got'"
+fi
+cleanup
+
+# pre-commit installs the pre-commit hook when the key is absent, so an absent
+# key must not read as "no hooks are owed" -- that would report a clone with no
+# hooks at all as correctly set up.
+fixture "an absent key means pre-commit alone" 'repos: []'
+got="$(types_of)"
+if [[ "$got" == "pre-commit" ]]; then
+  pass
+else
+  fail "an absent key read as '$got' rather than the pre-commit default"
+fi
+cleanup
+
+fixture "the block list ends at the next key" 'default_install_hook_types:
+  - pre-commit
+repos:
+  - repo: local'
+got="$(types_of)"
+if [[ "$got" == "pre-commit" ]]; then
+  pass
+else
+  fail "the list ran past its own key and read as '$got'"
+fi
+cleanup
+
+# The end-to-end answer both callers actually use: config asks for two hooks,
+# the clone has one, so one is reported.
+fixture "an installed hook is not reported missing" 'default_install_hook_types: [pre-commit, commit-msg]
+repos: []'
+(
+  cd "$work" || exit 1
+  git init -q .
+  touch .git/hooks/pre-commit
+) > /dev/null 2>&1
+got="$(cd "$work" && pre_commit_hooks_missing)"
+if [[ "$got" == "commit-msg" ]]; then
+  pass
+else
+  fail "missing hooks reported as '$got', expected commit-msg alone"
+fi
+cleanup
+
+report

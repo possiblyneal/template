@@ -13,6 +13,7 @@ One flat directory, not a `ci/` and a `scripts/` split. The boundary that split 
 - `repo-settings check` — hosted GitHub state, run explicitly
 - `adr-index` — called by pre-commit; regenerates `docs/adr/index.md`
 - `libs/detect.sh` — the detection library, sourced by all of the above
+- `libs/precommit.sh` — which git hooks the config asks for and which this clone lacks; sourced by `doctor` and by `.claude/hooks/session-start.sh`
 - `tests/*-test` — assertions about the wiring itself
 - `tests/libs/harness.sh` — the assertion counting those tests share
 
@@ -27,6 +28,10 @@ A helper that must be built before it runs belongs in `tools/`, not here.
 **Pipes end in a variable or a `-print -quit` test, never in a reader that exits early.** Under `set -euo pipefail` a `grep -q` or `head` closes the pipe, the writer dies of SIGPIPE, and pipefail reports 141 — which a detection function reads as "absent". That is a wrong answer that is silent rather than loud.
 
 **Three runners contradict the pass/fail rule and are special-cased deliberately.** pytest exits 5 on collecting no tests; `npm init -y` writes a placeholder test script that exits 1; `uv run <tool>` exits 2 when the tool is not installed. Each is translated to "no runner" or success rather than being reported as a failing suite. Do not remove these without reading why they are there.
+
+**`libs/precommit.sh` owns the question of which git hooks are owed, and parses rather than greps.** `doctor` reports the gap and `.claude/hooks/session-start.sh` closes it; both need the same answer, and the two copies that preceded this module had already drifted apart in how they tested for a hook file. It is not part of `libs/detect.sh`, which owns language-specific decisions — a git hook is present whatever the repository is written in.
+
+`default_install_hook_types` is valid in flow form and in block form, and a single-line pattern matches only the first. Against the other it finds nothing, reports no hooks owed, and both callers agree a clone with no commit-msg hook is correctly set up — a check that did not run reading as a check that passed, with no output to say so. `tests/precommit-hooks-test` covers both forms.
 
 **`libs/detect.sh` and `tests/libs/harness.sh` are sourced, never executed.** No shebang, no executable bit, `.sh` extension so linters recognize it. Every other script here is extensionless and executable — pre-commit identifies them as shell by reading the shebang, and only reads it on an executable file, so a script committed without that bit is skipped in silence. `harness.sh` holds the assertion counting and the tally; each suite keeps its own `fixture`, since they scaffold different worlds and only the counting is common.
 
@@ -56,6 +61,7 @@ Changes here almost always belong in `apps/github-repository-template/src/base-r
 - `scripts/tests/health-checks-test` — the offline boundary
 - `scripts/tests/adr-index-test` — the generated index converges, and pre-commit actually invokes the hook
 - `scripts/tests/commitlint-test` — the `commit-msg` hook is installed by a bare `pre-commit install`, and commitlint rejects a malformed message and tolerates a generated merge subject. The only suite here that needs the network, since proving a JavaScript linter rejects anything means installing and running it
-- `scripts/check` runs all four before the checks they guard; `ci.yml` runs them before toolchain setup
+- `scripts/tests/precommit-hooks-test` — `libs/precommit.sh` reads the hook list out of both YAML forms, and reports exactly the hooks a clone lacks. Needs neither `pre-commit` nor the network, so it always runs — which is the point, since this is the half of the wiring that fails silently
+- `scripts/check` runs all five before the checks they guard; `ci.yml` runs them before toolchain setup
 - Both hook-wiring suites skip their cases when `pre-commit` is absent, so `ci.yml` installs `pre-commit` ahead of them. Without that install they report a smaller green run in CI than they do locally, and the assertions covering the wiring above are the ones lost
 - shellcheck via pre-commit, with `-x` so it follows `source` into `libs/detect.sh`
