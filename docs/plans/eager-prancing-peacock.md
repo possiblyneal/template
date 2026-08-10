@@ -200,3 +200,30 @@ touching seven files across two trees.
    default ignore list covers the merge subject in practice.
 
 The first commit made under this change is itself a test of it.
+
+## What review changed
+
+Everything above is the plan as approved, kept as written. Review of the first
+commit directed work the plan did not anticipate, and the branch no longer
+matches it in four places:
+
+- **§3 and §4 were replaced rather than implemented.** The plan added an `elif`
+  to `doctor` and widened a condition in `session-start.sh`. Both read the same
+  config with the same single-line pattern, so both were moved into
+  `scripts/libs/precommit.sh`, which parses the list instead. The two copies had
+  already drifted in how they tested for a hook file.
+- **`scripts/tests/precommit-hooks-test` was added**, covering that parser
+  across every YAML list form. It needs neither `pre-commit` nor the network,
+  unlike `commitlint-test`.
+- **`.commitlintrc.yaml` needed an ownership rule** in `.repo-template.json`.
+  Root dotfiles match no directory pattern, so without one the payload's
+  commit-message rules would never reach a generated repository — and the
+  reference manifest in the repo-builder skill was missing the same line.
+- **Squash merging was turned off**, and `scripts/repo-settings check` now
+  reports it. The plan assumed merge commits; nothing enforced that assumption,
+  and a squash takes its subject from the pull request title, where no hook
+  reaches it.
+
+`scripts/check` also gained a pass over untracked files, which is not this
+plan's work — it was found while doing it, when `check` passed over two new
+files it had never read.

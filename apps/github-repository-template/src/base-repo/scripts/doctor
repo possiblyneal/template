@@ -85,7 +85,7 @@ if [[ -s .pre-commit-config.yaml ]]; then
     echo "  Install it, then run: pre-commit install"
     missing=1
   else
-    uninstalled="$(pre_commit_hooks_missing)"
+    uninstalled="$(pre_commit_hooks_missing .pre-commit-config.yaml)"
 
     if [[ -n "$uninstalled" ]]; then
       while IFS= read -r hook_type; do

@@ -20,7 +20,6 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=libs/harness.sh
 source "$repo_root/scripts/tests/libs/harness.sh"
 
-work=""
 
 # Builds a repository wired exactly as a generated one is. Both the
 # default_install_hook_types line and the commitlint entry are lifted out of
@@ -30,7 +29,19 @@ fixture() {
   current="$1"
   work="$(mktemp -d)"
   {
-    grep '^default_install_hook_types:' "$repo_root/.pre-commit-config.yaml"
+    # The key and whatever list form it carries, copied verbatim -- a wrapped
+    # flow list and a block list both continue onto the lines below, and a
+    # single-line pattern would lift a fragment that no longer parses. Copying
+    # rather than reading the values keeps this fixture free of a second
+    # opinion about what the config says; libs/precommit.sh holds the only one.
+    awk '/^default_install_hook_types:/ {
+           print
+           if ($0 ~ /\[/) { if ($0 !~ /\]/) flow = 1 } else block = 1
+           next
+         }
+         flow { print; if ($0 ~ /\]/) flow = 0; next }
+         block && /^[[:space:]]*-/ { print; next }
+         block { block = 0 }' "$repo_root/.pre-commit-config.yaml"
     echo "repos:"
     awk '/^  - repo: .*commitlint-pre-commit-hook/ { on = 1; print; next }
          on && /^  - repo: / { exit }
@@ -62,10 +73,6 @@ attempt() {
   ) 2>&1
 }
 
-cleanup() {
-  [[ -n "$work" && "$work" == /tmp/* ]] && rm -rf "$work"
-  work=""
-}
 
 trap cleanup EXIT
 

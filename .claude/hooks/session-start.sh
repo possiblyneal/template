@@ -20,7 +20,7 @@ if [[ -f .pre-commit-config.yaml ]] && command -v pre-commit >/dev/null 2>&1 \
   # shellcheck source-path=SCRIPTDIR
   # shellcheck source=../../scripts/libs/precommit.sh
   source scripts/libs/precommit.sh
-  if [[ -n "$(pre_commit_hooks_missing)" ]]; then
+  if [[ -n "$(pre_commit_hooks_missing .pre-commit-config.yaml)" ]]; then
     pre-commit install >/dev/null 2>&1 || true
   fi
 fi

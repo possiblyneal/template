@@ -30,6 +30,8 @@ fixture() {
   cd "$work" || exit 1
 }
 
+# Overrides the harness version, which every other suite uses as-is. This one
+# cd's into the fixture, so the directory has to be left before it is removed.
 cleanup() {
   cd /
   [[ -n "${work:-}" && "$work" == /tmp/* ]] && rm -rf "$work"

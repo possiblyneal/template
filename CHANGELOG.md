@@ -32,6 +32,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   releases page cannot disagree. `release.yml` holds `contents: write` to create
   the release, where it previously needed only `contents: read`.
 
+### Removed
+
+- The empty `tools/` directory from the payload. Where a helper that must be
+  built before it runs belongs is still documented; the directory no longer
+  ships to assert that every generated repository will grow one.
+
 ### Fixed
 
 - `scripts/check` runs the pre-commit hooks over untracked files as well as
@@ -42,11 +48,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   commit-message rules reaches a generated repository instead of being silently
   skipped as product. Root dotfiles match no directory pattern and need a rule
   each; the reference manifest in the repo-builder skill was missing one too.
-
-### Removed
-
-- The empty `tools/` directory from the payload. Where a helper that must be
-  built before it runs belongs is still documented; the directory no longer
-  ships to assert that every generated repository will grow one.
 
 [Unreleased]: https://github.com/possiblyneal/template/commits/main
