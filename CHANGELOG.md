@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `scripts/check` runs the pre-commit hooks over untracked files as well as
+  tracked ones. `--all-files` enumerates through git, so a file written but not
+  yet staged used to pass the gate without being read and then fail the hook at
+  commit time — the blind spot sitting exactly where new files are.
 - `.commitlintrc.yaml` is owned as a managed path, so a payload fix to the
   commit-message rules reaches a generated repository instead of being silently
   skipped as product. Root dotfiles match no directory pattern and need a rule

@@ -51,4 +51,23 @@ if [[ -s .pre-commit-config.yaml ]]; then
   echo
   echo "Running pre-commit across all files"
   SKIP=no-commit-to-branch pre-commit run --all-files
+
+  # --all-files means every file Git knows about, so a file written but not yet
+  # staged is not one of them. That is this sweep's blind spot at the moment it
+  # matters most: a new script reads as covered here and then fails the hook at
+  # commit time, having never been looked at. --files takes a path whether or
+  # not Git tracks it, which is what closes the gap.
+  #
+  # --exclude-standard so an ignored path stays ignored; -z and -d '' so a name
+  # containing whitespace stays one argument.
+  untracked=()
+  while IFS= read -r -d '' path; do
+    untracked+=("$path")
+  done < <(git ls-files --others --exclude-standard -z 2>/dev/null)
+
+  if (( ${#untracked[@]} )); then
+    echo
+    echo "Running pre-commit across ${#untracked[@]} untracked file(s)"
+    SKIP=no-commit-to-branch pre-commit run --files "${untracked[@]}"
+  fi
 fi
