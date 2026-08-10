@@ -10,7 +10,6 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=libs/harness.sh
 source "$repo_root/scripts/tests/libs/harness.sh"
 
-work=""
 
 fixture() {
   current="$1"
@@ -25,10 +24,6 @@ EOF
   chmod +x "$work/bin/gh"
 }
 
-cleanup() {
-  [[ -n "$work" && "$work" == /tmp/* ]] && rm -rf "$work"
-  work=""
-}
 
 trap cleanup EXIT
 
