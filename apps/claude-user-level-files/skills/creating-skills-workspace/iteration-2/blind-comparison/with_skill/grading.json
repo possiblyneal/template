@@ -1,0 +1,8 @@
+{
+  "expectations": [
+    {"text": "References agents/comparator.md and/or agents/analyzer.md", "passed": true, "evidence": "Transcript explicitly lists both: 'agents/comparator.md — Primary guide for blind judging' and 'agents/analyzer.md — Guide for the unblinded post-hoc analysis.'"},
+    {"text": "Spawns or describes spawning an independent comparator agent with outputs unlabeled", "passed": true, "evidence": "Transcript: 'Yes. I would spawn an independent comparator agent rather than judge the outputs myself.' Describes neutral A/B labels, randomized assignment, and private mapping file outside comparator context."},
+    {"text": "Does not self-judge the comparison inline without referencing the comparator agent", "passed": true, "evidence": "Transcript: 'I would reserve my own role for orchestration and post-hoc synthesis, not first-pass judgment.' The comparator agent handles quality judgment."}
+  ],
+  "summary": {"passed": 3, "failed": 0, "total": 3, "pass_rate": 1.0}
+}

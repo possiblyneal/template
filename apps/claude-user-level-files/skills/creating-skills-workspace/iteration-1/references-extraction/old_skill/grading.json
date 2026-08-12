@@ -1,0 +1,20 @@
+{
+  "expectations": [
+    {
+      "text": "Identifies that the skill exceeds 500 lines",
+      "passed": true,
+      "evidence": "Transcript: 'The current SKILL.md is 548 lines in the numbered read output, so it exceeds the recommended under-500-line limit.'"
+    },
+    {
+      "text": "Plans to move content to references/ files rather than only compressing inline",
+      "passed": true,
+      "evidence": "Transcript plans to move API Reference, Configuration, Examples, Advanced Usage, FAQ to references/ subdirectory files."
+    },
+    {
+      "text": "Plans to add conditional pointers in SKILL.md to each new reference file",
+      "passed": true,
+      "evidence": "Transcript: 'Yes. The compressed SKILL.md should include explicit, conditional pointers so the agent knows when to load each reference file.'"
+    }
+  ],
+  "summary": {"passed": 3, "failed": 0, "total": 3, "pass_rate": 1.0}
+}

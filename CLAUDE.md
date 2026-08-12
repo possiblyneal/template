@@ -61,6 +61,7 @@ A generated repository is where a guarantee unavailable on this plan can actuall
 
 ## Child Index
 
+- `apps/claude-user-level-files/CLAUDE.md` — versioned user-level Claude Code configuration linked from `~/.claude`
 - `apps/github-repository-template/CLAUDE.md` — the template payload and the reference docs explaining it
 - `scripts/CLAUDE.md` — the language-capabilities interface, and what adding a language or check requires
 - `.claude/CLAUDE.md` — hooks, settings, and skills; what a session may not grant itself

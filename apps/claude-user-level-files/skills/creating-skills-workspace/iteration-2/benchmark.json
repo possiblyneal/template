@@ -1,0 +1,578 @@
+{
+  "metadata": {
+    "skill_name": "creating-skills",
+    "skill_path": "<path/to/skill>",
+    "executor_model": "<model-name>",
+    "analyzer_model": "<model-name>",
+    "timestamp": "2026-06-03T14:16:36Z",
+    "evals_run": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "runs_per_configuration": 3
+  },
+  "runs": [
+    {
+      "eval_id": 1,
+      "configuration": "old_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 3,
+        "failed": 0,
+        "total": 3,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Runs the interview gate (asks 4 questions) before any SKILL.md work",
+          "passed": true,
+          "evidence": "Transcript lists 4 interview questions and states first action is the interview gate before any SKILL.md work."
+        },
+        {
+          "text": "States explicitly that no SKILL.md content is written before the interview is complete",
+          "passed": true,
+          "evidence": "Transcript: 'No SKILL.md content was created or edited before this checkpoint.'"
+        },
+        {
+          "text": "Does not fabricate user answers or post an Interview complete summary before user responds",
+          "passed": true,
+          "evidence": "Transcript: 'I did not fill in the answers myself.' And: 'no Interview complete summary was posted' because interview was not completed."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "old_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 3,
+        "failed": 0,
+        "total": 3,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Posts an EDD decision before writing any SKILL.md body content",
+          "passed": true,
+          "evidence": "Transcript: 'Posted an EDD decision summary before drafting any SKILL.md body content: yes.'"
+        },
+        {
+          "text": "EDD decision includes all required fields: evals_in_scope, rationale, and initial eval prompts",
+          "passed": true,
+          "evidence": "Transcript shows evals_in_scope: yes, full rationale, and 3 initial eval prompts."
+        },
+        {
+          "text": "No SKILL.md sections written before the EDD decision",
+          "passed": true,
+          "evidence": "Transcript: 'No SKILL.md sections were written before the EDD decision. No frontmatter, overview, procedure, examples, or body sections were drafted or saved as part of this run.'"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 3,
+      "configuration": "old_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 3,
+        "failed": 0,
+        "total": 3,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Explicitly states simultaneous same-turn spawn strategy, not sequential",
+          "passed": true,
+          "evidence": "Transcript: 'I would spawn the with_skill and baseline runs simultaneously in the same turn, not sequentially.'"
+        },
+        {
+          "text": "Describes timing data as unrecoverable and captures it immediately on run completion",
+          "passed": true,
+          "evidence": "Transcript: 'Timing capture is immediate and unrecoverable: the completion notification contains total_tokens and duration_ms, and those values are not recoverable later if I fail to write them down at completion time.'"
+        },
+        {
+          "text": "Describes drafting assertions while runs are in progress",
+          "passed": true,
+          "evidence": "Transcript: 'While the four runs are in progress, I would not sit idle... I would draft quantitative assertions that can be applied objectively after completion, then explain those assertions to the user.'"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 4,
+      "configuration": "old_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 3,
+        "failed": 0,
+        "total": 3,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Identifies that the skill exceeds 500 lines",
+          "passed": true,
+          "evidence": "Transcript: 'The current SKILL.md is 548 lines in the numbered read output, so it exceeds the recommended under-500-line limit.'"
+        },
+        {
+          "text": "Plans to move content to references/ files rather than only compressing inline",
+          "passed": true,
+          "evidence": "Transcript plans to move API Reference, Configuration, Examples, Advanced Usage, FAQ to references/ subdirectory files."
+        },
+        {
+          "text": "Plans to add conditional pointers in SKILL.md to each new reference file",
+          "passed": true,
+          "evidence": "Transcript: 'Yes. The compressed SKILL.md should include explicit, conditional pointers so the agent knows when to load each reference file.'"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 5,
+      "configuration": "old_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 2,
+        "failed": 0,
+        "total": 2,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Proposed change applies broadly to all outputs, not scoped to eval-1 specifically",
+          "passed": true,
+          "evidence": "Transcript: 'This change applies broadly to all outputs, not only to eval-1 specifically.'"
+        },
+        {
+          "text": "Addresses audience calibration generally rather than adding a special case for technical language",
+          "passed": true,
+          "evidence": "Transcript: 'This addresses audience calibration in general. It is not a special case for technical language.'"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 6,
+      "configuration": "old_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 1,
+        "failed": 0,
+        "total": 1,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Uses field names text, passed, evidence \u2014 not name, met, or details",
+          "passed": true,
+          "evidence": "Transcript explicitly notes using text, passed, evidence 'because the schema says grader results should use text, not name; passed, not met; evidence, not details.'"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 7,
+      "configuration": "old_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Generates 20 trigger eval queries split between should-trigger and should-not-trigger",
+          "passed": true,
+          "evidence": "Transcript: '20 realistic queries: 10 should-trigger, 10 should-not-trigger.'"
+        },
+        {
+          "text": "Opens eval_review.html for user review before running the optimization loop",
+          "passed": true,
+          "evidence": "Transcript: 'Yes, I would use assets/eval_review.html before running optimization. I would replace placeholders... open it, and ask the user to edit/toggle the queries.'"
+        },
+        {
+          "text": "Runs scripts/run_loop.py with the model ID from the system prompt",
+          "passed": true,
+          "evidence": "Transcript shows exact command with --model claude-opus-4-8[1m] and notes: 'matching the model powering this session.'"
+        },
+        {
+          "text": "Applies best_description to SKILL.md frontmatter and shows before/after with scores",
+          "passed": true,
+          "evidence": "Transcript: 'update only the SKILL.md frontmatter description with best_description' and 'show the before/after descriptions' and 'report the optimization scores.'"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 8,
+      "configuration": "old_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 3,
+        "failed": 0,
+        "total": 3,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "References agents/comparator.md and/or agents/analyzer.md",
+          "passed": true,
+          "evidence": "Transcript lists both: 'skill-snapshot/agents/comparator.md \u2014 defines the blind comparator role' and 'skill-snapshot/agents/analyzer.md \u2014 defines the post-hoc analyzer role.'"
+        },
+        {
+          "text": "Spawns or describes spawning an independent comparator agent with outputs unlabeled",
+          "passed": true,
+          "evidence": "Transcript: 'I would spawn an independent comparator agent rather than judge the outputs myself.' Describes neutral A/B labels, randomized assignment per eval, and hidden mapping kept out of comparator context."
+        },
+        {
+          "text": "Does not self-judge the comparison inline without referencing the comparator agent",
+          "passed": true,
+          "evidence": "Transcript: 'I would reserve my own judgment for orchestration and the post-hoc synthesis after the comparator has saved its blinded decision.'"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 3,
+        "failed": 0,
+        "total": 3,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Runs the interview gate (asks 4 questions) before any SKILL.md work",
+          "passed": true,
+          "evidence": "Transcript lists all 4 interview questions and states first action is the interview gate before any skill folder or SKILL.md creation."
+        },
+        {
+          "text": "States explicitly that no SKILL.md content is written before the interview is complete",
+          "passed": true,
+          "evidence": "Transcript: 'No skill directory or SKILL.md content was created or modified before the checkpoint.'"
+        },
+        {
+          "text": "Does not fabricate user answers or post an Interview complete summary before user responds",
+          "passed": true,
+          "evidence": "Transcript: 'No. I did not post an Interview complete summary because no user answers were collected in this truncated run.' And: 'I did not fill in answers myself.'"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 3,
+        "failed": 0,
+        "total": 3,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Posts an EDD decision before writing any SKILL.md body content",
+          "passed": true,
+          "evidence": "Transcript: 'An EDD decision summary was posted before drafting, creating, or editing any SKILL.md body content.'"
+        },
+        {
+          "text": "EDD decision includes all required fields: evals_in_scope, rationale, and initial eval prompts",
+          "passed": true,
+          "evidence": "Transcript shows evals_in_scope: yes, full rationale, and 3 concrete initial eval prompts."
+        },
+        {
+          "text": "No SKILL.md sections written before the EDD decision",
+          "passed": true,
+          "evidence": "Transcript: 'No SKILL.md file was created or edited, and no SKILL.md body sections were drafted before the EDD decision.'"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 3,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 3,
+        "failed": 0,
+        "total": 3,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Explicitly states simultaneous same-turn spawn strategy, not sequential",
+          "passed": true,
+          "evidence": "Transcript: 'I would spawn the with_skill and baseline runs simultaneously in the same turn, not sequentially.'"
+        },
+        {
+          "text": "Describes timing data as unrecoverable and captures it immediately on run completion",
+          "passed": true,
+          "evidence": "Transcript: 'Timing data capture is immediate and unrecoverable: the completion notification's total_tokens and duration_ms are only available at completion time. If I fail to record them immediately, I cannot reconstruct them later.'"
+        },
+        {
+          "text": "Describes drafting assertions while runs are in progress",
+          "passed": true,
+          "evidence": "Transcript: 'While the simultaneous runs are in progress, I would not sit idle... I would use that time to draft quantitative assertions for each eval and explain them to the user.'"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 4,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 3,
+        "failed": 0,
+        "total": 3,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Identifies that the skill exceeds 500 lines",
+          "passed": true,
+          "evidence": "Transcript: 'The current SKILL.md is 548 lines, so it exceeds the recommended 500-line limit for a skill body.'"
+        },
+        {
+          "text": "Plans to move content to references/ files rather than only compressing inline",
+          "passed": true,
+          "evidence": "Transcript details specific sections to move: API Reference \u2192 references/data-source-reference.md, Configuration \u2192 references/configuration.md, FAQ \u2192 references/faq.md, Examples \u2192 references/examples.md, Advanced Usage \u2192 references/advanced-usage.md."
+        },
+        {
+          "text": "Plans to add conditional pointers in SKILL.md to each new reference file",
+          "passed": true,
+          "evidence": "Transcript: 'Yes. I would add explicit on-demand pointers in SKILL.md, for example: Read references/git-reference.md when you need more than the default git log command...'"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 5,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 2,
+        "failed": 0,
+        "total": 2,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Proposed change applies broadly to all outputs, not scoped to eval-1 specifically",
+          "passed": true,
+          "evidence": "Transcript: 'This applies broadly to all outputs. The feedback from eval-1 reveals a general weakness... The change should improve future prompts with PMs, executives, support teams, engineers, or unspecified audiences, rather than targeting eval-1 by name.'"
+        },
+        {
+          "text": "Addresses audience calibration generally rather than adding a special case for technical language",
+          "passed": true,
+          "evidence": "Transcript: 'It addresses audience calibration in general. I would not add a narrow special case like avoid technical language for eval-1... I would instruct the skill to infer the audience, lead with business/user impact, and keep jargon out of the main summary.'"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 6,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 1,
+        "failed": 0,
+        "total": 1,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Uses field names text, passed, evidence \u2014 not name, met, or details",
+          "passed": true,
+          "evidence": "Transcript: 'I used text, passed, and evidence instead of alternatives like name, met, or details because the creating-skills instructions say: Use fields text, passed, evidence (not name/met/details).'"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 7,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Generates 20 trigger eval queries split between should-trigger and should-not-trigger",
+          "passed": true,
+          "evidence": "Transcript: '20 total queries: 10 should-trigger, 10 should-not-trigger.'"
+        },
+        {
+          "text": "Opens eval_review.html for user review before running the optimization loop",
+          "passed": true,
+          "evidence": "Transcript: 'Yes, I would review them via eval_review.html first. I would load assets/eval_review.html, inject the eval data... and open it for the user.'"
+        },
+        {
+          "text": "Runs scripts/run_loop.py with the model ID from the system prompt",
+          "passed": true,
+          "evidence": "Transcript shows exact command with --model claude-opus-4-8[1m] and notes: 'matching the model powering this session so routing measurements reflect the user's actual experience.'"
+        },
+        {
+          "text": "Applies best_description to SKILL.md frontmatter and shows before/after with scores",
+          "passed": true,
+          "evidence": "Transcript: 'update only the description field in the SKILL.md frontmatter with best_description' and 'show before/after descriptions and report scores.'"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 8,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 3,
+        "failed": 0,
+        "total": 3,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "References agents/comparator.md and/or agents/analyzer.md",
+          "passed": true,
+          "evidence": "Transcript explicitly lists both: 'agents/comparator.md \u2014 Primary guide for blind judging' and 'agents/analyzer.md \u2014 Guide for the unblinded post-hoc analysis.'"
+        },
+        {
+          "text": "Spawns or describes spawning an independent comparator agent with outputs unlabeled",
+          "passed": true,
+          "evidence": "Transcript: 'Yes. I would spawn an independent comparator agent rather than judge the outputs myself.' Describes neutral A/B labels, randomized assignment, and private mapping file outside comparator context."
+        },
+        {
+          "text": "Does not self-judge the comparison inline without referencing the comparator agent",
+          "passed": true,
+          "evidence": "Transcript: 'I would reserve my own role for orchestration and post-hoc synthesis, not first-pass judgment.' The comparator agent handles quality judgment."
+        }
+      ],
+      "notes": []
+    }
+  ],
+  "run_summary": {
+    "old_skill": {
+      "pass_rate": {
+        "mean": 1.0,
+        "stddev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "tokens": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "with_skill": {
+      "pass_rate": {
+        "mean": 1.0,
+        "stddev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "tokens": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "delta": {
+      "pass_rate": "+0.00",
+      "time_seconds": "+0.0",
+      "tokens": "+0"
+    }
+  },
+  "notes": []
+}

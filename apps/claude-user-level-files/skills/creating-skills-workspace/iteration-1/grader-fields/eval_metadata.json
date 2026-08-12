@@ -1,0 +1,8 @@
+{
+  "eval_id": 6,
+  "eval_name": "grader-fields",
+  "prompt": "Grade the outputs from the last eval run against the assertions.",
+  "assertions": [
+    "Uses field names text, passed, evidence — not name, met, or details"
+  ]
+}

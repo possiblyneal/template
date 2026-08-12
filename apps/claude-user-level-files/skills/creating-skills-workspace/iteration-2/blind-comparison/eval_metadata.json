@@ -1,0 +1,10 @@
+{
+  "eval_id": 8,
+  "eval_name": "blind-comparison",
+  "prompt": "I want a rigorous comparison between the old and new versions of this skill. Can you do a blind A/B comparison?",
+  "assertions": [
+    "References agents/comparator.md and/or agents/analyzer.md",
+    "Spawns or describes spawning an independent comparator agent with outputs unlabeled",
+    "Does not self-judge the comparison inline without referencing the comparator agent"
+  ]
+}

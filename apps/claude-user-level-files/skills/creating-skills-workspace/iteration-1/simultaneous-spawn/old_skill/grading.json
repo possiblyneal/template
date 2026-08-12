@@ -1,0 +1,20 @@
+{
+  "expectations": [
+    {
+      "text": "Explicitly states simultaneous same-turn spawn strategy, not sequential",
+      "passed": true,
+      "evidence": "Transcript: 'I would spawn the with_skill and baseline runs simultaneously in the same turn, not sequentially.'"
+    },
+    {
+      "text": "Describes timing data as unrecoverable and captures it immediately on run completion",
+      "passed": true,
+      "evidence": "Transcript: 'Timing capture is immediate and unrecoverable: the completion notification contains total_tokens and duration_ms, and those values are not recoverable later if I fail to write them down at completion time.'"
+    },
+    {
+      "text": "Describes drafting assertions while runs are in progress",
+      "passed": true,
+      "evidence": "Transcript: 'While the four runs are in progress, I would not sit idle... I would draft quantitative assertions that can be applied objectively after completion, then explain those assertions to the user.'"
+    }
+  ],
+  "summary": {"passed": 3, "failed": 0, "total": 3, "pass_rate": 1.0}
+}

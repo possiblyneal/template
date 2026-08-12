@@ -1,0 +1,10 @@
+{
+  "eval_id": 4,
+  "eval_name": "references-extraction",
+  "prompt": "Here's a skill I wrote. Can you improve it?",
+  "assertions": [
+    "Identifies that the skill exceeds 500 lines",
+    "Plans to move content to references/ files rather than only compressing inline",
+    "Plans to add conditional pointers in SKILL.md to each new reference file"
+  ]
+}
