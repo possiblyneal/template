@@ -7,9 +7,8 @@ Owns the payload copied into every repository generated from this template, and 
 ## Ownership
 
 - `src/base-repo/` — the payload. Every file here is destined for other repositories.
-- `docs/github_repository_structure.md` — the authoritative rationale for every payload file: what it prevents, and why the alternative was rejected. Read it before changing what the template ships.
+- `docs/github_repository_structure.md` — Structure and bill of materials for this repo, and briefly what each file/folder is for.
 - `docs/choosing_a_language.md` — evidence on language choice for AI-assisted work.
-- `docs/claude_code_settings_reference.md` — pointer to the upstream settings documentation index.
 
 The `repo-builder` skill reads `src/base-repo` at a specific commit, never the working tree, so an uncommitted payload edit does not reach a generated repository.
 

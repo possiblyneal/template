@@ -9,7 +9,7 @@ The two trees hold near-identical files. Before editing, decide which one the ch
 
 This repository was generated from its own payload, so the root files are that payload plus repository-specific merges. `.repo-template.json` records the payload commit the root was last reconciled with, and marks `apps/**` as product so an update never overwrites the payload that produced it.
 
-`apps/github-repository-template/docs/github_repository_structure.md` is the reasoning behind every payload file. Read it before changing what the template ships; it explains what each file prevents, which is rarely visible from the file itself.
+`apps/github-repository-template/docs/github_repository_structure.md` is the structure and bill of materials for the payload, naming briefly what each file and folder is for. Read it before changing what the template ships, to see where a file belongs and what it is there to do.
 
 ## Commands
 
