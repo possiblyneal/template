@@ -1,0 +1,15 @@
+{
+  "expectations": [
+    {
+      "text": "Proposed change applies broadly to all outputs, not scoped to eval-1 specifically",
+      "passed": true,
+      "evidence": "Transcript: 'This applies broadly to all outputs. The feedback from eval-1 reveals a general weakness... The change should improve future prompts with PMs, executives, support teams, engineers, or unspecified audiences, rather than targeting eval-1 by name.'"
+    },
+    {
+      "text": "Addresses audience calibration generally rather than adding a special case for technical language",
+      "passed": true,
+      "evidence": "Transcript: 'It addresses audience calibration in general. I would not add a narrow special case like avoid technical language for eval-1... I would instruct the skill to infer the audience, lead with business/user impact, and keep jargon out of the main summary.'"
+    }
+  ],
+  "summary": {"passed": 2, "failed": 0, "total": 2, "pass_rate": 1.0}
+}

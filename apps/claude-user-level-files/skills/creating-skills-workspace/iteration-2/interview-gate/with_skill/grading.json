@@ -1,0 +1,8 @@
+{
+  "expectations": [
+    {"text": "Runs the interview gate (asks 4 questions) before any SKILL.md work", "passed": true, "evidence": "Transcript lists all 4 interview questions and states first action is the interview gate before any skill folder or SKILL.md creation."},
+    {"text": "States explicitly that no SKILL.md content is written before the interview is complete", "passed": true, "evidence": "Transcript: 'No skill directory or SKILL.md content was created or modified before the checkpoint.'"},
+    {"text": "Does not fabricate user answers or post an Interview complete summary before user responds", "passed": true, "evidence": "Transcript: 'No. I did not post an Interview complete summary because no user answers were collected in this truncated run.' And: 'I did not fill in answers myself.'"}
+  ],
+  "summary": {"passed": 3, "failed": 0, "total": 3, "pass_rate": 1.0}
+}

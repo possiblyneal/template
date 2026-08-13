@@ -1,0 +1,11 @@
+{
+  "eval_id": 7,
+  "eval_name": "description-optimization",
+  "prompt": "The skill is done. Can you optimize the description so it triggers more reliably?",
+  "assertions": [
+    "Generates 20 trigger eval queries split between should-trigger and should-not-trigger",
+    "Opens eval_review.html for user review before running the optimization loop",
+    "Runs scripts/run_loop.py with the model ID from the system prompt",
+    "Applies best_description to SKILL.md frontmatter and shows before/after with scores"
+  ]
+}

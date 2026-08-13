@@ -1,0 +1,14 @@
+{
+  "assertions": [
+    {
+      "text": "The output identifies the root cause of the failures",
+      "passed": true,
+      "evidence": "The output states that the failures were due to a connection pool exhaustion event starting at 14:00:12, which identifies the root cause."
+    },
+    {
+      "text": "The output mentions which jobs were affected by name",
+      "passed": true,
+      "evidence": "The output names the affected jobs explicitly as 8821, 8822, and 8823, and further notes retry/DLQ outcomes for 8821 and 8822."
+    }
+  ]
+}

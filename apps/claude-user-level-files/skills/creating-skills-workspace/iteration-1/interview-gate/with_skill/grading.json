@@ -1,0 +1,20 @@
+{
+  "expectations": [
+    {
+      "text": "Runs the interview gate (asks 4 questions) before any SKILL.md work",
+      "passed": true,
+      "evidence": "Transcript: 'The first major decision point in that workflow is the interview gate: before creating or editing any SKILL.md, the workflow requires confirming four fields with the user.' Posed all 4 questions verbatim."
+    },
+    {
+      "text": "States explicitly that no SKILL.md content is written before the interview is complete",
+      "passed": true,
+      "evidence": "Transcript: 'No SKILL.md content was created or edited before the checkpoint. No skill directory was created for the proposed conventional-commits skill.'"
+    },
+    {
+      "text": "Does not fabricate user answers or post an Interview complete summary before user responds",
+      "passed": true,
+      "evidence": "Transcript: 'No. I did not post an Interview complete summary because the interview had not been completed yet.' Correctly holds gate open."
+    }
+  ],
+  "summary": {"passed": 3, "failed": 0, "total": 3, "pass_rate": 1.0}
+}
