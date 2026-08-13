@@ -11,18 +11,18 @@ type: Note
 
 `.github/workflows/security.yml`: Runs dependency audits, plus a secret scan when a scanner is present.
 
-`**.github/workflows/release.yml**`: Verifies a tagged release and publishes it, both through `scripts/release`. Artifacts and binaries are wired into that script when the project defines them. It holds `contents: write` because it creates the release.
+**`.github/workflows/release.yml`**: Verifies a tagged release and publishes it, both through `scripts/release`. Artifacts and binaries are wired into that script when the project defines them. It holds `contents: write` because it creates the release.
 
-`**.github/workflows/security.yml**`: Runs dependency audits, plus a secret scan when a scanner is present.
+**`.github/workflows/security.yml`**: Runs dependency audits, plus a secret scan when a scanner is present.
 
-`**.github/actions/setup-toolchains/**`: Installs a toolchain for each language manifest present, reading `scripts/detect github-output` for the list.
+**`.github/actions/setup-toolchains/`**: Installs a toolchain for each language manifest present, reading `scripts/detect github-output` for the list.
 
 Rule of thumb:
 
-- `**ci.yml**`: Thinnest. One call to `scripts/ci` is often enough.
-- `**release.yml**`: Thin wrapper plus GitHub release/package auth.
-- `**security.yml**`: Wrapper plus GitHub-native security actions.
-- `**codeql.yml**`: No `scripts/` counterpart. CodeQL runs on GitHub's infrastructure and reports into the Security tab, so there is nothing to run locally.
+- **`ci.yml`**: Thinnest. One call to `scripts/ci` is often enough.
+- **`release.yml`**: Thin wrapper plus GitHub release/package auth.
+- **`security.yml`**: Wrapper plus GitHub-native security actions.
+- **`codeql.yml`**: No `scripts/` counterpart. CodeQL runs on GitHub's infrastructure and reports into the Security tab, so there is nothing to run locally.
 
 The goal is not "all logic outside YAML" but portable project logic in `scripts/` and provider-specific orchestration in `.github/workflows/`.
 
@@ -96,17 +96,17 @@ An `apps/` entry is one deployable service or one durable domain boundary: the u
 
 `scripts/libs/detect.sh`: The detection library, defined once. 
 
-`**scripts/libs/precommit.sh**`: Which git hooks `.pre-commit-config.yaml` asks for, and which of them a clone lacks.
+**`scripts/libs/precommit.sh`**: Which git hooks `.pre-commit-config.yaml` asks for, and which of them a clone lacks.
 
-`**scripts/detect**`: The same detection over a command line, because a workflow cannot source a bash library. `github-output` writes `language=true|false` flags for a step's `if:`, `codeql-matrix` writes the matrix JSON, and `check-orphans` reports the failure below. `setup-toolchains`, `security.yml`, and `codeql.yml` call it rather than each carrying detection of their own.
+**`scripts/detect`**: The same detection over a command line, because a workflow cannot source a bash library. `github-output` writes `language=true|false` flags for a step's `if:`, `codeql-matrix` writes the matrix JSON, and `check-orphans` reports the failure below. `setup-toolchains`, `security.yml`, and `codeql.yml` call it rather than each carrying detection of their own.
 
-`**scripts/tests/**`: `capabilities-test` asserts that every language present is dispatched to every check.
+**`scripts/tests/`**: `capabilities-test` asserts that every language present is dispatched to every check.
 
 `scripts/release` does the one part of publishing a template can know: it checks the tag against `vX.Y.Z`, reads the matching `## [x.y.z]` section out of `CHANGELOG.md`, runs `scripts/ci`, and creates the GitHub release with that section as the body.
 
-`**tools/**`: The counterpart to `scripts/`, and a convention rather than a shipped directory. A helper that has to be built before it runs — a Go linter, a code generator, a protobuf plugin — goes here as `tools/<name>/`, one directory per program, carrying its own manifest and source. A helper that is a shell file goes in `scripts/`. T
+**`tools/`**: The counterpart to `scripts/`, and a convention rather than a shipped directory. A helper that has to be built before it runs — a Go linter, a code generator, a protobuf plugin — goes here as `tools/<name>/`, one directory per program, carrying its own manifest and source. A helper that is a shell file goes in `scripts/`. T
 
-`**tmp/**`: Git-ignored scratch space for temporary files, downloaded artifacts, and dumped logs, holding a `.gitkeep` so the directory survives being empty.
+**`tmp/`**: Git-ignored scratch space for temporary files, downloaded artifacts, and dumped logs, holding a `.gitkeep` so the directory survives being empty.
 
 ### Documentation &amp; Knowledge Base
 
@@ -114,9 +114,9 @@ Durable knowledge that grounds the AI in the project's specific reality and oper
 
 `TODO.md`: A plain-text to-do of backlogged, informal tasks
 
-`**CHANGELOG.md**`: A per-version record of what changed, in Keep a Changelog 2.0.0 format, pinned by the link in the file's own header so the convention it follows cannot drift as that page changes.
+**`CHANGELOG.md`**: A per-version record of what changed, in Keep a Changelog 2.0.0 format, pinned by the link in the file's own header so the convention it follows cannot drift as that page changes.
 
-`**docs/adr/**`: Architectural Decision Records (e.g., `0001-initial-stack.md`). Explains *why* decisions were made so the AI doesn't try to revert or fundamentally alter established systems.
+**`docs/adr/`**: Architectural Decision Records (e.g., `0001-initial-stack.md`). Explains *why* decisions were made so the AI doesn't try to revert or fundamentally alter established systems.
 
 `docs/specs/`: Specs for contracts that span apps, such as service-to-service APIs and shared schemas. Specs for a single unit stay under `apps/<domain or deployable service>/docs/specs/`.
 
@@ -136,7 +136,7 @@ The hidden files that dictate environment variables, Git behavior, and tool inte
 
 `.gitattributes`: Git behavior rules for line endings, diffs, and GitHub Linguist classification.
 
-`.pre-commit-config.yaml`: Local guardrails that run automatically before code gets committed, catching AI syntax mistakes early. `**.commitlintrc.yaml**`: The commit message rules. Messages follow Conventional Commits — `type(optional scope): subject`, a blank line, then the body Additions by Occasion
+`.pre-commit-config.yaml`: Local guardrails that run automatically before code gets committed, catching AI syntax mistakes early. **`.commitlintrc.yaml`**: The commit message rules. Messages follow Conventional Commits — `type(optional scope): subject`, a blank line, then the body Additions by Occasion
 
 #### When someone else will use it
 
@@ -144,19 +144,19 @@ Someone who is not the author has to get the thing running, and has to know whet
 
 `README.md`: The public orientation page: what the project does, how to install it, and how to use it.
 
-`**LICENSE**`: The legal document outlining the usage, modification, and distribution rights of the code.
+**`LICENSE`**: The legal document outlining the usage, modification, and distribution rights of the code.
 
-`**SECURITY.md**`: The project's security policy, supported versions, and the private channel for reporting vulnerabilities. `SUPPORT.md`: Routes users to help, filtering general troubleshooting out of the core issue tracker.
+**`SECURITY.md`**: The project's security policy, supported versions, and the private channel for reporting vulnerabilities. `SUPPORT.md`: Routes users to help, filtering general troubleshooting out of the core issue tracker.
 
-`**.env.example**`: A sanitized template of `.env` showing required variables without exposing actual secrets.
+**`.env.example`**: A sanitized template of `.env` showing required variables without exposing actual secrets.
 
 #### When someone else will contribute code
 
 The trigger is a second person with commit ambitions, not a public repository. Two engineers on a private repository are already here.
 
-`**CONTRIBUTING.md**`: Guidelines for external developers on submitting pull requests, running tests, and adhering to code style.
+**`CONTRIBUTING.md`**: Guidelines for external developers on submitting pull requests, running tests, and adhering to code style.
 
-`**CODE_OF_CONDUCT.md**`: The baseline rules for community behavior and expectations for professional interaction. Its value depends on being adopted before it is needed; written in response to an incident it is a ruling rather than a rule, and reads as one.
+**`CODE_OF_CONDUCT.md`**: The baseline rules for community behavior and expectations for professional interaction. Its value depends on being adopted before it is needed; written in response to an incident it is a ruling rather than a rule, and reads as one.
 
 `CODEOWNERS`: The definitive list of core team members with write access and merge authority. Read from the repository root, `.github/`, or `docs/`, and nowhere else. On its own it only requests reviewers; a branch protection rule requiring code owner review is what makes that request binding.
 
@@ -166,15 +166,15 @@ Both files answer the same question — who decides, and who is owed credit for 
 
 `GOVERNANCE.md`: The political structure of the repository: how decisions are made, how maintainers are elected, and how disputes are resolved.
 
-`**CONTRIBUTORS.md**`: A public ledger crediting individuals who have contributed code or documentation. GitHub also recognizes `AUTHORS`, which is a narrower list: the people whose contributions are legally significant for copyright. The two only need to be separate files under a contributor licence agreement or copyright assignment, where who holds the copyright is a different question from who to thank.
+**`CONTRIBUTORS.md`**: A public ledger crediting individuals who have contributed code or documentation. GitHub also recognizes `AUTHORS`, which is a narrower list: the people whose contributions are legally significant for copyright. The two only need to be separate files under a contributor licence agreement or copyright assignment, where who holds the copyright is a different question from who to thank.
 
 #### When the work is academically valuable
 
-`**CITATION.cff**`: Machine-readable citation metadata, which GitHub surfaces as a "Cite this repository" button. Root only. The occasion is the work being the kind that gets cited — research software, a dataset, a method — not a citation request arriving, which nothing would announce. On an academic repository that is true on day one; on everything else it never becomes true.
+**`CITATION.cff`**: Machine-readable citation metadata, which GitHub surfaces as a "Cite this repository" button. Root only. The occasion is the work being the kind that gets cited — research software, a dataset, a method — not a citation request arriving, which nothing would announce. On an academic repository that is true on day one; on everything else it never becomes true.
 
 #### When the project has gained traction
 
-`**.github/FUNDING.yml**`: Displays a sponsor button in your repository, raising the visibility of funding options for your open source project. Unlike the rest of this section it is read only from `.github/`; a copy at the repository root is ignored, and the missing button is the only symptom. Opening a sponsors account takes minutes, so the condition worth waiting on is the audience rather than the account — the button is dead weight on a repository nobody has found, and no star count is the number that means one has been found.
+**`.github/FUNDING.yml`**: Displays a sponsor button in your repository, raising the visibility of funding options for your open source project. Unlike the rest of this section it is read only from `.github/`; a copy at the repository root is ignored, and the missing button is the only symptom. Opening a sponsors account takes minutes, so the condition worth waiting on is the audience rather than the account — the button is dead weight on a repository nobody has found, and no star count is the number that means one has been found.
 
 ### Program Language Metadata
 
