@@ -24,12 +24,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # adr-index-test skips its hook-wiring cases when pre-commit is absent,
-      # and those two are the ones that catch a hook pre-commit never invokes --
-      # the failure the whole suite exists for. Without this the suite reports a
-      # smaller green run here than it does locally, which is the shape of a
-      # regression nothing sees. The fixture builds a config holding only the
-      # local adr-index hook, so no hook environment is downloaded.
+      # adr-index-test and commitlint-test both skip their hook-wiring cases
+      # when pre-commit is absent, and those cases are the ones that catch a
+      # hook pre-commit never invokes -- the failure both suites exist for.
+      # Without this they report a smaller green run here than they do locally,
+      # which is the shape of a regression nothing sees.
+      #
+      # adr-index-test costs nothing: its fixture holds only the local hook, so
+      # no hook environment is downloaded. commitlint-test does download one,
+      # because commitlint is a JavaScript program and proving it rejects a bad
+      # message means running it. That puts the npm registry on the critical
+      # path of this job, which was accepted rather than shipping a
+      # commit-message rule to every generated repository unproven.
       - name: Install pre-commit
         run: pipx install pre-commit
 

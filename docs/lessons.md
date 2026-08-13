@@ -91,11 +91,11 @@ The root `.gitignore` pattern does not reach `apps/.../src/base-repo/.env`, so i
 
 ## pre-commit --all-files reads the index, not the working tree
 
-`scripts/check` ends in `pre-commit run --all-files`, which enumerates files through git. Untracked files are invisible to it.
+`pre-commit run --all-files` enumerates files through git. Untracked files are invisible to it, and it reports a pass over them rather than saying it skipped them.
 
-**Do:** `git add` a new file before treating `scripts/check` as evidence it passed. On a fresh generation, stage everything first.
+**Do:** Run `scripts/check`, which follows the sweep with a second pass over `git ls-files --others --exclude-standard`, rather than the bare command. Invoking `pre-commit run --all-files` yourself still needs the new files staged first.
 
-**Why:** A first run over an unstaged candidate checks the two files that were already tracked and reports a pass for the forty-eight that were not.
+**Why:** A run over an unstaged candidate checks the two files that were already tracked and reports a pass for the forty-eight that were not.
 
 **Source:** [scripts/check](../scripts/check)
 

@@ -23,7 +23,31 @@ case "$tag" in
     ;;
 esac
 
+version="${tag#v}"
+
 echo "Preparing release for $tag"
+
+if [[ ! -f CHANGELOG.md ]]; then
+  echo "CHANGELOG.md is missing, so this release has no notes to publish."
+  exit 1
+fi
+
+# The release body is the changelog section for this version rather than notes
+# generated from the commits since the last tag. Extracting it keeps the file
+# canonical: one edit produces both, so the tree and the releases page cannot
+# disagree. Dots are escaped because awk matches the pattern as a regex.
+notes="$(awk -v version="${version//./\\.}" '
+  $0 ~ "^## \\[" version "\\]" { collecting = 1; next }
+  collecting && /^## / { exit }
+  collecting && !seen && /^[[:space:]]*$/ { next }
+  collecting { seen = 1; print }
+' CHANGELOG.md)"
+
+if [[ -z "$notes" ]]; then
+  echo "CHANGELOG.md has no entries under ## [$version], so $tag would publish empty notes."
+  echo "Retitle the Unreleased section as ## [$version] - $(date +%F) before tagging."
+  exit 1
+fi
 
 if [[ ! -x scripts/ci ]]; then
   echo "scripts/ci is missing or not executable, so this release would ship unverified."
@@ -32,10 +56,13 @@ fi
 
 scripts/ci
 
-# Packaging is project-specific, so the template cannot supply it. Until it is
-# filled in there is nothing to publish, and exiting 0 here would report a
-# successful release that produced no artifact and no changelog.
-echo
-echo "No release packaging configured, so there is nothing to publish for $tag."
-echo "Add artifact build and changelog steps to scripts/release, then remove this block."
-exit 1
+if ! command -v gh >/dev/null 2>&1; then
+  echo "gh is not installed, so there is no way to publish $tag."
+  exit 1
+fi
+
+# Artifacts are project-specific, so the template builds none. Build them above
+# this line and pass the files as trailing arguments here; the tag and the notes
+# are already right without them, so a release with no artifact is still a real
+# release rather than a half-finished one.
+gh release create "$tag" --title "$tag" --notes "$notes"

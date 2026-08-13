@@ -10,15 +10,16 @@ on:
     tags:
       - "v*"
 
-# This workflow validates a release but does not publish yet, so checkout and
-# the build need only a read token. When publishing is added, put a
-# contents: write permission on its separate job rather than widening this one.
+# scripts/release creates the GitHub release, which needs a write token, and it
+# verifies in the same process so a release cannot be published without the gate
+# having run. That token is therefore live while scripts/ci executes the
+# project's own toolchains. Splitting verification into a read-only job would
+# narrow that window at the cost of running the whole gate twice.
 permissions:
-  contents: read
+  contents: write
 
-# Not cancel-in-progress, unlike the other workflows: a future publisher can
-# stop after publishing some artifacts and none of the rest. Overlapping runs
-# queue instead.
+# Not cancel-in-progress, unlike the other workflows: a publisher can stop after
+# publishing some artifacts and none of the rest. Overlapping runs queue instead.
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
@@ -31,13 +32,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-        with:
-          # Full history so changelog generation can reach the previous tag.
-          fetch-depth: 0
 
-      # scripts/release runs scripts/ci before packaging and publishing are
-      # added, and that fails when a manifest is present but its toolchain is
-      # missing.
+      # scripts/release runs scripts/ci before publishing, and that fails when a
+      # manifest is present but its toolchain is missing.
       - name: Set up toolchains
         uses: ./.github/actions/setup-toolchains
 
@@ -46,7 +43,8 @@ jobs:
       # The value crosses into the step as an environment variable rather than
       # through ${{ }} interpolation, which would paste a dispatch input
       # straight into the shell command.
-      - name: Build release artifacts
+      - name: Verify and publish
         env:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
         run: scripts/release "$RELEASE_TAG"

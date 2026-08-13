@@ -29,7 +29,7 @@ The `repo-builder` skill reads `src/base-repo` at a specific commit, never the w
 
 **`.github/dependabot.yml` lists only actions and pre-commit**, and that is not an oversight. An entry naming a manifest the repository does not have fails with `dependency_file_not_found` rather than being skipped, and a template cannot know which ecosystem a clone will use — listing five guarantees four broken entries in every one. The file carries the entry to copy when a real manifest arrives.
 
-**Nothing public ships.** The template is a private-repository baseline. `README.md`, `LICENSE`, `CONTRIBUTING.md`, `CODEOWNERS`, and the rest are the checklist in the structure doc for the day a generated repository goes public.
+**The payload is what is useful on day one.** `README.md`, `LICENSE`, `CONTRIBUTING.md`, `CODEOWNERS`, and the rest are absent because each answers a condition the template cannot know has arrived — not because the baseline is private. The structure doc's "Additions by Occasion" groups them by that condition. Adding one to the payload asserts its condition holds for every generated repository, which is the test to apply before doing so.
 
 ## Work Guidance
 
