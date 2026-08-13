@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- User-level Claude Code configuration is symlinked from `~/.claude` into
+  `apps/claude-user-level-files/src/` rather than copied, so settings changes
+  arrive as reviewable diffs. On that machine, `/model` now writes to the
+  working tree and a branch switch changes live configuration.
 - The structure doc groups the files a repository adds later by the occasion each
   one answers, rather than as a single checklist for going public.
 - `scripts/release` publishes the GitHub release rather than stopping short of

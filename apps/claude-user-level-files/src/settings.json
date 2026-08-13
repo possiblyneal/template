@@ -1,5 +1,4 @@
 {
-  "apiKeyHelper": "/home/neal/.local/share/ccr-upstream-client/bin/ccr-claude-code-api-key-default-claude-code",
   "env": {
     "CCR_STATUSLINE_DEBUG": "0",
     "CLAUDE_CODE_ATTRIBUTION_HEADER": "0",
@@ -23,7 +22,6 @@
     ],
     "defaultMode": "bypassPermissions"
   },
-  "model": "opus[1m]",
   "hooks": {
     "PreCompact": [
       {
