@@ -22,6 +22,7 @@
     ],
     "defaultMode": "bypassPermissions"
   },
+  "model": "opus",
   "hooks": {
     "PreCompact": [
       {
@@ -246,12 +247,12 @@
     }
   },
   "syntaxHighlightingDisabled": false,
-  "effortLevel": "high",
+  "effortLevel": "medium",
+  "autoCompactWindow": 300000,
   "awaySummaryEnabled": false,
   "autoMemoryEnabled": false,
   "skipDangerousModePermissionPrompt": true,
   "theme": "dark",
   "editorMode": "normal",
-  "preferredNotifChannel": "terminal_bell",
-  "autoCompactWindow": 300000
+  "preferredNotifChannel": "terminal_bell"
 }
