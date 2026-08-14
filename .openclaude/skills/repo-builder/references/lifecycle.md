@@ -79,6 +79,8 @@ Unmatched defaulting to product is the safe direction for a path the template do
 
 A rename or delete of a destination-modified managed file needs semantic review. Product-created files under managed directories remain untouched unless the new template introduces the same path.
 
+An adopted addon is one of those files, and the pair above lands on both sides of the line: `CHANGELOG.md` matches no pattern and defaults to product, while `.openclaude/rules/changelog.md` sits under a managed directory the template does not ship that path into. Neither is a deletion to reconcile. The template never having shipped a file is not the template having removed it, and an update that reads it that way deletes a record the destination chose to keep.
+
 ## Generate
 
 1. Resolve the requested source to an exact commit and run:
@@ -95,6 +97,10 @@ A rename or delete of a destination-modified managed file needs semantic review.
    `generate` validates the source only. It takes the destination as a name, never inspects it, and so cannot tell an empty repository from one with content. Establish that yourself before materializing.
 
 2. Collect only unresolved decisions: owner/name, visibility, application boundary/name, public-repository files, release behavior, and feature availability.
+
+   The public-repository files are not invented per generation. They sit in `apps/github-repository-template/src/repository-addons/`, a sibling of the subtree and therefore never materialized by step 3 — `README.md`, `LICENSE`, `CONTRIBUTING.md`, `CODEOWNERS`, `SECURITY.md`, `CHANGELOG.md`, and the rest. Each answers a condition the template cannot know has arrived, which is why it is held back rather than shipped. Offer them against the conditions the answers to this step have established, and copy the ones taken from that same source commit.
+
+   Two of them travel as a pair: `CHANGELOG.md` and `.openclaude/rules/changelog.md`. The rule instructs an agent to maintain the file, so adopting the rule without the file states a contract that cannot be satisfied, and adopting the file without the rule leaves nothing keeping it current. `scripts/release` reads whichever world it lands in and says which one it took, so neither is required — but half of the pair is a defect rather than a lighter choice.
 
    Do not collect stacks or package managers, and do not render a root manifest. A template cannot know the ecosystem a repository will use, and a wrong guess is worse than an absent file — the same reasoning `.github/dependabot.yml` follows in listing only the two manifests the template itself ships. A generated repository with no manifest is reported honestly by `scripts/ci` as nothing to check yet, with every check becoming required the moment one is added. The first real commit brings the manifest.
 
