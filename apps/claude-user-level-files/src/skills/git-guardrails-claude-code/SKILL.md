@@ -21,7 +21,7 @@ When blocked, Claude sees a message telling it that it does not have authority t
 
 ### 1. Ask scope
 
-Ask the user: install for **this project only** (`.claude/settings.json`) or **all projects** (`~/.claude/settings.json`)?
+Ask the user: install for **this project only** (`.openclaude/settings.json`) or **all projects** (`~/.openclaude/settings.json`)?
 
 ### 2. Copy the hook script
 
@@ -29,8 +29,8 @@ The bundled script is at: [scripts/block-dangerous-git.sh](scripts/block-dangero
 
 Copy it to the target location based on scope:
 
-- **Project**: `.claude/hooks/block-dangerous-git.sh`
-- **Global**: `~/.claude/hooks/block-dangerous-git.sh`
+- **Project**: `.openclaude/hooks/block-dangerous-git.sh`
+- **Global**: `~/.openclaude/hooks/block-dangerous-git.sh`
 
 Make it executable with `chmod +x`.
 
@@ -38,7 +38,7 @@ Make it executable with `chmod +x`.
 
 Add to the appropriate settings file:
 
-**Project** (`.claude/settings.json`):
+**Project** (`.openclaude/settings.json`):
 
 ```json
 {
@@ -49,7 +49,7 @@ Add to the appropriate settings file:
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-dangerous-git.sh"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.openclaude/hooks/block-dangerous-git.sh"
           }
         ]
       }
@@ -58,7 +58,7 @@ Add to the appropriate settings file:
 }
 ```
 
-**Global** (`~/.claude/settings.json`):
+**Global** (`~/.openclaude/settings.json`):
 
 ```json
 {
@@ -69,7 +69,7 @@ Add to the appropriate settings file:
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/block-dangerous-git.sh"
+            "command": "~/.openclaude/hooks/block-dangerous-git.sh"
           }
         ]
       }
