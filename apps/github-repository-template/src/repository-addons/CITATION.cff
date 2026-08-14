@@ -11,10 +11,12 @@
 #     the default branch.
 #   - Parsing is done by ruby-cff against the formal schema. A file that fails
 #     it produces an error in the sidebar instead of a citation.
-#   - Every REPLACE- placeholder below is a valid value. The schema asks for a
-#     nonempty string and gets one, so a half-filled file validates, renders,
-#     and hands out a BibTeX entry crediting REPLACE-FAMILY-NAME. Nothing warns
-#     anyone. Fill them in before the first commit, not after someone cites it.
+#   - Every active REPLACE- placeholder below is a valid value. The schema asks
+#     for a nonempty string and gets one, so a half-filled file validates,
+#     renders, and hands out a BibTeX entry crediting REPLACE-FAMILY-NAME.
+#     Nothing warns anyone. Fill them in before the first commit, not after
+#     someone cites it. `license` is the lone exception and is commented out
+#     for that reason -- see the note above it.
 #
 # Validate before pushing:  uvx cffconvert --validate
 # Schema guide:  https://github.com/citation-file-format/citation-file-format/blob/main/schema-guide.md
@@ -33,11 +35,18 @@ authors:
     # orcid: https://orcid.org/0000-0000-0000-0000
     # affiliation: REPLACE-INSTITUTION
 
-# Must be an SPDX identifier. GPL-3.0-or-later is the addon LICENSE this
-# repository ships; change it only if a different LICENSE ships. The "or later"
-# is not expressible in LICENSE itself -- its text is identical either way --
-# so this line and the per-file SPDX headers are the only places it is recorded.
-license: GPL-3.0-or-later
+# The one field where a placeholder cannot pass. `license` is a closed enum of
+# SPDX identifiers, so REPLACE-SPDX-IDENTIFIER fails validation and the sidebar
+# renders an error instead of a citation -- the opposite of every other field
+# here. It ships commented out rather than wrong: the file stays valid, and the
+# citation simply carries no license until this line is uncommented and filled.
+#
+# Use the SPDX identifier for whatever LICENSE actually ships, not its title.
+# `GPL-3.0-or-later` and `GPL-3.0-only` are distinct values and LICENSE cannot
+# tell them apart -- its text is identical either way -- so this line and the
+# per-file SPDX headers are the only places that choice is recorded.
+#
+# license: REPLACE-SPDX-IDENTIFIER
 
 # Left commented because a template cannot keep them true, and a stale value
 # here is worse than a missing one: it cites a version that was never released.
