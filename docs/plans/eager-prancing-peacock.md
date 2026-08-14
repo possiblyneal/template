@@ -40,7 +40,7 @@ looking like a JavaScript project because of it.
 Every functional change below lands in **both** trees in the same commit: the
 root, and `apps/github-repository-template/src/base-repo/`. The two copies of
 `.pre-commit-config.yaml`, `scripts/doctor`, `scripts/tests/`, `ci.yml`, and
-`.claude/hooks/session-start.sh` are currently byte-identical and must stay so.
+`.openclaude/hooks/session-start.sh` are currently byte-identical and must stay so.
 
 ### 1. `.pre-commit-config.yaml` — new top-level key and hook
 
@@ -105,7 +105,7 @@ for linked-worktree safety; add a matching `elif` branch for
 `hooks/commit-msg`, with the same remedy line (`Run: pre-commit install`, which
 now installs both).
 
-### 4. `.claude/hooks/session-start.sh` — install both hook types
+### 4. `.openclaude/hooks/session-start.sh` — install both hook types
 
 The condition at line 9 tests `! -f .git/hooks/pre-commit`. A clone that
 already has the pre-commit hook but not the commit-msg hook — which is every
@@ -176,7 +176,7 @@ touching seven files across two trees.
 - **`scripts/CLAUDE.md`** — add `tests/commitlint-test` to Ownership and to the
   Verification list, and note there that it is the first test requiring network
   access.
-- **`.claude/CLAUDE.md`** — record that `session-start.sh` now installs both
+- **`.openclaude/CLAUDE.md`** — record that `session-start.sh` now installs both
   hook types and resolves the hook path for worktrees.
 - **`apps/github-repository-template/docs/github_repository_structure.md`** —
   a `.commitlintrc.yaml` entry, and an update to the `.pre-commit-config.yaml`

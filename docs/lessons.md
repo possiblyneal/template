@@ -33,35 +33,39 @@ Add only durable, repeatable, non-obvious constraints, conventions, or tool/prov
 
 The root config files and `apps/github-repository-template/src/base-repo/` hold near-identical copies of the same files. They are not the same file.
 
-**Do:** Before editing `scripts/`, `.github/`, `.claude/`, or a root dotfile, decide whether the change belongs to this repository, to every generated repository, or to both. Apply it to both trees in one commit when it is both.
+**Do:** Before editing `scripts/`, `.github/`, `.openclaude/`, or a root dotfile, decide whether the change belongs to this repository, to every generated repository, or to both. Apply it to both trees in one commit when it is both.
 
 **Why:** A fix made only at the root leaves the template shipping the bug to every repository generated afterward. A fix made only in the payload leaves this repository running the bug.
 
 **Source:** [Template payload contract](../apps/github-repository-template/CLAUDE.md)
 
-## CodeQL cannot report on this repository
+## CodeQL fails fast here, and that failure is the finding
 
-`.github/workflows/codeql.yml` runs here, but this repository is private on a free plan, so code scanning is unavailable and the workflow fails when it uploads results.
+Code scanning accepts uploaded results from a public repository, or from a private one with GitHub Advanced Security. This repository is private on a free plan, so the `scanning` job in `.github/workflows/codeql.yml` fails in seconds with the reason in the run summary, instead of analyzing for an hour and dying at the upload step.
 
-**Do:** Read a red CodeQL run as the known plan limitation, not as a finding. Resolve it by making the repository public or adding GitHub Advanced Security, not by editing the workflow.
+**Do:** Read a red `Code scanning enabled` check as accurate — this repository genuinely has no static analysis coverage. Fix it by making the repository public or enabling Advanced Security. Never quiet it with `continue-on-error`, a removed upload step, or an `if:` that skips the job.
 
-**Why:** The failure is at the upload step, after analysis. Nothing about the code is being reported, so treating it as a code problem sends you looking for a bug that was never found.
+**Why not skip it:** A skipped job renders the workflow green, so a repository with no coverage looks on the checks list exactly like one that scanned clean and found nothing. That is the same false green `continue-on-error` produces, reached by a different route, and it is worth being precise about which problem the fail-fast solves: not that the check was red, but that it burned an hour and then reported `Code scanning is not enabled` underneath a misleading note about pull requests from forks. Red was always the honest answer. Slow and misdescribed was the defect.
+
+**Why the API and not the event:** Visibility is read through `gh api` because `github.event.repository` is documented as "Not applicable" for `schedule`. Read from the event, the weekly run would compare a null against `public` and fail a public repository every Tuesday. A failed lookup fails the job for the same reason, rather than defaulting either way.
+
+**Source:** [Payload structure](../apps/github-repository-template/docs/github_repository_structure.md)
 
 **Source:** [`.repo-template.json`](../.repo-template.json)
 
 ## The repo-builder tests are not covered by scripts/check
 
-`.claude/skills/repo-builder/` holds Python with a pytest suite, but this repository has no root `pyproject.toml`, so language detection finds no Python and `scripts/check` reports there is nothing to check.
+`.openclaude/skills/repo-builder/` holds Python with a pytest suite, but this repository has no root `pyproject.toml`, so language detection finds no Python and `scripts/check` reports there is nothing to check.
 
-**Do:** Run `python3 -m pytest .claude/skills/repo-builder/scripts/tests/` directly after changing `preflight.py`.
+**Do:** Run `python3 -m pytest .openclaude/skills/repo-builder/scripts/tests/` directly after changing `preflight.py`.
 
 **Why:** A green `scripts/check` is not evidence the skill's tests ran. It is evidence they were never looked for.
 
-**Source:** [Preflight tests](../.claude/skills/repo-builder/scripts/tests/test_preflight.py)
+**Source:** [Preflight tests](../.openclaude/skills/repo-builder/scripts/tests/test_preflight.py)
 
 ## Root dotfiles are unowned, so updates never reach them
 
-The ownership rules in `.repo-template.json` match `scripts/**`, `.github/**`, and parts of `.claude/`. No rule matches a root dotfile, and an unmatched path defaults to product.
+The ownership rules in `.repo-template.json` match `scripts/**`, `.github/**`, and parts of `.openclaude/`. No rule matches a root dotfile, and an unmatched path defaults to product.
 
 **Do:** When reconciling a template update, check `.pre-commit-config.yaml`, `.gitattributes`, `.gitignore`, `.mcp.json`, and `.worktreeinclude` by hand. Confirm a path's ownership with `preflight.classify_path` rather than assuming a broad rule covers it.
 
@@ -87,7 +91,7 @@ The root `.gitignore` pattern does not reach `apps/.../src/base-repo/.env`, so i
 
 **Why:** Every check in this repository is a check on content. Absence has no runner, so a missing file produces a green run.
 
-**Source:** [Lifecycle contract](../.claude/skills/repo-builder/references/lifecycle.md)
+**Source:** [Lifecycle contract](../.openclaude/skills/repo-builder/references/lifecycle.md)
 
 ## pre-commit --all-files reads the index, not the working tree
 

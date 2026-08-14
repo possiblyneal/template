@@ -7,9 +7,9 @@ Owns the payload copied into every repository generated from this template, and 
 ## Ownership
 
 - `src/base-repo/` — the payload. Every file here is destined for other repositories.
-- `docs/github_repository_structure.md` — the authoritative rationale for every payload file: what it prevents, and why the alternative was rejected. Read it before changing what the template ships.
+- `src/repository-addons/` — files held back from the payload because each answers a condition the template cannot know has arrived. Not copied during generation; added by hand when the occasion does arrive. `docs/github_repository_structure.md` groups them under "Additions by Occasion" and names the condition for each.
+- `docs/github_repository_structure.md` — Structure and bill of materials for this repo, and briefly what each file/folder is for.
 - `docs/choosing_a_language.md` — evidence on language choice for AI-assisted work.
-- `docs/claude_code_settings_reference.md` — pointer to the upstream settings documentation index.
 
 The `repo-builder` skill reads `src/base-repo` at a specific commit, never the working tree, so an uncommitted payload edit does not reach a generated repository.
 
@@ -25,7 +25,8 @@ The `repo-builder` skill reads `src/base-repo` at a specific commit, never the w
 
 - `src/base-repo/apps/app-name/` is renamed during generation. The root `CLAUDE.md` of the payload carries the Placeholders section instructing that rename; a placeholder that only looks like a convention gets kept rather than replaced.
 - `src/base-repo/.env` is an intentionally empty tracked file giving a generated repository somewhere to put local variables. Do not add content. It is tracked only because the root `.gitignore` pattern does not reach into the payload; at a destination root the same pattern matches it, so it copies across like any other file and can never be committed there. A generated repository has it locally and a clone of that repository does not.
-- `.mcp.json` ships empty, and `.claude/` ships empty `agents/`, `output-styles/`, `skills/`, and `workflows/`, so a new project sees the available surfaces without inheriting rules.
+- `.mcp.json` ships empty, and `.openclaude/` ships empty `agents/`, `output-styles/`, `skills/`, and `workflows/`, so a new project sees the available surfaces without inheriting rules.
+- `.openclaude/rules/` ships `documentation.md` only. `changelog.md` sits in `src/repository-addons/` alongside the `CHANGELOG.md` it governs, because a rule about maintaining a file the repository does not have is a contract an agent cannot satisfy. The two travel together or not at all.
 
 **`.github/dependabot.yml` lists only actions and pre-commit**, and that is not an oversight. An entry naming a manifest the repository does not have fails with `dependency_file_not_found` rather than being skipped, and a template cannot know which ecosystem a clone will use — listing five guarantees four broken entries in every one. The file carries the entry to copy when a real manifest arrives.
 
@@ -33,7 +34,7 @@ The `repo-builder` skill reads `src/base-repo` at a specific commit, never the w
 
 ## Work Guidance
 
-Editing under `src/` prompts for approval, per `.claude/settings.json`. Treat that prompt as the question: is this a payload change or a root change?
+Editing under `src/` prompts for approval, per `.openclaude/settings.json`. Treat that prompt as the question: is this a payload change or a root change?
 
 A payload change ships to repositories that cannot be inspected from here, so prefer changes that fail loudly in a generated repository over changes that silently do nothing. The payload's scripts distinguish `pass`, `not-applicable`, `unavailable`, and `FAIL` for exactly that reason.
 
@@ -43,7 +44,7 @@ When the structure doc and the payload disagree, one of them is wrong — fix bo
 
 No checks run against the payload as source. The root `scripts/check` runs shellcheck and actionlint over these files through pre-commit, which is syntax-level only.
 
-The payload's behavior is verified where it lands: by `src/base-repo/scripts/tests/*-test` once a repository is generated, and by the `repo-builder` evals under `.claude/skills/repo-builder/evals/`.
+The payload's behavior is verified where it lands: by `src/base-repo/scripts/tests/*-test` once a repository is generated, and by the `repo-builder` evals under `.openclaude/skills/repo-builder/evals/`.
 
 ## Child Index
 

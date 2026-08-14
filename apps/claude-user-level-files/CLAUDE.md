@@ -1,92 +1,44 @@
-# CLAUDE.md
+# Claude User-Level Files
 
-**Core Directive:** Bias toward caution for architecture, but bias toward autonomous action for execution. Write code that is easy to read, understand and maintain.
+## Purpose
 
-## 1. Think Before Coding
+Version control for the user-level Claude Code configuration that would otherwise exist only as loose files in `~/.openclaude`. `src/` holds the real files; `~/.openclaude` holds symlinks pointing back here. Editing either path edits the same file, so configuration changes arrive as reviewable diffs instead of untracked drift.
 
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
+## Ownership
 
-Before implementing:
+Everything under `src/`, each symlinked from `~/.openclaude/<name>`:
 
-- If a simpler or best practice or "right way" approach exists, say so. Push back when warranted. Don't hesitate to suggest a better way, or one that has long lasting impact over a tactical change. Implement the most direct solution that fully solves the problem, scaling rigor to its difficulty.
-- If something is unclear, stop. Name what's confusing. Ask.
-- Handle uncertainty by type:
-  - Uncertain what to build (intent, architecture, requirements): if the decision is costly to reverse (schema, public API, security), ask before writing code. If it's cheap to reverse, proceed on the most reasonable interpretation and surface the assumption in your response to the user.
-  - Uncertain whether something works (an approach, a library behavior, a performance assumption): don't ask — run a small, localized, low-risk experiment yourself, then bring me the hypothesis and result.
+- `CLAUDE.md` — the user's global directives, loaded into every session on this machine
+- `settings.json` — permissions, `statusLine`, model, and effort
+- `keybindings.json`, `output-styles/`, `skills/`
+- `agents/`, `hooks/`, `rules/`, `workflows/` — empty, each holding a `.gitkeep` so the surface is visible and ready to fill
 
-## 2. Simplicity First
+Not owned here: `plans/` exists in `~/.openclaude` as a real directory and has never been versioned. It is a candidate, not an omission.
 
-**Minimum code that solves the problem. Nothing speculative.**
+Also not owned here: the status line renderer. `settings.json` points `statusLine` at `~/.openclaude/statusline.sh`, which links into `code/devex`, so the file this app names is versioned in a different repository. Change the renderer there, not here.
 
-- No features beyond what was asked. YAGNI
-- No abstractions for single-use code.
-- No "flexibility" or "configurability" that wasn't requested.
-- No error handling for impossible scenarios.
-- For complex problems, state your approach and what that approach makes *harder* down the line. Do this *before* writing code.
-- Trivial fixes get minimal code, harder problems get more careful design.
-- Never strip, hide, bypass, or weaken existing behavior (UI states, validation, error handling, etc.) to reduce the amount of code written.
+## Local Contracts
 
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+**Only configuration is symlinked; runtime state stays in `~/.openclaude`.** `projects/`, `sessions/`, `history.jsonl`, `.openclaude.json`, `plugins/`, `cache/`, and `shell-snapshots/` are per-machine session state that would churn the working tree on every prompt. Moving any of them here is a mistake, not an extension.
 
-## 3. Surgical Changes
+**Claude Code writes to `settings.json` at runtime.** Selecting a model with `/model` persists through the symlink into this repository, so the working tree can go dirty without anyone editing a file. Read that diff before committing or discarding it — it records a real preference change.
 
-**Touch only what you must. Clean up your mess after.**
+**A branch switch changes live configuration.** The symlink target moves with the checkout, so a branch that predates a settings change silently applies the older settings to every new session on this machine. Checking out an unrelated branch is not neutral here the way it is elsewhere in this repository.
 
-When editing existing code:
+**No gateway token is committed.** Each CCR wrapper in `~/.local/share/ccr-upstream-client/bin/` exports its own `ANTHROPIC_API_KEY`; the token files stay there, outside version control. Never inline a `ccr-profile-*` value into `src/`.
 
-- Restrict your changes strictly to the user's requested scope.
+## Work Guidance
 
-- Match existing style, even if you'd author it differently.
+Adding a file means creating it in `src/` and symlinking it from `~/.openclaude`, never creating it in `~/.openclaude` first — a real file there shadows the versioned copy and the divergence is invisible until something breaks.
 
-- If you notice unrelated dead code, code smells, duplicated knowledge (DRY), or areas of code that are difficult to understand, edit, or maintain, surface them in a message to the user rather than fixing them silently. Offer sensible refactors as a separate follow-up step. If any of this describes your code, rewrite it before moving to the next step or task.
+Keep `settings.json` free of per-profile values. All CCR profiles share this file; anything profile-specific belongs in that profile's wrapper in `~/.local/share/ccr-upstream-client/bin/` as an environment variable. This is why `apiKeyHelper` is absent — the wrappers supply the key. `model` is set here because every profile is meant to run the same one.
 
-- When your changes create orphans Remove imports/variables/functions that only YOUR changes made unused.
+## Verification
 
-The test: Every changed line should trace directly to the user's request.
+`ls -la ~/.openclaude` shows which entries are symlinks; anything listed under Ownership that appears as a real file has drifted and needs reconciling.
 
-**The Target State**
+Pre-commit runs shellcheck over the shell scripts and validates the JSON here, the same as anywhere else in the repository. Nothing verifies that the symlinks point where they should, or that a `settings.json` change is one the user intended.
 
-When writing *new* code or performing *requested* refactors, aim for the following characteristics. Do not use these as an excuse to over-engineer trivial fixes:
+## Child Index
 
-- CUPID (Composable,  Unix-philosophy, Predictable, Idiomatic, Domain-based)
-
-- Explicit
-
-- Low coupling / High cohesion
-
-- Distinguish inherent problem complexity from accidental complexity. Write the simplest correct solution that handles edge cases.
-
-## 4. Goal-Driven Execution
-
-**Define success criteria. Loop until verified.**
-
-Transform tasks into verifiable goals:
-
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
-
-For multi-step tasks, state a brief plan:
-
-```
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
-```
-
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification. You must run and pass the test(s) before moving to the next step.
-
-## 5. Web Search & Fetch
-
-**Use Exa, never the built-in web tools.**
-
-- For web search, use the local `exa-web-search` CLI wrapper.
-- To read/fetch a URL, use the local `exa-web-fetch` CLI wrapper.
-- Keep Exa output token-efficient: request small result counts and capped text unless the task requires more.
-- Never use the built-in `WebSearch` or `WebFetch` tools — they are denied in settings. If the Exa CLI wrappers are unavailable, say so rather than falling back.
-
-## 6. Important Details
-
-- You may ssh in to every device on the network and passwordless sudo is available for any Linux based system on the network.
-- Do not give the user commands to type into the command line when it is possible for you to accomplish the same thing using ssh and/or passwordless sudo.
-- Do not invoke the skill claude-api. It will crash the session.
+None.

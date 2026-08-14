@@ -1,0 +1,78 @@
+# Citation metadata in the Citation File Format. GitHub renders it as a "Cite
+# this repository" button in the sidebar and converts it to APA and BibTeX on
+# demand.
+#
+# Four things about how this file is read, none of them guessable from it:
+#
+#   - Only the repository root of the default branch is parsed, and only under
+#     this exact name. CITATION.md, CITATION.bib, and CITATIONS get a link in
+#     the same sidebar and no parsing, so they look like they worked.
+#   - No release and no DOI are needed. The button appears on the next push to
+#     the default branch.
+#   - Parsing is done by ruby-cff against the formal schema. A file that fails
+#     it produces an error in the sidebar instead of a citation.
+#   - Every active REPLACE- placeholder below is a valid value. The schema asks
+#     for a nonempty string and gets one, so a half-filled file validates,
+#     renders, and hands out a BibTeX entry crediting REPLACE-FAMILY-NAME.
+#     Nothing warns anyone. Fill them in before the first commit, not after
+#     someone cites it. `license` is the lone exception and is commented out
+#     for that reason -- see the note above it.
+#
+# Validate before pushing:  uvx cffconvert --validate
+# Schema guide:  https://github.com/citation-file-format/citation-file-format/blob/main/schema-guide.md
+
+cff-version: 1.2.0
+message: If you use this software, please cite it as below.
+title: REPLACE-PROJECT-TITLE
+type: software
+repository-code: https://github.com/REPO-OWNER/REPO-NAME
+
+# Only family-names and given-names are required. An organization uses `name:`
+# instead of both, and mixing the two shapes in one list is allowed.
+authors:
+  - family-names: REPLACE-FAMILY-NAME
+    given-names: REPLACE-GIVEN-NAME
+    # orcid: https://orcid.org/0000-0000-0000-0000
+    # affiliation: REPLACE-INSTITUTION
+
+# The one field where a placeholder cannot pass. `license` is a closed enum of
+# SPDX identifiers, so REPLACE-SPDX-IDENTIFIER fails validation and the sidebar
+# renders an error instead of a citation -- the opposite of every other field
+# here. It ships commented out rather than wrong: the file stays valid, and the
+# citation simply carries no license until this line is uncommented and filled.
+#
+# Use the SPDX identifier for whatever LICENSE actually ships, not its title.
+# `GPL-3.0-or-later` and `GPL-3.0-only` are distinct values and LICENSE cannot
+# tell them apart -- its text is identical either way -- so this line and the
+# per-file SPDX headers are the only places that choice is recorded.
+#
+# license: REPLACE-SPDX-IDENTIFIER
+
+# Left commented because a template cannot keep them true, and a stale value
+# here is worse than a missing one: it cites a version that was never released.
+# Add them when something releases, and update them when something releases
+# again.
+#
+# version: 0.1.0
+# date-released: "2026-01-01"
+# doi: 10.5281/zenodo.0000000
+#
+# On DOIs: Zenodo mints two. The concept DOI always resolves to the newest
+# version and is the one that belongs here. The version DOI pins one release
+# and will quietly send readers to an old version forever.
+
+# preferred-citation redirects the citation to a paper. It REPLACES everything
+# above rather than supplementing it -- GitHub, Zotero, and ruby-cff all honor
+# it by default, so the sidebar stops citing this software entirely and starts
+# citing the article. That is the intended behavior and it surprises people.
+# Uncomment only if a citation to the paper is genuinely what you want.
+#
+# preferred-citation:
+#   type: article
+#   title: REPLACE-ARTICLE-TITLE
+#   authors:
+#     - family-names: REPLACE-FAMILY-NAME
+#       given-names: REPLACE-GIVEN-NAME
+#   journal: REPLACE-JOURNAL
+#   year: 2026
+#   doi: 10.0000/REPLACE

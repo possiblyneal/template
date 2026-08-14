@@ -13,7 +13,7 @@ One flat directory, not a `ci/` and a `scripts/` split. The boundary that split 
 - `repo-settings check` — hosted GitHub state, run explicitly
 - `adr-index` — called by pre-commit; regenerates `docs/adr/index.md`
 - `libs/detect.sh` — the detection library, sourced by all of the above
-- `libs/precommit.sh` — which git hooks the config asks for and which this clone lacks; sourced by `doctor` and by `.claude/hooks/session-start.sh`
+- `libs/precommit.sh` — which git hooks the config asks for and which this clone lacks; sourced by `doctor` and by `.openclaude/hooks/session-start.sh`
 - `tests/*-test` — assertions about the wiring itself
 - `tests/libs/harness.sh` — the assertion counting those tests share
 
@@ -29,7 +29,7 @@ A helper that must be built before it runs belongs in `tools/`, not here.
 
 **Three runners contradict the pass/fail rule and are special-cased deliberately.** pytest exits 5 on collecting no tests; `npm init -y` writes a placeholder test script that exits 1; `uv run <tool>` exits 2 when the tool is not installed. Each is translated to "no runner" or success rather than being reported as a failing suite. Do not remove these without reading why they are there.
 
-**`libs/precommit.sh` owns the question of which git hooks are owed, and parses rather than greps.** `doctor` reports the gap and `.claude/hooks/session-start.sh` closes it; both need the same answer, and the two copies that preceded this module had already drifted apart in how they tested for a hook file. It is not part of `libs/detect.sh`, which owns language-specific decisions — a git hook is present whatever the repository is written in.
+**`libs/precommit.sh` owns the question of which git hooks are owed, and parses rather than greps.** `doctor` reports the gap and `.openclaude/hooks/session-start.sh` closes it; both need the same answer, and the two copies that preceded this module had already drifted apart in how they tested for a hook file. It is not part of `libs/detect.sh`, which owns language-specific decisions — a git hook is present whatever the repository is written in.
 
 `default_install_hook_types` is valid as a flow list, as a flow list wrapped across lines, and as a block list, and a single-line pattern matches only the first. Against the others it finds nothing or half a list, reports no hooks owed, and both callers agree a clone with no commit-msg hook is correctly set up — a check that did not run reading as a check that passed, with no output to say so. `tests/precommit-hooks-test` covers all three, plus the scalar that must not be read as an unterminated list.
 
@@ -47,7 +47,7 @@ Two things about its wiring are load-bearing and were each a bug first. It self-
 
 This is not a promise that nothing reaches the network. pre-commit downloads a hook environment the first time each hook runs, which `check` has always triggered, and `tests/commitlint-test` needs one for commitlint specifically. The boundary is hosted repository state, not connectivity.
 
-**`release` is the only script here that writes to GitHub.** It creates the release from the `CHANGELOG.md` section matching the tag, and refuses when that section is missing or empty, so a version cannot be published before it has been cut in the changelog. It runs `scripts/ci` itself rather than trusting an earlier job to have done it, which is why the release workflow holds `contents: write` while the gate runs. Nothing else should call it.
+**`release` is the only script here that writes to GitHub.** A changelog is an addition by occasion, so the script handles both cases and announces which one it took. With a `CHANGELOG.md` it publishes the section matching the tag and refuses when that section is missing or empty, so a version cannot be published before it has been cut. Without the file it releases with GitHub-generated notes, because a project that has not reached a changelog still has versions to tag. What it must never do is treat an uncut version and an absent changelog as the same thing — the first is a mistake and the second is not. It runs `scripts/ci` itself rather than trusting an earlier job to have done it, which is why the release workflow holds `contents: write` while the gate runs. Nothing else should call it.
 
 **`repo-settings` reports and never changes.** Enabling a setting writes state the whole repository sees, and a ruleset write replaces rather than merges, so an automatic correction could silently revert a deliberate loosening. Three outcomes are distinct and the difference matters: enabled, disabled, and not offered for the plan and visibility.
 

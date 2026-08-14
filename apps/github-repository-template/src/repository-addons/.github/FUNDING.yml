@@ -1,0 +1,51 @@
+# Renders the Sponsor button on the repository page. GitHub reads this from
+# .github/ on the default branch only: a copy at the repository root is
+# ignored, and the button never appearing is the only symptom.
+#
+# Every entry below is commented out, so as it stands this file renders no
+# button -- the correct state until an account exists behind one of these
+# platforms. Uncomment a line only once its account is real, and replace the
+# placeholder. Nothing validates these values: an uncommented placeholder is
+# not an error, it is a working button pointing at a stranger's donation page.
+#
+# One value per platform. `github` is the exception at one organization plus
+# up to four sponsored developers, as is `custom` at up to four URLs.
+
+# One name or a list, not both -- these two lines are alternatives, and
+# uncommenting both is a duplicate key that check-yaml rejects at commit.
+# github: USERNAME
+# github: [USERNAME, USERNAME, USERNAME, USERNAME]
+
+# patreon: USERNAME
+# open_collective: USERNAME
+# ko_fi: USERNAME
+# liberapay: USERNAME
+# issuehunt: USERNAME
+# polar: USERNAME
+# buy_me_a_coffee: USERNAME
+
+# The u/gh/ prefix is part of the value. A bare username is accepted here and
+# resolves to nothing.
+# thanks_dev: u/gh/USERNAME
+
+# LFX Mentorship, formerly CommunityBridge. Only the key kept the old name.
+# community_bridge: PROJECT-NAME
+
+# The package as its registry names it, not as this repository names it.
+# Registry keys: npm, pypi, rubygems, maven, packagist, nuget.
+# tidelift: PLATFORM-NAME/PACKAGE-NAME
+
+# Anything without a key above, up to four. Quote a URL written inside the
+# list form -- GitHub requires it for any URL containing ':', which is every
+# https one. check-yaml parses the unquoted form happily, so the commit hook
+# is not what catches this; the rendered button is.
+# custom: https://example.com/donate
+# custom: ["https://example.com/donate", "https://example.com/shop"]
+
+# An organization-wide default belongs in that organization's .github
+# repository, where it covers every repository lacking its own FUNDING.yml.
+# This file overrides that default for this repository alone.
+#
+# Funding links are for direct financial support of this project. GitHub does
+# not permit them for advertising, or for political, community, or charity
+# fundraising.

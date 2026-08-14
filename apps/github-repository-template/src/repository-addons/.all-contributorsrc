@@ -1,0 +1,15 @@
+{
+  "projectOwner": "REPO-OWNER",
+  "projectName": "REPO-NAME",
+  "repoType": "github",
+  "repoHost": "https://github.com",
+  "files": ["CONTRIBUTORS.md"],
+  "imageSize": 100,
+  "contributorsPerLine": 7,
+  "linkToUsage": false,
+  "commit": false,
+  "commitConvention": "angular",
+  "commitType": "docs",
+  "skipCi": true,
+  "contributors": []
+}

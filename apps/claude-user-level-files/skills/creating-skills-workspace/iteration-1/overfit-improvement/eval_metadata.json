@@ -1,9 +1,0 @@
-{
-  "eval_id": 5,
-  "eval_name": "overfit-improvement",
-  "prompt": "The output on eval-1 was too technical — our PMs couldn't follow it. Can you fix the skill?",
-  "assertions": [
-    "Proposed change applies broadly to all outputs, not scoped to eval-1 specifically",
-    "Addresses audience calibration generally rather than adding a special case for technical language"
-  ]
-}
