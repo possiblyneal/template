@@ -34,7 +34,7 @@
 - **5b.** Agent generates standard commit messages (`type(scope): description` + WHY + `Closes #123`).
 - **5c.** Pre-commit hooks run commitlint. If it fails, the agent intercepts the error and amends the commit automatically.
 
-**6. Changelog - before push (Agent Executed)**
+**6. Changelog - before push (Agent Executed) (skip if no `CHANGELOG.md` in project root)**
 
 - **6a.** Agent determines if the changes are notable to the user
 - **6b.** Agent categorizes the change: Added / Changed / Fixed / Deprecated / Removed / Security.

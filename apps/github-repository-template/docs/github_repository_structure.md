@@ -74,7 +74,7 @@ The template ships `documentation.md`, holding the contract governing `CLAUDE.md
 
 `CLAUDE.local.md`: Personal, per-machine instructions loaded alongside `CLAUDE.md` and excluded by `.gitignore`. Not shipped; the entry exists so local preferences have a home that is not a diff.
 
-### Source Code, Tests &amp; Infrastructure
+### Source Code, Tests & Infrastructure
 
 The core workspace where development, execution, and testing occur.
 
@@ -102,19 +102,17 @@ An `apps/` entry is one deployable service or one durable domain boundary: the u
 
 **`scripts/tests/`**: `capabilities-test` asserts that every language present is dispatched to every check.
 
-`scripts/release` does the one part of publishing a template can know: it checks the tag against `vX.Y.Z`, reads the matching `## [x.y.z]` section out of `CHANGELOG.md`, runs `scripts/ci`, and creates the GitHub release with that section as the body.
+`scripts/release` does the one part of publishing a template can know: it checks the tag against `vX.Y.Z`, runs `scripts/ci`, and creates the GitHub release. The body is the matching `## [x.y.z]` section of `CHANGELOG.md` when the project keeps one — and the run stops when that section is missing, since a version absent from the changelog has not been cut. A project with no `CHANGELOG.md` releases with GitHub-generated notes instead.
 
 **`tools/`**: The counterpart to `scripts/`, and a convention rather than a shipped directory. A helper that has to be built before it runs — a Go linter, a code generator, a protobuf plugin — goes here as `tools/<name>/`, one directory per program, carrying its own manifest and source. A helper that is a shell file goes in `scripts/`. T
 
 **`tmp/`**: Git-ignored scratch space for temporary files, downloaded artifacts, and dumped logs, holding a `.gitkeep` so the directory survives being empty.
 
-### Documentation &amp; Knowledge Base
+### Documentation & Knowledge Base
 
 Durable knowledge that grounds the AI in the project's specific reality and operational standards.
 
 `TODO.md`: A plain-text to-do of backlogged, informal tasks
-
-**`CHANGELOG.md`**: A per-version record of what changed, in Keep a Changelog 2.0.0 format, pinned by the link in the file's own header so the convention it follows cannot drift as that page changes.
 
 **`docs/adr/`**: Architectural Decision Records (e.g., `0001-initial-stack.md`). Explains *why* decisions were made so the AI doesn't try to revert or fundamentally alter established systems.
 
@@ -136,13 +134,17 @@ The hidden files that dictate environment variables, Git behavior, and tool inte
 
 `.gitattributes`: Git behavior rules for line endings, diffs, and GitHub Linguist classification.
 
-`.pre-commit-config.yaml`: Local guardrails that run automatically before code gets committed, catching AI syntax mistakes early. **`.commitlintrc.yaml`**: The commit message rules. Messages follow Conventional Commits — `type(optional scope): subject`, a blank line, then the body Additions by Occasion
+`.pre-commit-config.yaml`: Local guardrails that run automatically before code gets committed, catching AI syntax mistakes early. **`.commitlintrc.yaml`**: The commit message rules. Messages follow Conventional Commits — `type(optional scope): subject`, a blank line, then the body.
+
+### Additions by Occasion
 
 #### When someone else will use it
 
 Someone who is not the author has to get the thing running, and has to know whether they are allowed to.
 
 `README.md`: The public orientation page: what the project does, how to install it, and how to use it.
+
+**`CHANGELOG.md`**: A per-version record of what changed, in Keep a Changelog 2.0.0 format, pinned by the link in the file's own header so the convention it follows cannot drift as that page changes. Written for someone deciding whether to upgrade, so it arrives with the first reader rather than the first commit. Adopting it brings `.openclaude/rules/changelog.md` with it, which is what teaches an agent when an entry is owed. `scripts/release` then publishes the section matching the tag instead of GitHub-generated notes.
 
 **`LICENSE`**: The legal document outlining the usage, modification, and distribution rights of the code.
 
