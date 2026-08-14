@@ -30,7 +30,7 @@ Every built repository tracks `.repo-template.json`:
     "application_name": "billing-api",
     "visibility": "private",
     "features": {
-      "codeql": "omitted-private-without-ghas"
+      "codeql": "omitted-by-choice"
     }
   },
   "ownership": [

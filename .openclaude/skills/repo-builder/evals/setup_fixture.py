@@ -146,7 +146,7 @@ def manifest(template: Path, remote: Path, old_commit: str) -> dict[str, object]
         "generation": {
             "application_name": "billing-api",
             "visibility": "private",
-            "features": {"codeql": "omitted-private-without-ghas"},
+            "features": {"codeql": "omitted-by-choice"},
         },
         "ownership": [
             {"path": ".repo-template.json", "mode": "managed"},
