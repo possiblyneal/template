@@ -7,7 +7,7 @@
     "type": "command",
     "command": "bash /home/neal/.openclaude/statusline.sh"
   },
-  "effortLevel": "medium",
+  "effortLevel": "high",
   "skipDangerousModePermissionPrompt": true,
   "skipFullAccessModePermissionPrompt": true
 }
