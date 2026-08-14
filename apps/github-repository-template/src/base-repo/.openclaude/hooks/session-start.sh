@@ -46,4 +46,4 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   git log --oneline -5 2>/dev/null || echo "(no commits yet)"
 fi
 
-echo "Read the nearest CLAUDE.md above every path you touch before editing, and update the owning docs after meaningful changes. The full documentation contract is .claude/rules/documentation.md."
+echo "Read the nearest CLAUDE.md above every path you touch before editing, and update the owning docs after meaningful changes. The full documentation contract is .openclaude/rules/documentation.md."

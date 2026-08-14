@@ -103,7 +103,7 @@ fi
 # exits non-zero for any reason other than a deliberate block is a non-blocking
 # error, so a missing jq lets writes outside the repository and mid-session
 # settings reloads through without a prompt or a block.
-if [[ -x .claude/hooks/ask-outside-repo.sh || -x .claude/hooks/block-config-change.sh ]]; then
+if [[ -x .openclaude/hooks/ask-outside-repo.sh || -x .openclaude/hooks/block-config-change.sh ]]; then
   check_required jq
 fi
 

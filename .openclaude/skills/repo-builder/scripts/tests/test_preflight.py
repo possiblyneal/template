@@ -19,13 +19,13 @@ SPEC.loader.exec_module(preflight)
 class PreflightUnitTests(unittest.TestCase):
     def test_longest_ownership_path_wins(self) -> None:
         rules = [
-            preflight.OwnershipRule(".claude/**", "managed", 0),
-            preflight.OwnershipRule(".claude/skills/**", "product", 1),
+            preflight.OwnershipRule(".openclaude/**", "managed", 0),
+            preflight.OwnershipRule(".openclaude/skills/**", "product", 1),
         ]
 
         self.assertEqual(
-            preflight.classify_path(".claude/skills/my-skill/SKILL.md", rules),
-            ("product", ".claude/skills/**"),
+            preflight.classify_path(".openclaude/skills/my-skill/SKILL.md", rules),
+            ("product", ".openclaude/skills/**"),
         )
 
     def test_unmatched_path_is_product_owned(self) -> None:

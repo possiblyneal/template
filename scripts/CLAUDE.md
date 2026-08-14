@@ -13,7 +13,7 @@ One flat directory, not a `ci/` and a `scripts/` split. The boundary that split 
 - `repo-settings check` — hosted GitHub state, run explicitly
 - `adr-index` — called by pre-commit; regenerates `docs/adr/index.md`
 - `libs/detect.sh` — the detection library, sourced by all of the above
-- `libs/precommit.sh` — which git hooks the config asks for and which this clone lacks; sourced by `doctor` and by `.claude/hooks/session-start.sh`
+- `libs/precommit.sh` — which git hooks the config asks for and which this clone lacks; sourced by `doctor` and by `.openclaude/hooks/session-start.sh`
 - `tests/*-test` — assertions about the wiring itself
 - `tests/libs/harness.sh` — the assertion counting those tests share
 
@@ -29,7 +29,7 @@ A helper that must be built before it runs belongs in `tools/`, not here.
 
 **Three runners contradict the pass/fail rule and are special-cased deliberately.** pytest exits 5 on collecting no tests; `npm init -y` writes a placeholder test script that exits 1; `uv run <tool>` exits 2 when the tool is not installed. Each is translated to "no runner" or success rather than being reported as a failing suite. Do not remove these without reading why they are there.
 
-**`libs/precommit.sh` owns the question of which git hooks are owed, and parses rather than greps.** `doctor` reports the gap and `.claude/hooks/session-start.sh` closes it; both need the same answer, and the two copies that preceded this module had already drifted apart in how they tested for a hook file. It is not part of `libs/detect.sh`, which owns language-specific decisions — a git hook is present whatever the repository is written in.
+**`libs/precommit.sh` owns the question of which git hooks are owed, and parses rather than greps.** `doctor` reports the gap and `.openclaude/hooks/session-start.sh` closes it; both need the same answer, and the two copies that preceded this module had already drifted apart in how they tested for a hook file. It is not part of `libs/detect.sh`, which owns language-specific decisions — a git hook is present whatever the repository is written in.
 
 `default_install_hook_types` is valid as a flow list, as a flow list wrapped across lines, and as a block list, and a single-line pattern matches only the first. Against the others it finds nothing or half a list, reports no hooks owed, and both callers agree a clone with no commit-msg hook is correctly set up — a check that did not run reading as a check that passed, with no output to say so. `tests/precommit-hooks-test` covers all three, plus the scalar that must not be read as an unterminated list.
 

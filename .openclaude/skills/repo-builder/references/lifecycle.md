@@ -37,9 +37,9 @@ Every built repository tracks `.repo-template.json`:
     {"path": ".repo-template.json", "mode": "managed"},
     {"path": "scripts/**", "mode": "managed"},
     {"path": ".github/**", "mode": "managed"},
-    {"path": ".claude/hooks/**", "mode": "managed"},
-    {"path": ".claude/rules/**", "mode": "managed"},
-    {"path": ".claude/settings.json", "mode": "managed"},
+    {"path": ".openclaude/hooks/**", "mode": "managed"},
+    {"path": ".openclaude/rules/**", "mode": "managed"},
+    {"path": ".openclaude/settings.json", "mode": "managed"},
     {"path": ".pre-commit-config.yaml", "mode": "managed"},
     {"path": ".commitlintrc.yaml", "mode": "managed"},
     {"path": ".gitattributes", "mode": "managed"},
@@ -51,10 +51,10 @@ Every built repository tracks `.repo-template.json`:
     {"path": "tests/**", "mode": "product"},
     {"path": "tools/**", "mode": "product"},
     {"path": "docs/**", "mode": "product"},
-    {"path": ".claude/skills/**", "mode": "product"},
-    {"path": ".claude/agents/**", "mode": "product"},
-    {"path": ".claude/output-styles/**", "mode": "product"},
-    {"path": ".claude/workflows/**", "mode": "product"}
+    {"path": ".openclaude/skills/**", "mode": "product"},
+    {"path": ".openclaude/agents/**", "mode": "product"},
+    {"path": ".openclaude/output-styles/**", "mode": "product"},
+    {"path": ".openclaude/workflows/**", "mode": "product"}
   ]
 }
 ```
@@ -84,7 +84,7 @@ A rename or delete of a destination-modified managed file needs semantic review.
 1. Resolve the requested source to an exact commit and run:
 
    ```bash
-   python3 .claude/skills/repo-builder/scripts/preflight.py generate \
+   python3 .openclaude/skills/repo-builder/scripts/preflight.py generate \
      --template-repo <template-repo> \
      --target <ref-or-commit> \
      --subtree apps/github-repository-template/src/base-repo \
@@ -156,7 +156,7 @@ Ownership still governs what a later update may touch, and a hand-merged file is
 2. Run the read-only preflight before editing:
 
    ```bash
-   python3 <template-repo>/.claude/skills/repo-builder/scripts/preflight.py update \
+   python3 <template-repo>/.openclaude/skills/repo-builder/scripts/preflight.py update \
      --template-repo <template-repo> \
      --target <ref-or-commit> \
      --destination <destination>

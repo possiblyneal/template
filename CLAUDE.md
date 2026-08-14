@@ -2,7 +2,7 @@
 
 This repository builds other repositories. It holds two trees and they must not be confused:
 
-- **Live configuration** — `scripts/`, `.github/`, `.claude/`, and the root dotfiles govern *this* repository, the same way they govern any other.
+- **Live configuration** — `scripts/`, `.github/`, `.openclaude/`, and the root dotfiles govern *this* repository, the same way they govern any other.
 - **Template payload** — `apps/github-repository-template/src/base-repo/` is the content copied into repositories generated from this one. Editing a file there changes every future generated repository and changes nothing here.
 
 The two trees hold near-identical files. Before editing, decide which one the change belongs to: a fix applied only at the root leaves the template shipping the bug, and a fix applied only in the payload leaves this repository running it. Editing under `src/` prompts for approval so the choice stays deliberate.
@@ -24,7 +24,7 @@ Use these instead of per-language tools; each detects the languages present and 
 
 Every check runs for every language present, not the first one detected. Results distinguish `pass`, `not-applicable`, `unavailable`, and `FAIL`, so an intentional no-op cannot look like a runner that executed. See `scripts/CLAUDE.md` before adding a language or a check.
 
-This repository has no root language manifest, so `scripts/check` reports there is nothing to check and never reaches the Python under `.claude/skills/repo-builder/`. Run those tests directly: `uv run --with pytest python -m pytest .claude/skills/repo-builder/scripts/tests/`.
+This repository has no root language manifest, so `scripts/check` reports there is nothing to check and never reaches the Python under `.openclaude/skills/repo-builder/`. Run those tests directly: `uv run --with pytest python -m pytest .openclaude/skills/repo-builder/scripts/tests/`.
 
 ## Git
 
@@ -69,10 +69,10 @@ A generated repository is where a guarantee unavailable on this plan can actuall
 
 ## Child Index
 
-- `apps/claude-user-level-files/CLAUDE.md` — versioned user-level Claude Code configuration linked from `~/.claude`
+- `apps/claude-user-level-files/CLAUDE.md` — versioned user-level Claude Code configuration linked from `~/.openclaude`
 - `apps/github-repository-template/CLAUDE.md` — the template payload and the reference docs explaining it
 - `scripts/CLAUDE.md` — the language-capabilities interface, and what adding a language or check requires
-- `.claude/CLAUDE.md` — hooks, settings, and skills; what a session may not grant itself
+- `.openclaude/CLAUDE.md` — hooks, settings, and skills; what a session may not grant itself
 - `docs/CLAUDE.md` — ADRs, specs, plans, and lessons
 
-The full documentation contract is `.claude/rules/documentation.md`. Read the nearest `CLAUDE.md` above every path you touch before editing, and update the owning file after meaningful changes.
+The full documentation contract is `.openclaude/rules/documentation.md`. Read the nearest `CLAUDE.md` above every path you touch before editing, and update the owning file after meaningful changes.

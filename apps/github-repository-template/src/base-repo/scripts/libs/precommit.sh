@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # Which pre-commit hooks this repository asks for, and which of them this clone
-# is missing. Sourced by scripts/doctor and .claude/hooks/session-start.sh --
+# is missing. Sourced by scripts/doctor and .openclaude/hooks/session-start.sh --
 # one reports the gap, the other closes it, and both need the same answer.
 #
 # Sourced, never executed: no shebang, no executable bit, a .sh extension so

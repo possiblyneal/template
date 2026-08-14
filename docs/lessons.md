@@ -33,7 +33,7 @@ Add only durable, repeatable, non-obvious constraints, conventions, or tool/prov
 
 The root config files and `apps/github-repository-template/src/base-repo/` hold near-identical copies of the same files. They are not the same file.
 
-**Do:** Before editing `scripts/`, `.github/`, `.claude/`, or a root dotfile, decide whether the change belongs to this repository, to every generated repository, or to both. Apply it to both trees in one commit when it is both.
+**Do:** Before editing `scripts/`, `.github/`, `.openclaude/`, or a root dotfile, decide whether the change belongs to this repository, to every generated repository, or to both. Apply it to both trees in one commit when it is both.
 
 **Why:** A fix made only at the root leaves the template shipping the bug to every repository generated afterward. A fix made only in the payload leaves this repository running the bug.
 
@@ -51,17 +51,17 @@ The root config files and `apps/github-repository-template/src/base-repo/` hold 
 
 ## The repo-builder tests are not covered by scripts/check
 
-`.claude/skills/repo-builder/` holds Python with a pytest suite, but this repository has no root `pyproject.toml`, so language detection finds no Python and `scripts/check` reports there is nothing to check.
+`.openclaude/skills/repo-builder/` holds Python with a pytest suite, but this repository has no root `pyproject.toml`, so language detection finds no Python and `scripts/check` reports there is nothing to check.
 
-**Do:** Run `python3 -m pytest .claude/skills/repo-builder/scripts/tests/` directly after changing `preflight.py`.
+**Do:** Run `python3 -m pytest .openclaude/skills/repo-builder/scripts/tests/` directly after changing `preflight.py`.
 
 **Why:** A green `scripts/check` is not evidence the skill's tests ran. It is evidence they were never looked for.
 
-**Source:** [Preflight tests](../.claude/skills/repo-builder/scripts/tests/test_preflight.py)
+**Source:** [Preflight tests](../.openclaude/skills/repo-builder/scripts/tests/test_preflight.py)
 
 ## Root dotfiles are unowned, so updates never reach them
 
-The ownership rules in `.repo-template.json` match `scripts/**`, `.github/**`, and parts of `.claude/`. No rule matches a root dotfile, and an unmatched path defaults to product.
+The ownership rules in `.repo-template.json` match `scripts/**`, `.github/**`, and parts of `.openclaude/`. No rule matches a root dotfile, and an unmatched path defaults to product.
 
 **Do:** When reconciling a template update, check `.pre-commit-config.yaml`, `.gitattributes`, `.gitignore`, `.mcp.json`, and `.worktreeinclude` by hand. Confirm a path's ownership with `preflight.classify_path` rather than assuming a broad rule covers it.
 
@@ -87,7 +87,7 @@ The root `.gitignore` pattern does not reach `apps/.../src/base-repo/.env`, so i
 
 **Why:** Every check in this repository is a check on content. Absence has no runner, so a missing file produces a green run.
 
-**Source:** [Lifecycle contract](../.claude/skills/repo-builder/references/lifecycle.md)
+**Source:** [Lifecycle contract](../.openclaude/skills/repo-builder/references/lifecycle.md)
 
 ## pre-commit --all-files reads the index, not the working tree
 

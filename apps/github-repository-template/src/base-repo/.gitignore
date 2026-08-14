@@ -22,11 +22,11 @@ service-account*.json
 
 # Claude worktrees are checkouts of this same repo; without this their
 # entire file tree shows up as untracked noise in the main checkout.
-.claude/worktrees/
+.openclaude/worktrees/
 
 # Per-machine Claude overrides. Both are personal, not part of the repo
 # contract, and may hold local paths or preferences.
-.claude/settings.local.json
+.openclaude/settings.local.json
 CLAUDE.local.md
 
 # Local scratch
