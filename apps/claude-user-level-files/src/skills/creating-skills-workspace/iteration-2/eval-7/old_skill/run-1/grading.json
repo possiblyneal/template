@@ -1,9 +1,0 @@
-{
-  "expectations": [
-    {"text": "Generates 20 trigger eval queries split between should-trigger and should-not-trigger", "passed": true, "evidence": "Transcript: '20 realistic queries: 10 should-trigger, 10 should-not-trigger.'"},
-    {"text": "Opens eval_review.html for user review before running the optimization loop", "passed": true, "evidence": "Transcript: 'Yes, I would use assets/eval_review.html before running optimization. I would replace placeholders... open it, and ask the user to edit/toggle the queries.'"},
-    {"text": "Runs scripts/run_loop.py with the model ID from the system prompt", "passed": true, "evidence": "Transcript shows exact command with --model claude-opus-4-8[1m] and notes: 'matching the model powering this session.'"},
-    {"text": "Applies best_description to SKILL.md frontmatter and shows before/after with scores", "passed": true, "evidence": "Transcript: 'update only the SKILL.md frontmatter description with best_description' and 'show the before/after descriptions' and 'report the optimization scores.'"}
-  ],
-  "summary": {"passed": 4, "failed": 0, "total": 4, "pass_rate": 1.0}
-}

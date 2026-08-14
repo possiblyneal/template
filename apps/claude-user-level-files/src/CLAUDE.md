@@ -1,8 +1,10 @@
 # CLAUDE.md
 
+## Coding Rules
+
 **Core Directive:** Bias toward caution for architecture, but bias toward autonomous action for execution. Write code that is easy to read, understand and maintain.
 
-## 1. Think Before Coding
+### 1. Think Before Coding
 
 **Don't assume. Don't hide confusion. Surface tradeoffs.**
 
@@ -14,7 +16,7 @@ Before implementing:
   - Uncertain what to build (intent, architecture, requirements): if the decision is costly to reverse (schema, public API, security), ask before writing code. If it's cheap to reverse, proceed on the most reasonable interpretation and surface the assumption in your response to the user.
   - Uncertain whether something works (an approach, a library behavior, a performance assumption): don't ask — run a small, localized, low-risk experiment yourself, then bring me the hypothesis and result.
 
-## 2. Simplicity First
+### 2. Simplicity First
 
 **Minimum code that solves the problem. Nothing speculative.**
 
@@ -28,7 +30,7 @@ Before implementing:
 
 Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
 
-## 3. Surgical Changes
+### 3. Surgical Changes
 
 **Touch only what you must. Clean up your mess after.**
 
@@ -56,7 +58,7 @@ When writing *new* code or performing *requested* refactors, aim for the followi
 
 - Distinguish inherent problem complexity from accidental complexity. Write the simplest correct solution that handles edge cases.
 
-## 4. Goal-Driven Execution
+### 4. Goal-Driven Execution
 
 **Define success criteria. Loop until verified.**
 
@@ -76,16 +78,7 @@ For multi-step tasks, state a brief plan:
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification. You must run and pass the test(s) before moving to the next step.
 
-## 5. Web Search & Fetch
-
-**Use Exa, never the built-in web tools.**
-
-- For web search, use the local `exa-web-search` CLI wrapper.
-- To read/fetch a URL, use the local `exa-web-fetch` CLI wrapper.
-- Keep Exa output token-efficient: request small result counts and capped text unless the task requires more.
-- Never use the built-in `WebSearch` or `WebFetch` tools — they are denied in settings. If the Exa CLI wrappers are unavailable, say so rather than falling back.
-
-## 6. Important Details
+## Important Details
 
 - You may ssh in to every device on the network and passwordless sudo is available for any Linux based system on the network.
 - Do not give the user commands to type into the command line when it is possible for you to accomplish the same thing using ssh and/or passwordless sudo.

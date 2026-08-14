@@ -1,8 +1,0 @@
-{
-  "expectations": [
-    {"text": "References agents/comparator.md and/or agents/analyzer.md", "passed": true, "evidence": "Transcript lists both: 'skill-snapshot/agents/comparator.md — defines the blind comparator role' and 'skill-snapshot/agents/analyzer.md — defines the post-hoc analyzer role.'"},
-    {"text": "Spawns or describes spawning an independent comparator agent with outputs unlabeled", "passed": true, "evidence": "Transcript: 'I would spawn an independent comparator agent rather than judge the outputs myself.' Describes neutral A/B labels, randomized assignment per eval, and hidden mapping kept out of comparator context."},
-    {"text": "Does not self-judge the comparison inline without referencing the comparator agent", "passed": true, "evidence": "Transcript: 'I would reserve my own judgment for orchestration and the post-hoc synthesis after the comparator has saved its blinded decision.'"}
-  ],
-  "summary": {"passed": 3, "failed": 0, "total": 3, "pass_rate": 1.0}
-}
