@@ -21,20 +21,26 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "$repo_root/scripts/tests/libs/harness.sh"
 
 
-# Builds a repository wired exactly as a generated one is. Both the
-# default_install_hook_types line and the commitlint entry are lifted out of
-# this repository's own .pre-commit-config.yaml rather than restated, so a
-# change to the real config is what these cases assert against.
+# Builds a repository wired exactly as a generated one is. Both the top-level
+# default_* keys and the commitlint entry are lifted out of this repository's
+# own .pre-commit-config.yaml rather than restated, so a change to the real
+# config is what these cases assert against.
+#
+# Every default_* key, not only default_install_hook_types. `default_stages`
+# decides which git hook each entry runs at, so a fixture that drops it
+# asserts against a config this repository does not have: it would report the
+# commit-msg wiring healthy while the real config had scoped commitlint out of
+# existence. That is a check that did not run reading as a check that passed.
 fixture() {
   current="$1"
   work="$(mktemp -d)"
   {
-    # The key and whatever list form it carries, copied verbatim -- a wrapped
+    # Each key and whatever list form it carries, copied verbatim -- a wrapped
     # flow list and a block list both continue onto the lines below, and a
     # single-line pattern would lift a fragment that no longer parses. Copying
     # rather than reading the values keeps this fixture free of a second
     # opinion about what the config says; libs/precommit.sh holds the only one.
-    awk '/^default_install_hook_types:/ {
+    awk '/^default_(install_hook_types|stages):/ {
            print
            if ($0 ~ /\[/) { if ($0 !~ /\]/) flow = 1 } else block = 1
            next

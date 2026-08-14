@@ -7,6 +7,31 @@
 # it. This line is what makes the plain command install both.
 default_install_hook_types: [pre-commit, commit-msg]
 
+# Scopes the hooks below to the commit, so a git hook type this file never
+# asked for cannot run them. A clone that once ran `pre-commit install -t
+# post-merge` (or -t pre-push, or -t post-checkout) keeps that hook file
+# forever -- uninstalling is per clone and nothing here reaches it -- and
+# without this line those stray hooks run the whole set. `no-commit-to-branch`
+# is always_run with pass_filenames false, so it fires with no files and
+# fails, and `git pull` on main ends in a red "don't commit to branch...
+# Failed" and a non-zero exit for a pull that succeeded. A false alarm on a
+# routine command is worse than none: it is the one that teaches you to skim
+# past the real failure.
+#
+# Whole-file rather than per-hook because the next hook added should inherit
+# the right scope instead of quietly misfiring.
+#
+# It does not reach every hook, and the exceptions are not a gap to close.
+# A `stages` in the hook's own manifest wins over this. Six upstream hooks
+# declare `[pre-commit, pre-push, manual]`; five of them are enabled here --
+# end-of-file-fixer, trailing-whitespace, check-added-large-files,
+# check-executables-have-shebangs, check-shebang-scripts-are-executable -- and
+# those five still run before a push. They take filenames and they pass, which
+# is the upstream intent and is not the failure above. commitlint is the one
+# exception declared here, at `stages: [commit-msg]`, because it reads a
+# message that does not exist at pre-commit time.
+default_stages: [pre-commit]
+
 repos:
   # Catches a secret while it is still only in the working tree, which is the
   # one point where the fix is editing a file rather than rotating a credential.
