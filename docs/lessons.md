@@ -39,15 +39,15 @@ The root config files and `apps/github-repository-template/src/base-repo/` hold 
 
 **Source:** [Template payload contract](../apps/github-repository-template/CLAUDE.md)
 
-## CodeQL analysis is gated on repository visibility
+## CodeQL fails fast here, and that failure is the finding
 
-Code scanning accepts uploaded results from a public repository, or from a private one with GitHub Advanced Security. This repository is private on a free plan, so `.github/workflows/codeql.yml` skips its `analyze` job here and records the reason in the run summary.
+Code scanning accepts uploaded results from a public repository, or from a private one with GitHub Advanced Security. This repository is private on a free plan, so the `scanning` job in `.github/workflows/codeql.yml` fails in seconds with the reason in the run summary, instead of analyzing for an hour and dying at the upload step.
 
-**Do:** Leave the gate in place. Remove the `if:` on `analyze` only when the repository is public or has Advanced Security. Never reach for `continue-on-error` or a removed upload step to quiet a red run.
+**Do:** Read a red `Code scanning enabled` check as accurate — this repository genuinely has no static analysis coverage. Fix it by making the repository public or enabling Advanced Security. Never quiet it with `continue-on-error`, a removed upload step, or an `if:` that skips the job.
 
-**Why:** A check that can only ever be red teaches people to ignore the ones that can tell them something, so the failure costs more than the missing signal. Skipping analysis that structurally cannot report is not the same as suppressing a result: the gate runs no query and claims no verdict, where `continue-on-error` runs the queries and then discards whatever they found. The first is honest about having no signal; the second manufactures a green check out of one.
+**Why not skip it:** A skipped job renders the workflow green, so a repository with no coverage looks on the checks list exactly like one that scanned clean and found nothing. That is the same false green `continue-on-error` produces, reached by a different route, and it is worth being precise about which problem the fail-fast solves: not that the check was red, but that it burned an hour and then reported `Code scanning is not enabled` underneath a misleading note about pull requests from forks. Red was always the honest answer. Slow and misdescribed was the defect.
 
-**Why the API and not the event:** Visibility is read through `gh api` because `github.event.repository` is documented as "Not applicable" for `schedule`. Read from the event, the weekly run would compare a null against `public` and skip itself on a repository that should be scanned — the gate reintroducing the silent no-op it was added to remove. A failed lookup fails the step for the same reason, rather than defaulting to skip.
+**Why the API and not the event:** Visibility is read through `gh api` because `github.event.repository` is documented as "Not applicable" for `schedule`. Read from the event, the weekly run would compare a null against `public` and fail a public repository every Tuesday. A failed lookup fails the job for the same reason, rather than defaulting either way.
 
 **Source:** [Payload structure](../apps/github-repository-template/docs/github_repository_structure.md)
 
