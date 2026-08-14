@@ -66,11 +66,6 @@ fi
 
 scripts/ci
 
-if ! command -v gh >/dev/null 2>&1; then
-  echo "gh is not installed, so there is no way to publish $tag."
-  exit 1
-fi
-
 # Artifacts are project-specific, so the template builds none. Build them above
 # this line and pass the files as trailing arguments here; the tag and the notes
 # are already right without them, so a release with no artifact is still a real

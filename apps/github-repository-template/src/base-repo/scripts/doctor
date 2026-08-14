@@ -39,6 +39,16 @@ check_optional() {
 check_required git
 check_required bash
 
+# gh is required rather than optional because both scripts that need it fail
+# quietly without it: release dies at its last line once the whole gate has
+# already run, and repo-settings reports nothing while still exiting 0. Marking
+# it optional here would reproduce exactly that silence. release used to check
+# at runtime and no longer does, so this is the one place stating the
+# prerequisite, and it states it before a release rather than after.
+# A PATH lookup is not a hosted read, so this stays inside the boundary that
+# keeps doctor off GitHub state.
+check_required gh
+
 # Language toolchains are private adapters in the capabilities module. Doctor
 # treats unavailable as a missing required tool without knowing its command.
 toolchain_status=0
