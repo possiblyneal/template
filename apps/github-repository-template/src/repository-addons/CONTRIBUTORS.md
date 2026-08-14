@@ -34,15 +34,9 @@ Adding someone by hand instead means editing the table and `.all-contributorsrc`
 
 **The marker comments above are load-bearing.** The bot finds its insertion point by string match on `ALL-CONTRIBUTORS-LIST:START` and `ALL-CONTRIBUTORS-LIST:END`. Delete, reword, or reformat them and the bot has nowhere to write — it fails to find the section rather than guessing, so the symptom is a pull request that never appears.
 
-**The bot writes to `README.md` unless told otherwise.** Its default `files` list names the README, so pointing it at this file is a config change, not a default:
+**`.all-contributorsrc` travels with this file and is not optional.** It ships alongside, already carrying `"files": ["CONTRIBUTORS.md"]` — the default is `["README.md"]`, so without that key the table lands in the README and this file stays empty forever. The two are one record: the table here is generated from the `contributors` array there, never parsed back out of the Markdown.
 
-```json
-{
-  "files": ["CONTRIBUTORS.md"]
-}
-```
-
-Without that, the table lands in `README.md` and this file stays empty forever.
+**Replace `REPO-OWNER` and `REPO-NAME` in it before first use.** Both are required and the CLI throws rather than guessing, so the failure is at least loud. They build the profile and commit links, so wrong values produce a table of dead links instead of an error.
 
 **The bot must be installed on the repository** from <https://github.com/apps/allcontributors>. The comment syntax does nothing on a repository where it is not installed, and nothing reports that — the comment simply sits there.
 
