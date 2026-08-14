@@ -162,7 +162,7 @@ The long-form notice this abbreviates is the appendix at the end of `LICENSE`, a
 
 **`SECURITY.md`**: The project's security policy, supported versions, and the private channel for reporting vulnerabilities. `SUPPORT.md`: Routes users to help, filtering general troubleshooting out of the core issue tracker.
 
-**`.env.example`**: A sanitized template of `.env` showing required variables without exposing actual secrets. Ships as a scaffold: the conventions and the copy step, with no variables, because the template cannot know what an application reads. The `.example` suffix is load-bearing — `.gitignore` ignores `.env` and `.env.*`, then re-includes `.env.example` and `.env.*.example` by negation, so a file named `.env.sample` or `.env.local` is ignored and never reaches the repository.
+**`.env.example`**: A sanitized template of `.env` showing required variables without exposing actual secrets. Ships empty, like `.env` itself: the variables are whatever the application reads, and a template that guessed them would ship a list every generated repository has to delete. The `.example` suffix is load-bearing — `.gitignore` ignores `.env` and `.env.*`, then re-includes `.env.example` and `.env.*.example` by negation, so a file named `.env.sample` or `.env.local` is ignored and never reaches the repository.
 
 #### When someone else will contribute code
 
@@ -181,6 +181,8 @@ Both files answer the same question — who decides, and who is owed credit for 
 `GOVERNANCE.md`: The political structure of the repository: how decisions are made, how maintainers are elected, and how disputes are resolved.
 
 **`CONTRIBUTORS.md`**: A public ledger crediting individuals who have contributed code or documentation. GitHub also recognizes `AUTHORS`, which is a narrower list: the people whose contributions are legally significant for copyright. The two only need to be separate files under a contributor licence agreement or copyright assignment, where who holds the copyright is a different question from who to thank.
+
+Ships in the [All Contributors](https://allcontributors.org) format, carrying the marker comments, the badge, and all thirty-three contribution keys. The format is the point rather than the file: a hand-maintained credit list drifts, and an omission from a list of people you are thanking reads worse than having no list, so the value is in the bot maintaining it. Adopting it therefore means installing the bot and setting `files` in `.all-contributorsrc` to name this file — the bot writes to `README.md` by default, and without that key the table lands there while this file stays empty. The marker comments are matched as literal strings; reformatting them leaves the bot with nowhere to write and no pull request appears.
 
 #### When the work is academically valuable
 
