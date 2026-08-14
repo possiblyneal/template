@@ -146,11 +146,23 @@ Someone who is not the author has to get the thing running, and has to know whet
 
 **`CHANGELOG.md`**: A per-version record of what changed, in Keep a Changelog 2.0.0 format, pinned by the link in the file's own header so the convention it follows cannot drift as that page changes. Written for someone deciding whether to upgrade, so it arrives with the first reader rather than the first commit. Adopting it brings `.openclaude/rules/changelog.md` with it, which is what teaches an agent when an entry is owed. `scripts/release` then publishes the section matching the tag instead of GitHub-generated notes.
 
-**`LICENSE`**: The legal document outlining the usage, modification, and distribution rights of the code.
+**`LICENSE`**: The terms under which others may use, modify, and distribute the work. Ships as the GNU General Public License v3.0, byte-identical to the text published at gnu.org — reciprocal copyleft, so a derivative carries the same license rather than being absorbed into something closed. Keep it verbatim. An explanatory comment or a filled-in copyright line breaks the license's own terms and can drop GitHub's detection, which matches against the whole text; the project's own copyright notice belongs in source file headers and the README, which is what the appendix at the end of the file gives instructions for.
+
+CC BY-SA 4.0 asks for the same reciprocity and does not survive contact with software: it licenses no patent rights, §2(b)(2) excluding them in as many words; it defines no source-code obligation, so a minified bundle satisfies ShareAlike; and it says nothing about linking, which is the question copyleft exists to answer. Creative Commons declared GPLv3 one-way compatible with BY-SA 4.0 in 2015 for that reason, making GPLv3 their own answer to what BY-SA means for code. AGPL-3.0 closes the one gap GPL leaves — a hosted service is never distributed and so never triggers share-alike — and is deliberately not the default, because the network clause is not wanted here.
+
+A permissive default was weighed and declined. MIT or Apache-2.0 would grow adoption faster, and Apache-2.0 in particular is the better permissive license because it grants patent rights where MIT leaves the same gap CC BY-SA does. Reciprocity was ranked above adoption deliberately: the point of the default is that a derivative stays open, and a permissive license buys reach by giving that up. Treat this as settled rather than reopening it per repository — the case for permissive is real and already known.
+
+The version is **GPL-3.0-or-later**, not version 3 only. That choice is not expressible in `LICENSE`, whose text is identical either way; it lives in the per-file notice, and the SPDX identifier `GPL-3.0-or-later` is what records it in a form tooling reads. Mark source files with the one-line form rather than the full paragraph block:
+
+```
+# SPDX-License-Identifier: GPL-3.0-or-later
+```
+
+The long-form notice this abbreviates is the appendix at the end of `LICENSE`, already worded for "or later" — use it in the README or a program's `--version` output where a reader needs prose. "Or later" is chosen because relicensing to a future GPLv4 otherwise requires every contributor's individual consent, which is unobtainable in practice once a project has any history.
 
 **`SECURITY.md`**: The project's security policy, supported versions, and the private channel for reporting vulnerabilities. `SUPPORT.md`: Routes users to help, filtering general troubleshooting out of the core issue tracker.
 
-**`.env.example`**: A sanitized template of `.env` showing required variables without exposing actual secrets.
+**`.env.example`**: A sanitized template of `.env` showing required variables without exposing actual secrets. Ships as a scaffold: the conventions and the copy step, with no variables, because the template cannot know what an application reads. The `.example` suffix is load-bearing — `.gitignore` ignores `.env` and `.env.*`, then re-includes `.env.example` and `.env.*.example` by negation, so a file named `.env.sample` or `.env.local` is ignored and never reaches the repository.
 
 #### When someone else will contribute code
 
