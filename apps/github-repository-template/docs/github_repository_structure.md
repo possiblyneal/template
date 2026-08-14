@@ -28,6 +28,10 @@ The goal is not "all logic outside YAML" but portable project logic in `scripts/
 
 `.github/workflows/codeql.yml`: Static analysis tracing untrusted input to dangerous sinks across files, the class of bug the linters in `scripts/ci` cannot see. Runs on pull requests, on `main`, and weekly: CodeQL adds queries over time, so a scheduled run finds problems in code that has not changed.
 
+Analysis is gated on the repository being public. Code scanning accepts uploaded results from a public repository, or from a private one with GitHub Advanced Security; without it the analysis completes and then fails at the upload step on every run, and a check that can only ever be red teaches people to ignore the ones that can tell them something. The `detect` job reads visibility and `analyze` is skipped unless it is `public`, with the reason written to the run summary rather than leaving a bare skip to interpret. A private repository that does have Advanced Security removes the `if:` on `analyze`.
+
+Visibility is read from the API rather than from `github.event.repository.visibility`, whose payload GitHub documents as "Not applicable" for `schedule`. Taken from the event, the weekly run would compare a null against `public` and skip itself on a repository that should be scanned — the silent no-op the gate exists to prevent, arriving through the gate. A failed lookup fails the step rather than defaulting either way, so it cannot be mistaken for a repository that should not be scanned.
+
 `.github/dependabot.yml`: Opens one grouped weekly pull request for the action versions in `.github/workflows/` and `.github/actions/`, rather than one per action.
 
 `.github/ISSUE_TEMPLATE/`: Contains `bug_report.yml`, `feature_request.yml`, and `config.yml`.

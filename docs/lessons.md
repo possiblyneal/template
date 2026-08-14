@@ -39,13 +39,17 @@ The root config files and `apps/github-repository-template/src/base-repo/` hold 
 
 **Source:** [Template payload contract](../apps/github-repository-template/CLAUDE.md)
 
-## CodeQL cannot report on this repository
+## CodeQL analysis is gated on repository visibility
 
-`.github/workflows/codeql.yml` runs here, but this repository is private on a free plan, so code scanning is unavailable and the workflow fails when it uploads results.
+Code scanning accepts uploaded results from a public repository, or from a private one with GitHub Advanced Security. This repository is private on a free plan, so `.github/workflows/codeql.yml` skips its `analyze` job here and records the reason in the run summary.
 
-**Do:** Read a red CodeQL run as the known plan limitation, not as a finding. Resolve it by making the repository public or adding GitHub Advanced Security, not by editing the workflow.
+**Do:** Leave the gate in place. Remove the `if:` on `analyze` only when the repository is public or has Advanced Security. Never reach for `continue-on-error` or a removed upload step to quiet a red run.
 
-**Why:** The failure is at the upload step, after analysis. Nothing about the code is being reported, so treating it as a code problem sends you looking for a bug that was never found.
+**Why:** A check that can only ever be red teaches people to ignore the ones that can tell them something, so the failure costs more than the missing signal. Skipping analysis that structurally cannot report is not the same as suppressing a result: the gate runs no query and claims no verdict, where `continue-on-error` runs the queries and then discards whatever they found. The first is honest about having no signal; the second manufactures a green check out of one.
+
+**Why the API and not the event:** Visibility is read through `gh api` because `github.event.repository` is documented as "Not applicable" for `schedule`. Read from the event, the weekly run would compare a null against `public` and skip itself on a repository that should be scanned — the gate reintroducing the silent no-op it was added to remove. A failed lookup fails the step for the same reason, rather than defaulting to skip.
+
+**Source:** [Payload structure](../apps/github-repository-template/docs/github_repository_structure.md)
 
 **Source:** [`.repo-template.json`](../.repo-template.json)
 

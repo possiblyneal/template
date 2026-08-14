@@ -29,9 +29,43 @@ jobs:
     timeout-minutes: 5
     outputs:
       matrix: ${{ steps.detect.outputs.matrix }}
+      scannable: ${{ steps.scannable.outputs.result }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      # Code scanning accepts uploaded results on a public repository, and on a
+      # private one only with GitHub Advanced Security. Without it the analysis
+      # runs to completion and then fails at the upload step on every run, which
+      # is a check that can only ever be red -- and a check that cannot pass
+      # teaches people to ignore the ones that can.
+      #
+      # Visibility is read from the API rather than github.event.repository,
+      # whose payload is documented as "Not applicable" for schedule. Reading it
+      # from the event would leave the weekly run skipping itself on a public
+      # repository: the silent do-nothing this step exists to avoid.
+      - name: Check whether code scanning can accept results
+        id: scannable
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          visibility="$(gh api "repos/${GITHUB_REPOSITORY}" --jq .visibility)"
+          if [ "${visibility}" = "public" ]; then
+            echo "result=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          echo "result=false" >> "${GITHUB_OUTPUT}"
+          {
+            echo "### CodeQL skipped"
+            echo
+            echo "Repository visibility is \`${visibility}\`. Code scanning accepts results"
+            echo "from a public repository, or from a private one with GitHub Advanced"
+            echo "Security. Analyzing here would fail at the upload step on every run"
+            echo "rather than report anything about the code."
+            echo
+            echo "If this repository does have Advanced Security, remove the \`if:\` on"
+            echo "the \`analyze\` job."
+          } >> "${GITHUB_STEP_SUMMARY}"
 
       # The matrix comes from scripts/detect rather than being built here,
       # so a language this repository checks is one CodeQL scans. This step
@@ -44,6 +78,7 @@ jobs:
   analyze:
     name: Analyze ${{ matrix.language }}
     needs: detect
+    if: needs.detect.outputs.scannable == 'true'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     strategy:
