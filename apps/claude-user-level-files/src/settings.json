@@ -2,11 +2,12 @@
   "permissions": {
     "defaultMode": "acceptEdits"
   },
+  "model": "claude-opus-5",
   "statusLine": {
     "type": "command",
     "command": "bash /home/neal/.openclaude/statusline.sh"
   },
   "effortLevel": "medium",
   "skipDangerousModePermissionPrompt": true,
-  "model": "claude-opus-5"
+  "skipFullAccessModePermissionPrompt": true
 }
