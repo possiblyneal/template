@@ -83,3 +83,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 - You may ssh in to every device on the network and passwordless sudo is available for any Linux based system on the network.
 - Do not give the user commands to type into the command line when it is possible for you to accomplish the same thing using ssh and/or passwordless sudo.
 - Do not invoke the skill claude-api. It will crash the session.
+- For web search prefer the `exa-web-search` / `exa-web-fetch` CLIs over the built-in
+  WebSearch/WebFetch tools. They are Bash executables in `~/.local/bin/`, not MCP tools, so
+  they never appear in your tool list — check `command -v exa-web-search`, don't assume.
+  Usage: `exa-web-search -n 5 "query"`, `exa-web-fetch --max-chars 2000 <url>`.
