@@ -144,6 +144,10 @@ The hidden files that dictate environment variables, Git behavior, and tool inte
 
 ### Additions by Occasion
 
+These live in `src/repository-addons/` and are never copied during generation. This section names the occasion for each — the condition that makes it worth having — and why it is shaped the way it is. What must be *edited* before one is safe to ship is a separate question, answered by `src/addon-adoption.json`, which lists per addon the tokens to replace, the sections demanding a judgement, and the steps that happen outside the repository. Two files because they are read at different moments and by different readers: this one when deciding whether to take an addon, that one while adopting it.
+
+Several of them ship empty and are written rather than filled — `README.md`, `SECURITY.md`, `CONTRIBUTING.md`, `GOVERNANCE.md`, `CODEOWNERS`, and `.env.example`. The manifest flags those `authored_on_adoption` and the occasion below is the whole of the guidance.
+
 #### When someone else will use it
 
 Someone who is not the author has to get the thing running, and has to know whether they are allowed to.
@@ -178,6 +182,10 @@ The trigger is a second person with commit ambitions, not a public repository. T
 
 **`CODE_OF_CONDUCT.md`**: The baseline rules for community behavior and expectations for professional interaction. Its value depends on being adopted before it is needed; written in response to an incident it is a ruling rather than a rule, and reads as one.
 
+Ships as [Contributor Covenant 3.0](https://www.contributor-covenant.org/version/3/0/), verbatim apart from the site's own front matter. Version 2.1 is the more widely deployed text and was declined: 3.0 has been the stable release since July 2025, and its enforcement ladder is the part worth having — 2.1 lists four consequences with no stated process for reaching one, which is the gap a maintainer discovers while trying to apply it. Keep the Attribution section; CC BY-SA 4.0 requires it and removing it is a licence violation.
+
+Upstream ships two visible `[NOTE: ...]` markers rather than silent placeholders, and they are kept that way. A Code of Conduct is the one document whose failure mode is being *trusted*: an unfilled reporting line published silently promises a channel that does not exist, and someone finds that out at the worst possible moment. A marker that renders in the published document is the safer failure. Both regions are in the adoption manifest.
+
 `CODEOWNERS`: The definitive list of core team members with write access and merge authority. Read from the repository root, `.github/`, or `docs/`, and nowhere else. On its own it only requests reviewers; a branch protection rule requiring code owner review is what makes that request binding.
 
 #### When the project outlives a single maintainer
@@ -190,7 +198,7 @@ Both files answer the same question — who decides, and who is owed credit for 
 
 Ships in the [All Contributors](https://allcontributors.org) format, carrying the marker comments, the badge, and all thirty-three contribution keys. The format is the point rather than the file: a hand-maintained credit list drifts, and an omission from a list of people you are thanking reads worse than having no list, so the value is in the bot maintaining it. It travels with `.all-contributorsrc`, which is the second half of one record rather than a separate file: the table is generated from the `contributors` array in the config and is never parsed back out of the Markdown, so the config alone is the state. It ships pointing `files` at `CONTRIBUTORS.md`, because the default is `README.md` and the table otherwise lands there while this file stays empty.
 
-Two things remain on adoption. `projectOwner` and `projectName` ship as `REPO-OWNER` and `REPO-NAME` and must be replaced — both are required, so the CLI throws rather than guessing, but they build the profile and commit links, and wrong values give a table of dead links rather than an error. The bot must also be installed from <https://github.com/apps/allcontributors>; the comment syntax does nothing on a repository without it and nothing reports that. The marker comments in the Markdown are matched as literal strings, so reformatting them leaves the bot with nowhere to write and no pull request appears.
+The adoption manifest carries what to do; what is worth knowing here is the shape of the failures. `projectOwner` and `projectName` are required, so an empty value throws — but they build the profile and commit links, so a *wrong* value gives a table of dead links and no error at all. Installing the bot is the step nothing reports undone: without it the `@allcontributors` comment syntax simply sits there and no pull request appears. The marker comments in the Markdown are matched as literal strings, so reformatting them produces the same silence.
 
 **`.all-contributorsrc`**: The All Contributors configuration and contributor state. Named without a `.json` suffix because both the CLI and the bot look for that exact filename, which also means the `check-json` hook does not match it and nothing local validates it — the CLI reads it through `json-fixer`, which silently repairs and rewrites malformed JSON rather than failing. `commit` is `false` so the CLI proposes changes instead of writing a commit, which would otherwise hit `no-commit-to-branch`; `commitConvention` is `angular` so the message it does generate satisfies commitlint.
 

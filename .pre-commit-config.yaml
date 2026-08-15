@@ -60,6 +60,26 @@ repos:
         always_run: true
         pass_filenames: false
 
+  # src/addon-adoption.json says which regions of each repository addon an
+  # operator must edit before that addon is safe to ship. The repo-builder skill
+  # walks that manifest; an addon missing from it is walked past in silence,
+  # which reads as "nothing to do here".
+  #
+  # always_run with no files filter, for the same reason as adr-index above: a
+  # filter reads the staged paths, and pre-commit's staged-file list excludes
+  # deletions. `git rm` of an addon is exactly when the manifest goes stale and
+  # exactly what a filter cannot see. The test is stdlib-only so it runs here
+  # with no dependency resolution, and reads two paths on a commit touching
+  # neither.
+  - repo: local
+    hooks:
+      - id: addon-adoption
+        name: check the addon adoption manifest covers every addon
+        entry: .openclaude/skills/repo-builder/scripts/tests/test_addon_adoption.py
+        language: script
+        always_run: true
+        pass_filenames: false
+
   # The only static analysis the shell scripts in scripts/ get. Every one there
   # is extensionless, so pre-commit recognizes it as shell by reading its
   # shebang, which it only does for files that are executable. The two shebang

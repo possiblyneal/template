@@ -8,6 +8,7 @@ Owns the payload copied into every repository generated from this template, and 
 
 - `src/base-repo/` — the payload. Every file here is destined for other repositories.
 - `src/repository-addons/` — files held back from the payload because each answers a condition the template cannot know has arrived. Not copied during generation; added by hand when the occasion does arrive. `docs/github_repository_structure.md` groups them under "Additions by Occasion" and names the condition for each.
+- `src/addon-adoption.json` — which regions of each addon must be edited before that addon is safe to ship: `slots` (a token to replace), `reviews` (a section demanding a judgement, with no token to grep for), `external` (a step outside the repository). Read by the `repo-builder` skill at step 2 of `.openclaude/skills/repo-builder/references/lifecycle.md`.
 - `docs/github_repository_structure.md` — Structure and bill of materials for this repo, and briefly what each file/folder is for.
 - `docs/choosing_a_language.md` — evidence on language choice for AI-assisted work.
 
@@ -18,6 +19,8 @@ The `repo-builder` skill reads `src/base-repo` at a specific commit, never the w
 **A file under `src/base-repo/` is not this repository's configuration. It is data.** `src/base-repo/scripts/check` never runs here; the root `scripts/check` does.
 
 **Payload and root are separate edits.** When a change should apply to both, make it in both places in the same commit. A fix at the root only leaves the template shipping the bug to every repository generated afterward.
+
+**`src/addon-adoption.json` is root-only and stays that way**, the one deliberate exception to the rule above. It describes `src/repository-addons/`, which never reaches a generated repository, so mirroring it into the payload ships an index of files that are not there. It is also a sibling of that directory rather than a file inside it, because anything inside is an addon to copy. The in-file guidance carried by the addons themselves is not deduplicated against it: that guidance serves someone adopting a file by hand, in a repository that has no manifest to read.
 
 **Payload paths lose the `src/base-repo/` prefix when generated**, so a relative reference written inside the payload must be relative to the generated repository's root, not to this one.
 
@@ -42,7 +45,9 @@ When the structure doc and the payload disagree, one of them is wrong — fix bo
 
 ## Verification
 
-No checks run against the payload as source. The root `scripts/check` runs shellcheck and actionlint over these files through pre-commit, which is syntax-level only.
+The root `scripts/check` runs shellcheck and actionlint over these files through pre-commit, which is syntax-level only.
+
+One check reads this directory semantically: the `addon-adoption` pre-commit hook runs `.openclaude/skills/repo-builder/scripts/tests/test_addon_adoption.py`, which fails when `src/addon-adoption.json` and `src/repository-addons/` disagree about which files exist, when an entry declares a slot token no longer present in its file, or when a file flagged `authored_on_adoption` ships content. It runs on every commit rather than on a path filter, because `git rm` of an addon is the case a filter cannot see. It does not check that a described region is described *well* — only that it exists.
 
 The payload's behavior is verified where it lands: by `src/base-repo/scripts/tests/*-test` once a repository is generated, and by the `repo-builder` evals under `.openclaude/skills/repo-builder/evals/`.
 

@@ -104,6 +104,18 @@ An adopted addon is one of those files, and the pair above lands on both sides o
 
    The other pair is `CHANGELOG.md` and `.openclaude/rules/changelog.md`. The rule instructs an agent to maintain the file, so adopting the rule without the file states a contract that cannot be satisfied, and adopting the file without the rule leaves nothing keeping it current. `scripts/release` reads whichever world it lands in and says which one it took, so neither is required — but half of the pair is a defect rather than a lighter choice.
 
+   Copying an addon is not adopting it. Most arrive with regions that are wrong until someone edits them, and the failure mode is silent — a Code of Conduct promising a reporting channel that does not exist, a funding button pointing at a stranger's donation page, a citation crediting `REPLACE-FAMILY-NAME`. None of these are errors to any tool; they render, validate, and publish. `apps/github-repository-template/src/addon-adoption.json` is the index of those regions, a sibling of the addons directory rather than a file inside it, and is read here rather than copied — a generated repository has no `repository-addons/` for it to describe.
+
+   Walk its entry for every addon taken, and for nothing else. It sorts each region by what the operator has to do:
+
+   - `slots` — a literal token to replace with a value. Grep for the token; if it is absent the file was already edited or the manifest has drifted, and either is worth stopping over.
+   - `reviews` — a section to read and a judgement to make, with no token to find. These are the ones a search cannot surface, which is the only reason they are written down.
+   - `external` — a step outside the repository entirely, such as installing a GitHub App. Nothing in the tree reports these undone.
+
+   Ask each distinct `value_key` once, not once per file. The repository owner is spelled `REPO-OWNER` in two addons and `<owner>` in a third; asking in each file's own vocabulary asks the same question three times and invites three answers. An entry flagged `authored_on_adoption` has no regions because the file ships empty — it is written, not filled, and the occasion for it is in `docs/github_repository_structure.md`.
+
+   Report every region as done or as outstanding. An addon left with an unfilled slot is worse than one not taken, because the repository now carries a document that reads as finished.
+
    Do not collect stacks or package managers, and do not render a root manifest. A template cannot know the ecosystem a repository will use, and a wrong guess is worse than an absent file — the same reasoning `.github/dependabot.yml` follows in listing only the two manifests the template itself ships. A generated repository with no manifest is reported honestly by `scripts/ci` as nothing to check yet, with every check becoming required the moment one is added. The first real commit brings the manifest.
 
    Say so in the handover: the root manifest is what makes a package visible to the checks, and a manifest nested under `apps/` instead is invisible to all of them. `scripts/doctor` fails on that shape rather than passing over it.
@@ -236,6 +248,10 @@ Use this stable shape. On a generate the Reconciliation lines are empty or trivi
 
 ### File list
 - <payload paths accounted for, and every difference named as intended or as a defect>
+
+### Addon adoption
+- <addon taken>: <slot token, review section, or external step>: filled | reviewed | done | OUTSTANDING (<what remains>)
+- <addons offered and not taken, on one line>
 
 ### Repository settings
 - <setting>: enabled | unavailable (<reason>) | not requested

@@ -1,0 +1,127 @@
+{
+  "_about": [
+    "Which regions of each repository addon someone must edit before that addon is safe to ship.",
+    "Read by the repo-builder skill at generation time; see .openclaude/skills/repo-builder/references/lifecycle.md step 2.",
+    "A sibling of repository-addons/ rather than a file inside it, because anything inside that directory looks like an addon to copy.",
+    "Never copied into a generated repository. In-file guidance inside the addons themselves is deliberately NOT deduplicated against this file: that guidance serves the person adopting the file by hand in a repository that has no manifest.",
+    "Occasion lives in docs/github_repository_structure.md and pairing lives in lifecycle.md. Neither is repeated here.",
+    "slots replace a token with a value. reviews demand a judgement with no token to grep for. external happens outside the repository entirely.",
+    "value_key groups one answer asked once: the repository owner is spelled three ways across three files."
+  ],
+  "files": {
+    "README.md": { "authored_on_adoption": true, "slots": [], "reviews": [], "external": [] },
+    "SECURITY.md": { "authored_on_adoption": true, "slots": [], "reviews": [], "external": [] },
+    "CONTRIBUTING.md": { "authored_on_adoption": true, "slots": [], "reviews": [], "external": [] },
+    "GOVERNANCE.md": { "authored_on_adoption": true, "slots": [], "reviews": [], "external": [] },
+    "CODEOWNERS": { "authored_on_adoption": true, "slots": [], "reviews": [], "external": [] },
+    ".env.example": { "authored_on_adoption": true, "slots": [], "reviews": [], "external": [] },
+
+    "CODE_OF_CONDUCT.md": {
+      "slots": [
+        {
+          "token": "[NOTE: describe your means of reporting here.]",
+          "value_key": "conduct-contact",
+          "what": "The reporting channel for a violation. Unlike a silent REPLACE- token this renders visibly in the published document, so an unadopted Code of Conduct announces itself rather than quietly promising a channel that does not exist. That is the one thing worse than having no Code of Conduct, and it is why the visible marker is kept rather than normalized."
+        }
+      ],
+      "reviews": [
+        {
+          "section": "Addressing and Repairing Harm",
+          "decision": "Upstream ships suggested remedies and marks them for replacement. Confirm they describe how this project actually responds, or rewrite them. Remedies nobody intends to apply are worse than none, because the document is what a reporter is told to rely on."
+        }
+      ],
+      "external": []
+    },
+
+    "LICENSE": {
+      "slots": [],
+      "reviews": [
+        {
+          "section": "Appendix: How to Apply These Terms to Your New Programs",
+          "decision": "The angle-bracket fields there are GPL instructional text describing what to put in YOUR source files and --version output. Do not edit them in LICENSE; the file ships verbatim and is not ours to re-mark."
+        },
+        {
+          "section": "or-later versus only",
+          "decision": "LICENSE cannot express the choice -- its text is identical either way. Record it in the per-file SPDX headers and in CITATION.cff if that addon is also taken. Relicensing to a future GPLv4 needs every contributor's consent once the project has history, which is why the payload's own docs choose or-later."
+        }
+      ],
+      "external": []
+    },
+
+    "CHANGELOG.md": {
+      "slots": [
+        { "token": "<owner>", "value_key": "repo-owner", "what": "Repository owner in the Unreleased compare link at the bottom." },
+        { "token": "<repo>", "value_key": "repo-name", "what": "Repository name in the same link." }
+      ],
+      "reviews": [
+        {
+          "section": "The <Replace ...> note between the intro and [Unreleased]",
+          "decision": "Instructions, not content. Delete the whole block once the link is filled, or it ships to readers as part of the changelog."
+        }
+      ],
+      "external": []
+    },
+
+    ".openclaude/rules/changelog.md": {
+      "slots": [],
+      "reviews": [],
+      "external": []
+    },
+
+    "CONTRIBUTORS.md": {
+      "slots": [],
+      "reviews": [],
+      "external": [
+        {
+          "step": "Install the All Contributors app on the repository from https://github.com/apps/allcontributors",
+          "consequence": "Without it the @allcontributors comment syntax does nothing and nothing reports that -- the comment simply sits there and no pull request appears."
+        }
+      ]
+    },
+
+    ".all-contributorsrc": {
+      "slots": [
+        { "token": "REPO-OWNER", "value_key": "repo-owner", "what": "projectOwner. Required, and the CLI throws rather than guessing, so this failure is at least loud. It builds the profile and commit links, so a wrong value gives a table of dead links instead of an error." },
+        { "token": "REPO-NAME", "value_key": "repo-name", "what": "projectName. Same." }
+      ],
+      "reviews": [],
+      "external": []
+    },
+
+    "CITATION.cff": {
+      "slots": [
+        { "token": "REPLACE-PROJECT-TITLE", "value_key": "project-title", "what": "title. Every active REPLACE- value here is schema-valid, so a half-filled file validates, renders, and hands out a BibTeX entry crediting the placeholder. Nothing warns anyone." },
+        { "token": "REPLACE-FAMILY-NAME", "value_key": "author-family-name", "what": "authors[0].family-names." },
+        { "token": "REPLACE-GIVEN-NAME", "value_key": "author-given-name", "what": "authors[0].given-names." },
+        { "token": "REPO-OWNER", "value_key": "repo-owner", "what": "repository-code URL." },
+        { "token": "REPO-NAME", "value_key": "repo-name", "what": "repository-code URL." }
+      ],
+      "reviews": [
+        {
+          "section": "the commented-out license: line",
+          "decision": "The one field where a placeholder cannot pass -- license is a closed SPDX enum, so a placeholder fails validation and the sidebar renders an error instead of a citation. It ships commented rather than wrong. Uncomment and fill it, or the citation carries no license."
+        },
+        {
+          "section": "the commented version / date-released / doi block",
+          "decision": "Left commented because a template cannot keep them true and a stale value cites a version that was never released. Fill them when something releases, and again when something releases again."
+        },
+        {
+          "section": "preferred-citation",
+          "decision": "It REPLACES the citation rather than supplementing it -- the sidebar stops citing the software and starts citing the article. Uncomment only if that is genuinely what you want."
+        }
+      ],
+      "external": []
+    },
+
+    ".github/FUNDING.yml": {
+      "slots": [],
+      "reviews": [
+        {
+          "section": "every platform entry",
+          "decision": "All ship commented out, which is the correct state until an account exists. Uncomment only lines whose account is real and replace USERNAME. Nothing validates these: an uncommented placeholder is not an error, it is a working button pointing at a stranger's donation page."
+        }
+      ],
+      "external": []
+    }
+  }
+}
