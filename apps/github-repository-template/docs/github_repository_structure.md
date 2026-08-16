@@ -146,7 +146,7 @@ The hidden files that dictate environment variables, Git behavior, and tool inte
 
 These live in `src/repository-addons/` and are never copied during generation. This section names the occasion for each — the condition that makes it worth having — and why it is shaped the way it is. What must be *edited* before one is safe to ship is a separate question, answered by `src/addon-adoption.json`, which lists per addon the tokens to replace, the sections demanding a judgement, and the steps that happen outside the repository. Two files because they are read at different moments and by different readers: this one when deciding whether to take an addon, that one while adopting it.
 
-Several of them ship empty and are written rather than filled — `README.md`, `SECURITY.md`, `CONTRIBUTING.md`, `GOVERNANCE.md`, and `.env.example`. The manifest flags those `authored_on_adoption` and the occasion below is the whole of the guidance.
+Several of them ship empty and are written rather than filled — `README.md`, `SECURITY.md`, `GOVERNANCE.md`, and `.env.example`. The manifest flags those `authored_on_adoption` and the occasion below is the whole of the guidance.
 
 #### When someone else will use it
 
@@ -178,7 +178,11 @@ The long-form notice this abbreviates is the appendix at the end of `LICENSE`, a
 
 The trigger is a second person with commit ambitions, not a public repository. Two engineers on a private repository are already here.
 
-**`CONTRIBUTING.md`**: Guidelines for external developers on submitting pull requests, running tests, and adhering to code style.
+**`CONTRIBUTING.md`**: How a change reaches the default branch — reporting a bug, proposing an enhancement, setting up locally, and opening a pull request.
+
+Ships as a template rather than empty, for the reason `CODEOWNERS` does but through the opposite mechanism. `CODEOWNERS` is filled because its rules are unguessable; this file is filled because most of its rules are already *known* — the payload ships and enforces the whole contribution workflow it describes. Conventional Commits are checked by commitlint at commit time, `no-commit-to-branch` blocks `main`, pull requests merge rather than squash, `scripts/doctor` and `scripts/check` are the setup and the gate, and `.github/` already carries the issue forms and pull request template the guide points at. An empty file would ask an operator to re-derive that process from scratch and document it correctly — the workflow their repository already runs — which is exactly the re-derivation an authored-on-adoption file is right to demand only when the template knows nothing.
+
+What the template cannot supply is marked, not guessed. The project name is the one slot, `REPLACE-PROJECT-TITLE`, shared with `CITATION.cff` and rendered visibly so an unfilled copy announces itself. The judgement regions carry no token and are the reason `src/addon-adoption.json` lists this file: the intro's one-line description of what the project is; the Code of Conduct and security links, each valid only if that addon was also taken and a dead link otherwise; the Ways-to-contribute list, to be trimmed to the paths a maintainer can actually shepherd; and the setup section, whose concrete build and test commands do not exist until the repository's first language manifest does. Each is mirrored by an invisible `<!-- ADOPT: ... -->` comment in the file itself, which serves someone adopting it by hand with no manifest to read and is deleted on adoption.
 
 **`CODE_OF_CONDUCT.md`**: The baseline rules for community behavior and expectations for professional interaction. Its value depends on being adopted before it is needed; written in response to an incident it is a ruling rather than a rule, and reads as one.
 

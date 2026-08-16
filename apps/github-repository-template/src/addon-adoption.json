@@ -11,7 +11,6 @@
   "files": {
     "README.md": { "authored_on_adoption": true, "slots": [], "reviews": [], "external": [] },
     "SECURITY.md": { "authored_on_adoption": true, "slots": [], "reviews": [], "external": [] },
-    "CONTRIBUTING.md": { "authored_on_adoption": true, "slots": [], "reviews": [], "external": [] },
     "GOVERNANCE.md": { "authored_on_adoption": true, "slots": [], "reviews": [], "external": [] },
     ".env.example": { "authored_on_adoption": true, "slots": [], "reviews": [], "external": [] },
 
@@ -43,6 +42,39 @@
           "consequence": "The verification this file gets, and it has to be asked for: an invalid line is skipped and an owner without write access is dropped without either announcing itself in the course of a pull request, so a file that is half in force reads exactly like one that is working. The script calls that endpoint and reports the requirement above in the same run."
         }
       ]
+    },
+
+    "CONTRIBUTING.md": {
+      "slots": [
+        {
+          "token": "REPLACE-PROJECT-TITLE",
+          "value_key": "project-title",
+          "what": "The project name in the opening heading and welcome line. Shared with CITATION.cff, so it is the same answer asked once. It renders visibly, so an unfilled copy ships a contributing guide that welcomes people to REPLACE-PROJECT-TITLE -- the placeholder announces itself rather than promising something absent, which is why it is a slot and not a review."
+        }
+      ],
+      "reviews": [
+        {
+          "section": "the opening paragraph and the one-line project description in it",
+          "decision": "The template says how work reaches the branch, which it can, but not what the project is or who it is for, which it cannot. Rewrite the first sentence so it introduces this project rather than a generic one -- an ADOPT comment marks the spot. The rest of the intro is accurate as shipped and needs no change."
+        },
+        {
+          "section": "the Code of Conduct link in the intro",
+          "decision": "The line assumes CODE_OF_CONDUCT.md was taken alongside this file. Keep it only if that addon was adopted; delete the line otherwise, so the guide does not link a file that is not there. An ADOPT comment marks it."
+        },
+        {
+          "section": "the security carve-out under Reporting a bug",
+          "decision": "It links SECURITY.md and tells contributors to report vulnerabilities there instead of in a public issue. Keep the link only if that addon was adopted; otherwise replace it with the private channel you actually watch, or delete the paragraph. A guide that routes a vulnerability report to a channel that does not exist is the same silent failure the Code of Conduct's reporting line guards against -- worse than saying nothing, because someone relies on it at the worst moment."
+        },
+        {
+          "section": "the Ways to contribute list",
+          "decision": "Trim it to the paths this project can actually shepherd. Advertising a contribution type no maintainer has time to mentor invites work that then stalls, which reads worse than not inviting it. An ADOPT comment marks the list."
+        },
+        {
+          "section": "Setting up your environment",
+          "decision": "The section documents the scripts/ wrappers, which ship correct and stay correct. The concrete build and test commands are stack-specific and do not exist until the repository's first language manifest does -- until then scripts/check reports nothing to run, and that is honest. Fill in the stack-specific steps when a manifest lands; leave the section pointing at the wrappers until then. The wrappers are not a placeholder to replace, so this is a review rather than a slot."
+        }
+      ],
+      "external": []
     },
 
     "CODE_OF_CONDUCT.md": {
