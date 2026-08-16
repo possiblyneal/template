@@ -1,0 +1,94 @@
+# CODEOWNERS -- who GitHub requests for review when a pull request touches a
+# path. Ownership here is a request, not a permission. It grants no access and
+# blocks no merge on its own; a branch protection rule or ruleset with "Require
+# review from Code Owners" is what makes it binding, and that lives in the
+# repository settings rather than in this file.
+#
+# Read from .github/, then the repository root, then docs/ -- in that order,
+# first one found wins, and nowhere else. Two copies is a silent trap: the one
+# in .github/ is used and the other is never read. This file ships at the root.
+# Move it if you want it elsewhere; do not copy it.
+#
+# Rules are read per branch, from the BASE branch of a pull request. Fixing
+# this file on a feature branch does not change that branch's own reviewers.
+#
+# Everything here fails silently:
+#
+#   - An invalid line is skipped. The rest of the file still applies, so a typo
+#     removes one rule and nothing says so.
+#   - A user or team without write access is never assigned. Naming someone who
+#     cannot review looks exactly like naming nobody. A team must additionally
+#     be visible and hold write access in its own right, even when every member
+#     already has it.
+#   - Over 3 MB the entire file is ignored.
+#   - Draft pull requests request no one; owners are notified when the pull
+#     request is marked ready for review.
+#
+# Two of those are checkable, and nothing checks them unless asked: browse to
+# this file on GitHub, where rejected lines are highlighted, or run
+#
+#     gh api repos/<owner>/<repo>/codeowners/errors
+#
+# Patterns use gitignore syntax minus three of its features: `!` negation,
+# `[ ]` character ranges, and `\#` to escape a leading `#`. GitHub documents
+# all three as not working and does not say what happens instead -- a `!` line
+# has been reported both highlighted as invalid and accepted as valid -- so the
+# two checks above catch one only sometimes. Do not reach for them. Paths are
+# case sensitive whatever the local filesystem does.
+#
+# THE LAST MATCHING PATTERN WINS -- not the most specific one. That is the
+# reverse of most path-matching intuition and the first mistake to look for.
+# Specific rules go BELOW the catch-all, never above it.
+#
+# Several owners for one pattern go on ONE line. Split across two lines, the
+# second replaces the first instead of adding to it. Any one owner on a line
+# satisfies a required code-owner review, so a line names a pool, not a quorum.
+#
+# A pattern with no owner after it UNSETS ownership for that path, which is how
+# a subdirectory is exempted from a broader rule.
+
+# The default owner for everything. Replace the placeholder below with a GitHub
+# username (@octocat) or a team (@org/team-name), keeping the @. An email
+# address registered to an account with write access also resolves. Replacing
+# it should leave no occurrence of the placeholder anywhere in this file, which
+# is what makes grepping for it a straight answer to whether this was done.
+#
+# That line ships active and wrong rather than commented out, deliberately. It
+# is the one placeholder in these addons that reports itself: GitHub validates
+# CODEOWNERS, so an unfilled line is highlighted on the file's page and listed
+# by the API call above, while a commented-out file is indistinguishable from a
+# finished one. Until it is filled the file assigns no owners, which is the
+# truth about it.
+* @REPLACE-CODE-OWNER
+
+# Ownership per path, for when more than one person owns something. Uncomment
+# and adjust -- these mirror the layout in the root CLAUDE.md. Every one of
+# them must stay below the catch-all above to take effect.
+#
+# /apps/      @org/team-name
+# /libs/      @org/team-name
+# /scripts/   @org/team-name
+# /docs/adr/  @org/team-name
+#
+# A leading slash anchors to the repository root: `/docs/` is the top-level
+# directory and everything under it, while `docs/` with no leading slash is any
+# directory named docs at any depth. A slash in the MIDDLE of a pattern anchors
+# it as well, so `docs/*` is the files sitting directly in the top-level docs --
+# neither its subdirectories nor a docs directory nested somewhere else.
+
+# The rules governing who may change the rules. This is GitHub's own
+# recommendation once more than one account has write access: without it,
+# anyone can edit this file, or the workflows beside it, in the same pull
+# request that depends on the edit. Redundant while one owner owns everything
+# above.
+#
+# /.github/    @org/team-name
+# /CODEOWNERS  @org/team-name
+
+# One caution for a solo maintainer, because it is otherwise discovered at the
+# worst moment: GitHub does not let the author of a pull request approve it.
+# `* @you` plus a rule requiring code-owner review means every pull request you
+# open needs an approval that only you can give and that you are not allowed to
+# give. The file is still worth having -- it records ownership and is already
+# correct when a second maintainer arrives -- but leave that requirement off
+# until someone else can satisfy it. Delete this paragraph once decided.

@@ -146,7 +146,7 @@ The hidden files that dictate environment variables, Git behavior, and tool inte
 
 These live in `src/repository-addons/` and are never copied during generation. This section names the occasion for each — the condition that makes it worth having — and why it is shaped the way it is. What must be *edited* before one is safe to ship is a separate question, answered by `src/addon-adoption.json`, which lists per addon the tokens to replace, the sections demanding a judgement, and the steps that happen outside the repository. Two files because they are read at different moments and by different readers: this one when deciding whether to take an addon, that one while adopting it.
 
-Several of them ship empty and are written rather than filled — `README.md`, `SECURITY.md`, `CONTRIBUTING.md`, `GOVERNANCE.md`, `CODEOWNERS`, and `.env.example`. The manifest flags those `authored_on_adoption` and the occasion below is the whole of the guidance.
+Several of them ship empty and are written rather than filled — `README.md`, `SECURITY.md`, `CONTRIBUTING.md`, `GOVERNANCE.md`, and `.env.example`. The manifest flags those `authored_on_adoption` and the occasion below is the whole of the guidance.
 
 #### When someone else will use it
 
@@ -186,7 +186,13 @@ Ships as [Contributor Covenant 3.0](https://www.contributor-covenant.org/version
 
 Upstream ships two visible `[NOTE: ...]` markers rather than silent placeholders, and they are kept that way. A Code of Conduct is the one document whose failure mode is being *trusted*: an unfilled reporting line published silently promises a channel that does not exist, and someone finds that out at the worst possible moment. A marker that renders in the published document is the safer failure. Both regions are in the adoption manifest.
 
-`CODEOWNERS`: The definitive list of core team members with write access and merge authority. Read from the repository root, `.github/`, or `docs/`, and nowhere else. On its own it only requests reviewers; a branch protection rule requiring code owner review is what makes that request binding.
+**`CODEOWNERS`**: Which accounts GitHub requests for review when a pull request touches a path. Read from `.github/`, then the repository root, then `docs/` — in that order, first one found wins, and nowhere else, so a second copy is not a fallback but a file that is never read. On its own it only requests reviewers; a branch protection rule or ruleset requiring code owner review is what makes the request binding.
+
+Ships as a template rather than empty, because almost nothing about the file is guessable from looking at it and every one of its failure modes is silent. An invalid line is skipped while the rest of the file still applies; an owner without write access is dropped; a team must be visible and hold write access in its own right even when all its members already have it; over 3 MB the file is ignored entirely; draft pull requests request nobody. The pattern rules are gitignore's minus `!`, `[ ]`, and `\#`, which GitHub documents as not working without saying what happens instead, and a `!` line has been reported both highlighted as invalid and accepted as valid. The last matching pattern wins rather than the most specific, which is backwards from how the same syntax reads everywhere else and is the one mistake here that reports nothing at all.
+
+The default owner ships as an active `* @REPLACE-CODE-OWNER` line rather than commented out, the opposite of `.github/FUNDING.yml`, and for the reason that distinguishes them: GitHub validates this file. An unfilled line is highlighted on the file's page and returned by `gh api repos/<owner>/<repo>/codeowners/errors`, so the placeholder announces itself, while a commented-out file is indistinguishable from a finished one. `scripts/repo-settings check` calls that endpoint, and in the same run reports whether any rule actually requires code owner review — the difference between a file that binds and one that requests reviewers nothing waits for. It reports *not readable from here* as its own outcome rather than as "not required", because that answer can live in classic branch protection, which needs admin to read.
+
+The trap worth knowing before adopting it: GitHub does not let the author of a pull request approve it. A solo maintainer with `* @me` who also requires code-owner review needs an approval that only they can give and that GitHub will not let them give; an administrator can merge past it, unless the rule is set to apply to administrators too.
 
 #### When the project outlives a single maintainer
 
