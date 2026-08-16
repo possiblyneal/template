@@ -1,4 +1,19 @@
 {
+  "env": {
+    "CLAUDE_CODE_ALT_SCREEN_FULL_REPAINT": "1",
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "175000",
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
+    "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1",
+    "CLAUDE_CODE_ENABLE_FINE_GRAINED_TOOL_STREAMING": "1",
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "CLAUDE_CODE_GLOB_HIDDEN": "1",
+    "DISABLE_ERROR_REPORTING": "1",
+    "DISABLE_EXTRA_USAGE_COMMAND": "1",
+    "DISABLE_INSTALL_GITHUB_APP_COMMAND": "1",
+    "DISABLE_LOGOUT_COMMAND": "1",
+    "DISABLE_UPGRADE_COMMAND": "1",
+    "ENABLE_CLAUDEAI_MCP_SERVERS": "0"
+  },
   "permissions": {
     "defaultMode": "acceptEdits"
   },
@@ -9,5 +24,132 @@
   },
   "effortLevel": "medium",
   "skipDangerousModePermissionPrompt": true,
-  "skipFullAccessModePermissionPrompt": true
+  "skipFullAccessModePermissionPrompt": true,
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -z \"${HOME-}\" ]; then { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; elif [ -f \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -r \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -x \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ]; then /bin/sh \"$HOME/.orca/agent-hooks/openclaude-hook.sh\"; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -z \"${HOME-}\" ]; then { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; elif [ -f \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -r \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -x \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ]; then /bin/sh \"$HOME/.orca/agent-hooks/openclaude-hook.sh\"; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -z \"${HOME-}\" ]; then { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; elif [ -f \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -r \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -x \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ]; then /bin/sh \"$HOME/.orca/agent-hooks/openclaude-hook.sh\"; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -z \"${HOME-}\" ]; then { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; elif [ -f \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -r \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -x \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ]; then /bin/sh \"$HOME/.orca/agent-hooks/openclaude-hook.sh\"; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -z \"${HOME-}\" ]; then { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; elif [ -f \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -r \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -x \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ]; then /bin/sh \"$HOME/.orca/agent-hooks/openclaude-hook.sh\"; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -z \"${HOME-}\" ]; then { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; elif [ -f \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -r \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -x \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ]; then /bin/sh \"$HOME/.orca/agent-hooks/openclaude-hook.sh\"; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "TeammateIdle": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -z \"${HOME-}\" ]; then { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; elif [ -f \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -r \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -x \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ]; then /bin/sh \"$HOME/.orca/agent-hooks/openclaude-hook.sh\"; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -z \"${HOME-}\" ]; then { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; elif [ -f \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -r \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -x \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ]; then /bin/sh \"$HOME/.orca/agent-hooks/openclaude-hook.sh\"; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -z \"${HOME-}\" ]; then { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; elif [ -f \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -r \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -x \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ]; then /bin/sh \"$HOME/.orca/agent-hooks/openclaude-hook.sh\"; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -z \"${HOME-}\" ]; then { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; elif [ -f \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -r \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -x \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ]; then /bin/sh \"$HOME/.orca/agent-hooks/openclaude-hook.sh\"; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -z \"${HOME-}\" ]; then { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; elif [ -f \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -r \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -x \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ]; then /bin/sh \"$HOME/.orca/agent-hooks/openclaude-hook.sh\"; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
 }

@@ -146,7 +146,7 @@ The hidden files that dictate environment variables, Git behavior, and tool inte
 
 These live in `src/repository-addons/` and are never copied during generation. This section names the occasion for each — the condition that makes it worth having — and why it is shaped the way it is. What must be *edited* before one is safe to ship is a separate question, answered by `src/addon-adoption.json`, which lists per addon the tokens to replace, the sections demanding a judgement, and the steps that happen outside the repository. Two files because they are read at different moments and by different readers: this one when deciding whether to take an addon, that one while adopting it.
 
-Several of them ship empty and are written rather than filled — `README.md`, `SECURITY.md`, `CONTRIBUTING.md`, `GOVERNANCE.md`, `CODEOWNERS`, and `.env.example`. The manifest flags those `authored_on_adoption` and the occasion below is the whole of the guidance.
+Several of them ship empty and are written rather than filled — `README.md`, `SECURITY.md`, `GOVERNANCE.md`, and `.env.example`. The manifest flags those `authored_on_adoption` and the occasion below is the whole of the guidance.
 
 #### When someone else will use it
 
@@ -178,7 +178,11 @@ The long-form notice this abbreviates is the appendix at the end of `LICENSE`, a
 
 The trigger is a second person with commit ambitions, not a public repository. Two engineers on a private repository are already here.
 
-**`CONTRIBUTING.md`**: Guidelines for external developers on submitting pull requests, running tests, and adhering to code style.
+**`CONTRIBUTING.md`**: How a change reaches the default branch — reporting a bug, proposing an enhancement, setting up locally, and opening a pull request.
+
+Ships as a template rather than empty, for the reason `CODEOWNERS` does but through the opposite mechanism. `CODEOWNERS` is filled because its rules are unguessable; this file is filled because most of its rules are already *known* — the payload ships and enforces the whole contribution workflow it describes. Conventional Commits are checked by commitlint at commit time, `no-commit-to-branch` blocks `main`, pull requests merge rather than squash, `scripts/doctor` and `scripts/check` are the setup and the gate, and `.github/` already carries the issue forms and pull request template the guide points at. An empty file would ask an operator to re-derive that process from scratch and document it correctly — the workflow their repository already runs — which is exactly the re-derivation an authored-on-adoption file is right to demand only when the template knows nothing.
+
+What the template cannot supply is marked, not guessed. The project name is the one slot, `REPLACE-PROJECT-TITLE`, shared with `CITATION.cff` and rendered visibly so an unfilled copy announces itself. The judgement regions carry no token and are the reason `src/addon-adoption.json` lists this file: the intro's one-line description of what the project is; the Code of Conduct and security links, each valid only if that addon was also taken and a dead link otherwise; the Ways-to-contribute list, to be trimmed to the paths a maintainer can actually shepherd; and the setup section, whose concrete build and test commands do not exist until the repository's first language manifest does. Each is mirrored by an invisible `<!-- ADOPT: ... -->` comment in the file itself, which serves someone adopting it by hand with no manifest to read and is deleted on adoption.
 
 **`CODE_OF_CONDUCT.md`**: The baseline rules for community behavior and expectations for professional interaction. Its value depends on being adopted before it is needed; written in response to an incident it is a ruling rather than a rule, and reads as one.
 
@@ -186,7 +190,13 @@ Ships as [Contributor Covenant 3.0](https://www.contributor-covenant.org/version
 
 Upstream ships two visible `[NOTE: ...]` markers rather than silent placeholders, and they are kept that way. A Code of Conduct is the one document whose failure mode is being *trusted*: an unfilled reporting line published silently promises a channel that does not exist, and someone finds that out at the worst possible moment. A marker that renders in the published document is the safer failure. Both regions are in the adoption manifest.
 
-`CODEOWNERS`: The definitive list of core team members with write access and merge authority. Read from the repository root, `.github/`, or `docs/`, and nowhere else. On its own it only requests reviewers; a branch protection rule requiring code owner review is what makes that request binding.
+**`CODEOWNERS`**: Which accounts GitHub requests for review when a pull request touches a path. Read from `.github/`, then the repository root, then `docs/` — in that order, first one found wins, and nowhere else, so a second copy is not a fallback but a file that is never read. On its own it only requests reviewers; a branch protection rule or ruleset requiring code owner review is what makes the request binding.
+
+Ships as a template rather than empty, because almost nothing about the file is guessable from looking at it and every one of its failure modes is silent. An invalid line is skipped while the rest of the file still applies; an owner without write access is dropped; a team must be visible and hold write access in its own right even when all its members already have it; over 3 MB the file is ignored entirely; draft pull requests request nobody. The pattern rules are gitignore's minus `!`, `[ ]`, and `\#`, which GitHub documents as not working without saying what happens instead, and a `!` line has been reported both highlighted as invalid and accepted as valid. The last matching pattern wins rather than the most specific, which is backwards from how the same syntax reads everywhere else and is the one mistake here that reports nothing at all.
+
+The default owner ships as an active `* @REPLACE-CODE-OWNER` line rather than commented out, the opposite of `.github/FUNDING.yml`, and for the reason that distinguishes them: GitHub validates this file. An unfilled line is highlighted on the file's page and returned by `gh api repos/<owner>/<repo>/codeowners/errors`, so the placeholder announces itself, while a commented-out file is indistinguishable from a finished one. `scripts/repo-settings check` calls that endpoint, and in the same run reports whether any rule actually requires code owner review — the difference between a file that binds and one that requests reviewers nothing waits for. It reports *not readable from here* as its own outcome rather than as "not required", because that answer can live in classic branch protection, which needs admin to read.
+
+The trap worth knowing before adopting it: GitHub does not let the author of a pull request approve it. A solo maintainer with `* @me` who also requires code-owner review needs an approval that only they can give and that GitHub will not let them give; an administrator can merge past it, unless the rule is set to apply to administrators too.
 
 #### When the project outlives a single maintainer
 

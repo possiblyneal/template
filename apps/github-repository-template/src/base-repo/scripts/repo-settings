@@ -10,6 +10,7 @@ usage() {
 
 check_github_settings() {
   local repo json admin rulesets
+  local branch owner_errors error_count branch_rules protection
 
   if ! command -v gh >/dev/null 2>&1; then
     echo "optional missing: gh (cannot check the remote's branch and secret settings)"
@@ -37,8 +38,54 @@ check_github_settings() {
   fi
 
   # security_and_analysis is absent for a non-admin and for a plan that does not
-  # offer the feature, so admin tells the two apart.
+  # offer the feature, so admin tells the two apart. Read here and gated further
+  # down, because the CODEOWNERS section between the two needs the answer without
+  # being subject to it.
   admin="$(jq -r '.permissions.admin // false' <<<"$json")"
+  branch="$(jq -r '.default_branch // "main"' <<<"$json")"
+
+  # Every way CODEOWNERS fails is silent, so this is the section that has to ask
+  # rather than wait to be told. It sits above the admin gate because the errors
+  # endpoint needs only read access, and a non-admin is exactly who benefits from
+  # being told the file is broken. It sits below the read-access check because
+  # that check is what makes a 404 here mean "no CODEOWNERS file" instead of "no
+  # access to look" -- the two are the same status code. Do not reorder either.
+  if ! owner_errors="$(gh api "repos/$repo/codeowners/errors?ref=$branch" 2>/dev/null)"; then
+    echo "ok: no CODEOWNERS file (nothing to validate)"
+  else
+    error_count="$(jq -r '.errors | length' <<<"$owner_errors")"
+    if (( error_count > 0 )); then
+      echo "optional missing: a CODEOWNERS on $branch that GitHub accepts whole"
+      jq -r '.errors[] | "  \(.path):\(.line):\(.column) \(.kind) -- \(.message)"' <<<"$owner_errors"
+      echo "  Each line above is skipped while the rest of the file still applies, so the file half works and no pull request says so."
+    else
+      echo "ok: CODEOWNERS parses on $branch"
+    fi
+
+    # A CODEOWNERS file that nothing requires is a no-op: it requests reviewers
+    # and merges without them. Rulesets and classic branch protection can each
+    # impose the requirement, and this endpoint reports only the first, so a
+    # repository protected the classic way reads as unrequired here. Checking
+    # that second source needs admin, which is why "not required" is only
+    # claimed when both were actually readable.
+    if ! branch_rules="$(gh api "repos/$repo/rules/branches/$branch" 2>/dev/null)"; then
+      echo "optional missing: whether $branch requires code owner review (not offered for $repo's plan and visibility)"
+      echo "  Unread is not unrequired. Until it can be read, treat the file as requesting reviewers that nothing waits for."
+    elif [[ "$(jq -r '[.[] | select(.type == "pull_request") | select(.parameters.require_code_owner_review == true)] | length' <<<"$branch_rules")" -gt 0 ]]; then
+      echo "ok: code owner review required on $branch"
+    elif [[ "$admin" != "true" ]]; then
+      echo "optional missing: whether $branch requires code owner review (needs admin on $repo to read its branch protection)"
+      echo "  No ruleset imposes it, but classic branch protection still could, and that is the half a non-admin cannot see."
+    elif protection="$(gh api "repos/$repo/branches/$branch/protection" 2>/dev/null)" &&
+      [[ "$(jq -r '.required_pull_request_reviews.require_code_owner_reviews // false' <<<"$protection")" == "true" ]]; then
+      echo "ok: code owner review required on $branch (classic branch protection)"
+    else
+      echo "optional missing: code owner review required on $branch"
+      echo "  Turn it on in Settings, under Rules, in the pull request rule."
+      echo "  Without it CODEOWNERS only requests a reviewer and nothing waits for the answer: a pull request touching an owned path merges with no code owner approval and no record that one was expected."
+    fi
+  fi
+
   if [[ "$admin" != "true" ]]; then
     echo "optional missing: admin on $repo (its settings cannot be read from here)"
     return

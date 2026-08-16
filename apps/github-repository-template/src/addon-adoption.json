@@ -11,10 +11,71 @@
   "files": {
     "README.md": { "authored_on_adoption": true, "slots": [], "reviews": [], "external": [] },
     "SECURITY.md": { "authored_on_adoption": true, "slots": [], "reviews": [], "external": [] },
-    "CONTRIBUTING.md": { "authored_on_adoption": true, "slots": [], "reviews": [], "external": [] },
     "GOVERNANCE.md": { "authored_on_adoption": true, "slots": [], "reviews": [], "external": [] },
-    "CODEOWNERS": { "authored_on_adoption": true, "slots": [], "reviews": [], "external": [] },
     ".env.example": { "authored_on_adoption": true, "slots": [], "reviews": [], "external": [] },
+
+    "CODEOWNERS": {
+      "slots": [
+        {
+          "token": "REPLACE-CODE-OWNER",
+          "value_key": "code-owner",
+          "what": "The default owner on the `*` line: @username or @org/team-name, keeping the @. A separate question from repo-owner rather than the same one twice -- on a personal repository they are the same handle, but the owner of an organization repository is the organization, and an organization is not a valid code owner. It has to be a user or a team inside it. The named owner needs write access, and a team must also be visible and hold write access in its own right; an owner who lacks it is silently never assigned. This is the one placeholder in these addons that reports itself, because GitHub validates CODEOWNERS: an unfilled line is highlighted on the file's page and returned by `gh api repos/<owner>/<repo>/codeowners/errors`."
+        }
+      ],
+      "reviews": [
+        {
+          "section": "the per-path block below the `*` line, and the /.github/ and /CODEOWNERS lines under it, all commented out",
+          "decision": "Ownership per path is read off the repository's layout, not filled in from a token, which is why it ships commented. Leave it that way while one owner owns everything: a path rule naming the same person as the catch-all adds nothing and has to be kept true as the tree moves. When it is uncommented, every rule must sit BELOW the catch-all, because the last matching pattern wins rather than the most specific, and a path rule above `*` is silently overridden. The two self-ownership lines are GitHub's own recommendation once a second account has write access -- without them anyone can edit this file, or the workflows beside it, in the same pull request that depends on the edit."
+        },
+        {
+          "section": "the solo-maintainer paragraph at the end",
+          "decision": "GitHub does not let the author of a pull request approve it, so `* @you` plus a rule requiring code-owner review makes every pull request you open need an approval only you can give and are not allowed to give. Decide whether to enable that requirement now or keep the file as a record of ownership until a second maintainer exists, then delete the paragraph. Leaving it in ships instructions to readers as part of the file."
+        }
+      ],
+      "external": [
+        {
+          "step": "Enable \"Require review from Code Owners\" on the default branch, through a ruleset or a branch protection rule.",
+          "consequence": "Without it this file only requests a reviewer and nothing waits for the answer: a pull request touching an owned path merges with no code-owner approval and no record that one was expected. `scripts/repo-settings check` reports whether anything actually imposes it, and says so rather than guessing when the answer needs admin to read; rulesets are unavailable on a private repository on the free plan."
+        },
+        {
+          "step": "Run `scripts/repo-settings check` once the file is pushed, or `gh api repos/<owner>/<repo>/codeowners/errors` directly in a repository that does not have that script.",
+          "consequence": "The verification this file gets, and it has to be asked for: an invalid line is skipped and an owner without write access is dropped without either announcing itself in the course of a pull request, so a file that is half in force reads exactly like one that is working. The script calls that endpoint and reports the requirement above in the same run."
+        }
+      ]
+    },
+
+    "CONTRIBUTING.md": {
+      "slots": [
+        {
+          "token": "REPLACE-PROJECT-TITLE",
+          "value_key": "project-title",
+          "what": "The project name in the opening heading and welcome line. Shared with CITATION.cff, so it is the same answer asked once. It renders visibly, so an unfilled copy ships a contributing guide that welcomes people to REPLACE-PROJECT-TITLE -- the placeholder announces itself rather than promising something absent, which is why it is a slot and not a review."
+        }
+      ],
+      "reviews": [
+        {
+          "section": "the opening paragraph and the one-line project description in it",
+          "decision": "The template says how work reaches the branch, which it can, but not what the project is or who it is for, which it cannot. Rewrite the first sentence so it introduces this project rather than a generic one -- an ADOPT comment marks the spot. The rest of the intro is accurate as shipped and needs no change."
+        },
+        {
+          "section": "the Code of Conduct link in the intro",
+          "decision": "The line assumes CODE_OF_CONDUCT.md was taken alongside this file. Keep it only if that addon was adopted; delete the line otherwise, so the guide does not link a file that is not there. An ADOPT comment marks it."
+        },
+        {
+          "section": "the security carve-out under Reporting a bug",
+          "decision": "It links SECURITY.md and tells contributors to report vulnerabilities there instead of in a public issue. Keep the link only if that addon was adopted; otherwise replace it with the private channel you actually watch, or delete the paragraph. A guide that routes a vulnerability report to a channel that does not exist is the same silent failure the Code of Conduct's reporting line guards against -- worse than saying nothing, because someone relies on it at the worst moment."
+        },
+        {
+          "section": "the Ways to contribute list",
+          "decision": "Trim it to the paths this project can actually shepherd. Advertising a contribution type no maintainer has time to mentor invites work that then stalls, which reads worse than not inviting it. An ADOPT comment marks the list."
+        },
+        {
+          "section": "Setting up your environment",
+          "decision": "The section documents the scripts/ wrappers, which ship correct and stay correct. The concrete build and test commands are stack-specific and do not exist until the repository's first language manifest does -- until then scripts/check reports nothing to run, and that is honest. Fill in the stack-specific steps when a manifest lands; leave the section pointing at the wrappers until then. The wrappers are not a placeholder to replace, so this is a review rather than a slot."
+        }
+      ],
+      "external": []
+    },
 
     "CODE_OF_CONDUCT.md": {
       "slots": [
