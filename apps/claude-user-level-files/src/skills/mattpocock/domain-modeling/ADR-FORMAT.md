@@ -6,7 +6,7 @@ Create the `docs/adrs/` directory lazily — only when the first ADR is needed.
 
 ## Template
 
-`docs/adrs/0000-template.`
+Copy `docs/adrs/0000-template.md` to `NNNN-slug.md` and replace every field.
 
 ## Numbering
 

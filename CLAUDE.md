@@ -46,7 +46,7 @@ Where a new file goes, and why the boundary exists:
 - `scripts/` — every portable shell script, whether a person or a workflow runs it.
 - `tools/` — helpers that must be built before they run, one directory per program with its own manifest. The split from `scripts/` is by artifact, not by caller; a script written for CI is the first thing someone runs locally to reproduce a failure.
 - `docs/specs/` — contracts spanning apps. Single-unit specs stay with their unit.
-- `docs/adr/` — one repo-wide numbered sequence. See `docs/CLAUDE.md`.
+- `docs/adrs/` — one repo-wide numbered sequence. See `docs/CLAUDE.md`.
 
 A package under `apps/` or `libs/` whose language has no root manifest fails the run rather than passing, because every check runs from the repository root and nothing would look at it. The failure names the root manifest to add.
 

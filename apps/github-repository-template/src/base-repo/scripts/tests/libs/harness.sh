@@ -7,7 +7,7 @@
 # carrying one without the bit is skipped in silence.
 #
 # Fixtures are deliberately not here. Each suite scaffolds a different world --
-# manifests, a stubbed gh, a docs/adr directory -- and the one thing they share
+# manifests, a stubbed gh, a docs/adrs directory -- and the one thing they share
 # is how an assertion is recorded. A fixture() forced into this file would take
 # a parameter per suite and be read in three places to understand one.
 #

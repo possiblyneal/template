@@ -68,7 +68,7 @@
 # /apps/      @org/team-name
 # /libs/      @org/team-name
 # /scripts/   @org/team-name
-# /docs/adr/  @org/team-name
+# /docs/adrs/  @org/team-name
 #
 # A leading slash anchors to the repository root: `/docs/` is the top-level
 # directory and everything under it, while `docs/` with no leading slash is any

@@ -21,9 +21,9 @@ source "$repo_root/scripts/tests/libs/harness.sh"
 fixture() {
   current="$1"
   work="$(mktemp -d)"
-  mkdir -p "$work/scripts" "$work/docs/adr"
+  mkdir -p "$work/scripts" "$work/docs/adrs"
   cp "$repo_root/scripts/adr-index" "$work/scripts/"
-  cp "$repo_root/docs/adr/0000-template.md" "$work/docs/adr/"
+  cp "$repo_root/docs/adrs/0000-template.md" "$work/docs/adrs/"
 }
 
 # Writes a record. record <file> <title> <status> [superseded_by]
@@ -37,13 +37,13 @@ record() {
     echo "superseded_by: ${4:-}"
     echo "status: $3              # proposed | accepted | deprecated | superseded"
     echo "---"
-  } > "$work/docs/adr/$1"
+  } > "$work/docs/adrs/$1"
 }
 
 
 trap cleanup EXIT
 
-index="docs/adr/index.md"
+index="docs/adrs/index.md"
 
 echo "adr-index-test"
 
@@ -51,7 +51,7 @@ echo "adr-index-test"
 # comment the template ships on `status` must not become part of the value.
 fixture "records become rows"
 record 0001-use-postgresql.md "Use PostgreSQL for the Primary Datastore" accepted
-record 0002-redis-sessions.md "Store Sessions in Redis" superseded docs/adr/0005-sessions-in-postgres.md
+record 0002-redis-sessions.md "Store Sessions in Redis" superseded docs/adrs/0005-sessions-in-postgres.md
 record 0005-sessions-in-postgres.md "Move Sessions into PostgreSQL" accepted
 (cd "$work" && scripts/adr-index) > /dev/null 2>&1
 out="$(cat "$work/$index" 2>&1)"
@@ -75,7 +75,7 @@ fixture "the template's own empty commented field reads as empty"
   echo "superseded_by:                # path to the replacing ADR; set status: superseded when filling this"
   echo "status: accepted              # proposed | accepted | deprecated | superseded"
   echo "---"
-} > "$work/docs/adr/0001-a.md"
+} > "$work/docs/adrs/0001-a.md"
 out="$(cd "$work" && scripts/adr-index 2>&1)"
 if grep -qxF '| [0001](0001-a.md) | Use PostgreSQL | accepted |' "$work/$index" 2> /dev/null; then
   pass
@@ -101,7 +101,7 @@ cleanup
 # beside the records is not a record either.
 fixture "only NNNN-prefixed records are listed"
 record 0001-a.md "A Real Decision" accepted
-printf -- '---\ntitle: Notes\n---\n' > "$work/docs/adr/notes.md"
+printf -- '---\ntitle: Notes\n---\n' > "$work/docs/adrs/notes.md"
 (cd "$work" && scripts/adr-index) > /dev/null 2>&1
 if ! grep -q '0000-template' "$work/$index" && ! grep -q 'notes.md' "$work/$index"; then
   pass
@@ -168,7 +168,7 @@ cleanup
 fixture "removing the last record removes the index"
 record 0001-a.md "A" accepted
 (cd "$work" && scripts/adr-index) > /dev/null 2>&1
-rm "$work/docs/adr/0001-a.md"
+rm "$work/docs/adrs/0001-a.md"
 out="$(cd "$work" && scripts/adr-index 2>&1)"
 status=$?
 if (( status != 0 )) && [[ ! -e "$work/$index" ]]; then
@@ -181,7 +181,7 @@ cleanup
 # A typo here is invisible at review: both the right path and the wrong one
 # read as plausible, and the record claims to be settled either way.
 fixture "a replacement that does not exist is refused"
-record 0001-a.md "A" superseded docs/adr/0009-typo.md
+record 0001-a.md "A" superseded docs/adrs/0009-typo.md
 out="$(cd "$work" && scripts/adr-index 2>&1)"
 status=$?
 if (( status != 0 )) && grep -q 'which does not exist' <<<"$out" && [[ ! -e "$work/$index" ]]; then
@@ -198,19 +198,19 @@ record 0002-b.md "B" accepted
 if grep -qxF '| [0001](0001-a.md) | A | superseded by [0002](0002-b.md) |' "$work/$index"; then
   pass
 else
-  fail "a replacement named by filename alone was not resolved against docs/adr"
+  fail "a replacement named by filename alone was not resolved against docs/adrs"
 fi
 cleanup
 
 # docs/CLAUDE.md contemplates an app keeping its own adr directory once local
 # decisions would drown the repo-wide ones, so a replacement is not always a
-# sibling. The link has to climb out of docs/adr to reach it.
+# sibling. The link has to climb out of docs/adrs to reach it.
 fixture "a replacement outside the ADR directory links out"
-record 0001-a.md "A" superseded apps/billing/docs/adr/0003-c.md
-mkdir -p "$work/apps/billing/docs/adr"
-touch "$work/apps/billing/docs/adr/0003-c.md"
+record 0001-a.md "A" superseded apps/billing/docs/adrs/0003-c.md
+mkdir -p "$work/apps/billing/docs/adrs"
+touch "$work/apps/billing/docs/adrs/0003-c.md"
 (cd "$work" && scripts/adr-index) > /dev/null 2>&1
-if grep -qxF '| [0001](0001-a.md) | A | superseded by [0003](../../apps/billing/docs/adr/0003-c.md) |' "$work/$index"; then
+if grep -qxF '| [0001](0001-a.md) | A | superseded by [0003](../../apps/billing/docs/adrs/0003-c.md) |' "$work/$index"; then
   pass
 else
   fail "a replacement in another directory got a link relative to the wrong place"
@@ -233,7 +233,7 @@ fixture "nested and commented frontmatter is not read"
   echo "generated: { by: \"human:neal\", at: \"2026-08-05T14:30:00Z\" }"
   echo "status: accepted"
   echo "---"
-} > "$work/docs/adr/0001-a.md"
+} > "$work/docs/adrs/0001-a.md"
 (cd "$work" && scripts/adr-index) > /dev/null 2>&1
 if grep -qxF '| [0001](0001-a.md) | A | accepted |' "$work/$index"; then
   pass
@@ -250,7 +250,7 @@ status=$?
 if (( status == 0 )) && [[ -z "$out" ]]; then
   pass
 else
-  fail "a repository with no docs/adr directory failed the run"
+  fail "a repository with no docs/adrs directory failed the run"
 fi
 cleanup
 
@@ -263,7 +263,7 @@ if command -v pre-commit > /dev/null 2>&1 && command -v git > /dev/null 2>&1; th
   # so a change to the real config is what this asserts against.
   hook_fixture() {
     fixture "$1"
-    awk '/^  # docs\/adr\/index.md is derived/ { on = 1 }
+    awk '/^  # docs\/adrs\/index.md is derived/ { on = 1 }
          on && /^  - repo: local/ { printing = 1 }
          printing && /^  [^ ]/ && !/^  - repo: local/ && seen { exit }
          printing { print; seen = 1 }' \
@@ -288,7 +288,7 @@ if command -v pre-commit > /dev/null 2>&1 && command -v git > /dev/null 2>&1; th
     git commit -qm init
     pre-commit install
   ) > /dev/null 2>&1
-  out="$(cd "$work" && git rm -q docs/adr/0002-b.md && git commit -m "remove a record" 2>&1)"
+  out="$(cd "$work" && git rm -q docs/adrs/0002-b.md && git commit -m "remove a record" 2>&1)"
   status=$?
   if (( status != 0 )) && ! grep -q '0002-b' "$work/$index"; then
     pass
@@ -305,7 +305,7 @@ if command -v pre-commit > /dev/null 2>&1 && command -v git > /dev/null 2>&1; th
     git commit -qm init
     pre-commit install
   ) > /dev/null 2>&1
-  out="$(cd "$work" && git add docs/adr/0001-a.md && git commit -m "add a record" 2>&1)"
+  out="$(cd "$work" && git add docs/adrs/0001-a.md && git commit -m "add a record" 2>&1)"
   status=$?
   if (( status != 0 )) && [[ -f "$work/$index" ]]; then
     pass

@@ -72,9 +72,9 @@ def generation(root: Path, fixture: dict[str, object]) -> list[Check]:
         ),
         (
             "ADR template retained",
-            (candidate / "docs/adr/0000-template.md").is_file()
-            and "type: Template" in (candidate / "docs/adr/0000-template.md").read_text(encoding="utf-8"),
-            "docs/adr/0000-template.md remains a template",
+            (candidate / "docs/adrs/0000-template.md").is_file()
+            and "type: Template" in (candidate / "docs/adrs/0000-template.md").read_text(encoding="utf-8"),
+            "docs/adrs/0000-template.md remains a template",
         ),
         report_check(
             report,

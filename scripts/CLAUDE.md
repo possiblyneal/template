@@ -11,7 +11,7 @@ One flat directory, not a `ci/` and a `scripts/` split. The boundary that split 
 - `doctor`, `check`, `fix`, `clean`, `dev` — run by a person
 - `ci`, `security`, `release`, `detect` — called by `.github/workflows/`
 - `repo-settings check` — hosted GitHub state, run explicitly
-- `adr-index` — called by pre-commit; regenerates `docs/adr/index.md`
+- `adr-index` — called by pre-commit; regenerates `docs/adrs/index.md`
 - `libs/detect.sh` — the detection library, sourced by all of the above
 - `libs/precommit.sh` — which git hooks the config asks for and which this clone lacks; sourced by `doctor` and by `.openclaude/hooks/session-start.sh`
 - `tests/*-test` — assertions about the wiring itself

@@ -10,7 +10,7 @@ tags: [] # High level architectural themes only (Max 5)
 #     title: <Human-readable source title>
 generated: { by: "<actor, e.g. human:neal or agent/model>", at: "<ISO 8601 datetime, e.g. 2026-08-05T14:30:00Z>" } # update after each meaningful change
 # verified: { by: "<actor>", at: "<ISO 8601 datetime>" } # uncomment after confirming that this ADR accurately records the decision, context, alternatives, and consequences against its cited sources or other authoritative records; use a list for several
-# superseeds:                 # path to the ADR this replaces (if applicable)
+# supersedes:                 # path to the ADR this replaces (if applicable)
 superseded_by:                # path to the replacing ADR; set status: superseded when filling this
 status: proposed              # proposed | accepted | deprecated | superseded
 ---

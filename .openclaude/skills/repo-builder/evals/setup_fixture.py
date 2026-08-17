@@ -78,7 +78,7 @@ This project is not yet indexed. Replace this message with the actual index.
     write(repo, "base-repo/apps/app-name/src/.gitkeep", "")
     write(
         repo,
-        "base-repo/docs/adr/0000-template.md",
+        "base-repo/docs/adrs/0000-template.md",
         """---
 type: Template
 title: <Decision title>

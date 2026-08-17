@@ -120,7 +120,7 @@ Durable knowledge that grounds the AI in the project's specific reality and oper
 
 `TODO.md`: A plain-text to-do of backlogged, informal tasks
 
-**`docs/adr/`**: Architectural Decision Records (e.g., `0001-initial-stack.md`). Explains *why* decisions were made so the AI doesn't try to revert or fundamentally alter established systems.
+**`docs/adrs/`**: Architectural Decision Records (e.g., `0001-initial-stack.md`). Explains *why* decisions were made so the AI doesn't try to revert or fundamentally alter established systems.
 
 `docs/specs/`: Specs for contracts that span apps, such as service-to-service APIs and shared schemas. Specs for a single unit stay under `apps/<domain or deployable service>/docs/specs/`.
 
