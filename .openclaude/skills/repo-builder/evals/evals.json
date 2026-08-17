@@ -9,7 +9,7 @@
       "expectations": [
         "The candidate records the exact full template commit, repository, and base-repo subtree in .repo-template.json.",
         "apps/billing-api exists, while apps/app-name and the root CLAUDE.md bootstrap placeholders do not remain.",
-        "docs/adrs/0000-template.md remains available as an ADR template and docs/lessons.md has initialized non-placeholder metadata.",
+        "docs/adrs/0000-template.md remains available as an ADR template and docs/LESSONS.md has initialized non-placeholder metadata.",
         "The report identifies an empty root commit on main followed by a generated-content branch and pull request.",
         "No gh command, push, remote creation, or other network mutation occurs."
       ]

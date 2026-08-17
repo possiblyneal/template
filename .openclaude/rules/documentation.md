@@ -90,4 +90,4 @@ When you discover a recurring repo-specific mistake, stale doc, missing command,
 
 ## Lessons Learned
 
-For critical lessons learned regarding this repo, refer to docs/lessons.md. This file contains the "hard-won" knowledge required to avoid common provider-specific pitfalls.
+For critical lessons learned regarding this repo, refer to docs/LESSONS.md. This file contains the "hard-won" knowledge required to avoid common provider-specific pitfalls.

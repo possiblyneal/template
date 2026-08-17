@@ -67,7 +67,7 @@ def generation(root: Path, fixture: dict[str, object]) -> list[Check]:
         ),
         (
             "lessons initialized",
-            contains_none(candidate / "docs/lessons.md", ("<actor>", "<ISO 8601", "<Replace", "<Add repository")),
+            contains_none(candidate / "docs/LESSONS.md", ("<actor>", "<ISO 8601", "<Replace", "<Add repository")),
             "lessons metadata and placeholders resolved",
         ),
         (

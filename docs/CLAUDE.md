@@ -9,7 +9,7 @@ Durable knowledge about this repository: why decisions were made, what contracts
 - `adrs/` — architectural decision records, one repo-wide numbered sequence; `adrs/index.md` is generated from their frontmatter and is never hand-edited
 - `specs/` — contracts spanning apps, such as service-to-service APIs and shared schemas
 - `plans/` — plans written in plan mode, pointed here by `plansDirectory` in `.openclaude/settings.json`
-- `lessons.md` — repository-specific knowledge that prevents recurring mistakes
+- `LESSONS.md` — repository-specific knowledge that prevents recurring mistakes
 
 Specs for a single unit belong to that unit, under `apps/<name>/docs/specs/`, and change in the same commit as the code they describe.
 
@@ -27,7 +27,7 @@ Specs for a single unit belong to that unit, under `apps/<name>/docs/specs/`, an
 
 **`plans/` is tracked**, unlike the `~/.openclaude/plans` default, so a plan arrives in the diff alongside the code it describes. That is the moment a human approves the plan before the work starts.
 
-**`lessons.md` takes durable constraints only.** Not incident history, not generic advice, not facts already clear from the code. Lead with the required action, name the exact artifact or command, and link the authoritative source rather than duplicating it. The format is documented in the file.
+**`LESSONS.md` takes durable constraints only.** Not incident history, not generic advice, not facts already clear from the code. Lead with the required action, name the exact artifact or command, and link the authoritative source rather than duplicating it. The format is documented in the file.
 
 ## Work Guidance
 

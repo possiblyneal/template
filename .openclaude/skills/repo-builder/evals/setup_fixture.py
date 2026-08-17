@@ -92,7 +92,7 @@ Copy this file to create an ADR. Replace the placeholders in the copy.
     )
     write(
         repo,
-        "base-repo/docs/lessons.md",
+        "base-repo/docs/LESSONS.md",
         """---
 type: Template
 title: Repository Lessons Learned
