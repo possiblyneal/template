@@ -31,6 +31,15 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/home/neal/.agentmemory/plugin/scripts/session-start.mjs\"",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -42,6 +51,15 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/home/neal/.agentmemory/plugin/scripts/prompt-submit.mjs\"",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "Stop": [
@@ -50,6 +68,15 @@
           {
             "type": "command",
             "command": "if [ -z \"${HOME-}\" ]; then { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; else case \"${OSTYPE-}\" in msys*|cygwin*|win32*) if [ -f \"$HOME/.orca/agent-hooks/openclaude-hook.cmd\" ]; then case \"$HOME\" in *\\&*|*\\^*|*\\(*|*\\)*|*\\;*|*,*|*=*|*%*|*\\!*) if [ -f \"$SYSTEMROOT/System32/WindowsPowerShell/v1.0/powershell.exe\" ]; then \"$SYSTEMROOT/System32/WindowsPowerShell/v1.0/powershell.exe\" -NoProfile -ExecutionPolicy Bypass -EncodedCommand JABoAG8AbQBlAFAAYQB0AGgAIAA9ACAAJABlAG4AdgA6AEgATwBNAEUAIAAtAHIAZQBwAGwAYQBjAGUAIAAnAF4ALwAoAFsAQQAtAFoAYQAtAHoAXQApAC8AJwAsACAAJwAkADEAOgAvACcAOwAgACQAcwBjAHIAaQBwAHQAUABhAHQAaAAgAD0AIABKAG8AaQBuAC0AUABhAHQAaAAgACQAaABvAG0AZQBQAGEAdABoACAAJwAuAG8AcgBjAGEAXABhAGcAZQBuAHQALQBoAG8AbwBrAHMAXABvAHAAZQBuAGMAbABhAHUAZABlAC0AaABvAG8AawAuAGMAbQBkACcAOwAgAGkAZgAgACgAVABlAHMAdAAtAFAAYQB0AGgAIAAtAEwAaQB0AGUAcgBhAGwAUABhAHQAaAAgACQAcwBjAHIAaQBwAHQAUABhAHQAaAAgAC0AUABhAHQAaABUAHkAcABlACAATABlAGEAZgApACAAewAgACYAIAAkAHMAYwByAGkAcAB0AFAAYQB0AGgAOwAgAGUAeABpAHQAIAAkAEwAQQBTAFQARQBYAEkAVABDAE8ARABFACAAfQA7ACAAWwBDAG8AbgBzAG8AbABlAF0AOgA6AEkAbgAuAFIAZQBhAGQAVABvAEUAbgBkACgAKQAgAHwAIABPAHUAdAAtAE4AdQBsAGwAOwAgAGUAeABpAHQAIAAwAA==; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi ;; *) \"$HOME/.orca/agent-hooks/openclaude-hook.cmd\" ;; esac; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi ;; *) if [ -f \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -r \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -x \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ]; then /bin/sh \"$HOME/.orca/agent-hooks/openclaude-hook.sh\"; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi ;; esac; fi",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/home/neal/.agentmemory/plugin/scripts/stop.mjs\"",
             "timeout": 10
           }
         ]
@@ -75,6 +102,15 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/home/neal/.agentmemory/plugin/scripts/subagent-start.mjs\"",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "SubagentStop": [
@@ -83,6 +119,15 @@
           {
             "type": "command",
             "command": "if [ -z \"${HOME-}\" ]; then { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; else case \"${OSTYPE-}\" in msys*|cygwin*|win32*) if [ -f \"$HOME/.orca/agent-hooks/openclaude-hook.cmd\" ]; then case \"$HOME\" in *\\&*|*\\^*|*\\(*|*\\)*|*\\;*|*,*|*=*|*%*|*\\!*) if [ -f \"$SYSTEMROOT/System32/WindowsPowerShell/v1.0/powershell.exe\" ]; then \"$SYSTEMROOT/System32/WindowsPowerShell/v1.0/powershell.exe\" -NoProfile -ExecutionPolicy Bypass -EncodedCommand JABoAG8AbQBlAFAAYQB0AGgAIAA9ACAAJABlAG4AdgA6AEgATwBNAEUAIAAtAHIAZQBwAGwAYQBjAGUAIAAnAF4ALwAoAFsAQQAtAFoAYQAtAHoAXQApAC8AJwAsACAAJwAkADEAOgAvACcAOwAgACQAcwBjAHIAaQBwAHQAUABhAHQAaAAgAD0AIABKAG8AaQBuAC0AUABhAHQAaAAgACQAaABvAG0AZQBQAGEAdABoACAAJwAuAG8AcgBjAGEAXABhAGcAZQBuAHQALQBoAG8AbwBrAHMAXABvAHAAZQBuAGMAbABhAHUAZABlAC0AaABvAG8AawAuAGMAbQBkACcAOwAgAGkAZgAgACgAVABlAHMAdAAtAFAAYQB0AGgAIAAtAEwAaQB0AGUAcgBhAGwAUABhAHQAaAAgACQAcwBjAHIAaQBwAHQAUABhAHQAaAAgAC0AUABhAHQAaABUAHkAcABlACAATABlAGEAZgApACAAewAgACYAIAAkAHMAYwByAGkAcAB0AFAAYQB0AGgAOwAgAGUAeABpAHQAIAAkAEwAQQBTAFQARQBYAEkAVABDAE8ARABFACAAfQA7ACAAWwBDAG8AbgBzAG8AbABlAF0AOgA6AEkAbgAuAFIAZQBhAGQAVABvAEUAbgBkACgAKQAgAHwAIABPAHUAdAAtAE4AdQBsAGwAOwAgAGUAeABpAHQAIAAwAA==; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi ;; *) \"$HOME/.orca/agent-hooks/openclaude-hook.cmd\" ;; esac; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi ;; *) if [ -f \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -r \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -x \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ]; then /bin/sh \"$HOME/.orca/agent-hooks/openclaude-hook.sh\"; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi ;; esac; fi",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/home/neal/.agentmemory/plugin/scripts/subagent-stop.mjs\"",
             "timeout": 10
           }
         ]
@@ -109,6 +154,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|Read|Glob|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/home/neal/.agentmemory/plugin/scripts/pre-tool-use.mjs\"",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -118,6 +173,16 @@
           {
             "type": "command",
             "command": "if [ -z \"${HOME-}\" ]; then { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; else case \"${OSTYPE-}\" in msys*|cygwin*|win32*) if [ -f \"$HOME/.orca/agent-hooks/openclaude-hook.cmd\" ]; then case \"$HOME\" in *\\&*|*\\^*|*\\(*|*\\)*|*\\;*|*,*|*=*|*%*|*\\!*) if [ -f \"$SYSTEMROOT/System32/WindowsPowerShell/v1.0/powershell.exe\" ]; then \"$SYSTEMROOT/System32/WindowsPowerShell/v1.0/powershell.exe\" -NoProfile -ExecutionPolicy Bypass -EncodedCommand JABoAG8AbQBlAFAAYQB0AGgAIAA9ACAAJABlAG4AdgA6AEgATwBNAEUAIAAtAHIAZQBwAGwAYQBjAGUAIAAnAF4ALwAoAFsAQQAtAFoAYQAtAHoAXQApAC8AJwAsACAAJwAkADEAOgAvACcAOwAgACQAcwBjAHIAaQBwAHQAUABhAHQAaAAgAD0AIABKAG8AaQBuAC0AUABhAHQAaAAgACQAaABvAG0AZQBQAGEAdABoACAAJwAuAG8AcgBjAGEAXABhAGcAZQBuAHQALQBoAG8AbwBrAHMAXABvAHAAZQBuAGMAbABhAHUAZABlAC0AaABvAG8AawAuAGMAbQBkACcAOwAgAGkAZgAgACgAVABlAHMAdAAtAFAAYQB0AGgAIAAtAEwAaQB0AGUAcgBhAGwAUABhAHQAaAAgACQAcwBjAHIAaQBwAHQAUABhAHQAaAAgAC0AUABhAHQAaABUAHkAcABlACAATABlAGEAZgApACAAewAgACYAIAAkAHMAYwByAGkAcAB0AFAAYQB0AGgAOwAgAGUAeABpAHQAIAAkAEwAQQBTAFQARQBYAEkAVABDAE8ARABFACAAfQA7ACAAWwBDAG8AbgBzAG8AbABlAF0AOgA6AEkAbgAuAFIAZQBhAGQAVABvAEUAbgBkACgAKQAgAHwAIABPAHUAdAAtAE4AdQBsAGwAOwAgAGUAeABpAHQAIAAwAA==; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi ;; *) \"$HOME/.orca/agent-hooks/openclaude-hook.cmd\" ;; esac; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi ;; *) if [ -f \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -r \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -x \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ]; then /bin/sh \"$HOME/.orca/agent-hooks/openclaude-hook.sh\"; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi ;; esac; fi",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/home/neal/.agentmemory/plugin/scripts/post-tool-use.mjs\"",
             "timeout": 10
           }
         ]
@@ -133,6 +198,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/home/neal/.agentmemory/plugin/scripts/post-tool-failure.mjs\"",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PermissionRequest": [
@@ -142,6 +217,50 @@
           {
             "type": "command",
             "command": "if [ -z \"${HOME-}\" ]; then { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; else case \"${OSTYPE-}\" in msys*|cygwin*|win32*) if [ -f \"$HOME/.orca/agent-hooks/openclaude-hook.cmd\" ]; then case \"$HOME\" in *\\&*|*\\^*|*\\(*|*\\)*|*\\;*|*,*|*=*|*%*|*\\!*) if [ -f \"$SYSTEMROOT/System32/WindowsPowerShell/v1.0/powershell.exe\" ]; then \"$SYSTEMROOT/System32/WindowsPowerShell/v1.0/powershell.exe\" -NoProfile -ExecutionPolicy Bypass -EncodedCommand JABoAG8AbQBlAFAAYQB0AGgAIAA9ACAAJABlAG4AdgA6AEgATwBNAEUAIAAtAHIAZQBwAGwAYQBjAGUAIAAnAF4ALwAoAFsAQQAtAFoAYQAtAHoAXQApAC8AJwAsACAAJwAkADEAOgAvACcAOwAgACQAcwBjAHIAaQBwAHQAUABhAHQAaAAgAD0AIABKAG8AaQBuAC0AUABhAHQAaAAgACQAaABvAG0AZQBQAGEAdABoACAAJwAuAG8AcgBjAGEAXABhAGcAZQBuAHQALQBoAG8AbwBrAHMAXABvAHAAZQBuAGMAbABhAHUAZABlAC0AaABvAG8AawAuAGMAbQBkACcAOwAgAGkAZgAgACgAVABlAHMAdAAtAFAAYQB0AGgAIAAtAEwAaQB0AGUAcgBhAGwAUABhAHQAaAAgACQAcwBjAHIAaQBwAHQAUABhAHQAaAAgAC0AUABhAHQAaABUAHkAcABlACAATABlAGEAZgApACAAewAgACYAIAAkAHMAYwByAGkAcAB0AFAAYQB0AGgAOwAgAGUAeABpAHQAIAAkAEwAQQBTAFQARQBYAEkAVABDAE8ARABFACAAfQA7ACAAWwBDAG8AbgBzAG8AbABlAF0AOgA6AEkAbgAuAFIAZQBhAGQAVABvAEUAbgBkACgAKQAgAHwAIABPAHUAdAAtAE4AdQBsAGwAOwAgAGUAeABpAHQAIAAwAA==; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi ;; *) \"$HOME/.orca/agent-hooks/openclaude-hook.cmd\" ;; esac; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi ;; *) if [ -f \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -r \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ] && [ -x \"$HOME/.orca/agent-hooks/openclaude-hook.sh\" ]; then /bin/sh \"$HOME/.orca/agent-hooks/openclaude-hook.sh\"; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi ;; esac; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/home/neal/.agentmemory/plugin/scripts/pre-compact.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/home/neal/.agentmemory/plugin/scripts/notification.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/home/neal/.agentmemory/plugin/scripts/task-completed.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/home/neal/.agentmemory/plugin/scripts/session-end.mjs\"",
             "timeout": 10
           }
         ]
