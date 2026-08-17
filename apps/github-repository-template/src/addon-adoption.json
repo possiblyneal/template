@@ -9,10 +9,115 @@
     "value_key groups one answer asked once: the repository owner is spelled three ways across three files."
   ],
   "files": {
-    "README.md": { "authored_on_adoption": true, "slots": [], "reviews": [], "external": [] },
-    "SECURITY.md": { "authored_on_adoption": true, "slots": [], "reviews": [], "external": [] },
-    "GOVERNANCE.md": { "authored_on_adoption": true, "slots": [], "reviews": [], "external": [] },
     ".env.example": { "authored_on_adoption": true, "slots": [], "reviews": [], "external": [] },
+
+    "README.md": {
+      "slots": [
+        {
+          "token": "[REPLACE: project name]",
+          "value_key": "project-title",
+          "what": "The project name, in the H1 header and again in the About and Features text. Shared with CONTRIBUTING.md and CITATION.cff, so it is the same answer asked once. A visible bracket rather than a silent REPLACE- token because a README renders to humans and nothing validates it: an unfilled copy shows a giant placeholder heading, which is the loud failure this scaffold wants. If the logo already carries the name, the H1 is redundant -- the images review covers dropping one."
+        },
+        {
+          "token": "[REPLACE: one-line tagline]",
+          "value_key": "project-tagline",
+          "what": "The one-line description under the title and reused in the About opener -- what the project is, in a breath. A new answer not shared with any other addon: CONTRIBUTING and CITATION carry a name but no tagline. Visible bracket for the same reason as the title, and it renders in the most-read line of the file after the name."
+        },
+        {
+          "token": "[REPLACE: owner]",
+          "value_key": "repo-owner",
+          "what": "The repository owner in the badge image URLs, the clone URL, and the acknowledgements line. Shared with the repo-owner answer other addons ask for. An empty value gives shields.io badges that render broken and a clone command that fails -- loud, which is the point. Note the space in the token: it makes the URL malformed until replaced, so a half-finished badge cannot pass for a working one."
+        },
+        {
+          "token": "[REPLACE: repo]",
+          "value_key": "repo-name",
+          "what": "The repository name in the same badge URLs, the clone URL and directory, and the Homebrew example. Shared with the repo-name answer other addons ask for. Same loud-failure rationale as the owner token."
+        }
+      ],
+      "reviews": [
+        {
+          "section": "the logo and hero images in the centered header",
+          "decision": "The header references docs/assets/logo.svg and docs/assets/hero.png as relative paths. GitHub renders those from the repository, so until the files exist they show as broken-image icons -- a loud failure by design, paired with the external step that adds them. Either supply the images or delete the blocks and lead with the heading alone. A logo that already spells the project name makes the H1 redundant; keep one, not both. This is a review rather than a slot because the decision is keep-or-cut plus a file to author, not a token to fill."
+        },
+        {
+          "section": "the badge row under the title",
+          "decision": "The scaffold ships three shields.io badges (build, license, release). Keep only the ones backed by something real. A build badge for a workflow that does not exist, or a hardcoded version that is not the current release, renders green-and-official while being false -- the single failure mode a README must not have, because a badge reads as machine-verified fact. Delete any badge you cannot back. Once the owner/repo slots are filled the URLs resolve; an unfilled or unbacked badge renders broken or wrong, which is the loud signal to fix or cut it."
+        },
+        {
+          "section": "the About, Features, and Usage body content",
+          "decision": "Every line of prose, every feature bullet, the comparison table, and the usage example ship as placeholder text, not truth. Replace them with the project's real description, features, and a runnable example. The scaffold's job is the shape and the Markdown palette; the content is entirely the operator's. Trim the Features subsections and the comparison table to what is real, or delete them."
+        },
+        {
+          "section": "the Install and Usage command blocks",
+          "decision": "The fenced commands (brew install, git clone, build-from-source, --help) are stack-specific and, like CONTRIBUTING.md's setup section, do not exist until this repository's first language manifest does -- until then there is nothing real to run. Replace them with the project's actual install and run steps when they exist; until then say so in a line rather than shipping a command that fails. A review, not a slot, because there is no single token: the whole block is either made true or replaced."
+        },
+        {
+          "section": "the Contributing, Security, and License links",
+          "decision": "The scaffold links CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md, and LICENSE -- each a separate addon. Keep a link only if that file was actually adopted; otherwise rewrite the line to point at the channel that is real, or delete the section. A README that links a governance or security file the repository does not have is the same dead-link failure CONTRIBUTING.md's conditional links guard against. ADOPT comments mark each."
+        },
+        {
+          "section": "the table of contents",
+          "decision": "The TOC links to headings by their GitHub auto-anchor (lowercase, spaces to hyphens). It must track the headings actually kept -- renaming or deleting a section without fixing the list leaves a dead anchor that scrolls nowhere. No token marks this because the anchors are valid as shipped; it becomes a defect only when the headings change and the list does not."
+        }
+      ],
+      "external": [
+        {
+          "step": "Add the images the header references -- docs/assets/logo.svg and docs/assets/hero.png (any format is fine; match the src attributes) -- or delete the header and hero blocks that point at them.",
+          "consequence": "GitHub renders relative image paths from the repository, so until the files are committed the README opens with broken-image icons where the logo and hero should be. Nothing else reports them missing -- the render is the only check, which is why this is loud on purpose rather than a silent gap. Add real assets or remove the references so the file does not ship pointing at images that are not there."
+        }
+      ]
+    },
+
+    "SECURITY.md": {
+      "slots": [
+        {
+          "token": "[REPLACE: the private security address you monitor]",
+          "value_key": "security-contact",
+          "what": "The private channel a vulnerability report is sent to, in the Reporting a vulnerability section. A visible bracket rather than a silent REPLACE- token, on purpose and for the same reason the Code of Conduct's reporting line is: this is the one field whose failure mode is being trusted, so an unfilled copy has to announce itself in the rendered policy rather than quietly route reports into a void. Kept as a separate answer from conduct-contact even though a solo maintainer may use one address for both, because the security channel is often a different inbox or team. If the operator chooses GitHub Private Vulnerability Reporting instead of email (the review below), this token is deleted rather than filled -- the reviews and external step cover that path."
+        }
+      ],
+      "reviews": [
+        {
+          "section": "the reporting channel in Reporting a vulnerability -- email versus GitHub Private Vulnerability Reporting",
+          "decision": "The file ships with an email address as the channel and PVR as the documented alternative; the repository has to name exactly one. PVR is GitHub's recommended private channel -- a Report a vulnerability button on the Security tab that needs no shared inbox -- but it is a repository setting that must be enabled first (the external step below) and is offered on public repositories, or private ones with GitHub Advanced Security, not on a private repository on the free plan. Choose email or PVR, fill or delete the slot accordingly, rewrite the paragraph to describe the one channel that is real, and delete the other. A file that names both, or names PVR without enabling it, points reporters at a route that does not answer."
+        },
+        {
+          "section": "the acknowledgement window in What to expect",
+          "decision": "The section promises an acknowledgement within a stated window and coordinated disclosure. A window is a commitment a reporter measures the project against, so state a number only if it will be kept -- a promised three days that becomes three weeks is the same broken trust this file exists to prevent, surfacing at the worst moment. Where no window can be committed to, say so in words rather than inventing one. No token marks this because the shipped wording is already honest as a default; it becomes a defect only when someone writes a number they cannot hold."
+        },
+        {
+          "section": "the Supported versions table",
+          "decision": "The shipped table (1.x supported, < 1.0 not) is a plausible-looking guess that validates and renders while telling users which versions are maintained -- a silent failure when it is wrong, not an error any tool catches. Replace its rows with the versions this project actually supports, or, for a project with a single release line or one still before its first release, delete the table and state the policy in a sentence. This is a review rather than a slot because there is no single token to fill: the whole table is either made true or removed."
+        }
+      ],
+      "external": [
+        {
+          "step": "If GitHub Private Vulnerability Reporting is the chosen channel, enable it at Settings -> Advanced Security -> Private vulnerability reporting.",
+          "consequence": "Without it the Report a vulnerability button never appears, so a policy pointing reporters at the Security tab routes them to a form that does not exist. Nothing in this repository reports whether it is on -- unlike CODEOWNERS, no script checks this -- and it is offered on public repositories or private ones with GitHub Advanced Security, not on a private repository on the free plan, the same plan boundary scripts/repo-settings check reports for push protection and rulesets. Skip this step entirely if the channel is email."
+        }
+      ]
+    },
+
+    "GOVERNANCE.md": {
+      "slots": [
+        {
+          "token": "[REPLACE: the maintainer with final authority, as a GitHub @handle]",
+          "value_key": "maintainer",
+          "what": "The single person who holds final say, named in the opening section. A visible bracket rather than a silent REPLACE- token because nothing validates GOVERNANCE.md the way GitHub validates CODEOWNERS -- an unfilled handle renders in the published document and no tool reports it, so a human is the only check. Kept as its own answer rather than reused from code-owner or repo-owner: repo-owner may be an organization, which does not make decisions, and code-owner may be a team, which is not a single authority. This is the human who decides -- on a personal repository usually the same handle as both, on an organization repository a person inside it."
+        }
+      ],
+      "reviews": [
+        {
+          "section": "the Code of Conduct link in Conduct and disputes",
+          "decision": "The line assumes CODE_OF_CONDUCT.md was adopted alongside this file. Keep it only if that addon was taken; delete the paragraph otherwise, so governance does not route a conduct report to a document that is not there. An ADOPT comment marks it."
+        },
+        {
+          "section": "the single-authority model itself, marked in Changing this document",
+          "decision": "The template states a benevolent-dictator model: one maintainer with final say. Confirm that actually describes this project before shipping it. If decisions are already shared among several accountable people, this template is the wrong shape -- it states an authority one of them does not hold alone -- so replace it with a multi-maintainer model rather than filling it in. CNCF publishes templates for the common ones: a self-selecting maintainer council, an elected steering committee, an umbrella of subprojects. This is a review rather than a slot because the whole document is either the right shape or replaced, with no single token to fill."
+        }
+      ],
+      "external": []
+    },
 
     "CODEOWNERS": {
       "slots": [
