@@ -4,6 +4,7 @@
 
 - [Manifest](#manifest)
 - [Ownership](#ownership)
+- [Addon adoption](#addon-adoption)
 - [Generate](#generate)
 - [Update](#update)
 - [Remote action gates](#remote-action-gates)
@@ -81,6 +82,26 @@ A rename or delete of a destination-modified managed file needs semantic review.
 
 An adopted addon is one of those files, and the pair above lands on both sides of the line: `CHANGELOG.md` matches no pattern and defaults to product, while `.openclaude/rules/changelog.md` sits under a managed directory the template does not ship that path into. Neither is a deletion to reconcile. The template never having shipped a file is not the template having removed it, and an update that reads it that way deletes a record the destination chose to keep.
 
+## Addon adoption
+
+The repository addons are the public-repository files a generation holds back: `README.md`, `LICENSE`, `CONTRIBUTING.md`, `CODEOWNERS`, `SECURITY.md`, `CHANGELOG.md`, and the rest. They sit in `apps/github-repository-template/src/repository-addons/`, a sibling of the subtree rather than inside it, so no flow materializes them by copying the subtree. Each answers a condition the template cannot know has arrived, which is why it is held back rather than shipped. Adopt one by copying it from the source commit and finishing the regions below; offer it only against a condition that has actually arrived.
+
+Four of them travel as two pairs. `CONTRIBUTORS.md` and `.all-contributorsrc` are one record split across two files: the contributor table is generated from the config's `contributors` array and never parsed back out of the Markdown, so taking the Markdown alone leaves a table nothing can update, and taking the config alone leaves it writing to a file that is not there.
+
+The other pair is `CHANGELOG.md` and `.openclaude/rules/changelog.md`. The rule instructs an agent to maintain the file, so adopting the rule without the file states a contract that cannot be satisfied, and adopting the file without the rule leaves nothing keeping it current. `scripts/release` reads whichever world it lands in and says which one it took, so neither is required — but half of the pair is a defect rather than a lighter choice.
+
+Copying an addon is not adopting it. Most arrive with regions that are wrong until someone edits them, and the failure mode is silent — a Code of Conduct promising a reporting channel that does not exist, a funding button pointing at a stranger's donation page, a citation crediting `REPLACE-FAMILY-NAME`. None of these are errors to any tool; they render, validate, and publish. `apps/github-repository-template/src/addon-adoption.json` is the index of those regions, a sibling of the addons directory rather than a file inside it, and is read rather than copied — a generated repository has no `repository-addons/` for it to describe.
+
+Walk its entry for every addon taken, and for nothing else. It sorts each region by what the operator has to do:
+
+- `slots` — a literal token to replace with a value. Grep for the token; if it is absent the file was already edited or the manifest has drifted, and either is worth stopping over.
+- `reviews` — a section to read and a judgement to make, with no token to find. These are the ones a search cannot surface, which is the only reason they are written down.
+- `external` — a step outside the repository entirely, such as installing a GitHub App. Nothing in the tree reports these undone.
+
+Ask each distinct `value_key` once, not once per file. The repository owner is spelled `REPO-OWNER` in two addons and `<owner>` in a third; asking in each file's own vocabulary asks the same question three times and invites three answers. An entry flagged `authored_on_adoption` has no regions because the file ships empty — it is written, not filled, and the occasion for it is in `docs/github_repository_structure.md`.
+
+Report every region as done or as outstanding. An addon left with an unfilled slot is worse than one not taken, because the repository now carries a document that reads as finished.
+
 ## Generate
 
 1. Resolve the requested source to an exact commit and run:
@@ -98,23 +119,7 @@ An adopted addon is one of those files, and the pair above lands on both sides o
 
 2. Collect only unresolved decisions: owner/name, visibility, application boundary/name, public-repository files, release behavior, and feature availability.
 
-   The public-repository files are not invented per generation. They sit in `apps/github-repository-template/src/repository-addons/`, a sibling of the subtree and therefore never materialized by step 3 — `README.md`, `LICENSE`, `CONTRIBUTING.md`, `CODEOWNERS`, `SECURITY.md`, `CHANGELOG.md`, and the rest. Each answers a condition the template cannot know has arrived, which is why it is held back rather than shipped. Offer them against the conditions the answers to this step have established, and copy the ones taken from that same source commit.
-
-   Four of them travel as two pairs. `CONTRIBUTORS.md` and `.all-contributorsrc` are one record split across two files: the contributor table is generated from the config's `contributors` array and never parsed back out of the Markdown, so taking the Markdown alone leaves a table nothing can update, and taking the config alone leaves it writing to a file that is not there.
-
-   The other pair is `CHANGELOG.md` and `.openclaude/rules/changelog.md`. The rule instructs an agent to maintain the file, so adopting the rule without the file states a contract that cannot be satisfied, and adopting the file without the rule leaves nothing keeping it current. `scripts/release` reads whichever world it lands in and says which one it took, so neither is required — but half of the pair is a defect rather than a lighter choice.
-
-   Copying an addon is not adopting it. Most arrive with regions that are wrong until someone edits them, and the failure mode is silent — a Code of Conduct promising a reporting channel that does not exist, a funding button pointing at a stranger's donation page, a citation crediting `REPLACE-FAMILY-NAME`. None of these are errors to any tool; they render, validate, and publish. `apps/github-repository-template/src/addon-adoption.json` is the index of those regions, a sibling of the addons directory rather than a file inside it, and is read here rather than copied — a generated repository has no `repository-addons/` for it to describe.
-
-   Walk its entry for every addon taken, and for nothing else. It sorts each region by what the operator has to do:
-
-   - `slots` — a literal token to replace with a value. Grep for the token; if it is absent the file was already edited or the manifest has drifted, and either is worth stopping over.
-   - `reviews` — a section to read and a judgement to make, with no token to find. These are the ones a search cannot surface, which is the only reason they are written down.
-   - `external` — a step outside the repository entirely, such as installing a GitHub App. Nothing in the tree reports these undone.
-
-   Ask each distinct `value_key` once, not once per file. The repository owner is spelled `REPO-OWNER` in two addons and `<owner>` in a third; asking in each file's own vocabulary asks the same question three times and invites three answers. An entry flagged `authored_on_adoption` has no regions because the file ships empty — it is written, not filled, and the occasion for it is in `docs/github_repository_structure.md`.
-
-   Report every region as done or as outstanding. An addon left with an unfilled slot is worse than one not taken, because the repository now carries a document that reads as finished.
+   The public-repository files are the repository addons, held back rather than shipped and offered against the conditions the answers to this step have established. Adopt the ones taken as the [Addon adoption](#addon-adoption) section directs, from this same source commit.
 
    Do not collect stacks or package managers, and do not render a root manifest. A template cannot know the ecosystem a repository will use, and a wrong guess is worse than an absent file — the same reasoning `.github/dependabot.yml` follows in listing only the two manifests the template itself ships. A generated repository with no manifest is reported honestly by `scripts/ci` as nothing to check yet, with every check becoming required the moment one is added. The first real commit brings the manifest.
 
