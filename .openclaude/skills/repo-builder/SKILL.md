@@ -12,6 +12,7 @@ Read `references/lifecycle.md` before acting. It defines the manifest, ownership
 
 - **Generate:** The destination has no `.repo-template.json`; build it from `apps/github-repository-template/src/base-repo` at the requested template commit.
 - **Update:** The destination has `.repo-template.json`; reconcile its recorded template commit with a requested descendant commit.
+- **Adopt:** The destination has `.repo-template.json` and the request is to add a held-back repository addon whose condition has arrived, not to carry a template delta. Read the addon from the recorded commit and do not advance the pin. Distinct from update: it adds a sibling file rather than reconciling a delta, and it moves no commit.
 - If the requested operation and destination state disagree, stop and explain the mismatch.
 
 Generation into a destination that already has content is still a generate, but its collisions are decided by hand and it never resolves one by deleting. `references/lifecycle.md` carries those rules; read them before writing to a non-empty destination.
@@ -22,6 +23,7 @@ Use `scripts/preflight.py` for deterministic validation and retain its JSON in t
 
 - `generate` resolves the exact source commit and verifies its payload subtree. It never inspects the destination, so an occupied destination looks identical to an empty one; establish that yourself.
 - `update` validates provenance, repository identities, a clean destination, strict ancestry, and the bounded template delta.
+- `adopt` validates provenance, repository identities, a clean destination, and each requested addon at the recorded commit: it exists in `repository-addons/`, carries an `addon-adoption.json` entry, completes its pair, and is absent from the destination.
 
 The helper is read-only and only authorizes the next stage. Claude owns personalization and semantic reconciliation; do not replace judgment with a blind copy, overlay, or text merge. Keep provenance, ancestry, ownership, validation, and remote-action gates even when simplifying the work. Unless preflight rejects the operation or reconciliation finds a real conflict, continue through materialization, local edits, manifest advancement, and verification. A preflight report alone is not a completed build or update.
 
@@ -42,7 +44,7 @@ On update, advance `.repo-template.json` only after the candidate validates, and
 ```md
 ## Repo Builder Result
 
-- Operation: generate | update | stopped
+- Operation: generate | update | adopt | stopped
 - Pull request: <URL or "not created">
 - Template: <old full commit, or "not previously generated"> -> <target full commit>
 - Destination: <owner/repository>

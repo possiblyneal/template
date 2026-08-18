@@ -7,6 +7,7 @@
 - [Addon adoption](#addon-adoption)
 - [Generate](#generate)
 - [Update](#update)
+- [Adopt](#adopt)
 - [Remote action gates](#remote-action-gates)
 - [Failure and recovery](#failure-and-recovery)
 - [Final report](#final-report)
@@ -206,6 +207,28 @@ Ownership still governs what a later update may touch, and a hand-merged file is
 8. Create a feature branch from the current remote default branch. Commit only the bounded lifecycle diff, present the remote gate, push, and open a PR. Do not merge.
 9. Verify PR base/head, changed paths, the recorded target commit, check results, and preserved product paths.
 
+## Adopt
+
+Adopt lands a held-back repository addon into a repository that already carries `.repo-template.json`, once its condition has arrived. It reads the addon from the **recorded** commit and never advances the pin: a newer addon is an update first, then an adopt. Use it instead of update when the request adds an addon rather than carrying a template delta.
+
+1. Confirm `.repo-template.json` is present — its absence makes this a generate, not an adopt. Require a clean destination worktree and identify its origin/default branch. Do not stash or discard the user's work.
+2. Run the read-only preflight before editing:
+
+   ```bash
+   python3 <template-repo>/.openclaude/skills/repo-builder/scripts/preflight.py adopt \
+     --template-repo <template-repo> \
+     --destination <destination> \
+     --addon <destination-relative path> [--addon ...]
+   ```
+
+   It validates the manifest, both repository identities, a clean worktree, and the recorded commit, then for each addon confirms the blob exists in `repository-addons/` at that commit, carries an `addon-adoption.json` entry, completes its pair, and is absent from the destination. A half pair or an already-present addon is a hard stop. Retain the JSON.
+3. Copy each addon from the recorded commit out of `repository-addons/` — a sibling of the subtree, not inside it — into the candidate at its destination-relative path. Adopt the two pairs whole: `CONTRIBUTORS.md` with `.all-contributorsrc`, and `CHANGELOG.md` with `.openclaude/rules/changelog.md`.
+4. Run the [Addon adoption](#addon-adoption) walkthrough for every addon taken: ask each distinct `value_key` once, fill every slot, surface each review judgement, list each external step, and write any `authored_on_adoption` file. Report each region as done or outstanding.
+5. Do not advance `template.commit` and do not record the addon in the manifest. Ownership already treats a later-seen adopted file as destination-added rather than a template deletion, so a subsequent update leaves it alone.
+6. Stage the candidate and run the destination's documented checks, keeping the four outcomes distinct: pass, nothing to do, runner unavailable, never ran.
+7. Create a feature branch from the current remote default branch. Commit only the adopted addon paths, present the remote gate, push, and open a PR. Never merge.
+8. Verify PR base/head, that only addon paths changed, check results, and that product content is preserved.
+
 ## Remote action gates
 
 Repository creation, settings writes, pushes, and pull-request creation are separate outward-facing actions. Plan and validate locally first. Immediately before them, show:
@@ -237,12 +260,12 @@ Report a check by what it did, and keep the four outcomes distinct: a check that
 
 ## Final report
 
-Use this stable shape. On a generate the Reconciliation lines are empty or trivially everything, and File list carries the weight — it is the only section reporting a file the payload ships and the candidate lacks, which no check can fail on.
+Use this stable shape. On a generate the Reconciliation lines are empty or trivially everything, and File list carries the weight — it is the only section reporting a file the payload ships and the candidate lacks, which no check can fail on. On an adopt the Template line shows the recorded commit on both sides because the pin does not move, and the Addon adoption block carries the weight.
 
 ```md
 ## Repo Builder Result
 
-- Operation: generate | update | stopped
+- Operation: generate | update | adopt | stopped
 - Pull request: <URL or "not created">
 - Template: <old full commit, or "not previously generated"> -> <target full commit>
 - Destination: <owner/repository>

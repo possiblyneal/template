@@ -131,6 +131,59 @@ echo "preflight ok"
     )
 
 
+def addon_payload(repo: Path) -> None:
+    write(
+        repo,
+        "repository-addons/README.md",
+        "# [REPLACE: project name]\n\n[REPLACE: one-line tagline]\n",
+    )
+    write(
+        repo,
+        "repository-addons/CONTRIBUTORS.md",
+        "<!-- ALL-CONTRIBUTORS-LIST:START -->\n<!-- ALL-CONTRIBUTORS-LIST:END -->\n",
+    )
+    write(
+        repo,
+        "repository-addons/.all-contributorsrc",
+        '{\n  "projectOwner": "REPO-OWNER",\n  "projectName": "REPO-NAME"\n}\n',
+    )
+    index = {
+        "_about": ["Fixture addon adoption index."],
+        "files": {
+            "README.md": {
+                "slots": [
+                    {
+                        "token": "[REPLACE: project name]",
+                        "value_key": "project-title",
+                        "what": "The project name in the H1 header.",
+                    }
+                ],
+                "reviews": [],
+                "external": [],
+            },
+            "CONTRIBUTORS.md": {
+                "slots": [],
+                "reviews": [],
+                "external": [
+                    {
+                        "step": "Install the All Contributors app on the repository.",
+                        "consequence": "Without it the @allcontributors comment syntax does nothing.",
+                    }
+                ],
+            },
+            ".all-contributorsrc": {
+                "slots": [
+                    {"token": "REPO-OWNER", "value_key": "repo-owner", "what": "projectOwner."},
+                    {"token": "REPO-NAME", "value_key": "repo-name", "what": "projectName."},
+                ],
+                "reviews": [],
+                "external": [],
+            },
+        },
+    }
+    write(repo, "addon-adoption.json", json.dumps(index, indent=2) + "\n")
+
+
 def manifest(template: Path, remote: Path, old_commit: str) -> dict[str, object]:
     return {
         "schema_version": 1,
@@ -291,9 +344,27 @@ echo "check v2"
     }
 
 
+def build_adopt(root: Path) -> dict[str, object]:
+    template = root / "template"
+    init_repo(template)
+    template_payload(template)
+    addon_payload(template)
+    recorded = commit(template, "Add base repository payload and repository addons")
+
+    destination, remote = create_destination(root, template, recorded, conflict=False)
+    return {
+        "scenario": "adopt",
+        "template_repo": str(template),
+        "subtree": "base-repo",
+        "recorded_commit": recorded,
+        "destination": str(destination),
+        "destination_remote": str(remote),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("scenario", choices=("generation", "clean-update", "unrelated", "conflict"))
+    parser.add_argument("scenario", choices=("generation", "clean-update", "unrelated", "conflict", "adopt"))
     parser.add_argument("output", type=Path)
     parser.add_argument("--force", action="store_true", help="replace an existing output directory")
     args = parser.parse_args()
@@ -308,6 +379,8 @@ def main() -> int:
     try:
         if args.scenario == "generation":
             details = build_generation(output)
+        elif args.scenario == "adopt":
+            details = build_adopt(output)
         else:
             details = build_update(output, args.scenario)
     except subprocess.CalledProcessError as error:

@@ -108,5 +108,71 @@ class PreflightUnitTests(unittest.TestCase):
             )
 
 
+class AdoptTests(unittest.TestCase):
+    def _build_fixture(self, directory: str) -> dict[str, object]:
+        fixture_setup = MODULE_PATH.parents[1] / "evals" / "setup_fixture.py"
+        fixture_root = Path(directory) / "fixture"
+        subprocess.run(
+            ["python3", str(fixture_setup), "adopt", str(fixture_root)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+        )
+        return json.loads((fixture_root / "fixture.json").read_text())
+
+    def _run_adopt(self, fixture: dict[str, object], *addons: str) -> subprocess.CompletedProcess[str]:
+        addon_args: list[str] = []
+        for addon in addons:
+            addon_args.extend(["--addon", addon])
+        return subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "adopt",
+                "--template-repo",
+                fixture["template_repo"],
+                "--destination",
+                fixture["destination"],
+                *addon_args,
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+    def test_adopt_reports_addon_entry_and_leaves_destination_clean(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._build_fixture(directory)
+            result = self._run_adopt(fixture, "README.md")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["operation"], "adopt")
+            self.assertEqual(report["template"]["recorded_commit"], fixture["recorded_commit"])
+            self.assertEqual(len(report["addons"]), 1)
+            addon = report["addons"][0]
+            self.assertEqual(addon["path"], "README.md")
+            self.assertEqual(addon["adoption"]["slots"][0]["value_key"], "project-title")
+
+            destination = Path(fixture["destination"])
+            self.assertFalse(
+                subprocess.run(
+                    ["git", "status", "--porcelain"],
+                    cwd=destination,
+                    check=True,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                ).stdout
+            )
+            self.assertFalse((destination / "README.md").exists())
+
+    def test_adopt_rejects_half_a_pair(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._build_fixture(directory)
+            result = self._run_adopt(fixture, "CONTRIBUTORS.md")
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("must be adopted with its pair", result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

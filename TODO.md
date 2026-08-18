@@ -15,12 +15,3 @@ not for a project cloned from it.
   `apps/github-repository-template/src/base-repo/docs/adrs/0000-template.md`.
   (Global-skill task, parked here because this repo owns the template it
   should match.)
-- Add a standalone addon-adoption flow to `repo-builder`. Today addons are
-  offered only during `generate` (`references/lifecycle.md` step 2); a
-  repository already carrying `.repo-template.json` has no supported way to
-  adopt a held-back addon after the fact. Needs an operation in `SKILL.md`
-  beside generate/update, a lifecycle flow that reads the addon from the
-  recorded template commit and lands it as a PR, and a decision on whether
-  `preflight.py` gains an `adopt` subcommand or reuses the agent's own
-  validation. Depends on the walkthrough first being factored out of
-  generate step 2 so both flows share it.
