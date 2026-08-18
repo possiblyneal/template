@@ -46,7 +46,7 @@ Where a new file goes, and why the boundary exists:
 - `scripts/` — every portable shell script, whether a person or a workflow runs it.
 - `tools/` — helpers that must be built before they run, one directory per program with its own manifest. The split from `scripts/` is by artifact, not by caller; a script written for CI is the first thing someone runs locally to reproduce a failure.
 - `docs/specs/` — contracts spanning apps. Single-unit specs stay with their unit.
-- `docs/adr/` — one repo-wide numbered sequence. See `docs/CLAUDE.md`.
+- `docs/adrs/` — one repo-wide numbered sequence. See `docs/CLAUDE.md`.
 
 A package under `apps/` or `libs/` whose language has no root manifest fails the run rather than passing, because every check runs from the repository root and nothing would look at it. The failure names the root manifest to add.
 
@@ -57,7 +57,7 @@ Some guarantees these files make are only half-kept by the files themselves. Cur
 - Dependabot alerts and security updates: **enabled**. `scripts/security` fails a pull request introducing a CVE; these open the pull request that resolves it.
 - Push protection and branch rulesets: **unavailable** on this plan. So `no-commit-to-branch` in each clone is the only thing keeping commits off `main`, and gitleaks in `.pre-commit-config.yaml` is the only check seeing a secret before it is pushed.
 - Squash merging: **disabled**. This is what makes the commit-message rules hold. A squashed commit takes its subject from the pull request title, written in GitHub's web interface where no hook can reach it, so leaving it enabled puts every rule in `.commitlintrc.yaml` one click away from being bypassed. `scripts/repo-settings check` reports it; unlike the two below, it is offered on every plan.
-- Code scanning: **unavailable**, so `.github/workflows/codeql.yml` fails its `scanning` job in seconds rather than analyzing for an hour and dying at the upload step. That red check is accurate — this repository has no static analysis coverage — and it clears itself when the repository goes public. Confirmed nothing else holds it back: the same workflow analyzed three languages and uploaded cleanly on a public repository generated from this payload. Read `docs/lessons.md` before making it green any other way.
+- Code scanning: **unavailable**, so `.github/workflows/codeql.yml` fails its `scanning` job in seconds rather than analyzing for an hour and dying at the upload step. That red check is accurate — this repository has no static analysis coverage — and it clears itself when the repository goes public. Confirmed nothing else holds it back: the same workflow analyzed three languages and uploaded cleanly on a public repository generated from this payload. Read `docs/LESSONS.md` before making it green any other way.
 - GitHub Actions: **verified**. `ci.yml` and `security.yml` pass on `main`. `codeql.yml` is red at `Code scanning enabled`, by design, until this repository is public.
 
 A generated repository is where a guarantee unavailable on this plan can actually be observed. Push protection, branch rulesets, and code scanning are all free on a public repository and unavailable on a private one here, so `scripts/repo-settings check` reports `not offered for the plan` against this repository whether or not the check works. Build a public repository from the payload to tell those apart.

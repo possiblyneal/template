@@ -123,8 +123,8 @@ An adopted addon is one of those files, and the pair above lands on both sides o
 4. Personalize the candidate:
    - move `apps/app-name` to the kebab-case application name (do not copy it), verify the old path is absent, and update every reference;
    - replace the root `CLAUDE.md` placeholder section and bootstrap Child Index with repository-specific content;
-   - initialize `docs/lessons.md` metadata and remove generation placeholders while retaining its durable writing guidance;
-   - keep `docs/adr/0000-template.md` as the reusable ADR template;
+   - initialize `docs/LESSONS.md` metadata and remove generation placeholders while retaining its durable writing guidance;
+   - keep `docs/adrs/0000-template.md` as the reusable ADR template;
    - create `.repo-template.json`;
    - render visibility and feature choices honestly. Keep `codeql.yml` for a private repository rather than omitting it. Its `scanning` job fails in seconds naming the reason, which is accurate — the repository has no static analysis coverage — and it turns green by itself when the repository goes public, where omitting the file leaves nothing to restore and nothing to say so. Report that red check as an expected initial state when handing the repository over; do not describe it as a passing build. Record an omission under `features` only when deliberately stripping the workflow, which is now a choice rather than the private-repository default.
 5. Initialize Git locally with no remote and run the candidate's documented checks. Install the local pre-commit hook if the candidate requires it. Report skipped or unavailable checks; do not call them passes.

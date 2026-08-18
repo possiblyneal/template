@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Rewrites docs/adr/index.md from the frontmatter of the decision records
+# Rewrites docs/adrs/index.md from the frontmatter of the decision records
 # beside it. The file is derived: every value in it is already authoritative in
 # an ADR, so editing it by hand loses the edit on the next run.
 #
@@ -17,7 +17,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-adr_dir="docs/adr"
+adr_dir="docs/adrs"
 index="$adr_dir/index.md"
 
 [[ -d "$adr_dir" ]] || exit 0

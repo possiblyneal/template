@@ -120,11 +120,11 @@ Durable knowledge that grounds the AI in the project's specific reality and oper
 
 `TODO.md`: A plain-text to-do of backlogged, informal tasks
 
-**`docs/adr/`**: Architectural Decision Records (e.g., `0001-initial-stack.md`). Explains *why* decisions were made so the AI doesn't try to revert or fundamentally alter established systems.
+**`docs/adrs/`**: Architectural Decision Records (e.g., `0001-initial-stack.md`). Explains *why* decisions were made so the AI doesn't try to revert or fundamentally alter established systems.
 
 `docs/specs/`: Specs for contracts that span apps, such as service-to-service APIs and shared schemas. Specs for a single unit stay under `apps/<domain or deployable service>/docs/specs/`.
 
-`docs/lessons.md`: Hard-won knowledge about this repository specifically: the provider quirks and recurring mistakes an agent would otherwise rediscover.
+`docs/LESSONS.md`: Hard-won knowledge about this repository specifically: the provider quirks and recurring mistakes an agent would otherwise rediscover.
 
 `docs/plans/`: Plans written in plan mode, pointed here by `plansDirectory` in `.openclaude/settings.json`. The default is `~/.openclaude/plans`, outside the repository, where a plan is invisible to review and disappears with the machine. Under `docs/` it arrives in the diff alongside the code it describes — the point when a human approves the plan before the work starts.
 
