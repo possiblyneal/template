@@ -8,7 +8,7 @@ Owns the payload copied into every repository generated from this template, and 
 
 - `src/base-repo/` — the payload. Every file here is destined for other repositories.
 - `src/repository-addons/` — files held back from the payload because each answers a condition the template cannot know has arrived. Not copied during generation; added by hand when the occasion does arrive. `docs/github_repository_structure.md` groups them under "Additions by Occasion" and names the condition for each.
-- `src/addon-adoption.json` — which regions of each addon must be edited before that addon is safe to ship: `slots` (a token to replace), `reviews` (a section demanding a judgement, with no token to grep for), `external` (a step outside the repository). Read by the `repo-builder` skill at step 2 of `.openclaude/skills/repo-builder/references/lifecycle.md`.
+- `src/addon-adoption.json` — which regions of each addon must be edited before that addon is safe to ship: `slots` (a token to replace), `reviews` (a section demanding a judgement, with no token to grep for), `external` (a step outside the repository). Read by the `repo-builder` skill's Addon adoption walkthrough in `.openclaude/skills/repo-builder/references/lifecycle.md`.
 - `docs/github_repository_structure.md` — Structure and bill of materials for this repo, and briefly what each file/folder is for.
 - `docs/choosing_a_language.md` — evidence on language choice for AI-assisted work.
 
