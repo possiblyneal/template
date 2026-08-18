@@ -277,6 +277,68 @@ def origin_identity(destination: Path) -> str:
     return normalize_repository_identity(result.stdout.strip())
 
 
+@dataclass(frozen=True)
+class Provenance:
+    destination: Path
+    template_repo: Path
+    recorded: str
+    subtree: str
+    rules: list[OwnershipRule]
+    template_identity: str
+    destination_identity: str
+    destination_config: dict[str, object]
+
+
+def load_provenance(arguments: argparse.Namespace) -> Provenance:
+    """Load and verify the shared manifest provenance for update and adopt.
+
+    A clean destination worktree, a schema-valid manifest, the recorded template
+    commit and its subtree, and both recorded identities matching reality.
+    """
+    destination = require_git_repository(arguments.destination, "destination")
+    ensure_clean(destination)
+    manifest_path = destination / arguments.manifest
+    manifest, rules = validate_manifest(manifest_path)
+    template = require_mapping(manifest, "template", "manifest")
+    destination_config = require_mapping(manifest, "destination", "manifest")
+
+    template_repo = require_git_repository(arguments.template_repo, "template repository")
+    recorded = resolve_commit(template_repo, require_string(template, "commit", "manifest.template"))
+    subtree = normalize_relative_path(template.get("subtree"), "manifest.template.subtree")
+    require_subtree(template_repo, recorded, subtree)
+
+    recorded_template_identity = normalize_repository_identity(
+        require_string(template, "repository", "manifest.template")
+    )
+    actual_template_identity = repository_identity(template_repo)
+    if recorded_template_identity != actual_template_identity:
+        raise PreflightError(
+            "template repository identity differs from the manifest: "
+            f"recorded {recorded_template_identity!r}, actual {actual_template_identity!r}"
+        )
+
+    recorded_destination_identity = normalize_repository_identity(
+        require_string(destination_config, "repository", "manifest.destination")
+    )
+    actual_destination_identity = origin_identity(destination)
+    if recorded_destination_identity != actual_destination_identity:
+        raise PreflightError(
+            "destination origin differs from the manifest: "
+            f"recorded {recorded_destination_identity!r}, actual {actual_destination_identity!r}"
+        )
+
+    return Provenance(
+        destination=destination,
+        template_repo=template_repo,
+        recorded=recorded,
+        subtree=subtree,
+        rules=rules,
+        template_identity=recorded_template_identity,
+        destination_identity=actual_destination_identity,
+        destination_config=destination_config,
+    )
+
+
 def generation_preflight(arguments: argparse.Namespace) -> dict[str, object]:
     template_repo = require_git_repository(arguments.template_repo, "template repository")
     target = resolve_commit(template_repo, arguments.target)
@@ -298,39 +360,16 @@ def generation_preflight(arguments: argparse.Namespace) -> dict[str, object]:
 
 
 def update_preflight(arguments: argparse.Namespace) -> dict[str, object]:
-    destination = require_git_repository(arguments.destination, "destination")
-    ensure_clean(destination)
-    manifest_path = destination / arguments.manifest
-    manifest, rules = validate_manifest(manifest_path)
-    template = require_mapping(manifest, "template", "manifest")
-    destination_config = require_mapping(manifest, "destination", "manifest")
+    provenance = load_provenance(arguments)
+    destination = provenance.destination
+    template_repo = provenance.template_repo
+    recorded = provenance.recorded
+    subtree = provenance.subtree
+    rules = provenance.rules
+    destination_config = provenance.destination_config
 
-    template_repo = require_git_repository(arguments.template_repo, "template repository")
-    recorded = resolve_commit(template_repo, require_string(template, "commit", "manifest.template"))
     target = resolve_commit(template_repo, arguments.target)
-    subtree = normalize_relative_path(template.get("subtree"), "manifest.template.subtree")
-    require_subtree(template_repo, recorded, subtree)
     require_subtree(template_repo, target, subtree)
-
-    recorded_template_identity = normalize_repository_identity(
-        require_string(template, "repository", "manifest.template")
-    )
-    actual_template_identity = repository_identity(template_repo)
-    if recorded_template_identity != actual_template_identity:
-        raise PreflightError(
-            "template repository identity differs from the manifest: "
-            f"recorded {recorded_template_identity!r}, actual {actual_template_identity!r}"
-        )
-
-    recorded_destination_identity = normalize_repository_identity(
-        require_string(destination_config, "repository", "manifest.destination")
-    )
-    actual_destination_identity = origin_identity(destination)
-    if recorded_destination_identity != actual_destination_identity:
-        raise PreflightError(
-            "destination origin differs from the manifest: "
-            f"recorded {recorded_destination_identity!r}, actual {actual_destination_identity!r}"
-        )
 
     ancestry = run_git(template_repo, "merge-base", "--is-ancestor", recorded, target, check=False)
     if ancestry.returncode == 1:
@@ -357,7 +396,7 @@ def update_preflight(arguments: argparse.Namespace) -> dict[str, object]:
     return {
         "operation": "update",
         "template": {
-            "repository": recorded_template_identity,
+            "repository": provenance.template_identity,
             "subtree": subtree,
             "recorded_commit": recorded,
             "target_commit": target,
@@ -365,7 +404,7 @@ def update_preflight(arguments: argparse.Namespace) -> dict[str, object]:
         },
         "destination": {
             "path": str(destination),
-            "repository": actual_destination_identity,
+            "repository": provenance.destination_identity,
             "default_branch": require_string(destination_config, "default_branch", "manifest.destination"),
             "clean": True,
         },
@@ -380,37 +419,13 @@ def update_preflight(arguments: argparse.Namespace) -> dict[str, object]:
 
 
 def adopt_preflight(arguments: argparse.Namespace) -> dict[str, object]:
-    destination = require_git_repository(arguments.destination, "destination")
-    ensure_clean(destination)
-    manifest_path = destination / arguments.manifest
-    manifest, rules = validate_manifest(manifest_path)
-    template = require_mapping(manifest, "template", "manifest")
-    destination_config = require_mapping(manifest, "destination", "manifest")
-
-    template_repo = require_git_repository(arguments.template_repo, "template repository")
-    recorded = resolve_commit(template_repo, require_string(template, "commit", "manifest.template"))
-    subtree = normalize_relative_path(template.get("subtree"), "manifest.template.subtree")
-    require_subtree(template_repo, recorded, subtree)
-
-    recorded_template_identity = normalize_repository_identity(
-        require_string(template, "repository", "manifest.template")
-    )
-    actual_template_identity = repository_identity(template_repo)
-    if recorded_template_identity != actual_template_identity:
-        raise PreflightError(
-            "template repository identity differs from the manifest: "
-            f"recorded {recorded_template_identity!r}, actual {actual_template_identity!r}"
-        )
-
-    recorded_destination_identity = normalize_repository_identity(
-        require_string(destination_config, "repository", "manifest.destination")
-    )
-    actual_destination_identity = origin_identity(destination)
-    if recorded_destination_identity != actual_destination_identity:
-        raise PreflightError(
-            "destination origin differs from the manifest: "
-            f"recorded {recorded_destination_identity!r}, actual {actual_destination_identity!r}"
-        )
+    provenance = load_provenance(arguments)
+    destination = provenance.destination
+    template_repo = provenance.template_repo
+    recorded = provenance.recorded
+    subtree = provenance.subtree
+    rules = provenance.rules
+    destination_config = provenance.destination_config
 
     requested: list[str] = []
     seen: set[str] = set()
@@ -436,7 +451,6 @@ def adopt_preflight(arguments: argparse.Namespace) -> dict[str, object]:
                 "path": addon,
                 "ownership": mode,
                 "ownership_rule": rule,
-                "already_present": False,
                 "adoption": entry,
             }
         )
@@ -444,13 +458,13 @@ def adopt_preflight(arguments: argparse.Namespace) -> dict[str, object]:
     return {
         "operation": "adopt",
         "template": {
-            "repository": recorded_template_identity,
+            "repository": provenance.template_identity,
             "subtree": subtree,
             "recorded_commit": recorded,
         },
         "destination": {
             "path": str(destination),
-            "repository": actual_destination_identity,
+            "repository": provenance.destination_identity,
             "default_branch": require_string(destination_config, "default_branch", "manifest.destination"),
             "clean": True,
         },

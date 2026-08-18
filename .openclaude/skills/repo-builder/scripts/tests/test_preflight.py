@@ -151,7 +151,6 @@ class AdoptTests(unittest.TestCase):
             self.assertEqual(len(report["addons"]), 1)
             addon = report["addons"][0]
             self.assertEqual(addon["path"], "README.md")
-            self.assertFalse(addon["already_present"])
             self.assertEqual(addon["adoption"]["slots"][0]["value_key"], "project-title")
 
             destination = Path(fixture["destination"])
