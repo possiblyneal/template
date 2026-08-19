@@ -43,10 +43,10 @@ trap cleanup EXIT
 
 echo "precommit-hooks-test"
 
-fixture "flow style is read" 'default_install_hook_types: [pre-commit, commit-msg]
+fixture "flow style is read" 'default_install_hook_types: [pre-commit, commit-msg, pre-push]
 repos: []'
 got="$(types_of)"
-if [[ "$got" == "pre-commit commit-msg" ]]; then
+if [[ "$got" == "pre-commit commit-msg pre-push" ]]; then
   pass
 else
   fail "flow style read as '$got'"
@@ -59,9 +59,10 @@ cleanup
 fixture "block style is read" 'default_install_hook_types:
   - pre-commit
   - commit-msg
+  - pre-push
 repos: []'
 got="$(types_of)"
-if [[ "$got" == "pre-commit commit-msg" ]]; then
+if [[ "$got" == "pre-commit commit-msg pre-push" ]]; then
   pass
 else
   fail "block style read as '$got', so the commit-msg hook would never be required"
@@ -72,10 +73,10 @@ cleanup
 # unchanged. Reading only the first line here yields half a list, which is the
 # same silence as reading none of it.
 fixture "a flow list wrapped across lines is read whole" 'default_install_hook_types: [pre-commit,
-  commit-msg]
+  commit-msg, pre-push]
 repos: []'
 got="$(types_of)"
-if [[ "$got" == "pre-commit commit-msg" ]]; then
+if [[ "$got" == "pre-commit commit-msg pre-push" ]]; then
   pass
 else
   fail "a wrapped flow list read as '$got'"
@@ -94,10 +95,10 @@ else
 fi
 cleanup
 
-fixture "quotes and trailing comments are tolerated" 'default_install_hook_types: ["pre-commit", "commit-msg"]  # both
+fixture "quotes and trailing comments are tolerated" 'default_install_hook_types: ["pre-commit", "commit-msg", "pre-push"]  # all three
 repos: []'
 got="$(types_of)"
-if [[ "$got" == "pre-commit commit-msg" ]]; then
+if [[ "$got" == "pre-commit commit-msg pre-push" ]]; then
   pass
 else
   fail "a quoted list with a comment read as '$got'"
@@ -128,9 +129,10 @@ else
 fi
 cleanup
 
-# The end-to-end answer both callers actually use: config asks for two hooks,
-# the clone has one, so one is reported.
-fixture "an installed hook is not reported missing" 'default_install_hook_types: [pre-commit, commit-msg]
+# The end-to-end answer both callers actually use: config asks for all three
+# hooks, the clone has the ordinary pre-commit hook, and the two stage-specific
+# hooks are still reported.
+fixture "stage-specific hooks are reported missing" 'default_install_hook_types: [pre-commit, commit-msg, pre-push]
 repos: []'
 (
   cd "$work" || exit 1
@@ -138,10 +140,10 @@ repos: []'
   touch .git/hooks/pre-commit
 ) > /dev/null 2>&1
 got="$(cd "$work" && pre_commit_hooks_missing .pre-commit-config.yaml)"
-if [[ "$got" == "commit-msg" ]]; then
+if [[ "$got" == $'commit-msg\npre-push' ]]; then
   pass
 else
-  fail "missing hooks reported as '$got', expected commit-msg alone"
+  fail "missing hooks reported as '$got', expected commit-msg and pre-push"
 fi
 cleanup
 
