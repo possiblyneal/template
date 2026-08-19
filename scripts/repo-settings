@@ -134,7 +134,8 @@ check_github_settings() {
   if ! rulesets="$(gh api "repos/$repo/rulesets" 2>/dev/null)"; then
     echo "optional missing: branch rulesets (not offered for $repo's plan and visibility)"
     echo "  They need GitHub Pro on a private repository, and are free on a public one."
-    echo "  Until then no-commit-to-branch in this clone is the only thing keeping commits off main."
+    echo "  Until then the local hooks are all of it: no-commit-to-branch refuses a commit made on main,"
+    echo "  and scripts/protect-branch refuses a push whose destination is main."
     return
   fi
 
@@ -143,7 +144,8 @@ check_github_settings() {
   else
     echo "optional missing: an active branch ruleset on $repo"
     echo "  Add one in Settings, under Rules, requiring a pull request and the CI check."
-    echo "  Without it the pre-commit hook is the only thing keeping commits off main, and a fresh clone does not have it."
+    echo "  Without it the local hooks are all of it -- no-commit-to-branch on commit, scripts/protect-branch"
+    echo "  on push -- and a fresh clone has neither until the hooks are installed."
   fi
 }
 
