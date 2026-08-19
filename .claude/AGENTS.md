@@ -19,7 +19,9 @@ The agent's operating parameters for this repository: hooks wired to tool events
 
 **A session must not grant itself new permissions.** `hooks/block-config-change.sh` blocks mid-session reloads of settings and skills. The edit stays on disk as a reviewable diff and applies next session. Without it, a session editing its own settings gets the new permissions immediately, unwinding the ask gates from inside — the same path a malicious skill file would take.
 
-**Only rules that restrict belong in `settings.json`.** Permission rules merge across scopes and a deny rule cannot be lifted downstream, so a rule here binds every clone. Granting capability from a repository-controlled file is the shape behind past trust-dialog bypasses.
+**A rule here binds every clone.** Permission rules merge across scopes and a deny or ask rule cannot be lifted downstream, so restriction is what this file is for. The `allow` list is the bounded exception and stays that way: a project allow rule applies only once the workspace trust dialog is accepted, and granting capability from a repository-controlled file is the shape behind past trust-dialog bypasses.
+
+**Secrets are denied, not asked.** A deny `Read` rule also blocks the edit tools on the same path and drops it from search and file discovery, which an `ask` rule does not; the patterns are `//`-anchored so they hold outside the repository too. Deny cannot carry exceptions, so the `.env` variants stay enumerated rather than globbed — `.env.*` would take `src/repository-addons/.env.example` with it.
 
 **Omit a key rather than blanking it when an empty value would be invalid**, because a settings file failing validation is rejected whole rather than partially applied. Enum strings, minimum-length strings, and objects with required sub-fields must stay absent until they hold a real value.
 
