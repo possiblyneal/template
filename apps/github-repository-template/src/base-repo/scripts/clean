@@ -16,7 +16,7 @@ prune=( -name .git -o -name node_modules -o -name .build )
 
 find . \( "${prune[@]}" \) -prune -o \
   -type d \( -name dist -o -name build -o -name coverage -o -name __pycache__ \
-  -o -name .pytest_cache -o -name .ruff_cache -o -name .mypy_cache \) \
+  -o -name .pytest_cache -o -name .ruff_cache \) \
   -exec rm -rf {} +
 
 # rm rather than -delete, which implies -depth and so disables the prune above.

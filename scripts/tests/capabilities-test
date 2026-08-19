@@ -111,7 +111,7 @@ cleanup
 # --- the regression this file exists for -------------------------------------
 
 # A Python CLI that gains a JavaScript UI. Every check used to stop at its first
-# match, so package.json arriving meant pytest, ruff, and mypy silently stopped
+# match, so package.json arriving meant pytest, ruff, and ty silently stopped
 # running while CI stayed green.
 fixture "python + node"
 printf '[project]\nname = "p"\nversion = "0.1.0"\n' > pyproject.toml
