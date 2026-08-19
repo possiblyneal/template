@@ -147,6 +147,14 @@ Report every region as done or as outstanding. An addon left with an unfilled sl
 
     Adopting `CODEOWNERS` changes what "appropriate" means here. It is the only addon finished by a repository setting rather than by an edit: without a rule requiring code owner review, the file requests a reviewer and nothing waits for the answer. Enabling it is not the safe default it looks like, for the reason its manifest entry gives — ask.
 
+    Automatic head branch deletion is offered rather than set. Unlike everything else in this step it is a preference about branch hygiene rather than a guarantee the payload depends on, and it is the only one here offered on every plan and visibility — so ask, and record the answer either way rather than letting a default decide. Left off, merged branches accumulate until someone prunes them by hand; nothing breaks and nothing reports it. Turned on, GitHub deletes the head ref at merge and the remote branch list stays the set of work in flight.
+
+    ```bash
+    gh api -X PATCH repos/<owner>/<name> -f delete_branch_on_merge=true
+    ```
+
+    It is a checkbox rather than a workflow on purpose — deleting the head ref from Actions means a `pull_request: closed` job holding `contents: write` to reimplement something GitHub already offers.
+
     Read the result back with the repository's own `scripts/repo-settings check` rather than hand-rolling `gh api` calls. It already separates the two ways a setting reads as absent: `security_and_analysis` is missing both for a non-admin and for a plan that does not offer the feature, and it checks `.permissions.admin` to tell those apart. A hand-rolled check that misses this reports a plan limitation as a disabled setting.
 
     Its output is the evidence for the settings section of the report, and `not offered for the plan` is a distinct outcome from disabled — do not collapse them.
@@ -238,7 +246,7 @@ Repository creation, settings writes, pushes, and pull-request creation are sepa
 Remote execution
 - create: owner/repository (private, uninitialized)
 - push: empty root commit -> main
-- settings: Dependabot alerts/updates; push protection if available; main ruleset
+- settings: Dependabot alerts/updates; push protection if available; main ruleset; automatic head branch deletion if chosen
 - push: repo-builder/<short-target> -> generated content or template update
 - open PR: repo-builder/<short-target> -> main
 ```
