@@ -105,6 +105,19 @@ check_github_settings() {
     echo "ok: squash merging off"
   fi
 
+  # A merged branch left behind is only clutter, but it is clutter every
+  # generated repository accumulates, and the fix is a checkbox rather than a
+  # workflow: deleting the head branch from Actions costs `contents: write` on
+  # a `pull_request: closed` trigger to reimplement what GitHub already does.
+  # Offered on every plan, like squash merging above.
+  if [[ "$(jq -r '.delete_branch_on_merge // false' <<<"$json")" == "true" ]]; then
+    echo "ok: merged head branches deleted"
+  else
+    echo "optional missing: automatic head branch deletion on $repo"
+    echo "  Turn it on in Settings, under Pull Requests."
+    echo "  Nothing is lost by leaving it off; merged branches simply accumulate until someone prunes them by hand."
+  fi
+
   case "$(jq -r '.security_and_analysis.secret_scanning_push_protection.status // "unavailable"' <<<"$json")" in
     enabled) echo "ok: push protection" ;;
     unavailable)
