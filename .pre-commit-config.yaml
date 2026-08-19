@@ -96,6 +96,25 @@ repos:
         files: (^|/)CHANGELOG\.md$
         stages: [pre-push]
 
+      # `no-commit-to-branch` above refuses a commit made while HEAD is main,
+      # which is not the way main actually gets written: `git push origin
+      # HEAD:main` from a feature branch never makes HEAD main and so never
+      # reaches it. This reads the destination ref instead, the only place that
+      # push is visible. It matters most where push protection and branch
+      # rulesets are not offered by the plan, which is every private repository
+      # generated from this template.
+      #
+      # always_run with pass_filenames false because the destination is not a
+      # path: pre-commit hands it over as PRE_COMMIT_REMOTE_BRANCH, and a
+      # filter would decide whether to check the push by which files it carries.
+      - id: protect-branch
+        name: refuse a push to a protected branch
+        entry: scripts/protect-branch
+        language: script
+        always_run: true
+        pass_filenames: false
+        stages: [pre-push]
+
       # These hooks let Git remove only stale administrative records for linked
       # worktrees whose directories have already disappeared. They never remove
       # a live worktree directory, and SessionStart reports candidates without

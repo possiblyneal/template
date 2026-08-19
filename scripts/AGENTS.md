@@ -13,6 +13,7 @@ One flat directory, not a `ci/` and a `scripts/` split. The boundary that split 
 - `repo-settings check` — hosted GitHub state, run explicitly
 - `adr-index` — called by pre-commit; regenerates `docs/adrs/index.md`
 - `changelog-check` — called by pre-commit at `pre-push`, and by `ci.yml` over a pull-request range; validates `CHANGELOG.md` structure
+- `protect-branch` — called by pre-commit at `pre-push`; refuses a push whose destination ref is `main` or `master`
 - `worktree-cleanup` — called by pre-commit at `post-checkout` and `post-merge`, and by the SessionStart hook with `--report`; prunes Git's records for worktrees whose directories are gone
 - `libs/detect.sh` — the detection library, sourced by all of the above
 - `libs/precommit.sh` — which git hooks the config asks for and which this clone lacks; sourced by `doctor` and by `.claude/hooks/session-start.sh`
@@ -44,6 +45,10 @@ The config path is a parameter to both functions; the clone is the working direc
 Two things about its wiring are load-bearing and were each a bug first. It self-reports the rewrite with a non-zero exit rather than relying on pre-commit's modified-files detection, which does not fire the first time the index is created: the file is untracked then, so pre-commit sees no change and the commit lands without it. And it runs with `always_run` and no `files:` filter, because that filter reads the staged paths, which exclude deletions — `git rm` of a record would skip the hook on the one commit that made the index stale. `tests/adr-index-test` drives a real repository through pre-commit for both.
 
 **`changelog-check` validates only the paths it is given, and runs at `pre-push` rather than `pre-commit`.** It is a structural check on Keep a Changelog form — heading order, the six categories, a link reference per version — not a judgment about whether a change owed an entry. A repository with no `CHANGELOG.md` never invokes it, because pre-commit passes it the changed paths and there are none; that is what lets the same hook ship to a generated repository that has not adopted the addon yet. It sits at `pre-push` because a broken entry is worth catching before review and not worth failing every commit on a work-in-progress section, and CI re-runs it across the whole pull-request range so a fixup commit cannot hide a bad entry an earlier commit introduced.
+
+**`protect-branch` reads the push destination, not the current branch.** That is the whole reason it exists: `no-commit-to-branch` fires only while HEAD *is* the protected branch, so `git push origin HEAD:main` from a feature branch never reaches it, and on a plan without push protection or branch rulesets nothing hosted refuses it either. A permission rule cannot cover it — an ask rule matches a command prefix and the destination is an argument.
+
+Two limits come from pre-commit's own pre-push parser rather than from the script, and both are deliberately left to the server. It exports only the first qualifying ref of a multi-ref push, and it exports nothing at all when the local sha is all zeros, which is every `git push --delete`. So the script exits 0 and prints nothing when `PRE_COMMIT_REMOTE_BRANCH` is unset: failing closed there would refuse every routine deletion of a feature branch, and GitHub already refuses to delete the branch its HEAD points at. A pre-push guard that fires on ordinary work gets bypassed with `--no-verify`, and then it guards nothing.
 
 **`worktree-cleanup` prunes metadata and never deletes a directory.** It calls `git worktree prune`, which drops Git's administrative record for a linked worktree whose directory has already disappeared; a live worktree is untouched by construction rather than by a guard. It exits early when the dry run reports nothing, so the ordinary checkout costs one `git` invocation and prints nothing.
 
@@ -81,6 +86,7 @@ Changes here almost always belong in `apps/github-repository-template/src/base-r
 - `scripts/tests/session-start-test` — the hook reports stale metadata without pruning it, and still prints the session context when `scripts/worktree-cleanup` is absent
 - `scripts/tests/changelog-check-test` — each structural rule rejects what it is meant to reject and the shipped addon changelog passes. Needs neither `pre-commit` nor the network
 - `scripts/tests/precommit-hooks-test` — `libs/precommit.sh` reads the hook list out of each YAML list form, and reports exactly the hooks a clone lacks. Needs neither `pre-commit` nor the network, so it always runs — which is the point, since this is the half of the wiring that fails silently
-- `scripts/check` runs all eight before the checks they guard; `ci.yml` runs them before toolchain setup
+- `scripts/tests/protect-branch-test` — `main` and `master` are refused whether the destination arrives bare or fully qualified, a branch merely containing or ending in `main` is let through, and an unset destination is silent. Reads one environment variable and writes no files, so it needs neither `git` nor the network
+- `scripts/check` runs all nine before the checks they guard; `ci.yml` runs them before toolchain setup
 - Both hook-wiring suites skip their cases when `pre-commit` is absent, so `ci.yml` installs `pre-commit` ahead of them. Without that install they report a smaller green run in CI than they do locally, and the assertions covering the wiring above are the ones lost
 - shellcheck via pre-commit, with `-x` so it follows `source` into `libs/detect.sh`
