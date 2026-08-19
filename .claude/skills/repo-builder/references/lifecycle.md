@@ -119,7 +119,9 @@ Report every region as done or as outstanding. An addon left with an unfilled sl
 
    `generate` validates the source only. It takes the destination as a name, never inspects it, and so cannot tell an empty repository from one with content. Establish that yourself before materializing.
 
-2. Collect only unresolved decisions: owner/name, visibility, application boundary/name, public-repository files, release behavior, and feature availability.
+2. Collect only unresolved decisions: owner/name, visibility, application boundary/name, public-repository files, release behavior, feature availability, and automatic head branch deletion.
+
+   Automatic head branch deletion is collected here rather than at step 9, where it is applied, because the remote action gate in step 7 lists it among the settings it authorizes. A gate cannot name a choice that has not been made yet — asking after it would take authorization for one plan and then write a setting under another.
 
    The public-repository files are the repository addons, held back rather than shipped and offered against the conditions the answers to this step have established. Adopt the ones taken as the [Addon adoption](#addon-adoption) section directs, from this same source commit.
 
@@ -147,7 +149,7 @@ Report every region as done or as outstanding. An addon left with an unfilled sl
 
     Adopting `CODEOWNERS` changes what "appropriate" means here. It is the only addon finished by a repository setting rather than by an edit: without a rule requiring code owner review, the file requests a reviewer and nothing waits for the answer. Enabling it is not the safe default it looks like, for the reason its manifest entry gives — ask.
 
-    Automatic head branch deletion is offered rather than set. Unlike everything else in this step it is a preference about branch hygiene rather than a guarantee the payload depends on, and it is the only one here offered on every plan and visibility — so ask, and record the answer either way rather than letting a default decide. Left off, merged branches accumulate until someone prunes them by hand; nothing breaks and nothing reports it. Turned on, GitHub deletes the head ref at merge and the remote branch list stays the set of work in flight.
+    Automatic head branch deletion is applied here from the answer step 2 already collected, not asked about here. Unlike everything else in this step it is a preference about branch hygiene rather than a guarantee the payload depends on, which is why it is the one setting a person chooses rather than one the payload requires. Left off, merged branches accumulate until someone prunes them by hand; nothing breaks and nothing reports it. Turned on, GitHub deletes the head ref at merge and the remote branch list stays the set of work in flight.
 
     ```bash
     gh api -X PATCH repos/<owner>/<name> -f delete_branch_on_merge=true
