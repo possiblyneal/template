@@ -50,35 +50,35 @@ Visibility is read from the API rather than from `github.event.repository.visibi
 
 The specific operating parameters for the AI agent.
 
-`.openclaude/rules/`: Core behavioral constraints, domain-specific heuristics, and strict formatting requirements the AI must follow during generation. A rule without `paths:` frontmatter loads at session start at the same priority as `CLAUDE.md`; a rule with it loads only when a matching file enters context, keeping a long contract out of sessions that never touch its subject.
+`.claude/rules/`: Core behavioral constraints, domain-specific heuristics, and strict formatting requirements the AI must follow during generation. A rule without `paths:` frontmatter loads at session start at the same priority as `AGENTS.md`; a rule with it loads only when a matching file enters context, keeping a long contract out of sessions that never touch its subject.
 
-The template ships `documentation.md`, holding the contract governing `CLAUDE.md` files:
+The template ships `documentation.md`, holding the contract governing `AGENTS.md` files:
 
-`.openclaude/skills/`: Reusable, parameterized prompts that you or the AI can invoke by name to execute complex, multi-step actions. Each `<name>/SKILL.md` is also invocable as `/name`, which is why the template ships no `.openclaude/commands/`: commands are the legacy single-file form of the same shortcut, and one directory holding both roles beats two whose boundary needs explaining.
+`.claude/skills/`: Reusable, parameterized prompts that you or the AI can invoke by name to execute complex, multi-step actions. Each `<name>/SKILL.md` is also invocable as `/name`, which is why the template ships no `.claude/commands/`: commands are the legacy single-file form of the same shortcut, and one directory holding both roles beats two whose boundary needs explaining.
 
-`.openclaude/output-styles/`: Templates dictating the exact format of generated code, logs, or documentation, so the AI's output matches your personal conventions.
+`.claude/output-styles/`: Templates dictating the exact format of generated code, logs, or documentation, so the AI's output matches your personal conventions.
 
-`.openclaude/agents/`: Specialized subagents with their own scoped context windows for isolated tasks e.g., a dedicated refactoring agent.
+`.claude/agents/`: Specialized subagents with their own scoped context windows for isolated tasks e.g., a dedicated refactoring agent.
 
-`.openclaude/workflows/`: Dynamic workflow scripts that orchestrate multiple subagents in sequence.
+`.claude/workflows/`: Dynamic workflow scripts that orchestrate multiple subagents in sequence.
 
-`.openclaude/agent-memory/`: Subagent persistent memory, maintaining state across sessions separately from the main session auto-memory. Not shipped; Claude Code creates the directory when a subagent first writes to it.
+`.claude/agent-memory/`: Subagent persistent memory, maintaining state across sessions separately from the main session auto-memory. Not shipped; Claude Code creates the directory when a subagent first writes to it.
 
-`.openclaude/hooks/`: Shell scripts wired to tool events by `.openclaude/settings.json`. Ships three, each parsing its input with `jq`, which is why `scripts/doctor` requires that tool while any of them is present.
+`.claude/hooks/`: Shell scripts wired to tool events by `.claude/settings.json`. Ships three, each parsing its input with `jq`, which is why `scripts/doctor` requires that tool while any of them is present.
 
 `ask-outside-repo.sh` is a `PreToolUse` hook that prompts before `Edit`, `Write`, or `NotebookEdit` touches a path outside the repository.
 
-`block-config-change.sh` is a `ConfigChange` hook that stops edits to `.openclaude/settings.json`, `.openclaude/settings.local.json`, or `.openclaude/skills/` from hot-reloading into the running session. Without it, a session that edits its own settings gets the new permissions immediately, unwinding the ask gates above from inside; the same mid-session path is how a malicious skill file would take effect.
+`block-config-change.sh` is a `ConfigChange` hook that stops edits to `.claude/settings.json`, `.claude/settings.local.json`, or `.claude/skills/` from hot-reloading into the running session. Without it, a session that edits its own settings gets the new permissions immediately, unwinding the ask gates above from inside; the same mid-session path is how a malicious skill file would take effect.
 
 `session-start.sh` is a `SessionStart` hook that prints the current branch, uncommitted changes, and recent commits as session context, restates the read-before-edit obligation and names the rule file holding the full documentation contract, and runs `pre-commit install` when the config is present but a hook it asks for is not yet installed.
 
-`.openclaude/settings.json`: Overrides for global `settings.json`. The template fills `hooks` with the three entries above, `permissions.ask`, `plansDirectory`, `attribution`, `allowedHttpHookUrls`, and `disableClaudeAiConnectors`, and ships the remaining containers empty so a new project sees the available sections without inheriting rules: `permissions.allow`, `permissions.deny`, `permissions.additionalDirectories`, `env`, `sandbox`, `enabledPlugins`, `modelOverrides`, and `skillOverrides`.
+`.claude/settings.json`: Overrides for global `settings.json`. The template fills `hooks` with the three entries above, `permissions.ask`, `plansDirectory`, `attribution`, `allowedHttpHookUrls`, and `disableClaudeAiConnectors`, and ships the remaining containers empty so a new project sees the available sections without inheriting rules: `permissions.allow`, `permissions.deny`, `permissions.additionalDirectories`, `env`, `sandbox`, `enabledPlugins`, `modelOverrides`, and `skillOverrides`.
 
 `.mcp.json`: Configures Model Context Protocol MCP servers for this project only, granting the AI read/write access to external tools like databases, APIs, or local browsers.
 
-`CLAUDE.md`: The project-specific system prompt. Houses your conventions, common commands, and architectural context so the AI operates with the same baseline assumptions as a human developer. The template ships four sections.
+`AGENTS.md`: The project-specific system prompt. Houses your conventions, common commands, and architectural context so the AI operates with the same baseline assumptions as a human developer. The template ships four sections.
 
-`CLAUDE.local.md`: Personal, per-machine instructions loaded alongside `CLAUDE.md` and excluded by `.gitignore`. Not shipped; the entry exists so local preferences have a home that is not a diff.
+`CLAUDE.local.md`: Personal, per-machine instructions loaded alongside `AGENTS.md` and excluded by `.gitignore`. Not shipped; the entry exists so local preferences have a home that is not a diff.
 
 ### Source Code, Tests & Infrastructure
 
@@ -126,7 +126,7 @@ Durable knowledge that grounds the AI in the project's specific reality and oper
 
 `docs/LESSONS.md`: Hard-won knowledge about this repository specifically: the provider quirks and recurring mistakes an agent would otherwise rediscover.
 
-`docs/plans/`: Plans written in plan mode, pointed here by `plansDirectory` in `.openclaude/settings.json`. The default is `~/.openclaude/plans`, outside the repository, where a plan is invisible to review and disappears with the machine. Under `docs/` it arrives in the diff alongside the code it describes — the point when a human approves the plan before the work starts.
+`docs/plans/`: Plans written in plan mode, pointed here by `plansDirectory` in `.claude/settings.json`. The default is `~/.openclaude/plans`, outside the repository, where a plan is invisible to review and disappears with the machine. Under `docs/` it arrives in the diff alongside the code it describes — the point when a human approves the plan before the work starts.
 
 ### Root Configuration Files
 
@@ -136,8 +136,7 @@ The hidden files that dictate environment variables, Git behavior, and tool inte
 
 `.env`: The git-ignored config file for storing active sensitive environment variables.
 
-`.gitignore`: Specifies intentionally untracked files and directories. 
-
+`.gitignore`: Specifies intentionally untracked files and directories. Ignores `.claude/` and `CLAUDE.md` so a generated repository carries them in its working tree without committing them.
 `.gitattributes`: Git behavior rules for line endings, diffs, and GitHub Linguist classification.
 
 `.pre-commit-config.yaml`: Local guardrails that run automatically before code gets committed, catching AI syntax mistakes early. **`.commitlintrc.yaml`**: The commit message rules. Messages follow Conventional Commits — `type(optional scope): subject`, a blank line, then the body.
@@ -160,7 +159,7 @@ It ships as a scaffold rather than authored-on-adoption for the reason `CONTRIBU
 
 The manifest lists four slots — the project title (shared with CONTRIBUTING and CITATION), a new one-line tagline, and the owner and repo names that appear in badge and clone URLs — and six reviews, because most of what a README needs is judgement, not substitution: which visuals to keep, which badges are backed by something real, the actual features and usage, the install commands that do not exist until the first language manifest does, the companion-file links that are dead unless that addon was adopted, and the table of contents that must track the headings kept. The one external step is adding the header and hero images the scaffold references, or deleting the blocks that point at them; nothing but the render reports them missing. Each region carries an invisible `<!-- ADOPT: ... -->` comment for someone adopting the file by hand with no manifest to read.
 
-**`CHANGELOG.md`**: A per-version record of what changed, in Keep a Changelog 2.0.0 format, pinned by the link in the file's own header so the convention it follows cannot drift as that page changes. Written for someone deciding whether to upgrade, so it arrives with the first reader rather than the first commit. Adopting it brings `.openclaude/rules/changelog.md` with it, which is what teaches an agent when an entry is owed. `scripts/release` then publishes the section matching the tag instead of GitHub-generated notes.
+**`CHANGELOG.md`**: A per-version record of what changed, in Keep a Changelog 2.0.0 format, pinned by the link in the file's own header so the convention it follows cannot drift as that page changes. Written for someone deciding whether to upgrade, so it arrives with the first reader rather than the first commit. Adopting it brings `.claude/rules/changelog.md` with it, which is what teaches an agent when an entry is owed. `scripts/release` then publishes the section matching the tag instead of GitHub-generated notes.
 
 **`LICENSE`**: The terms under which others may use, modify, and distribute the work. Ships as the GNU General Public License v3.0, byte-identical to the text published at gnu.org — reciprocal copyleft, so a derivative carries the same license rather than being absorbed into something closed. Keep it verbatim. An explanatory comment or a filled-in copyright line breaks the license's own terms and can drop GitHub's detection, which matches against the whole text; the project's own copyright notice belongs in source file headers and the README, which is what the appendix at the end of the file gives instructions for.
 
