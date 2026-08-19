@@ -1,5 +1,7 @@
 # Reverse Claude User-Config Links
 
+> **Historical record — read `.openclaude/` as `.claude/`.** This plan predates the rename. The `.openclaude` → `.claude` compatibility symlink has since been removed, so paths and commands written here fail as typed. The text is left as approved rather than corrected, because a plan records what was agreed to, not what the tree looks like now.
+
 ## Context
 
 `apps/claude-user-level-files/` is intended to become the versioned source for the selected user-level Claude Code configuration. It currently contains ten symbolic links into `~/.openclaude/`, while the matching home paths contain the real files and directories. Reverse that direction: materialize the selected entries in the app, then replace the matching home entries with symbolic links to the app. This keeps Claude Code usable from `~/.openclaude/` while the repository owns the configuration content.

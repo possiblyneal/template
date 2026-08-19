@@ -27,6 +27,8 @@ Specs for a single unit belong to that unit, under `apps/<name>/docs/specs/`, an
 
 **`plans/` is tracked**, unlike the `~/.claude/plans` default, so a plan arrives in the diff alongside the code it describes. That is the moment a human approves the plan before the work starts.
 
+**An approved plan is frozen.** Never rewrite its body to match a later rename, move, or reversal — that falsifies the record of what was agreed to. When the tree moves out from under one, add a blockquote directly under the title saying what to read instead, and leave everything below it alone. The five plans carrying `.openclaude/` paths are annotated that way and are the pattern to copy; do not "fix" their paths.
+
 **`LESSONS.md` takes durable constraints only.** Not incident history, not generic advice, not facts already clear from the code. Lead with the required action, name the exact artifact or command, and link the authoritative source rather than duplicating it. The format is documented in the file.
 
 ## Work Guidance
