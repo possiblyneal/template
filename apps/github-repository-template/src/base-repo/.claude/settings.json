@@ -9,10 +9,18 @@
       "Bash(gh pr merge:*)",
       "Bash(gh release:*)",
       "Bash(gh repo delete:*)",
+      "Bash(rm:*)",
+      "Bash(git rm:*)",
       "Edit(.*)",
       "Edit(.*/**)",
       "Edit(**/.*)",
-      "Edit(**/.*/**)"
+      "Edit(**/.*/**)",
+      "Edit(**/src/**)",
+      "Edit(/*)",
+      "Read(//**/.npmrc)",
+      "Read(//**/.pypirc)",
+      "Edit(//**/.npmrc)",
+      "Edit(//**/.pypirc)"
     ],
     "deny": [
       "Read(//**/.env)",
@@ -34,8 +42,6 @@
       "Read(//**/*.pfx)",
       "Read(//**/credentials.json)",
       "Read(//**/service-account*.json)",
-      "Read(//**/.npmrc)",
-      "Read(//**/.pypirc)",
       "Read(//**/*.tfstate)",
       "Read(//**/*.tfstate.*)",
       "Edit(//**/.env)",
@@ -57,8 +63,6 @@
       "Edit(//**/*.pfx)",
       "Edit(//**/credentials.json)",
       "Edit(//**/service-account*.json)",
-      "Edit(//**/.npmrc)",
-      "Edit(//**/.pypirc)",
       "Edit(//**/*.tfstate)",
       "Edit(//**/*.tfstate.*)"
     ],
