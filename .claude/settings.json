@@ -11,11 +11,9 @@
       "Read(//home/neal/.agentmemory/**)"
     ],
     "ask": [
-      "Bash(git push:*)",
       "Bash(git reset --hard:*)",
       "Bash(git clean:*)",
       "Bash(git rebase:*)",
-      "Bash(gh pr create:*)",
       "Bash(gh pr merge:*)",
       "Bash(gh release:*)",
       "Bash(gh repo delete:*)",
