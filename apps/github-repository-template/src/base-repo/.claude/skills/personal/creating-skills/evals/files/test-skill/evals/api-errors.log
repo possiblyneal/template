@@ -1,0 +1,22 @@
+2026-05-30 14:58:01 INFO  API server started port=8080 workers=4
+2026-05-30 14:58:02 INFO  Health check OK
+2026-05-30 15:00:00 INFO  Scheduled job: cache_refresh started
+2026-05-30 15:00:01 INFO  Fetching upstream data from payments-service
+2026-05-30 15:00:03 WARN  payments-service response slow latency=1200ms
+2026-05-30 15:00:06 ERROR payments-service timeout after 3000ms url=http://payments-svc/v2/rates
+2026-05-30 15:00:06 ERROR cache_refresh failed: upstream unavailable, cache not updated
+2026-05-30 15:00:07 INFO  cache_refresh complete (stale cache retained)
+2026-05-30 15:00:08 INFO  GET /api/v1/checkout 200 12ms
+2026-05-30 15:00:09 INFO  GET /api/v1/checkout 200 14ms
+2026-05-30 15:00:11 INFO  POST /api/v1/order 200 88ms
+2026-05-30 15:00:14 INFO  POST /api/v1/order 200 92ms
+2026-05-30 15:00:18 ERROR POST /api/v1/order 500 InternalServerError: stale rate data - rate_version=2026-04-15 expected>=2026-05-01
+2026-05-30 15:00:19 ERROR POST /api/v1/order 500 InternalServerError: stale rate data - rate_version=2026-04-15 expected>=2026-05-01
+2026-05-30 15:00:19 ERROR POST /api/v1/order 500 InternalServerError: stale rate data - rate_version=2026-04-15 expected>=2026-05-01
+2026-05-30 15:00:20 WARN  Error rate elevated: 500s=3 in last 60s threshold=2
+2026-05-30 15:00:21 ERROR POST /api/v1/order 500 InternalServerError: stale rate data - rate_version=2026-04-15 expected>=2026-05-01
+2026-05-30 15:00:22 ERROR POST /api/v1/order 500 InternalServerError: stale rate data - rate_version=2026-04-15 expected>=2026-05-01
+2026-05-30 15:00:23 ERROR POST /api/v1/order 500 InternalServerError: stale rate data - rate_version=2026-04-15 expected>=2026-05-01
+2026-05-30 15:00:25 INFO  GET /api/v1/checkout 200 11ms
+2026-05-30 15:00:26 ERROR POST /api/v1/order 500 InternalServerError: stale rate data - rate_version=2026-04-15 expected>=2026-05-01
+2026-05-30 15:00:30 WARN  Circuit breaker opened for payments-service

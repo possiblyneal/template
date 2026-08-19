@@ -22,11 +22,11 @@ service-account*.json
 
 # Claude worktrees are checkouts of this same repo; without this their
 # entire file tree shows up as untracked noise in the main checkout.
-.openclaude/worktrees/
+.claude/worktrees/
 
 # Per-machine Claude overrides. Both are personal, not part of the repo
 # contract, and may hold local paths or preferences.
-.openclaude/settings.local.json
+.claude/settings.local.json
 CLAUDE.local.md
 
 # Local scratch
@@ -100,4 +100,4 @@ docker-data/
 /downloads/
 
 # Scratch space for repo-builder skill iterations, not repository content.
-.openclaude/skills/repo-builder-workspace/
+.claude/skills/repo-builder-workspace/
