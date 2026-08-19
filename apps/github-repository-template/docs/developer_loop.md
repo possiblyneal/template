@@ -1,8 +1,8 @@
 **1. Sync & Pick - loop start**
 
-- **1a.** Agent syncs `main` (`git checkout main` + `git pull`).
-- **1b.** Agent chooses the next ticket
-- **1c.** Agent creates the feature branch (`git checkout -b feat/ticket-123`).
+- **1a.** Agent confirms its current worktree is clean and fetches `origin/main`.
+- **1b.** Agent chooses the next ticket.
+- **1c.** Agent creates a fresh feature worktree and branch from `origin/main` (for example, `git worktree add -b feat/ticket-123 <path> origin/main`).
 
 **2. Plan / Breakdown / Context**
 
@@ -17,7 +17,7 @@
 - **3a.** Coding agent writes a targeted chunk of code and the corresponding test.
 - **3b.** Agent executes local tests AND performs programmatic "manual" verification using terminal tools (e.g., executing `curl` against local endpoints, running headless scripts, or querying local databases to verify state).
 - **3c.** If red, the test output and error logs are piped directly back into the agent's prompt for immediate remediation.
-  - *Circuit Breaker:* If the agent fails to clear a test or verification step after 3 attempts, it halts execution, stashes progress, and pings you for a tie-breaker.
+  - *Circuit Breaker:* If the agent fails to clear a test or verification step after 3 attempts, it halts execution, preserves the feature branch and any reviewable WIP commit, and pings you with the failing command, logs, attempt count, and decision needed for a tie-breaker.
 - **3d.** Agent refactors the chunk to align with the repository's architecture.
 - **3e.** Agent repeats 3a-3d autonomously until the sub-task is complete.
 

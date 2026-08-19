@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       # adr-index-test and commitlint-test both skip their hook-wiring cases
       # when pre-commit is absent, and those cases are the ones that catch a
@@ -46,6 +48,18 @@ jobs:
           for test_script in scripts/tests/*-test; do
             "$test_script"
           done
+
+      # The hook receives the same base-to-head file range a push does. It
+      # validates an edited changelog but deliberately does not require one for
+      # every pull request; that editorial decision belongs in review.
+      - name: Validate changed changelog entries
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: >-
+          pre-commit run changelog-check --hook-stage pre-push
+          --from-ref "$BASE_SHA" --to-ref "$HEAD_SHA"
 
       - name: Set up toolchains
         uses: ./.github/actions/setup-toolchains

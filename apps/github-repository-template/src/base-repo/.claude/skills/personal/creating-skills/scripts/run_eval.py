@@ -21,14 +21,14 @@ from scripts.utils import parse_skill_md
 
 
 def find_project_root() -> Path:
-    """Find the project root by walking up from cwd looking for .openclaude/.
+    """Find the project root by walking up from cwd looking for .claude/.
 
     Mimics how Claude Code discovers its project root, so the command file
     we create ends up where claude -p will look for it.
     """
     current = Path.cwd()
     for parent in [current, *current.parents]:
-        if (parent / ".openclaude").is_dir():
+        if (parent / ".claude").is_dir():
             return parent
     return current
 
@@ -43,9 +43,9 @@ def run_single_query(
 ) -> bool:
     """Run a single query and return whether the skill was triggered.
 
-    Installs a throwaway skill in .openclaude/skills/ so it appears in
+    Installs a throwaway skill in .claude/skills/ so it appears in
     Claude's available_skills list, then runs `claude -p` with the raw query.
-    The CLI also loads .openclaude/commands/, but folds those in under the
+    The CLI also loads .claude/commands/, but folds those in under the
     name legacyCommands; skills are the surface that replaced them, and
     evaluating a description on the deprecated path measures the wrong thing.
     Uses --include-partial-messages to detect triggering early from
@@ -54,7 +54,7 @@ def run_single_query(
     """
     unique_id = uuid.uuid4().hex[:8]
     clean_name = f"{skill_name}-skill-{unique_id}"
-    skill_dir = Path(project_root) / ".openclaude" / "skills" / clean_name
+    skill_dir = Path(project_root) / ".claude" / "skills" / clean_name
     skill_file = skill_dir / "SKILL.md"
 
     try:

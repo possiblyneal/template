@@ -105,6 +105,19 @@ check_github_settings() {
     echo "ok: squash merging off"
   fi
 
+  # A merged branch left behind is only clutter, but it is clutter every
+  # generated repository accumulates, and the fix is a checkbox rather than a
+  # workflow: deleting the head branch from Actions costs `contents: write` on
+  # a `pull_request: closed` trigger to reimplement what GitHub already does.
+  # Offered on every plan, like squash merging above.
+  if [[ "$(jq -r '.delete_branch_on_merge // false' <<<"$json")" == "true" ]]; then
+    echo "ok: merged head branches deleted"
+  else
+    echo "optional missing: automatic head branch deletion on $repo"
+    echo "  Turn it on in Settings, under Pull Requests."
+    echo "  Nothing is lost by leaving it off; merged branches simply accumulate until someone prunes them by hand."
+  fi
+
   case "$(jq -r '.security_and_analysis.secret_scanning_push_protection.status // "unavailable"' <<<"$json")" in
     enabled) echo "ok: push protection" ;;
     unavailable)
@@ -121,7 +134,8 @@ check_github_settings() {
   if ! rulesets="$(gh api "repos/$repo/rulesets" 2>/dev/null)"; then
     echo "optional missing: branch rulesets (not offered for $repo's plan and visibility)"
     echo "  They need GitHub Pro on a private repository, and are free on a public one."
-    echo "  Until then no-commit-to-branch in this clone is the only thing keeping commits off main."
+    echo "  Until then the local hooks are all of it: no-commit-to-branch refuses a commit made on main,"
+    echo "  and scripts/protect-branch refuses a push whose destination is main."
     return
   fi
 
@@ -130,7 +144,8 @@ check_github_settings() {
   else
     echo "optional missing: an active branch ruleset on $repo"
     echo "  Add one in Settings, under Rules, requiring a pull request and the CI check."
-    echo "  Without it the pre-commit hook is the only thing keeping commits off main, and a fresh clone does not have it."
+    echo "  Without it the local hooks are all of it -- no-commit-to-branch on commit, scripts/protect-branch"
+    echo "  on push -- and a fresh clone has neither until the hooks are installed."
   fi
 }
 

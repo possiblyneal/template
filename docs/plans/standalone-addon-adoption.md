@@ -1,5 +1,7 @@
 # Standalone addon adoption for `repo-builder` (Gap 2)
 
+> **Historical record — read `.openclaude/` as `.claude/`.** This plan predates the rename. The `.openclaude` → `.claude` compatibility symlink has since been removed, so paths and commands written here fail as typed. The text is left as approved rather than corrected, because a plan records what was agreed to, not what the tree looks like now.
+
 ## Context
 
 The `repo-builder` skill offers repository addons — the public-repository files
