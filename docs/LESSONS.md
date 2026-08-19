@@ -37,7 +37,7 @@ The root config files and `apps/github-repository-template/src/base-repo/` hold 
 
 **Why:** A fix made only at the root leaves the template shipping the bug to every repository generated afterward. A fix made only in the payload leaves this repository running the bug.
 
-**Source:** [Template payload contract](../apps/github-repository-template/CLAUDE.md)
+**Source:** [Template payload contract](../apps/github-repository-template/AGENTS.md)
 
 ## CodeQL fails fast here, and that failure is the finding
 
@@ -132,3 +132,13 @@ Workflow registration and run dispatch are separate services. A workflow can reg
 **Why:** A threshold is one visible line that reads as "known findings below this level". An ignore list is a set of individually plausible entries that nobody revisits, and it only grows. The pinning policy in `zizmor.yml` is the deliberate exception: it encodes a trust boundary — ref-pin first-party, hash-pin third-party — rather than dismissing a finding.
 
 **Source:** [.pre-commit-config.yaml](../.pre-commit-config.yaml), [zizmor.yml](../zizmor.yml)
+
+## A per-directory CLAUDE.md is a loader, not a restatement
+
+Claude Code loads `CLAUDE.md`. It never loads `AGENTS.md`. At launch it walks the directory hierarchy above the working directory; below that, it loads on demand when it reads a file in a subdirectory, and the on-demand path reads exactly `<dir>/CLAUDE.md` and `<dir>/.claude/CLAUDE.md`. No setting renames the file it looks for. An instruction to read `AGENTS.md` is context the agent may act on, not a mechanism that loads anything.
+
+**Do:** Keep the one-line `@AGENTS.md` shim beside every `AGENTS.md` that must load when an agent works inside that directory. Delete a shim only after confirming the directory's contract is reachable some other way.
+
+**Why:** Without the shim, walking into `apps/github-repository-template/` loads the payload contract not at all, and the two-tree rule above it — the one that decides whether an edit belongs to the payload or the root — is precisely what goes missing. The root `AGENTS.md` naming the child in its Child Index does not load the child; it asks the agent to. This lesson exists because that argument was accepted in #30 and the shim was deleted, in a session that had the root instruction loaded and still did not follow it.
+
+**Source:** [Claude Code memory docs](https://code.claude.com/docs/en/memory), [apps/github-repository-template/CLAUDE.md](../apps/github-repository-template/CLAUDE.md)
