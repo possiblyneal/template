@@ -10,10 +10,12 @@ on:
     # code that has not changed since the last push.
     - cron: "41 7 * * 2"
 
+# The floor every job starts from. security-events: write is not here: only
+# `analyze` uploads results, and at the workflow level `detect` would inherit
+# the ability to write findings into the Security tab in order to run a
+# detection script. Each job widens from this to what it actually needs.
 permissions:
   contents: read
-  security-events: write
-  actions: read
 
 concurrency:
   group: codeql-${{ github.ref }}
@@ -95,6 +97,13 @@ jobs:
     needs: [scanning, detect]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
+    # The one job that uploads findings, so the one job that may write them.
+    # actions: read lets CodeQL read workflow run metadata when scanning the
+    # `actions` language in the matrix.
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.detect.outputs.matrix) }}

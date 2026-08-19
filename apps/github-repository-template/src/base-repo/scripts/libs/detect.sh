@@ -283,7 +283,7 @@ _capability_format_check_swift() { command -v swift >/dev/null 2>&1 || return "$
 _capability_format_check_kotlin() { gradle_has_task ktlintCheck || return "$NO_RUNNER"; ./gradlew ktlintCheck; }
 
 _capability_typecheck_node() { has_npm_script typecheck || return "$NO_RUNNER"; npm run typecheck; }
-_capability_typecheck_python() { uv_run mypy .; }
+_capability_typecheck_python() { uv_run ty check .; }
 
 _capability_test_node() { has_npm_script test || return "$NO_RUNNER"; npm run test; }
 _capability_test_python() {
@@ -321,7 +321,20 @@ _capability_audit_node() {
   fi
   return "$NO_RUNNER"
 }
-_capability_audit_python() { uv_run pip-audit; }
+# `uv audit` is a uv subcommand rather than a tool uv runs, so uv_run does not
+# apply: there is nothing to look up on PATH, and the version probe it does
+# would run the audit itself. A uv predating the subcommand exits 2 for an
+# unknown one, the same shape as an audit that ran and found vulnerabilities,
+# so support is probed with --help first and its absence reported as no runner.
+#
+# The subcommand is still experimental and prints a warning on every run unless
+# the preview feature is named. Passing it silences that; an older uv that
+# rejects the flag has already been sent to NO_RUNNER by the probe above.
+_capability_audit_python() {
+  command -v uv >/dev/null 2>&1 || return "$NO_RUNNER"
+  uv audit --help >/dev/null 2>&1 || return "$NO_RUNNER"
+  uv audit --preview-features audit-command
+}
 _capability_audit_go() { command -v govulncheck >/dev/null 2>&1 || return "$NO_RUNNER"; govulncheck ./...; }
 _capability_audit_rust() { command -v cargo-audit >/dev/null 2>&1 || return "$NO_RUNNER"; cargo audit; }
 _capability_audit_swift() { command -v trivy >/dev/null 2>&1 || return "$NO_RUNNER"; trivy_each Package.resolved; }

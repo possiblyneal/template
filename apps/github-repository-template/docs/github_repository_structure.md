@@ -34,6 +34,10 @@ It fails rather than skips, and that is the load-bearing choice. A skipped job r
 
 Visibility is read from the API rather than from `github.event.repository.visibility`, whose payload GitHub documents as "Not applicable" for `schedule`. Taken from the event, the weekly run would compare a null against `public` and fail a public repository every Tuesday. A failed lookup fails the job rather than defaulting either way, so a token or network problem cannot be mistaken for a repository that should not be scanned.
 
+`zizmor.yml`: Configuration for zizmor, which runs through pre-commit beside actionlint rather than as a workflow. It audits the workflows for security defects — template injection reaching a `run:` block, credential persistence, an unpinned third-party action, permissions wider than the job needs. actionlint asks whether a workflow is valid; zizmor asks whether a valid workflow is unsafe. Neither reports the other's findings. It is a hook rather than a workflow because the finding is about a file in the diff, and because a workflow auditing workflows reports a problem with `ci.yml` as a failure of `ci.yml`.
+
+The file sets one thing: the `unpinned-uses` policy. Since v1.20.0 zizmor requires hash pins on every action, while this repository ref-pins first-party actions and hash-pins third-party ones. That split is a trust boundary rather than an inconsistency — a first-party action moving under its tag is a compromise of the platform the workflow already runs on, while a third-party action is a different repository with different owners, which is how tj-actions/changed-files was compromised. The hook runs at `--min-severity medium` with nothing suppressed to reach it, so the threshold stays one visible line instead of a list nobody revisits.
+
 `.github/dependabot.yml`: Opens one grouped weekly pull request for the action versions in `.github/workflows/` and `.github/actions/`, rather than one per action.
 
 `.github/ISSUE_TEMPLATE/`: Contains `bug_report.yml`, `feature_request.yml`, and `config.yml`.
@@ -131,6 +135,8 @@ Durable knowledge that grounds the AI in the project's specific reality and oper
 ### Root Configuration Files
 
 The hidden files that dictate environment variables, Git behavior, and tool integrations.
+
+YAML files use `.yml` except where a tool fixes the name, which is why `.pre-commit-config.yaml` sits beside `zizmor.yml` and a Node repository adds `pnpm-lock.yaml`. Neither spelling is universally correct: yaml.org prefers `.yaml`, GitHub's metadata reference prefers `action.yml`, and every file this template ships is free to use either. `.yml` is the majority and matches GitHub's own examples, so the two forced `.yaml` names are the exception rather than drift. Rename nothing to make them agree — `pre-commit` reads only `.pre-commit-config.yaml` and `pre-commit install` bakes that default into the hook it writes, so a rename yields a hook that silently does nothing.
 
 `.worktreeinclude`: Lists git-ignored files to copy into new Claude worktrees, which are otherwise fresh checkouts holding tracked files only.
 

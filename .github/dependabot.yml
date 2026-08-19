@@ -33,12 +33,19 @@ updates:
   # under .github/actions/ are not reached from it, so their pins would age
   # silently while the workflow copies stay current. The glob below covers them,
   # and needs `directories`, which supports globbing where `directory` does not.
+  #
+  # The cooldown is the reason a bump here is not just noise deferred. Dependabot
+  # waits three days by default; a week is long enough that an opportunistic
+  # package compromise is usually taken down before an update pull request
+  # proposes it, and short enough that a real fix is not held back.
   - package-ecosystem: github-actions
     directories:
       - /
       - /.github/actions/*
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns:
@@ -53,6 +60,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       pre-commit:
         patterns:
