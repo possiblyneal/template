@@ -119,7 +119,9 @@ Report every region as done or as outstanding. An addon left with an unfilled sl
 
    `generate` validates the source only. It takes the destination as a name, never inspects it, and so cannot tell an empty repository from one with content. Establish that yourself before materializing.
 
-2. Collect only unresolved decisions: owner/name, visibility, application boundary/name, public-repository files, release behavior, and feature availability.
+2. Collect only unresolved decisions: owner/name, visibility, application boundary/name, public-repository files, release behavior, feature availability, and automatic head branch deletion.
+
+   Automatic head branch deletion is collected here rather than at step 9, where it is applied, because the remote action gate in step 7 lists it among the settings it authorizes. A gate cannot name a choice that has not been made yet — asking after it would take authorization for one plan and then write a setting under another.
 
    The public-repository files are the repository addons, held back rather than shipped and offered against the conditions the answers to this step have established. Adopt the ones taken as the [Addon adoption](#addon-adoption) section directs, from this same source commit.
 
@@ -146,6 +148,14 @@ Report every region as done or as outstanding. An addon left with an unfilled sl
 9. Configure supported settings after the default branch exists: Dependabot alerts/security updates, push protection where available, and a branch ruleset appropriate to the repository. Confirm plan/visibility limitations instead of treating API success as proof a feature is active.
 
     Adopting `CODEOWNERS` changes what "appropriate" means here. It is the only addon finished by a repository setting rather than by an edit: without a rule requiring code owner review, the file requests a reviewer and nothing waits for the answer. Enabling it is not the safe default it looks like, for the reason its manifest entry gives — ask.
+
+    Automatic head branch deletion is applied here from the answer step 2 already collected, not asked about here. Unlike everything else in this step it is a preference about branch hygiene rather than a guarantee the payload depends on, which is why it is the one setting a person chooses rather than one the payload requires. Left off, merged branches accumulate until someone prunes them by hand; nothing breaks and nothing reports it. Turned on, GitHub deletes the head ref at merge and the remote branch list stays the set of work in flight.
+
+    ```bash
+    gh api -X PATCH repos/<owner>/<name> -f delete_branch_on_merge=true
+    ```
+
+    It is a checkbox rather than a workflow on purpose — deleting the head ref from Actions means a `pull_request: closed` job holding `contents: write` to reimplement something GitHub already offers.
 
     Read the result back with the repository's own `scripts/repo-settings check` rather than hand-rolling `gh api` calls. It already separates the two ways a setting reads as absent: `security_and_analysis` is missing both for a non-admin and for a plan that does not offer the feature, and it checks `.permissions.admin` to tell those apart. A hand-rolled check that misses this reports a plan limitation as a disabled setting.
 
@@ -238,7 +248,7 @@ Repository creation, settings writes, pushes, and pull-request creation are sepa
 Remote execution
 - create: owner/repository (private, uninitialized)
 - push: empty root commit -> main
-- settings: Dependabot alerts/updates; push protection if available; main ruleset
+- settings: Dependabot alerts/updates; push protection if available; main ruleset; automatic head branch deletion if chosen
 - push: repo-builder/<short-target> -> generated content or template update
 - open PR: repo-builder/<short-target> -> main
 ```
