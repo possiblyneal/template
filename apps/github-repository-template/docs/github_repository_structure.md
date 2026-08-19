@@ -136,6 +136,8 @@ Durable knowledge that grounds the AI in the project's specific reality and oper
 
 The hidden files that dictate environment variables, Git behavior, and tool integrations.
 
+YAML files use `.yml` except where a tool fixes the name, which is why `.pre-commit-config.yaml` sits beside `zizmor.yml` and a Node repository adds `pnpm-lock.yaml`. Neither spelling is universally correct: yaml.org prefers `.yaml`, GitHub's metadata reference prefers `action.yml`, and every file this template ships is free to use either. `.yml` is the majority and matches GitHub's own examples, so the two forced `.yaml` names are the exception rather than drift. Rename nothing to make them agree — `pre-commit` reads only `.pre-commit-config.yaml` and `pre-commit install` bakes that default into the hook it writes, so a rename yields a hook that silently does nothing.
+
 `.worktreeinclude`: Lists git-ignored files to copy into new Claude worktrees, which are otherwise fresh checkouts holding tracked files only.
 
 `.env`: The git-ignored config file for storing active sensitive environment variables.
