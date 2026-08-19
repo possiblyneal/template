@@ -130,7 +130,7 @@ Durable knowledge that grounds the AI in the project's specific reality and oper
 
 `docs/LESSONS.md`: Hard-won knowledge about this repository specifically: the provider quirks and recurring mistakes an agent would otherwise rediscover.
 
-`docs/plans/`: Plans written in plan mode, pointed here by `plansDirectory` in `.claude/settings.json`. The default is `~/.openclaude/plans`, outside the repository, where a plan is invisible to review and disappears with the machine. Under `docs/` it arrives in the diff alongside the code it describes — the point when a human approves the plan before the work starts.
+`docs/plans/`: Plans written in plan mode, pointed here by `plansDirectory` in `.claude/settings.json`. The default is `~/.claude/plans`, outside the repository, where a plan is invisible to review and disappears with the machine. Under `docs/` it arrives in the diff alongside the code it describes — the point when a human approves the plan before the work starts.
 
 ### Root Configuration Files
 
