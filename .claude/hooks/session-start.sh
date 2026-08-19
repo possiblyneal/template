@@ -26,6 +26,10 @@ if [[ -f .pre-commit-config.yaml ]] && command -v pre-commit >/dev/null 2>&1 \
 fi
 
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  if [[ -x scripts/worktree-cleanup ]]; then
+    scripts/worktree-cleanup --report || true
+  fi
+
   branch="$(git branch --show-current 2>/dev/null || true)"
   echo "Branch: ${branch:-(detached HEAD)}"
 
@@ -46,4 +50,4 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   git log --oneline -5 2>/dev/null || echo "(no commits yet)"
 fi
 
-echo "Read the nearest CLAUDE.md above every path you touch before editing, and update the owning docs after meaningful changes. The full documentation contract is .claude/rules/documentation.md."
+echo "Read the nearest AGENTS.md above every path you touch before editing, and update the owning docs after meaningful changes. The full documentation contract is .claude/rules/documentation.md."

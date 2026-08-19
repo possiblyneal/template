@@ -26,6 +26,10 @@ if [[ -f .pre-commit-config.yaml ]] && command -v pre-commit >/dev/null 2>&1 \
 fi
 
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  if [[ -x scripts/worktree-cleanup ]]; then
+    scripts/worktree-cleanup --report || true
+  fi
+
   branch="$(git branch --show-current 2>/dev/null || true)"
   echo "Branch: ${branch:-(detached HEAD)}"
 

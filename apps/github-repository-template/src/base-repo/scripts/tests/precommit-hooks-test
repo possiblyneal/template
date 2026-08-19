@@ -43,10 +43,10 @@ trap cleanup EXIT
 
 echo "precommit-hooks-test"
 
-fixture "flow style is read" 'default_install_hook_types: [pre-commit, commit-msg, pre-push]
+fixture "flow style is read" 'default_install_hook_types: [pre-commit, commit-msg, pre-push, post-checkout, post-merge]
 repos: []'
 got="$(types_of)"
-if [[ "$got" == "pre-commit commit-msg pre-push" ]]; then
+if [[ "$got" == "pre-commit commit-msg pre-push post-checkout post-merge" ]]; then
   pass
 else
   fail "flow style read as '$got'"
@@ -60,9 +60,11 @@ fixture "block style is read" 'default_install_hook_types:
   - pre-commit
   - commit-msg
   - pre-push
+  - post-checkout
+  - post-merge
 repos: []'
 got="$(types_of)"
-if [[ "$got" == "pre-commit commit-msg pre-push" ]]; then
+if [[ "$got" == "pre-commit commit-msg pre-push post-checkout post-merge" ]]; then
   pass
 else
   fail "block style read as '$got', so the commit-msg hook would never be required"
@@ -73,10 +75,10 @@ cleanup
 # unchanged. Reading only the first line here yields half a list, which is the
 # same silence as reading none of it.
 fixture "a flow list wrapped across lines is read whole" 'default_install_hook_types: [pre-commit,
-  commit-msg, pre-push]
+  commit-msg, pre-push, post-checkout, post-merge]
 repos: []'
 got="$(types_of)"
-if [[ "$got" == "pre-commit commit-msg pre-push" ]]; then
+if [[ "$got" == "pre-commit commit-msg pre-push post-checkout post-merge" ]]; then
   pass
 else
   fail "a wrapped flow list read as '$got'"
@@ -95,10 +97,10 @@ else
 fi
 cleanup
 
-fixture "quotes and trailing comments are tolerated" 'default_install_hook_types: ["pre-commit", "commit-msg", "pre-push"]  # all three
+fixture "quotes and trailing comments are tolerated" 'default_install_hook_types: ["pre-commit", "commit-msg", "pre-push", "post-checkout", "post-merge"]  # all five
 repos: []'
 got="$(types_of)"
-if [[ "$got" == "pre-commit commit-msg pre-push" ]]; then
+if [[ "$got" == "pre-commit commit-msg pre-push post-checkout post-merge" ]]; then
   pass
 else
   fail "a quoted list with a comment read as '$got'"
@@ -129,10 +131,10 @@ else
 fi
 cleanup
 
-# The end-to-end answer both callers actually use: config asks for all three
-# hooks, the clone has the ordinary pre-commit hook, and the two stage-specific
+# The end-to-end answer both callers actually use: config asks for all five
+# hooks, the clone has the ordinary pre-commit hook, and all four stage-specific
 # hooks are still reported.
-fixture "stage-specific hooks are reported missing" 'default_install_hook_types: [pre-commit, commit-msg, pre-push]
+fixture "stage-specific hooks are reported missing" 'default_install_hook_types: [pre-commit, commit-msg, pre-push, post-checkout, post-merge]
 repos: []'
 (
   cd "$work" || exit 1
@@ -140,11 +142,28 @@ repos: []'
   touch .git/hooks/pre-commit
 ) > /dev/null 2>&1
 got="$(cd "$work" && pre_commit_hooks_missing .pre-commit-config.yaml)"
-if [[ "$got" == $'commit-msg\npre-push' ]]; then
+if [[ "$got" == $'commit-msg\npre-push\npost-checkout\npost-merge' ]]; then
   pass
 else
-  fail "missing hooks reported as '$got', expected commit-msg and pre-push"
+  fail "missing hooks reported as '$got', expected every stage-specific hook"
 fi
 cleanup
+
+if command -v pre-commit >/dev/null 2>&1; then
+  fixture "plain pre-commit install writes every configured hook" 'default_install_hook_types: [pre-commit, commit-msg, pre-push, post-checkout, post-merge]
+repos: []'
+  (
+    cd "$work" || exit 1
+    git init -q .
+    pre-commit install >/dev/null
+  )
+  got="$(cd "$work" && pre_commit_hooks_missing .pre-commit-config.yaml)"
+  if [[ -z "$got" ]]; then
+    pass
+  else
+    fail "pre-commit install left hooks missing: '$got'"
+  fi
+  cleanup
+fi
 
 report

@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+# SessionStart must report stale worktree metadata without pruning it, and a
+# missing optional cleanup script must not cost the session context that
+# follows it. Both are silent failures: the first mutates a clone at startup,
+# the second leaves an agent with no orientation and nothing saying why.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/harness.sh
+source "$repo_root/scripts/tests/libs/harness.sh"
+
+hook="$repo_root/.claude/hooks/session-start.sh"
+
+fixture() {
+  current="$1"
+  work="$(mktemp -d)"
+  git -C "$work" init -q
+  git -C "$work" -c user.name=test -c user.email=test@example.com commit --allow-empty -qm initial
+  mkdir -p "$work/scripts"
+  cp "$repo_root/scripts/worktree-cleanup" "$work/scripts/worktree-cleanup"
+  chmod +x "$work/scripts/worktree-cleanup"
+}
+
+stale_worktree() {
+  local path="$work/stale"
+  git -C "$work" worktree add -q -b stale "$path"
+  rm -rf "$path"
+}
+
+has_prunable_worktree() {
+  local listed
+  listed="$(git -C "$work" worktree list --porcelain)"
+  [[ "$listed" == *$'\nprunable '* ]]
+}
+
+echo "session-start-test"
+
+fixture "reports stale metadata without pruning"
+stale_worktree
+output="$(CLAUDE_PROJECT_DIR="$work" "$hook")"
+if [[ "$output" == *"Stale worktree metadata:"* ]] && [[ "$output" == *"Branch: "* ]] && has_prunable_worktree; then
+  pass
+else
+  fail "reporting changed metadata or lost context: '$output'"
+fi
+cleanup
+
+fixture "keeps session context when cleanup is absent"
+rm "$work/scripts/worktree-cleanup"
+output="$(CLAUDE_PROJECT_DIR="$work" "$hook")"
+if [[ "$output" == *"Branch: "* ]]; then
+  pass
+else
+  fail "missing cleanup script hid session context: '$output'"
+fi
+cleanup
+
+report

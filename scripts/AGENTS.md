@@ -13,6 +13,7 @@ One flat directory, not a `ci/` and a `scripts/` split. The boundary that split 
 - `repo-settings check` — hosted GitHub state, run explicitly
 - `adr-index` — called by pre-commit; regenerates `docs/adrs/index.md`
 - `changelog-check` — called by pre-commit at `pre-push`, and by `ci.yml` over a pull-request range; validates `CHANGELOG.md` structure
+- `worktree-cleanup` — called by pre-commit at `post-checkout` and `post-merge`, and by the SessionStart hook with `--report`; prunes Git's records for worktrees whose directories are gone
 - `libs/detect.sh` — the detection library, sourced by all of the above
 - `libs/precommit.sh` — which git hooks the config asks for and which this clone lacks; sourced by `doctor` and by `.claude/hooks/session-start.sh`
 - `tests/*-test` — assertions about the wiring itself
@@ -44,6 +45,10 @@ Two things about its wiring are load-bearing and were each a bug first. It self-
 
 **`changelog-check` validates only the paths it is given, and runs at `pre-push` rather than `pre-commit`.** It is a structural check on Keep a Changelog form — heading order, the six categories, a link reference per version — not a judgment about whether a change owed an entry. A repository with no `CHANGELOG.md` never invokes it, because pre-commit passes it the changed paths and there are none; that is what lets the same hook ship to a generated repository that has not adopted the addon yet. It sits at `pre-push` because a broken entry is worth catching before review and not worth failing every commit on a work-in-progress section, and CI re-runs it across the whole pull-request range so a fixup commit cannot hide a bad entry an earlier commit introduced.
 
+**`worktree-cleanup` prunes metadata and never deletes a directory.** It calls `git worktree prune`, which drops Git's administrative record for a linked worktree whose directory has already disappeared; a live worktree is untouched by construction rather than by a guard. It exits early when the dry run reports nothing, so the ordinary checkout costs one `git` invocation and prints nothing.
+
+Its positional arguments are ignored on purpose. `post-checkout` passes three (previous HEAD, new HEAD, branch flag) and `post-merge` passes one, and a hook that read them as paths would misbehave differently at each stage; only `--report` is interpreted. That flag is what SessionStart uses, so starting a session names the stale metadata without changing the clone, and its failure is swallowed rather than costing the session context printed after it.
+
 **`check`'s pre-commit sweep covers untracked files, in a second pass by path.** `--all-files` enumerates through git and cannot see a file that has not been staged, which makes the gate blindest to the files most likely to be new. A new script would pass `check` and then fail the hook at commit time, having never been read. `--files` takes a path whether or not git tracks it; `git ls-files --others --exclude-standard` supplies the list, so an ignored path stays ignored.
 
 **Local commands stay off hosted GitHub state.** `doctor`, `check`, and `dev` must not read or write repository settings, branches, or releases. Hosted inspection happens only through `repo-settings check`, so ordinary local work is not coupled to `gh` authentication. `tests/health-checks-test` enforces this by stubbing `gh`.
@@ -72,8 +77,10 @@ Changes here almost always belong in `apps/github-repository-template/src/base-r
 - `scripts/tests/health-checks-test` — the offline boundary
 - `scripts/tests/adr-index-test` — the generated index converges, and pre-commit actually invokes the hook
 - `scripts/tests/commitlint-test` — the `commit-msg` hook is installed by a bare `pre-commit install`, and commitlint rejects a malformed message and tolerates a generated merge subject. The only suite here that needs the network, since proving a JavaScript linter rejects anything means installing and running it
+- `scripts/tests/worktree-cleanup-test` — pruning removes stale records, leaves a live worktree, is idempotent, and tolerates the arguments each git hook stage passes
+- `scripts/tests/session-start-test` — the hook reports stale metadata without pruning it, and still prints the session context when `scripts/worktree-cleanup` is absent
 - `scripts/tests/changelog-check-test` — each structural rule rejects what it is meant to reject and the shipped addon changelog passes. Needs neither `pre-commit` nor the network
 - `scripts/tests/precommit-hooks-test` — `libs/precommit.sh` reads the hook list out of each YAML list form, and reports exactly the hooks a clone lacks. Needs neither `pre-commit` nor the network, so it always runs — which is the point, since this is the half of the wiring that fails silently
-- `scripts/check` runs all six before the checks they guard; `ci.yml` runs them before toolchain setup
+- `scripts/check` runs all eight before the checks they guard; `ci.yml` runs them before toolchain setup
 - Both hook-wiring suites skip their cases when `pre-commit` is absent, so `ci.yml` installs `pre-commit` ahead of them. Without that install they report a smaller green run in CI than they do locally, and the assertions covering the wiring above are the ones lost
 - shellcheck via pre-commit, with `-x` so it follows `source` into `libs/detect.sh`
