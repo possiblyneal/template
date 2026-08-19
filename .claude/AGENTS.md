@@ -10,7 +10,8 @@ The agent's operating parameters for this repository: hooks wired to tool events
 - `hooks/` — three shell scripts, each parsing input with `jq`, which is why `scripts/doctor` requires `jq` while any of them is present
 - `rules/documentation.md` — the contract governing every `AGENTS.md` in this repository
 - `skills/` — reusable multi-step prompts, each invocable as `/name`
-- `agents/`, `output-styles/`, `workflows/` — empty, shipped so the available surfaces are visible without inheriting rules
+- `output-styles/minimal.md` — the `Minimal` style, a copy of the payload's; `.repo-template.json` marks the directory product, so a template update never overwrites it
+- `agents/`, `workflows/` — empty, shipped so the available surfaces are visible without inheriting rules
 
 `skills/repo-builder/` is this repository's own product, not configuration. Its contract is `skills/repo-builder/references/lifecycle.md`.
 
