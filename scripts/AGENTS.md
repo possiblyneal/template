@@ -12,6 +12,8 @@ One flat directory, not a `ci/` and a `scripts/` split. The boundary that split 
 - `ci`, `security`, `release`, `detect` — called by `.github/workflows/`
 - `repo-settings check` — hosted GitHub state, run explicitly
 - `adr-index` — called by pre-commit; regenerates `docs/adrs/index.md`
+- `changelog-check` — called by pre-commit at `pre-push`, and by `ci.yml` over a pull-request range; validates `CHANGELOG.md` structure
+- `worktree-cleanup` — called by pre-commit at `post-checkout` and `post-merge`, and by the SessionStart hook with `--report`; prunes Git's records for worktrees whose directories are gone
 - `libs/detect.sh` — the detection library, sourced by all of the above
 - `libs/precommit.sh` — which git hooks the config asks for and which this clone lacks; sourced by `doctor` and by `.claude/hooks/session-start.sh`
 - `tests/*-test` — assertions about the wiring itself
@@ -41,6 +43,12 @@ The config path is a parameter to both functions; the clone is the working direc
 
 Two things about its wiring are load-bearing and were each a bug first. It self-reports the rewrite with a non-zero exit rather than relying on pre-commit's modified-files detection, which does not fire the first time the index is created: the file is untracked then, so pre-commit sees no change and the commit lands without it. And it runs with `always_run` and no `files:` filter, because that filter reads the staged paths, which exclude deletions — `git rm` of a record would skip the hook on the one commit that made the index stale. `tests/adr-index-test` drives a real repository through pre-commit for both.
 
+**`changelog-check` validates only the paths it is given, and runs at `pre-push` rather than `pre-commit`.** It is a structural check on Keep a Changelog form — heading order, the six categories, a link reference per version — not a judgment about whether a change owed an entry. A repository with no `CHANGELOG.md` never invokes it, because pre-commit passes it the changed paths and there are none; that is what lets the same hook ship to a generated repository that has not adopted the addon yet. It sits at `pre-push` because a broken entry is worth catching before review and not worth failing every commit on a work-in-progress section, and CI re-runs it across the whole pull-request range so a fixup commit cannot hide a bad entry an earlier commit introduced.
+
+**`worktree-cleanup` prunes metadata and never deletes a directory.** It calls `git worktree prune`, which drops Git's administrative record for a linked worktree whose directory has already disappeared; a live worktree is untouched by construction rather than by a guard. It exits early when the dry run reports nothing, so the ordinary checkout costs one `git` invocation and prints nothing.
+
+Its positional arguments are ignored on purpose. `post-checkout` passes three (previous HEAD, new HEAD, branch flag) and `post-merge` passes one, and a hook that read them as paths would misbehave differently at each stage; only `--report` is interpreted. That flag is what SessionStart uses, so starting a session names the stale metadata without changing the clone, and its failure is swallowed rather than costing the session context printed after it.
+
 **`check`'s pre-commit sweep covers untracked files, in a second pass by path.** `--all-files` enumerates through git and cannot see a file that has not been staged, which makes the gate blindest to the files most likely to be new. A new script would pass `check` and then fail the hook at commit time, having never been read. `--files` takes a path whether or not git tracks it; `git ls-files --others --exclude-standard` supplies the list, so an ignored path stays ignored.
 
 **Local commands stay off hosted GitHub state.** `doctor`, `check`, and `dev` must not read or write repository settings, branches, or releases. Hosted inspection happens only through `repo-settings check`, so ordinary local work is not coupled to `gh` authentication. `tests/health-checks-test` enforces this by stubbing `gh`.
@@ -49,7 +57,7 @@ This is not a promise that nothing reaches the network. pre-commit downloads a h
 
 **`release` is the only script here that writes to GitHub.** A changelog is an addition by occasion, so the script handles both cases and announces which one it took. With a `CHANGELOG.md` it publishes the section matching the tag and refuses when that section is missing or empty, so a version cannot be published before it has been cut. Without the file it releases with GitHub-generated notes, because a project that has not reached a changelog still has versions to tag. What it must never do is treat an uncut version and an absent changelog as the same thing — the first is a mistake and the second is not. It runs `scripts/ci` itself rather than trusting an earlier job to have done it, which is why the release workflow holds `contents: write` while the gate runs. Nothing else should call it.
 
-**`repo-settings` reports and never changes.** Enabling a setting writes state the whole repository sees, and a ruleset write replaces rather than merges, so an automatic correction could silently revert a deliberate loosening. Three outcomes are distinct and the difference matters: enabled, disabled, and not offered for the plan and visibility.
+**`repo-settings` reports and never changes.** Squash merging and automatic head branch deletion are checked first and unconditionally, because both are offered on every plan while push protection and rulesets return early when they are not. Enabling a setting writes state the whole repository sees, and a ruleset write replaces rather than merges, so an automatic correction could silently revert a deliberate loosening. Three outcomes are distinct and the difference matters: enabled, disabled, and not offered for the plan and visibility.
 
 **The CODEOWNERS section runs above the admin gate, deliberately, and a fourth outcome joins the three above.** Every way a CODEOWNERS file fails is silent — a rejected line is skipped while the rest of the file still applies, an owner without write access is dropped — so it is asked about rather than waited on. `codeowners/errors` needs only read access, and a non-admin is exactly who benefits from being told the file is broken, so the section sits above the admin early-return. It sits below the read-access check because that is what makes a 404 from that endpoint mean "no CODEOWNERS file" rather than "no access to look"; the two are the same status code. Neither position is arbitrary.
 
@@ -69,7 +77,10 @@ Changes here almost always belong in `apps/github-repository-template/src/base-r
 - `scripts/tests/health-checks-test` — the offline boundary
 - `scripts/tests/adr-index-test` — the generated index converges, and pre-commit actually invokes the hook
 - `scripts/tests/commitlint-test` — the `commit-msg` hook is installed by a bare `pre-commit install`, and commitlint rejects a malformed message and tolerates a generated merge subject. The only suite here that needs the network, since proving a JavaScript linter rejects anything means installing and running it
+- `scripts/tests/worktree-cleanup-test` — pruning removes stale records, leaves a live worktree, is idempotent, and tolerates the arguments each git hook stage passes
+- `scripts/tests/session-start-test` — the hook reports stale metadata without pruning it, and still prints the session context when `scripts/worktree-cleanup` is absent
+- `scripts/tests/changelog-check-test` — each structural rule rejects what it is meant to reject and the shipped addon changelog passes. Needs neither `pre-commit` nor the network
 - `scripts/tests/precommit-hooks-test` — `libs/precommit.sh` reads the hook list out of each YAML list form, and reports exactly the hooks a clone lacks. Needs neither `pre-commit` nor the network, so it always runs — which is the point, since this is the half of the wiring that fails silently
-- `scripts/check` runs all five before the checks they guard; `ci.yml` runs them before toolchain setup
+- `scripts/check` runs all eight before the checks they guard; `ci.yml` runs them before toolchain setup
 - Both hook-wiring suites skip their cases when `pre-commit` is absent, so `ci.yml` installs `pre-commit` ahead of them. Without that install they report a smaller green run in CI than they do locally, and the assertions covering the wiring above are the ones lost
 - shellcheck via pre-commit, with `-x` so it follows `source` into `libs/detect.sh`

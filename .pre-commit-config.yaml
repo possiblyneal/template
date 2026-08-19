@@ -1,11 +1,14 @@
 # Install once per clone with `pre-commit install`, otherwise these never run.
 
-# commitlint runs at commit-msg, a different git hook file from the one every
-# other hook here uses. `pre-commit install` writes only the pre-commit hook
-# unless it is told otherwise, and a commit-msg hook that was never installed
-# fails silently: commits succeed, messages go unchecked, and nothing reports
-# it. This line is what makes the plain command install both.
-default_install_hook_types: [pre-commit, commit-msg]
+# commitlint runs at commit-msg, changelog-check at pre-push, and
+# worktree-cleanup at post-checkout and post-merge -- four git hook files
+# distinct from the one every other hook here uses. `pre-commit install`
+# writes only the pre-commit hook unless it is told otherwise, and a hook that
+# was never installed fails silently: commits, pushes, and checkouts succeed
+# while messages, changelog entries, and stale worktree metadata go unchecked,
+# and nothing reports it. This line is what makes the plain command install
+# every one of them.
+default_install_hook_types: [pre-commit, commit-msg, pre-push, post-checkout, post-merge]
 
 # Scopes the hooks below to the commit, so a git hook type this file never
 # asked for cannot run them. A clone that once ran `pre-commit install -t
@@ -79,6 +82,30 @@ repos:
         language: script
         always_run: true
         pass_filenames: false
+
+  - repo: local
+    hooks:
+      # Changelog content is judged in the pull request, but once an entry is
+      # chosen its Keep a Changelog structure is deterministic. Running only
+      # when the file changed preserves that division rather than inventing a
+      # policy that every source change must add an entry.
+      - id: changelog-check
+        name: validate changed changelog entries
+        entry: scripts/changelog-check
+        language: script
+        files: (^|/)CHANGELOG\.md$
+        stages: [pre-push]
+
+      # These hooks let Git remove only stale administrative records for linked
+      # worktrees whose directories have already disappeared. They never remove
+      # a live worktree directory, and SessionStart reports candidates without
+      # mutating them.
+      - id: worktree-cleanup
+        name: prune stale worktree metadata
+        entry: scripts/worktree-cleanup
+        language: script
+        pass_filenames: false
+        stages: [post-checkout, post-merge]
 
   # The only static analysis the shell scripts in scripts/ get. Every one there
   # is extensionless, so pre-commit recognizes it as shell by reading its

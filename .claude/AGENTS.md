@@ -29,6 +29,8 @@ The agent's operating parameters for this repository: hooks wired to tool events
 
 **`hooks/session-start.sh` installs every git hook type the config asks for, not just `pre-commit`.** A clone that predates the commit-msg hook already has `hooks/pre-commit`, so testing for that file alone reports the clone as set up and the message check never lands.
 
+**`hooks/session-start.sh` reports stale worktree metadata; it does not prune it.** It calls `scripts/worktree-cleanup --report`, guarded on the file being executable and with its failure swallowed, because everything the hook prints after that point is the session's orientation and a missing or broken optional script must not cost it. Pruning belongs to the `post-checkout` and `post-merge` hooks, where a person asked git to do something; starting a session is not that.
+
 That module also resolves the hooks directory with `git rev-parse --git-path` instead of a literal `.git/hooks`, so the install fires in a linked worktree, where `.git` is a file and the hooks live in the shared common directory. The hardcoded path this replaced reported those clones as already set up.
 
 It gets that list by sourcing `scripts/libs/precommit.sh` rather than reading the config itself — the only dependency any hook here has on `scripts/`, and deliberate. `scripts/doctor` reports the same gap this closes, and when the two disagreed about whether a clone was set up, the disagreement was invisible from either file. The source is guarded on the file existing, so a tree without `scripts/` still starts a session.

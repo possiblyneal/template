@@ -74,7 +74,7 @@ The template ships `documentation.md`, holding the contract governing `AGENTS.md
 
 `block-config-change.sh` is a `ConfigChange` hook that stops edits to `.claude/settings.json`, `.claude/settings.local.json`, or `.claude/skills/` from hot-reloading into the running session. Without it, a session that edits its own settings gets the new permissions immediately, unwinding the ask gates above from inside; the same mid-session path is how a malicious skill file would take effect.
 
-`session-start.sh` is a `SessionStart` hook that prints the current branch, uncommitted changes, and recent commits as session context, restates the read-before-edit obligation and names the rule file holding the full documentation contract, and runs `pre-commit install` when the config is present but a hook it asks for is not yet installed.
+`session-start.sh` is a `SessionStart` hook that prints the current branch, uncommitted changes, and recent commits as session context, restates the read-before-edit obligation and names the rule file holding the full documentation contract, and runs `pre-commit install` when the config is present but a hook it asks for is not yet installed. It also runs `scripts/worktree-cleanup --report`, which names stale linked-worktree metadata without pruning it, so starting a session stays read-only; a failure there is swallowed rather than costing the session context that follows.
 
 `.claude/settings.json`: Overrides for global `settings.json`. The template fills `hooks` with the three entries above, `permissions.ask`, `plansDirectory`, `attribution`, `allowedHttpHookUrls`, `disableClaudeAiConnectors`, `env` (CLI environment defaults carried over from the author's global settings), and `skipDangerousModePermissionPrompt`, and ships the remaining containers empty so a new project sees the available sections without inheriting rules: `permissions.allow`, `permissions.deny`, `permissions.additionalDirectories`, `sandbox`, `enabledPlugins`, `modelOverrides`, and `skillOverrides`.
 
@@ -100,7 +100,7 @@ An `apps/` entry is one deployable service or one durable domain boundary: the u
 
 `tests/`: Repo-level tests spanning multiple apps or libraries: integration, end-to-end, contract, benchmark, and shared fixtures. App-local tests stay under `apps/<domain or deployable service>/tests/`.
 
-`scripts/`: Every portable shell script, whether a person runs it or a workflow does. `scripts/security` runs a dependency audit and, when a scanner is installed, a secret scan.
+`scripts/`: Every portable shell script, whether a person runs it or a workflow does. `scripts/security` runs a dependency audit and, when a scanner is installed, a secret scan. `scripts/changelog-check` validates the deterministic structure of a changed changelog; pre-commit calls it at `pre-push`, where the changed-file range is known. `scripts/worktree-cleanup` prunes Git's records for linked worktrees whose directories are already gone; pre-commit calls it at `post-checkout` and `post-merge`.
 
 `scripts/libs/`: Shared shell libraries private to the `scripts/` entry points. Its plural name matches root `libs/`: each file is a library, while the directory holds the collection. Nothing here is a command, so files have no shebang or executable bit; callers source them by an absolute path rooted at the repository.
 
