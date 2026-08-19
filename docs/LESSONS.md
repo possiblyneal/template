@@ -37,7 +37,7 @@ The root config files and `apps/github-repository-template/src/base-repo/` hold 
 
 **Why:** A fix made only at the root leaves the template shipping the bug to every repository generated afterward. A fix made only in the payload leaves this repository running the bug.
 
-**Source:** [Template payload contract](../apps/github-repository-template/CLAUDE.md)
+**Source:** [Template payload contract](../apps/github-repository-template/AGENTS.md)
 
 ## CodeQL fails fast here, and that failure is the finding
 

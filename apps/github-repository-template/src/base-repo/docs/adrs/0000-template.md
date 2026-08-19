@@ -2,7 +2,7 @@
 type: Template                # replace with: Architecture Decision Record
 title: <The Decision as One Imperative Statement, e.g. "Use PostgreSQL for the Primary Datastore">
 description: <Write the decision as one sentence. Scans and indexes surface this without opening the file.>
-scope: [] # `apps/<app-name>` for domain or `global` if it effects three or more, or `lang:rust` for languages (Max 3)
+scope: [] # `apps/<app-name>` for domain or `global` if it affects three or more apps, or `lang:rust` for languages (Max 3)
 tags: [] # High level architectural themes only (Max 5)
 # sources:
 #   - id: <stable-source-id>
@@ -37,15 +37,17 @@ have changed.>
 
 
 ## Alternatives Considered
-**Optional:** Only include when it adds genuine value. Most ADRs won't need this.
 
-<One entry per option, each with why it was rejected. State the
+<Optional — delete this heading and this note together when the section
+would add nothing. Most ADRs won't need it.
+One entry per option, each with why it was rejected. State the
 rejection reason precisely enough that a reader can tell when it no
 longer applies. If a reader can still ask "but why didn't we just…?",
 this section has failed.>
 
 ## Consequences
-**Optional:** Only include when it adds genuine value. Most ADRs won't need this.
 
-<What we accept as a result — good and bad. If only upsides are listed
+<Optional — delete this heading and this note together when the section
+would add nothing. Most ADRs won't need it.
+What we accept as a result — good and bad. If only upsides are listed
 this is a sales pitch, not a record; the honest costs are the payload.>
