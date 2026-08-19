@@ -20,6 +20,8 @@ The `repo-builder` skill reads `src/base-repo` at a specific commit, never the w
 
 **Payload and root are separate edits.** When a change should apply to both, make it in both places in the same commit. A fix at the root only leaves the template shipping the bug to every repository generated afterward.
 
+**Dependabot only ever bumps the root.** `.github/dependabot.yml` scans `/` and `/.github/actions/*`, and nothing it lists reaches `apps/`, so a bot pull request bumping a pinned action updates the root copy and leaves the payload pinned to the old revision. Mirror the bump into `src/base-repo/.github/` on the bot's own branch before merging it. Nothing reports the divergence afterward: both trees are valid YAML, both pass actionlint, and the stale pin only surfaces in a repository generated later.
+
 **`src/addon-adoption.json` is root-only and stays that way**, the one deliberate exception to the rule above. It describes `src/repository-addons/`, which never reaches a generated repository, so mirroring it into the payload ships an index of files that are not there. It is also a sibling of that directory rather than a file inside it, because anything inside is an addon to copy. The in-file guidance carried by the addons themselves is not deduplicated against it: that guidance serves someone adopting a file by hand, in a repository that has no manifest to read.
 
 **Payload paths lose the `src/base-repo/` prefix when generated**, so a relative reference written inside the payload must be relative to the generated repository's root, not to this one.
