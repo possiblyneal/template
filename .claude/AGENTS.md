@@ -19,9 +19,15 @@ The agent's operating parameters for this repository: hooks wired to tool events
 
 **A session must not grant itself new permissions.** `hooks/block-config-change.sh` blocks mid-session reloads of settings and skills. The edit stays on disk as a reviewable diff and applies next session. Without it, a session editing its own settings gets the new permissions immediately, unwinding the ask gates from inside — the same path a malicious skill file would take.
 
-**A rule here binds every clone.** Permission rules merge across scopes and a deny or ask rule cannot be lifted downstream, so restriction is what this file is for. The `allow` list is the bounded exception and stays that way: a project allow rule applies only once the workspace trust dialog is accepted, and granting capability from a repository-controlled file is the shape behind past trust-dialog bypasses.
+**A rule here binds every clone.** Permission rules merge across scopes and a deny or ask rule cannot be lifted downstream, so restriction is what this file is for.
 
-**Secrets are denied, not asked.** A deny `Read` rule also blocks the edit tools on the same path and drops it from search and file discovery, which an `ask` rule does not; the patterns are `//`-anchored so they hold outside the repository too. Deny cannot carry exceptions, so the `.env` variants stay enumerated rather than globbed — `.env.*` would take `src/repository-addons/.env.example` with it.
+**`allow` ships empty and stays empty.** Allow rules have no effect under `bypassPermissions`, so one added here buys nothing for a session running that mode while still granting capability to every clone that accepts the trust dialog — the shape behind past trust-dialog bypasses. Deny rules block in every mode including bypass, and ask rules prompt in every mode, so those two are the only rules that do anything for every reader of this file. A rule that is genuinely machine-local has no home in this repository; keep it in user settings.
+
+**Secrets are denied, not asked**, `//`-anchored so they hold outside the repository, and written twice — once as `Read`, once as `Edit`. The `Read` half also blocks the edit tools and drops the path from search and file discovery, but it does not cover `NotebookEdit`, and its Write coverage requires Claude Code v2.1.228 or later; the `Edit` twin closes both gaps.
+
+**An enumerated deny plus a broad allow is a leak, not a boundary.** A deny list names the files it knows; `Read(//home/neal/.claude/**)` handed back `.credentials.json`, which `Read(//**/credentials.json)` does not match, and `Read(//home/neal/.agentmemory/**)` handed back `.env.bak.*`, which `Read(//**/.env)` does not match. Widen the deny when a new secret shape appears; do not re-open a directory to reach one file in it.
+
+**Deny cannot carry exceptions**, so the `.env` variants stay enumerated rather than globbed — `.env.*` would take `src/repository-addons/.env.example` with it. The tracked payload `.env` is denied and that is correct: it ships intentionally empty and `apps/github-repository-template/AGENTS.md` forbids giving it content. The cost is that Glob and Grep no longer surface it, so the `.env` reconciliation step in `skills/repo-builder/references/lifecycle.md` has to name the path outright rather than discover it.
 
 **Omit a key rather than blanking it when an empty value would be invalid**, because a settings file failing validation is rejected whole rather than partially applied. Enum strings, minimum-length strings, and objects with required sub-fields must stay absent until they hold a real value.
 
@@ -41,7 +47,7 @@ It gets that list by sourcing `scripts/libs/precommit.sh` rather than reading th
 
 ## Work Guidance
 
-This repository's `settings.json` differs from the payload's by one rule: `Edit(/apps/github-repository-template/src/**)`, which prompts before a payload edit so the payload-versus-root choice stays deliberate. Preserve it when reconciling a template update.
+This repository's `settings.json` differs from the payload's in two places, and a normalized `jq -S` diff of the two files should show nothing else. The root adds the ask rule `Edit(/apps/github-repository-template/src/**)`, which prompts before a payload edit so the payload-versus-root choice stays deliberate; preserve it when reconciling a template update. The payload sets `skipDangerousModePermissionPrompt: true` and the root does not — a repository-controlled file suppressing that confirmation in every generated repository, kept only because removing it is a decision about the payload rather than a reconciliation.
 
 Changes to `hooks/`, `rules/`, and `settings.json` usually belong in the payload too. `skills/` does not — it is product, and the manifest classifies it that way.
 
