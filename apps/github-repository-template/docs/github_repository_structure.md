@@ -146,7 +146,7 @@ YAML files use `.yml` except where a tool fixes the name, which is why `.pre-com
 
 `.env`: The git-ignored config file for storing active sensitive environment variables.
 
-`.gitignore`: Specifies intentionally untracked files and directories. Ignores `.claude/` and `CLAUDE.md` so a generated repository carries them in its working tree without committing them.
+`.gitignore`: Specifies intentionally untracked files and directories. Ignores `.claude/` and the root `CLAUDE.md` so a generated repository carries them in its working tree without committing them. The `CLAUDE.md` pattern is anchored: a nested `CLAUDE.md` is the `@AGENTS.md` shim that loads its folder's contract, and must be committable.
 `.gitattributes`: Git behavior rules for line endings, diffs, and GitHub Linguist classification.
 
 `.pre-commit-config.yaml`: Local guardrails that run automatically before code gets committed, catching AI syntax mistakes early. **`.commitlintrc.yaml`**: The commit message rules. Messages follow Conventional Commits — `type(optional scope): subject`, a blank line, then the body.

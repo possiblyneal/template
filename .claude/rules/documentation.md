@@ -44,6 +44,7 @@ Update parent docs when parent-level structure, ownership, workflow, or child in
 
 - Create a child `AGENTS.md` when a folder becomes a durable boundary with its own purpose, ownership, rules, responsibilities, workflow, materials, or quality standards
 - Create a `CLAUDE.md` beside it in the same commit, containing exactly `@AGENTS.md` and nothing else. Claude Code loads `CLAUDE.md` and never loads `AGENTS.md`, so the shim is the only thing that loads the contract when work happens inside that folder. Move, rename, or delete the pair together; a stranded `AGENTS.md` is a contract that silently does not load
+- The root pair is exempt where the repository gitignores its root `CLAUDE.md`, as a generated repository does: that shim arrives through the working tree rather than history, so a fresh clone loads the root contract only once someone supplies it. The exemption stops at the root — every nested shim is committed
 - Work Guidance must reflect the current standards of the project or user instructions; if there are no specific standards or instructions yet, leave it empty
 - Verification must reflect an existing check; if no verification framework exists yet, leave it empty and update it when one exists
 
@@ -77,7 +78,7 @@ Default section order:
 1. Re-check changed paths against the chain of `AGENTS.md` files
 2. Update nearest owning docs and any affected parents or children
 3. Refresh every affected Child Index
-4. Confirm every `AGENTS.md` you added, moved, or renamed has its `CLAUDE.md` shim beside it
+4. Confirm every `AGENTS.md` you added, moved, or renamed has its `CLAUDE.md` shim beside it, and that deleting one took its shim with it
 5. Remove stale or contradictory text
 6. Run existing verification when relevant
 7. Report any docs intentionally left unchanged and why
