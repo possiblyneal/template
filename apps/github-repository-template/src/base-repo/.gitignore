@@ -22,7 +22,11 @@ service-account*.json
 
 # Claude config: copied into a generated repo but not committed there.
 .claude/
-CLAUDE.md
+# Anchored: the root CLAUDE.md is the personal bootstrap and stays out of
+# history, but a nested CLAUDE.md is a structural `@AGENTS.md` shim and is the
+# only thing that loads that folder's contract. Unanchored, git matched it at
+# every depth and `git add` dropped nested shims silently, with no error.
+/CLAUDE.md
 CLAUDE.local.md
 
 # Local scratch
