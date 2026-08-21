@@ -39,8 +39,6 @@ Every built repository tracks `.repo-template.json`:
     {"path": ".repo-template.json", "mode": "managed"},
     {"path": "scripts/**", "mode": "managed"},
     {"path": ".github/**", "mode": "managed"},
-    {"path": ".claude/hooks/**", "mode": "managed"},
-    {"path": ".claude/rules/**", "mode": "managed"},
     {"path": ".claude/settings.json", "mode": "managed"},
     {"path": ".pre-commit-config.yaml", "mode": "managed"},
     {"path": ".commitlintrc.yaml", "mode": "managed"},
@@ -54,6 +52,8 @@ Every built repository tracks `.repo-template.json`:
     {"path": "tests/**", "mode": "product"},
     {"path": "tools/**", "mode": "product"},
     {"path": "docs/**", "mode": "product"},
+    {"path": ".claude/hooks/**", "mode": "product"},
+    {"path": ".claude/rules/**", "mode": "product"},
     {"path": ".claude/skills/**", "mode": "product"},
     {"path": ".claude/agents/**", "mode": "product"},
     {"path": ".claude/output-styles/**", "mode": "product"},
@@ -82,7 +82,7 @@ Unmatched defaulting to product is the safe direction for a path the template do
 
 A rename or delete of a destination-modified managed file needs semantic review. Product-created files under managed directories remain untouched unless the new template introduces the same path.
 
-An adopted addon is one of those files, and the pair above lands on both sides of the line: `CHANGELOG.md` matches no pattern and defaults to product, while `.claude/rules/changelog.md` sits under a managed directory the template does not ship that path into. Neither is a deletion to reconcile. The template never having shipped a file is not the template having removed it, and an update that reads it that way deletes a record the destination chose to keep.
+An adopted addon is one of those files. `CHANGELOG.md` matches no pattern and defaults to product; `.claude/rules/changelog.md` falls under the product-owned `.claude/rules/**`. Neither is a deletion to reconcile. The template never having shipped a path is not the template having removed it, and an update that reads it that way deletes a record the destination chose to keep.
 
 ## Addon adoption
 

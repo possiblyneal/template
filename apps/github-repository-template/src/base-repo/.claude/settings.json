@@ -88,43 +88,7 @@
   "allowedHttpHookUrls": [],
   "disableClaudeAiConnectors": true,
   "skipDangerousModePermissionPrompt": true,
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/session-start.sh",
-            "args": []
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Edit|Write|NotebookEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/ask-outside-repo.sh",
-            "args": []
-          }
-        ]
-      }
-    ],
-    "ConfigChange": [
-      {
-        "matcher": "project_settings|local_settings|skills",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-config-change.sh",
-            "args": []
-          }
-        ]
-      }
-    ]
-  },
+  "hooks": {},
   "sandbox": {},
   "attribution": {
     "commit": "",

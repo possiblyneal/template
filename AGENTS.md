@@ -71,7 +71,7 @@ A generated repository is where a guarantee unavailable on this plan can actuall
 
 - `apps/github-repository-template/AGENTS.md` — the template payload and the reference docs explaining it
 - `scripts/AGENTS.md` — the language-capabilities interface, and what adding a language or check requires
-- `.claude/AGENTS.md` — hooks, settings, and skills; what a session may not grant itself
+- `.claude/AGENTS.md` — settings and skills; what a session may not grant itself
 - `docs/AGENTS.md` — ADRs, specs, plans, and lessons
 
-The full documentation contract is `.claude/rules/documentation.md`. Read the nearest `AGENTS.md` above every path you touch before editing, and update the owning file after meaningful changes.
+Read the nearest `AGENTS.md` above every path you touch before editing, and update the owning file after meaningful changes.

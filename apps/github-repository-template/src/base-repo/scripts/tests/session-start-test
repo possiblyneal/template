@@ -12,7 +12,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=libs/harness.sh
 source "$repo_root/scripts/tests/libs/harness.sh"
 
-hook="$repo_root/.claude/hooks/session-start.sh"
+hook="$HOME/.claude/hooks/session-start.sh"
 
 fixture() {
   current="$1"

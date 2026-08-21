@@ -39,4 +39,4 @@ Rename with `git mv`, then grep for the old name and update every reference befo
 
 ## Child Index
 
-This project is not yet indexed. Before continuing you must read `.claude/rules/documentation.md`, scan the project, build the `AGENTS.md` tree and replace this message with the actual index. Go deep and scan files recursively to properly evaluate complexity and create nested `AGENTS.md` files where needed.
+This project is not yet indexed. Before continuing you must scan the project, build the `AGENTS.md` tree and replace this message with the actual index. Go deep and scan files recursively to properly evaluate complexity and create nested `AGENTS.md` files where needed.
