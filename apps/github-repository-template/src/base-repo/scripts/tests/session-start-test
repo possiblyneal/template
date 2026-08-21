@@ -38,6 +38,15 @@ has_prunable_worktree() {
 
 echo "session-start-test"
 
+if [[ ! -x "$hook" ]]; then
+  echo "unavailable: ~/.claude/hooks/session-start.sh not present"
+  echo "  This suite exercises the operator's global session-start hook, which ships"
+  echo "  outside this repository. A CI runner, or a clone whose operator has not set"
+  echo "  it up, has nothing here to test against."
+  report
+  exit
+fi
+
 fixture "reports stale metadata without pruning"
 stale_worktree
 output="$(CLAUDE_PROJECT_DIR="$work" "$hook")"
