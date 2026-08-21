@@ -62,6 +62,8 @@ Every built repository tracks `.repo-template.json`:
 }
 ```
 
+The `ownership` array above illustrates the shape at the time this contract was written; it is not a canonical list to copy. Build it from the payload's actual top-level structure at the resolved source commit — e.g. `git ls-tree -r --name-only <commit> -- <subtree>` — rather than pasting this example, since the template's real paths can drift from documentation prose without this file being updated to match.
+
 Use a full lowercase 40-character commit. `template.commit` is the last template version successfully applied to the candidate state. Change it only after the candidate passes verification; commit it with the update it describes.
 
 Record generation choices that change rendered files or repository settings. Do not record timestamps, a pending target commit, destination HEAD, or duplicate file contents.
@@ -132,7 +134,7 @@ Report every region as done or as outstanding. An addon left with an unfilled sl
 4. Personalize the candidate:
    - move `apps/app-name` to the kebab-case application name (do not copy it), verify the old path is absent, and update every reference;
    - replace the root `AGENTS.md` placeholder section and bootstrap Child Index with repository-specific content;
-   - initialize `docs/LESSONS.md` metadata and remove generation placeholders while retaining its durable writing guidance;
+   - initialize `docs/LESSONS.md` metadata and remove generation placeholders while retaining its durable writing guidance. Set `generated.by` to the actual author — the repo-builder agent, not the operator on whose behalf it ran — and capture `generated.at` from the real clock (e.g. `date -u +%Y-%m-%dT%H:%M:%SZ`) at the moment of writing rather than composing a plausible-looking value; a rounded time such as midnight is a placeholder wearing a valid format, not a captured one;
    - keep `docs/adrs/0000-template.md` as the reusable ADR template;
    - create `.repo-template.json`;
    - render visibility and feature choices honestly. Keep `codeql.yml` for a private repository rather than omitting it. Its `scanning` job fails in seconds naming the reason, which is accurate — the repository has no static analysis coverage — and it turns green by itself when the repository goes public, where omitting the file leaves nothing to restore and nothing to say so. Report that red check as an expected initial state when handing the repository over; do not describe it as a passing build. Record an omission under `features` only when deliberately stripping the workflow, which is now a choice rather than the private-repository default.
@@ -142,9 +144,25 @@ Report every region as done or as outstanding. An addon left with an unfilled sl
 
    Tools the candidate's scripts look up on `PATH` may also run inside pre-commit's pinned environments. A tool reported unavailable by a script and passing under pre-commit in the same run was not skipped; report what each surface actually did.
 
+   A machine-wide `core.hooksPath` set for an unrelated purpose (an editor's own git integration, another agent's attribution hook) makes `pre-commit install` refuse outright, and breaks it again inside any throwaway fixture repository the candidate's own tests spin up to exercise hook installation — fixtures inherit the same global config. Check `git config --global core.hooksPath` before treating either failure as a candidate defect; a control run of the same checks against the template repository's own current HEAD reproduces an identical failure when this is the cause.
+
 6. Verify the file list, not only the content. Compare the payload's tracked paths at the source commit against the candidate's, and account for every difference as intended or as a defect. A file the payload ships and the candidate lacks is invisible to every check, because a check reads content and absence has no runner. Compare against the working tree as well as the index: a path the destination ignores is present and untracked rather than missing, and `.env` is the one the payload ships that way. Use `git ls-files` for the tracked comparison and `git ls-files -o -i --exclude-standard` for the untracked one; the flags are the whole point, since an ignored path appears in neither the plain form nor `-o --exclude-standard`, and the two disagree about `.env` in the direction that reads as missing. Do not build either list with the file-discovery tools — `.env` matches a `permissions.deny` rule, so Glob and Grep omit it and a listing built from them reports it missing when it is there.
 7. Present the local diff, the file-list reconciliation, checks, repository settings, and exact pending remote commands at the remote action gate.
 8. Create the GitHub repository without auto-initialization. Create and push one empty root commit to the default branch so the full generated payload can be reviewed in a PR.
+
+   The candidate's own `no-commit-to-branch` hook refuses this commit while HEAD is the default branch, and its `protect-branch` pre-push hook refuses to push anything there — both correctly, since neither can distinguish this one-time structural bootstrap from an ordinary disallowed commit. Build the empty commit directly, without checking the default branch out to make it, so the commit hook never fires:
+
+   ```bash
+   empty_tree=$(git hash-object -t tree /dev/null)
+   empty_commit=$(git commit-tree "$empty_tree" -m "chore: initialize empty repository")
+   git update-ref refs/heads/<default-branch> "$empty_commit"
+   ```
+
+   The push still needs `--no-verify`: `protect-branch` blocks by destination ref, not by commit content, so it cannot recognize this bootstrap push as the one exception. Get explicit confirmation for this specific exception before running it — every other push and commit in this lifecycle goes through hooks normally.
+
+   ```bash
+   git push --no-verify origin <default-branch>
+   ```
 9. Configure supported settings after the default branch exists: Dependabot alerts/security updates, push protection where available, squash merging disabled, and a branch ruleset appropriate to the repository. Confirm plan/visibility limitations instead of treating API success as proof a feature is active.
 
     Adopting `CODEOWNERS` changes what "appropriate" means here. It is the only addon finished by a repository setting rather than by an edit: without a rule requiring code owner review, the file requests a reviewer and nothing waits for the answer. Enabling it is not the safe default it looks like, for the reason its manifest entry gives — ask.
@@ -219,7 +237,7 @@ Ownership still governs what a later update may touch, and a hand-merged file is
    - both changed in non-overlapping ways: combine both intents and verify;
    - both changed the same behavior, a changed file was deleted/renamed, or a new template path collides with product content: report the conflict and request the specific policy decision.
 5. Classify every delta path as `applied`, `preserved`, `renamed/deleted`, or `conflicted`. Do not leave conflict markers.
-6. Run the destination's documented checks. If they fail, keep the recorded commit unchanged and report the candidate diff for recovery.
+6. Run the destination's documented checks. If they fail, keep the recorded commit unchanged and report the candidate diff for recovery. The `core.hooksPath` gotcha noted under Generate step 5 applies equally here if the destination's hook is not yet installed.
 7. After successful checks, update `template.commit` to the exact target, validate the manifest again, and rerun checks affected by that change.
 8. Create a feature branch from the current remote default branch. Commit only the bounded lifecycle diff, present the remote gate, push, and open a PR. Do not merge.
 9. Verify PR base/head, changed paths, the recorded target commit, check results, and preserved product paths.
@@ -242,7 +260,7 @@ Adopt lands a held-back repository addon into a repository that already carries 
 3. Copy each addon from the recorded commit out of `repository-addons/` — a sibling of the subtree, not inside it — into the candidate at its destination-relative path. Adopt the two pairs whole: `CONTRIBUTORS.md` with `.all-contributorsrc`, and `CHANGELOG.md` with `.claude/rules/changelog.md`.
 4. Run the [Addon adoption](#addon-adoption) walkthrough for every addon taken: ask each distinct `value_key` once, fill every slot, surface each review judgement, list each external step, and write any `authored_on_adoption` file. Report each region as done or outstanding.
 5. Do not advance `template.commit` and do not record the addon in the manifest. Ownership already treats a later-seen adopted file as destination-added rather than a template deletion, so a subsequent update leaves it alone.
-6. Stage the candidate and run the destination's documented checks, keeping the four outcomes distinct: pass, nothing to do, runner unavailable, never ran.
+6. Stage the candidate and run the destination's documented checks, keeping the four outcomes distinct: pass, nothing to do, runner unavailable, never ran. The `core.hooksPath` gotcha noted under Generate step 5 applies equally here if the destination's hook is not yet installed.
 7. Create a feature branch from the current remote default branch. Commit only the adopted addon paths, present the remote gate, push, and open a PR. Never merge.
 8. Verify PR base/head, that only addon paths changed, check results, and that product content is preserved.
 
