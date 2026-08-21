@@ -277,9 +277,10 @@ Remote execution
 - settings: Dependabot alerts/updates; push protection if available; squash merging disabled; main ruleset; automatic head branch deletion if chosen
 - push: repo-builder/<short-target> -> generated content or template update
 - open PR: repo-builder/<short-target> -> main
+- merge: repo-builder/<short-target> -> main (bootstrap generate only, see Generate step 11)
 ```
 
-Ask for confirmation unless the invocation already authorizes these exact actions against this exact repository. Authorization for repository creation does not imply settings changes or a later merge. Never merge as part of this skill.
+Ask for confirmation unless the invocation already authorizes these exact actions against this exact repository. Authorization for repository creation does not imply settings changes or a later merge. Never merge as part of this skill, except the bootstrap-generate case documented under Generate step 11: that PR may be merged, gated the same as every other remote action here.
 
 ## Failure and recovery
 
