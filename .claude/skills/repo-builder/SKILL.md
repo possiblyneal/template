@@ -19,7 +19,7 @@ Generation into a destination that already has content is still a generate, but 
 
 ## Preflight before editing
 
-Use `scripts/preflight.py` for deterministic validation and retain its JSON in the work record.
+Use `scripts/preflight.py` for deterministic validation and retain its JSON in the work record. `scripts/tests/test_preflight.py` and `scripts/tests/test_addon_adoption.py` cover them; run them after editing `preflight.py` or `addon-adoption.json`.
 
 - `generate` resolves the exact source commit and verifies its payload subtree. It never inspects the destination, so an occupied destination looks identical to an empty one; establish that yourself.
 - `update` validates provenance, repository identities, a clean destination, strict ancestry, and the bounded template delta.
