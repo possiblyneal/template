@@ -149,7 +149,7 @@ Report every region as done or as outstanding. An addon left with an unfilled sl
 
     Adopting `CODEOWNERS` changes what "appropriate" means here. It is the only addon finished by a repository setting rather than by an edit: without a rule requiring code owner review, the file requests a reviewer and nothing waits for the answer. Enabling it is not the safe default it looks like, for the reason its manifest entry gives — ask.
 
-    Squash merging is turned off unconditionally here, not collected as a preference in step 2. `AGENTS.md` documents Conventional Commit messages checked by a `commit-msg` hook; a squashed merge takes its message from the pull request title instead, written in GitHub's web interface where no local hook can reach it, so leaving it on lets one click bypass every rule in `.commitlintrc.yaml`. It is offered on every plan, unlike push protection and rulesets below, so there is no availability check to make first.
+    Squash merging is turned off unconditionally here, not collected as a preference in step 2. `AGENTS.md` documents Conventional Commit messages checked by a `commit-msg` hook; a squashed merge takes its message from the pull request title instead, written in GitHub's web interface where no local hook can reach it, so leaving it on lets one click bypass every rule in `.commitlintrc.yaml`. Unlike push protection and rulesets, it is offered on every plan, so it needs no plan/visibility check before applying it.
 
     ```bash
     gh api -X PATCH repos/<owner>/<name> -f allow_squash_merge=false
