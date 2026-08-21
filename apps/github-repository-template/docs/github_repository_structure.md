@@ -54,13 +54,11 @@ The file sets one thing: the `unpinned-uses` policy. Since v1.20.0 zizmor requir
 
 The specific operating parameters for the AI agent.
 
-`.claude/rules/`: Core behavioral constraints, domain-specific heuristics, and strict formatting requirements the AI must follow during generation. A rule without `paths:` frontmatter loads at session start at the same priority as `AGENTS.md`; a rule with it loads only when a matching file enters context, keeping a long contract out of sessions that never touch its subject.
+`.claude/rules/`: Core behavioral constraints, domain-specific heuristics, and strict formatting requirements the AI must follow during generation. A rule without `paths:` frontmatter loads at session start at the same priority as `AGENTS.md`; a rule with it loads only when a matching file enters context, keeping a long contract out of sessions that never touch its subject. Ships empty.
 
-The template ships `documentation.md`, holding the contract governing `AGENTS.md` files:
+`.claude/skills/`: Reusable, parameterized prompts that you or the AI can invoke by name to execute complex, multi-step actions. Each `<name>/SKILL.md` is also invocable as `/name`, which is why the template ships no `.claude/commands/`: commands are the legacy single-file form of the same shortcut, and one directory holding both roles beats two whose boundary needs explaining. Ships empty.
 
-`.claude/skills/`: Reusable, parameterized prompts that you or the AI can invoke by name to execute complex, multi-step actions. Each `<name>/SKILL.md` is also invocable as `/name`, which is why the template ships no `.claude/commands/`: commands are the legacy single-file form of the same shortcut, and one directory holding both roles beats two whose boundary needs explaining.
-
-`.claude/output-styles/`: Templates dictating the exact format of generated code, logs, or documentation, so the AI's output matches your personal conventions.
+`.claude/output-styles/`: Templates dictating the exact format of generated code, logs, or documentation, so the AI's output matches your personal conventions. Ships empty.
 
 `.claude/agents/`: Specialized subagents with their own scoped context windows for isolated tasks e.g., a dedicated refactoring agent.
 
@@ -68,19 +66,9 @@ The template ships `documentation.md`, holding the contract governing `AGENTS.md
 
 `.claude/agent-memory/`: Subagent persistent memory, maintaining state across sessions separately from the main session auto-memory. Not shipped; Claude Code creates the directory when a subagent first writes to it.
 
-`.claude/hooks/`: Shell scripts wired to tool events by `.claude/settings.json`. Ships three, each parsing its input with `jq`, which is why `scripts/doctor` requires that tool while any of them is present.
+`.claude/hooks/`: Shell scripts wired to tool events by `.claude/settings.json`. Ships empty.
 
-`ask-outside-repo.sh` is a `PreToolUse` hook that prompts before `Edit`, `Write`, or `NotebookEdit` touches a path outside the repository.
-
-`block-config-change.sh` is a `ConfigChange` hook that stops edits to `.claude/settings.json`, `.claude/settings.local.json`, or `.claude/skills/` from hot-reloading into the running session. Without it, a session that edits its own settings gets the new permissions immediately, unwinding the ask gates above from inside; the same mid-session path is how a malicious skill file would take effect.
-
-`session-start.sh` is a `SessionStart` hook that prints the current branch, uncommitted changes, and recent commits as session context, restates the read-before-edit obligation and names the rule file holding the full documentation contract, and runs `pre-commit install` when the config is present but a hook it asks for is not yet installed. It also runs `scripts/worktree-cleanup --report`, which names stale linked-worktree metadata without pruning it, so starting a session stays read-only; a failure there is swallowed rather than costing the session context that follows.
-
-`.claude/settings.json`: Overrides for global `settings.json`. The template fills `hooks` with the three entries above, `permissions.ask`, `permissions.deny`, `plansDirectory`, `attribution`, `allowedHttpHookUrls`, `disableClaudeAiConnectors`, `env` (CLI environment defaults carried over from the author's global settings), and `skipDangerousModePermissionPrompt`, and ships the remaining containers empty so a new project sees the available sections without inheriting rules: `permissions.allow`, `permissions.additionalDirectories`, `sandbox`, `enabledPlugins`, `modelOverrides`, and `skillOverrides`.
-
-`permissions.deny` carries the secret paths, each pattern written twice — once as `Read` and once as `Edit`. A `Read` deny already blocks the Edit and Write tools, but not `NotebookEdit`, and the Write half requires Claude Code v2.1.228 or later; the `Edit` twin closes both gaps rather than assuming a floor version in a repository the template cannot inspect. `permissions.allow` ships empty and should stay that way: allow rules have no effect under `bypassPermissions`, so a rule added there buys nothing for anyone running that mode while still granting capability to every clone that accepts the trust dialog.
-
-`permissions.ask` carries the irreversible git and `gh` commands, plus three path families a session should not touch on its own initiative: any dotfile or dot-folder, anything under a `src/` directory, and anything directly in the repository root. Those path rules cover creating and modifying, which go through `Edit`, `Write`, or `NotebookEdit`. They cannot cover deleting, which goes through the shell — a Bash rule matches a command prefix and cannot read the path in its argument — so `Bash(rm:*)` and `Bash(git rm:*)` sit alongside them and prompt on every removal rather than only on a gated path. `.npmrc` and `.pypirc` are here rather than in `deny` deliberately: both are ordinary package-manager configuration a session has real reason to read, and the credential in one is a line rather than the whole file.
+`.claude/settings.json`: Overrides for global `settings.json`. It ships with no local policy — `permissions.allow`, `permissions.ask`, `permissions.deny`, `permissions.additionalDirectories`, `hooks`, `sandbox`, `enabledPlugins`, `modelOverrides`, and `skillOverrides` are empty containers, and `attribution` holds blank defaults — so a new project sees the available sections without inheriting rules. The template is personal-use only for now: every repository generated from it is read and run by the same operator, whose global `~/.claude/settings.json` supplies the actual policy (the secret `permissions.deny` list, the dotfile/root-file/`rm`/`.npmrc`/`.pypirc` `permissions.ask` rules, and `env`) rather than the template shipping a duplicate copy of it. `permissions.allow` would ship empty regardless of that: allow rules have no effect under `bypassPermissions`, so a rule added there buys nothing for anyone running that mode while still granting capability to every clone that accepts the trust dialog.
 
 `.mcp.json`: Configures Model Context Protocol MCP servers for this project only, granting the AI read/write access to external tools like databases, APIs, or local browsers.
 

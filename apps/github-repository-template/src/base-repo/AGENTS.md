@@ -18,7 +18,7 @@ A package under `apps/` or `libs/` whose language has no root manifest fails the
 - Pre-commit blocks direct commits to `main` and `master`. Branch before you start; a commit attempted on either fails at the hook, not at review.
 - Run `scripts/check` before committing. It runs the same checks CI does, plus pre-commit across every file rather than the staged ones.
 - These prompt for approval and cannot be assumed: `git reset --hard`, `git clean`, `git rebase`, `rm` and `git rm`, and the `gh` commands that merge pull requests, cut releases, or delete the repository.
-- So do these paths, whether the change creates or modifies: any dotfile or dot-folder, anything under a `src/` directory, and anything directly in the repository root. The rules are in `.claude/settings.json`.
+- So do these paths, whether the change creates or modifies: any dotfile or dot-folder, and anything directly in the repository root. These prompts come from the operator's global `~/.claude/settings.json`, not this repository's own `.claude/settings.json`, which ships with no local policy — the payload assumes the same operator's global config is present in every repository generated from it.
 - `git push origin HEAD:main` is refused at `pre-push` by `scripts/protect-branch`. `no-commit-to-branch` cannot see that push — it fires only while HEAD is the protected branch — so the two are not redundant.
 - Work reaches `main` through a pull request, where `.github/PULL_REQUEST_TEMPLATE.md` applies.
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/): `type(optional scope): subject`, a blank line, then the body. commitlint enforces it at `commit-msg` and the rules live in `.commitlintrc.yaml`, so a malformed message fails at the hook rather than at review. The subject is lowercase after the type and takes no trailing period. A body is optional to the tool and expected here — the session that made the change ends with it, and the body is the only surviving record of why.
@@ -39,4 +39,4 @@ Rename with `git mv`, then grep for the old name and update every reference befo
 
 ## Child Index
 
-This project is not yet indexed. Before continuing you must read `.claude/rules/documentation.md`, scan the project, build the `AGENTS.md` tree and replace this message with the actual index. Go deep and scan files recursively to properly evaluate complexity and create nested `AGENTS.md` files where needed.
+This project is not yet indexed. Before continuing you must scan the project, build the `AGENTS.md` tree and replace this message with the actual index. Go deep and scan files recursively to properly evaluate complexity and create nested `AGENTS.md` files where needed.

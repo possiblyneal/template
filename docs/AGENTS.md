@@ -41,4 +41,4 @@ The repository's structural reasoning is not here — it lives in `apps/github-r
 
 `scripts/adr-index` through pre-commit, covering `adrs/` only: the index matches the records, and each record's frontmatter is well-formed. `scripts/tests/adr-index-test` covers the script itself. Nothing checks the prose in any document here.
 
-The closeout pass in `.claude/rules/documentation.md` is the check: re-check changed paths against the `AGENTS.md` chain, update owning docs, refresh every affected Child Index, and remove stale text.
+The closeout pass in `~/.claude/rules/documentation.md` is the check: re-check changed paths against the `AGENTS.md` chain, update owning docs, refresh every affected Child Index, and remove stale text.

@@ -12,7 +12,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=libs/harness.sh
 source "$repo_root/scripts/tests/libs/harness.sh"
 
-hook="$repo_root/.claude/hooks/session-start.sh"
+hook="$HOME/.claude/hooks/session-start.sh"
 
 fixture() {
   current="$1"
@@ -37,6 +37,15 @@ has_prunable_worktree() {
 }
 
 echo "session-start-test"
+
+if [[ ! -x "$hook" ]]; then
+  echo "unavailable: ~/.claude/hooks/session-start.sh not present"
+  echo "  This suite exercises the operator's global session-start hook, which ships"
+  echo "  outside this repository. A CI runner, or a clone whose operator has not set"
+  echo "  it up, has nothing here to test against."
+  report
+  exit
+fi
 
 fixture "reports stale metadata without pruning"
 stale_worktree
