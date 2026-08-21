@@ -13,7 +13,17 @@ scripts/doctor
 
 # Run before the checks they guard. They verify the language-capabilities
 # interface, its workflow adapters, and that routine local commands stay offline.
-for test_script in scripts/tests/*-test; do
+#
+# nullglob so an empty scripts/tests/ reports itself plainly rather than the
+# unexpanded glob reading as one missing, non-executable test script.
+shopt -s nullglob
+test_scripts=(scripts/tests/*-test)
+shopt -u nullglob
+if (( ${#test_scripts[@]} == 0 )); then
+  echo "No test scripts found in scripts/tests/."
+  exit 1
+fi
+for test_script in "${test_scripts[@]}"; do
   if [[ ! -x "$test_script" ]]; then
     echo "$test_script is missing or not executable."
     exit 1

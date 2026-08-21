@@ -37,16 +37,27 @@ has_kotlin() { [[ -s settings.gradle.kts || -s build.gradle.kts ]]; }
 # packages as this project's.
 DETECT_PRUNE_DIRS=(.git node_modules .build target .venv venv vendor)
 
+# DETECT_PRUNE_DIRS as a find(1) `-name a -o -name b ...` expression, assigned
+# into the array named by $1. Its own copy of this list is the second copy
+# scripts/clean once kept, and the one this repository's detection module
+# exists to prevent.
+detect_prune_expr() {
+  local -n _detect_prune_out="$1"
+  local dir
+  _detect_prune_out=()
+  for dir in "${DETECT_PRUNE_DIRS[@]}"; do
+    _detect_prune_out+=(-name "$dir" -o)
+  done
+  unset '_detect_prune_out[${#_detect_prune_out[@]}-1]'
+}
+
 # find(1) with the directories above pruned. Arguments after the filename are
 # forwarded, so callers choose -print, -print -quit, or a test of their own.
 detect_find() {
-  local name="$1" prune=() dir
+  local name="$1" prune=()
   shift
 
-  for dir in "${DETECT_PRUNE_DIRS[@]}"; do
-    prune+=(-name "$dir" -o)
-  done
-  unset 'prune[${#prune[@]}-1]'
+  detect_prune_expr prune
 
   find . \( "${prune[@]}" \) -prune -o -name "$name" -type f "$@"
 }
@@ -120,14 +131,18 @@ has_trivy_target() {
 # Runs trivy over every lockfile matching a name, since Swift and Gradle have no
 # first-party audit command. Every lockfile is scanned even after one reports a
 # vulnerability, so the first hit does not hide the rest.
+#
+# Read on fd 3, not stdin: trivy reads stdin itself in some modes, and a loop
+# reading the manifest list on fd 0 would have that same read consumed by the
+# command it runs, silently skipping every lockfile after the first.
 trivy_each() {
   local lockfile status=0 found=1
 
-  while IFS= read -r lockfile; do
+  while IFS= read -r lockfile <&3; do
     [[ -n "$lockfile" ]] || continue
     found=0
     trivy fs --exit-code 1 --severity HIGH,CRITICAL --scanners vuln "$lockfile" || status=1
-  done < <(detect_find "$1" -print)
+  done 3< <(detect_find "$1" -print)
 
   (( found == 0 )) || return "$NO_RUNNER"
   return "$status"
@@ -136,11 +151,14 @@ trivy_each() {
 # Runs a command once per Swift package directory. Every package runs even after
 # one fails, so a single broken package does not hide the state of the rest,
 # while any failure still decides the exit status.
+#
+# Read on fd 3, not stdin, for the same reason as trivy_each: swift test/build
+# can read stdin, which would otherwise consume the remaining manifest list.
 swift_each() {
   local manifest status=0
-  while IFS= read -r manifest; do
+  while IFS= read -r manifest <&3; do
     ( cd "$(dirname "$manifest")" && "$@" ) || status=1
-  done < <(detect_find Package.swift -print)
+  done 3< <(detect_find Package.swift -print)
   return "$status"
 }
 
@@ -174,20 +192,6 @@ has_npm_script() {
     command -v node >/dev/null 2>&1 &&
     command -v npm >/dev/null 2>&1 &&
     node -e 'const s=require("./package.json").scripts||{};const v=s[process.argv[1]];process.exit(v&&v!==process.argv[2]?0:1)' "$1" "$NPM_PLACEHOLDER_TEST" 2>/dev/null
-}
-
-# The root manifest each language is checked from. Swift is absent deliberately:
-# it has no root manifest, so nested packages are how a Swift repository is
-# supposed to look and the orphan rule below must not fire on them.
-_detect_root_manifest() {
-  case "$1" in
-    node) echo "package.json" ;;
-    python) echo "pyproject.toml" ;;
-    go) echo "go.work" ;;
-    rust) echo "Cargo.toml" ;;
-    kotlin) echo "settings.gradle.kts" ;;
-    *) return 1 ;;
-  esac
 }
 
 # Every check runs from the repository root against a root workspace manifest.
@@ -233,14 +237,24 @@ detect_orphan_manifests() {
   for entry in "${pairs[@]}"; do
     IFS=: read -r lang nested_name root noun <<<"$entry"
 
-    # A present root manifest means the language is wired up; nested packages
-    # under it are ordinary workspace members, not orphans.
-    if has_language "$lang"; then continue; fi
+    # The root manifest itself, not language presence: has_go accepts go.mod
+    # or go.work, and has_kotlin accepts build.gradle.kts or settings.gradle.kts,
+    # so either would wrongly treat a root go.mod or build.gradle.kts alone as
+    # having wired up a nested module that neither file actually includes.
+    if [[ -s "$root" ]]; then continue; fi
 
     while IFS= read -r nested; do
       [[ -n "$nested" ]] || continue
-      found=0
       dir="$(dirname "${nested#./}")"
+
+      # Where nested_name differs from root (go.mod under go.work,
+      # build.gradle.kts under settings.gradle.kts), searching for nested_name
+      # also matches a copy sitting at the repository root: that is this
+      # project's own top-level manifest, already visible to every check
+      # without a workspace file, not a nested module missing one.
+      [[ "$dir" != "." ]] || continue
+
+      found=0
 
       case "$lang" in
         go) _detect_orphan_report "$nested" "$root" "$noun" \
@@ -274,8 +288,9 @@ _capability_lint_kotlin() {
 _capability_format_check_node() { has_npm_script format:check || return "$NO_RUNNER"; npm run format:check; }
 _capability_format_check_python() { uv_run ruff format --check .; }
 _capability_format_check_go() {
-  local unformatted
-  unformatted="$(gofmt -l .)"
+  local unformatted status=0
+  unformatted="$(gofmt -l .)" || status=$?
+  (( status == 0 )) || { echo "gofmt failed (exit $status)"; return "$status"; }
   [[ -z "$unformatted" ]] || { echo "gofmt needed: $unformatted"; return 1; }
 }
 _capability_format_check_rust() { cargo fmt --check; }
@@ -367,6 +382,12 @@ _capability_dev_kotlin() { gradle_has_task run || return "$NO_RUNNER"; ./gradlew
 _capability_is_not_applicable() {
   case "$1:$2" in
     typecheck:go|typecheck:rust|typecheck:swift|typecheck:kotlin|build:python) return 0 ;;
+    # Package.resolved is committed by SwiftPM whenever a package has
+    # dependencies; gradle.lockfile exists only once dependency locking is
+    # turned on, which is not the Gradle default. Neither is guaranteed, so a
+    # trivy target absent here means nothing to scan, not a missing tool.
+    audit:swift) [[ -z "$(detect_find Package.resolved -print -quit)" ]] ;;
+    audit:kotlin) [[ -z "$(detect_find gradle.lockfile -print -quit)" ]] ;;
     *) return 1 ;;
   esac
 }

@@ -179,6 +179,132 @@ else
 fi
 cleanup
 
+# --- root manifest specificity -------------------------------------------------
+
+# has_go accepts go.mod or go.work, and has_kotlin accepts build.gradle.kts or
+# settings.gradle.kts, but the pairs table's root manifest for each is
+# specifically go.work / settings.gradle.kts. A root go.mod (a plain module,
+# not a workspace) or a root build.gradle.kts (a single-project build, not a
+# multi-project settings file) wires up nothing for a nested module, so the
+# orphan rule must still fire.
+fixture "root go.mod alone does not wire up a nested module"
+printf 'module example.com/root\n\ngo 1.22\n' > go.mod
+mkdir -p apps/a
+printf 'module example.com/a\n\ngo 1.22\n' > apps/a/go.mod
+if scripts/detect check-orphans >/dev/null 2>&1; then
+  fail "a nested go.mod under a root go.mod (no go.work) passed as wired up"
+else
+  pass
+fi
+cleanup
+
+fixture "root build.gradle.kts alone does not wire up a nested project"
+printf 'plugins { }\n' > build.gradle.kts
+mkdir -p apps/a
+printf 'plugins { }\n' > apps/a/build.gradle.kts
+if scripts/detect check-orphans >/dev/null 2>&1; then
+  fail "a nested build.gradle.kts under a root build.gradle.kts (no settings.gradle.kts) passed as wired up"
+else
+  pass
+fi
+cleanup
+
+# --- an audit with nothing to scan is not-applicable, not unavailable --------
+
+# Package.resolved and gradle.lockfile only exist once a package has resolved
+# dependencies or Gradle locking is turned on, neither of which is guaranteed.
+# No lockfile means nothing to scan, which must read as not-applicable rather
+# than as a missing tool -- the tool may well be installed.
+fixture "swift audit with no Package.resolved is not-applicable"
+mkdir -p apps/ios
+printf '// swift-tools-version:5.9\n' > apps/ios/Package.swift
+out="$(language_capabilities run --dry-run audit 2>&1)"
+if grep -qE '^not-applicable +audit swift$' <<<"$out"; then
+  pass
+else
+  fail "a Swift package with no Package.resolved reports audit as unavailable instead of not-applicable"
+fi
+cleanup
+
+fixture "kotlin audit with no gradle.lockfile is not-applicable"
+printf 'rootProject.name = "k"\n' > settings.gradle.kts
+out="$(language_capabilities run --dry-run audit 2>&1)"
+if grep -qE '^not-applicable +audit kotlin$' <<<"$out"; then
+  pass
+else
+  fail "a Gradle project with no gradle.lockfile reports audit as unavailable instead of not-applicable"
+fi
+cleanup
+
+# --- a stream reader inside trivy_each/swift_each must not steal the manifest list --
+
+# The manifest list is read on fd 3 specifically because the command run per
+# manifest may itself read stdin. If it read fd 0 instead, a command that
+# drains stdin would consume the remaining manifest list and silently skip
+# every package after the first.
+fixture "swift_each visits every package even when the command reads stdin"
+mkdir -p apps/a apps/b bin
+printf '// swift-tools-version:5.9\n' > apps/a/Package.swift
+printf '// swift-tools-version:5.9\n' > apps/b/Package.swift
+marker="$PWD/marker"
+: > "$marker"
+cat > bin/swift <<EOF
+#!/usr/bin/env bash
+cat >/dev/null
+echo ok >> "$marker"
+EOF
+chmod +x bin/swift
+PATH="$PWD/bin:$PATH" swift_each swift test
+if (( $(wc -l < "$marker") == 2 )); then
+  pass
+else
+  fail "swift_each visited $(wc -l < "$marker") of 2 packages when the command reads stdin"
+fi
+cleanup
+
+fixture "trivy_each scans every lockfile even when the command reads stdin"
+mkdir -p apps/a apps/b bin
+printf 'lock\n' > apps/a/gradle.lockfile
+printf 'lock\n' > apps/b/gradle.lockfile
+marker="$PWD/marker"
+: > "$marker"
+cat > bin/trivy <<EOF
+#!/usr/bin/env bash
+cat >/dev/null
+echo ok >> "$marker"
+EOF
+chmod +x bin/trivy
+PATH="$PWD/bin:$PATH" trivy_each gradle.lockfile
+if (( $(wc -l < "$marker") == 2 )); then
+  pass
+else
+  fail "trivy_each scanned $(wc -l < "$marker") of 2 lockfiles when the command reads stdin"
+fi
+cleanup
+
+# --- a format-check adapter must not swallow the tool's own failure ----------
+
+# gofmt exits nonzero with empty stdout on a file it cannot parse. Reading only
+# `gofmt -l .`'s output and not its exit status reports that as "nothing to
+# format" -- a pass -- instead of the tool failure it is.
+fixture "gofmt's own failure is not read as nothing to format"
+printf 'module example.com/m\n\ngo 1.22\n' > go.mod
+mkdir bin
+cat > bin/gofmt <<'EOF'
+#!/usr/bin/env bash
+echo "gofmt: bad.go:1:1: expected declaration, found EOF" >&2
+exit 2
+EOF
+chmod +x bin/gofmt
+PATH="$PWD/bin:$PATH" _capability_format_check_go >/dev/null 2>&1
+status=$?
+if (( status == 2 )); then
+  pass
+else
+  fail "gofmt's exit status $status was not surfaced (expected 2)"
+fi
+cleanup
+
 # node_modules holds another project's manifests, and reporting them as this
 # project's would fail every repository that has ever run npm install.
 fixture "node_modules is not searched"
