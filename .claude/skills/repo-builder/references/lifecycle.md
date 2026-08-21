@@ -200,6 +200,8 @@ Report every region as done or as outstanding. An addon left with an unfilled sl
 
     Note that `/actions/workflows` lists the default branch only, so it reads zero on a first-generation PR whose default branch has no `.github/` yet. That is expected, not evidence.
 
+    A bootstrap generate is the one case where "do not merge" inverts. The destination's default branch is still the empty root commit, so no worktree can be created against it to review the PR before it merges — `git worktree add` against an empty tree checks out nothing, and a hook that expects the repository's own files (a missing `.pre-commit-config.yaml`, for instance) then fails on an empty checkout that was never the defect. Once checks pass, repo-builder may merge this one pull request itself, gated the same as any other remote action: present it as an explicit action against this exact repository and obtain confirmation before running it. The exception is scoped to this bootstrap PR alone — update, adopt, and a generate into an already-populated destination all have a destination worktree available for ordinary review, so their pull requests are never merged by repo-builder.
+
 ## Generate into a repository that already has content
 
 The steps above assume an empty destination. A destination with existing content is a generation whose collisions are decided by hand, and it needs its own rules:
@@ -275,9 +277,10 @@ Remote execution
 - settings: Dependabot alerts/updates; push protection if available; squash merging disabled; main ruleset; automatic head branch deletion if chosen
 - push: repo-builder/<short-target> -> generated content or template update
 - open PR: repo-builder/<short-target> -> main
+- merge: repo-builder/<short-target> -> main (bootstrap generate only, see Generate step 11)
 ```
 
-Ask for confirmation unless the invocation already authorizes these exact actions against this exact repository. Authorization for repository creation does not imply settings changes or a later merge. Never merge as part of this skill.
+Ask for confirmation unless the invocation already authorizes these exact actions against this exact repository. Authorization for repository creation does not imply settings changes or a later merge. Never merge as part of this skill, except the bootstrap-generate case documented under Generate step 11: that PR may be merged, gated the same as every other remote action here.
 
 ## Failure and recovery
 
