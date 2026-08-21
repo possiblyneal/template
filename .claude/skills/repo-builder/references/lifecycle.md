@@ -237,7 +237,7 @@ Ownership still governs what a later update may touch, and a hand-merged file is
    - both changed in non-overlapping ways: combine both intents and verify;
    - both changed the same behavior, a changed file was deleted/renamed, or a new template path collides with product content: report the conflict and request the specific policy decision.
 5. Classify every delta path as `applied`, `preserved`, `renamed/deleted`, or `conflicted`. Do not leave conflict markers.
-6. Run the destination's documented checks. If they fail, keep the recorded commit unchanged and report the candidate diff for recovery.
+6. Run the destination's documented checks. If they fail, keep the recorded commit unchanged and report the candidate diff for recovery. The `core.hooksPath` gotcha noted under Generate step 5 applies equally here if the destination's hook is not yet installed.
 7. After successful checks, update `template.commit` to the exact target, validate the manifest again, and rerun checks affected by that change.
 8. Create a feature branch from the current remote default branch. Commit only the bounded lifecycle diff, present the remote gate, push, and open a PR. Do not merge.
 9. Verify PR base/head, changed paths, the recorded target commit, check results, and preserved product paths.
@@ -260,7 +260,7 @@ Adopt lands a held-back repository addon into a repository that already carries 
 3. Copy each addon from the recorded commit out of `repository-addons/` — a sibling of the subtree, not inside it — into the candidate at its destination-relative path. Adopt the two pairs whole: `CONTRIBUTORS.md` with `.all-contributorsrc`, and `CHANGELOG.md` with `.claude/rules/changelog.md`.
 4. Run the [Addon adoption](#addon-adoption) walkthrough for every addon taken: ask each distinct `value_key` once, fill every slot, surface each review judgement, list each external step, and write any `authored_on_adoption` file. Report each region as done or outstanding.
 5. Do not advance `template.commit` and do not record the addon in the manifest. Ownership already treats a later-seen adopted file as destination-added rather than a template deletion, so a subsequent update leaves it alone.
-6. Stage the candidate and run the destination's documented checks, keeping the four outcomes distinct: pass, nothing to do, runner unavailable, never ran.
+6. Stage the candidate and run the destination's documented checks, keeping the four outcomes distinct: pass, nothing to do, runner unavailable, never ran. The `core.hooksPath` gotcha noted under Generate step 5 applies equally here if the destination's hook is not yet installed.
 7. Create a feature branch from the current remote default branch. Commit only the adopted addon paths, present the remote gate, push, and open a PR. Never merge.
 8. Verify PR base/head, that only addon paths changed, check results, and that product content is preserved.
 
