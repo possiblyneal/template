@@ -18,4 +18,4 @@ An `apps/` entry is one deployable service or one durable domain boundary, the u
 
 ## Child Index
 
-This project is not yet indexed. Before continuing you must read `~/.claude/rules/documentation.md` scan the project, build the `CLAUDE.md` tree and replace this message with the actual index. Go deep and scan files recursively to properly evaluate complexity and create nested `CLAUDE.md` files where needed.
+This project is not yet indexed. Before continuing you must read `~/.claude/rules/documentation.md` scan the project, build the `CLAUDE.md` tree and replace this message with the actual child index. Go deep and scan files recursively to properly evaluate complexity and create nested `CLAUDE.md` files where needed.
