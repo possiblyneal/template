@@ -6,7 +6,7 @@ compatibility: Requires Python 3, Git, and gh for authorized GitHub repository a
 
 # Repo Builder
 
-Read `references/lifecycle.md` before acting. It defines the manifest, ownership rules, generation/update flows, remote confirmation gates, failure behavior, and final report.
+Read `references/lifecycle.md` before acting. It defines the manifest, ownership rules, the wayfinding session, generation/update flows, remote confirmation gates, failure behavior, and final report. `references/choosing_a_language.md` is the method that session runs on.
 
 ## Choose the operation
 
@@ -16,6 +16,8 @@ Read `references/lifecycle.md` before acting. It defines the manifest, ownership
 - If the requested operation and destination state disagree, stop and explain the mismatch.
 
 Generation into a destination that already has content is still a generate, but its collisions are decided by hand and it never resolves one by deleting. `references/lifecycle.md` carries those rules; read them before writing to a non-empty destination.
+
+A generate derives its application boundaries rather than collecting them. How many `apps/<name>/` directories the repository gets, what each is called, and what each is written in come out of wayfinding, run with the user before anything is materialized. It is two questions asked in one structured prompt — what ships separately, and what binds first for each — with your reading of the request as the options, and it expands into the full method in `references/choosing_a_language.md` only against the triggers `references/lifecycle.md` names. Do not open the full session by default. Skip wayfinding entirely when the invocation already names every deployable and its language, and report that it was skipped.
 
 ## Preflight before editing
 
@@ -55,6 +57,11 @@ On update, advance `.repo-template.json` only after the candidate validates, and
 - Renamed/deleted: <paths or none>
 - Conflicted: <paths and competing intents, or none>
 
+### Application boundaries
+- <deployable>: choke point <constraint, or "none bound; time-to-working-code"> -> <language>, <selected from list | reasoned from the seam contract | measured against it>
+- ADRs written: <paths, or none>
+- <deployables supplied in the invocation rather than derived, on one line, or none>
+
 ### File list
 - <payload paths accounted for, and every difference named as intended or as a defect>
 
@@ -67,6 +74,7 @@ On update, advance `.repo-template.json` only after the candidate validates, and
 
 ### Verification
 - `<exact command>`: pass | fail | unavailable (<reason>)
+- Default branch after merge: <check-suite result> | n/a (nothing merged)
 
 ### Pending action
 <none, or the exact decision/authorization needed>

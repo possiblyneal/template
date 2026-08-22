@@ -10,7 +10,7 @@ The agent's operating parameters for this repository: permission rules and the s
 - `skills/` — reusable multi-step prompts, each invocable as `/name`
 - `hooks/`, `rules/`, `output-styles/`, `agents/`, `workflows/` — empty, shipped so the available surfaces are visible without inheriting rules
 
-`skills/repo-builder/` is this repository's own product, not configuration. Its contract is `skills/repo-builder/references/lifecycle.md`.
+`skills/repo-builder/` is this repository's own product, not configuration. Its contract is `skills/repo-builder/references/lifecycle.md`, and `skills/repo-builder/references/choosing_a_language.md` is the method its wayfinding session runs on — how a repository's application boundaries and their languages get derived rather than asked for.
 
 ## Local Contracts
 
@@ -48,4 +48,4 @@ Changes to `settings.json` usually belong in the payload too. `hooks/`, `rules/`
 
 ## Child Index
 
-None. `skills/repo-builder/` documents itself through `SKILL.md` and `references/lifecycle.md`.
+None. `skills/repo-builder/` documents itself through `SKILL.md` and its `references/`.
