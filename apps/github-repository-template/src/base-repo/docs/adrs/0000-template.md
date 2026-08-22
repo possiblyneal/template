@@ -9,8 +9,8 @@ tags: [] # High level architectural themes only (Max 5)
 #     resource: <URL or bundle-relative path>
 #     title: <Human-readable source title>
 generated: { by: "<actor, e.g. human:neal or agent/model>", at: "<ISO 8601 datetime, e.g. 2026-08-05T14:30:00Z>" } # update after each meaningful change
-# verified: { by: "<actor>", at: "<ISO 8601 datetime>" } # uncomment after confirming that this ADR accurately records the decision, context, alternatives, and consequences against its cited sources or other authoritative records; use a list for several
-# supersedes:                 # path to the ADR this replaces (if applicable)
+# verified: { by: "<actor>", at: "<ISO 8601 datetime>" } # uncomment after confirming that this ADR accurately records the decision, context, alternatives, and consequences (if necessary) against its cited sources or other authoritative records; use a list for several
+# supersedes:                 # path to the ADR this replaces (if and when applicable)
 superseded_by:                # path to the replacing ADR; set status: superseded when filling this
 status: proposed              # proposed | accepted | deprecated | superseded
 ---
@@ -35,11 +35,11 @@ the section most often skipped and the most valuable — it is what lets
 a future reader judge whether the decision still holds once conditions
 have changed.>
 
-
 ## Alternatives Considered
 
 <Optional — delete this heading and this note together when the section
 would add nothing. Most ADRs won't need it.
+
 One entry per option, each with why it was rejected. State the
 rejection reason precisely enough that a reader can tell when it no
 longer applies. If a reader can still ask "but why didn't we just…?",
@@ -49,5 +49,6 @@ this section has failed.>
 
 <Optional — delete this heading and this note together when the section
 would add nothing. Most ADRs won't need it.
+
 What we accept as a result — good and bad. If only upsides are listed
 this is a sales pitch, not a record; the honest costs are the payload.>

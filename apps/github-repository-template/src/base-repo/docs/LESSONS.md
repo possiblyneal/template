@@ -34,17 +34,18 @@ Add only durable, repeatable, non-obvious constraints, conventions, or tool/prov
 ### Example
 
 ```md
-## Rename the app placeholder before adding code
+## Put a language's manifest at the repository root
 
-`apps/app-name/` is a placeholder, not a deployable unit.
+A package under `apps/` or `libs/` is checked only through a manifest at the
+root. A manifest nested beside the package is invisible to every check.
 
-**Do:** Ask the user to name the unit, rename it with `git mv`, and update all
-references before adding code.
+**Do:** Add the root manifest for the language before adding a package that
+needs one.
 
-**Why:** A later rename becomes unnecessarily broad and leaves the application
-boundary ambiguous.
+**Why:** Nothing reports the gap as a failure. `scripts/doctor` names the
+orphan, but lint, type check, and test see no package at all and pass.
 
-**Source:** [Repository instructions](../CLAUDE.md)
+**Source:** [scripts/doctor](../scripts/doctor)
 ```
 
 ## Lessons
