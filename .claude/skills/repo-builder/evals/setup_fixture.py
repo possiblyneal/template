@@ -61,14 +61,16 @@ def commit(repo: Path, message: str) -> str:
 def template_payload(repo: Path) -> None:
     write(
         repo,
-        "base-repo/AGENTS.md",
+        "base-repo/CLAUDE.md",
         """## Commands
 
 - `scripts/check` — run repository checks
 
-## Placeholders
+## Apps
 
-`apps/app-name/` is a placeholder. Rename it before adding code, then delete this section.
+An `apps/` entry is one deployable service.
+
+`apps/app-name/` is a placeholder. Rename it before adding code, then delete this paragraph.
 
 ## Child Index
 
@@ -76,16 +78,27 @@ This project is not yet indexed. Replace this message with the actual index.
 """,
     )
     write(repo, "base-repo/apps/app-name/src/.gitkeep", "")
+    write(repo, "base-repo/apps/app-name/tests/.gitkeep", "")
+    write(repo, "base-repo/apps/app-name/docs/specs/.gitkeep", "")
     write(
         repo,
         "base-repo/docs/adrs/0000-template.md",
         """---
 type: Template
 title: <Decision title>
+scope: [] # `apps/<app-name>` for domain, or `lang:rust` for languages
 status: proposed
 ---
 
 # <Decision title>
+
+## Context
+
+<What forced the decision.>
+
+## Alternatives Considered
+
+<One entry per option, each with why it was rejected.>
 
 Copy this file to create an ADR. Replace the placeholders in the copy.
 """,
@@ -270,13 +283,13 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def build_generation(root: Path) -> dict[str, object]:
+def build_generation(root: Path, scenario: str = "generation") -> dict[str, object]:
     template = root / "template"
     init_repo(template)
     template_payload(template)
     target = commit(template, "Add base repository payload")
     return {
-        "scenario": "generation",
+        "scenario": scenario,
         "template_repo": str(template),
         "subtree": "base-repo",
         "target_commit": target,
@@ -364,7 +377,7 @@ def build_adopt(root: Path) -> dict[str, object]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("scenario", choices=("generation", "clean-update", "unrelated", "conflict", "adopt"))
+    parser.add_argument("scenario", choices=("generation", "generation-multi", "clean-update", "unrelated", "conflict", "adopt"))
     parser.add_argument("output", type=Path)
     parser.add_argument("--force", action="store_true", help="replace an existing output directory")
     args = parser.parse_args()
@@ -377,8 +390,8 @@ def main() -> int:
     output.mkdir(parents=True)
 
     try:
-        if args.scenario == "generation":
-            details = build_generation(output)
+        if args.scenario in ("generation", "generation-multi"):
+            details = build_generation(output, args.scenario)
         elif args.scenario == "adopt":
             details = build_adopt(output)
         else:

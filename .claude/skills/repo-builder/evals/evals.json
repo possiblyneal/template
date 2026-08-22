@@ -3,13 +3,14 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "Generate a local candidate for acme/billing-service from the fixture template's base-repo subtree at the exact target commit. Use application name billing-api, private visibility, and main as the default branch. Do not contact GitHub or mutate any remote: materialize the candidate under the requested output directory and write a report explaining the remote repository/empty-base/content-PR steps that would follow. Preserve the ADR template, replace the app-name and CLAUDE.md bootstrap placeholders, initialize lessons metadata, and record provenance in .repo-template.json.",
-      "expected_output": "A personalized local repository candidate, valid lifecycle manifest, and a report that stops before remote operations while specifying the empty main base and generated-content PR sequence.",
+      "prompt": "Generate a local candidate for acme/billing-service from the fixture template's base-repo subtree at the exact target commit. The invocation names the deployables outright: one application, billing-api, written in Python. Use private visibility and main as the default branch. Do not contact GitHub or mutate any remote: materialize the candidate under the requested output directory and write a report explaining the remote repository/empty-base/content-PR steps that would follow. Preserve the ADR template, replace the app-name and CLAUDE.md bootstrap placeholders, initialize lessons metadata, and record provenance in .repo-template.json.",
+      "expected_output": "A personalized local repository candidate, valid lifecycle manifest, and a report that records the boundaries as supplied rather than derived and stops before remote operations while specifying the empty main base and generated-content PR sequence.",
       "files": [],
       "expectations": [
         "The candidate records the exact full template commit, repository, and base-repo subtree in .repo-template.json.",
         "apps/billing-api exists, while apps/app-name and the root CLAUDE.md bootstrap placeholders do not remain.",
         "docs/adrs/0000-template.md remains available as an ADR template and docs/LESSONS.md has initialized non-placeholder metadata.",
+        "The report records that the application boundaries were supplied in the invocation rather than derived, so no wayfinding session was opened and no language ADR was written.",
         "The report identifies an empty root commit on main followed by a generated-content branch and pull request.",
         "No gh command, push, remote creation, or other network mutation occurs."
       ]
@@ -49,6 +50,20 @@
         "The manifest remains at the recorded commit and no conflict markers are left in tracked files.",
         "The destination is not committed, pushed, or used to open a pull request.",
         "The report asks for the specific policy decision needed to resolve the conflict."
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Generate a local candidate for acme/session-replay from the fixture template's base-repo subtree at the exact target commit, private visibility, main as the default branch. The invocation does not name the applications, so derive them. The system captures a user's browser session and ships the captured frames to a server that fans them out to live subscribers. Answering the wayfinding questions: two things ship separately — a recorder that runs inside the browser page, and an ingest-api that holds the long-lived subscriber streams. What binds first is a runtime constraint for the recorder, since it can only execute where the browser executes, and network concurrency for the ingest-api, since its cost is thousands of idle open connections. That settles the recorder as TypeScript and the ingest-api as Go. Work locally only: do not contact GitHub or mutate any remote. Create both application directories, record each choke point in its own ADR, preserve the ADR template, replace the CLAUDE.md bootstrap placeholders, initialize lessons metadata, record provenance in .repo-template.json, and write a report.",
+      "expected_output": "A local candidate carrying two application directories derived from the wayfinding answers, one ADR per deployable recording its choke point and language, and a report that names both boundaries and stops before remote operations.",
+      "files": [],
+      "expectations": [
+        "apps/recorder and apps/ingest-api both exist with the payload skeleton (src, tests, docs/specs), and apps/app-name is gone.",
+        "docs/adrs holds one accepted ADR per deployable, numbered from 0001, each scoped to its apps/<name> path and a lang: tag, with docs/adrs/0000-template.md left as a template.",
+        "No root language manifest, toolchain, or package file is rendered for either language.",
+        "generation.applications in .repo-template.json lists both names and records no language.",
+        "The root CLAUDE.md names both deployables and what each is for, and the report states each choke point and how it was established.",
+        "No gh command, push, remote creation, or other network mutation occurs."
       ]
     }
   ]

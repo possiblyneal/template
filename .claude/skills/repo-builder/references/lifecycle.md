@@ -5,6 +5,7 @@
 - [Manifest](#manifest)
 - [Ownership](#ownership)
 - [Addon adoption](#addon-adoption)
+- [Wayfinding](#wayfinding)
 - [Generate](#generate)
 - [Update](#update)
 - [Adopt](#adopt)
@@ -29,7 +30,7 @@ Every built repository tracks `.repo-template.json`:
     "default_branch": "main"
   },
   "generation": {
-    "application_name": "billing-api",
+    "applications": ["billing-api"],
     "visibility": "private",
     "features": {
       "codeql": "omitted-by-choice"
@@ -70,6 +71,8 @@ Record generation choices that change rendered files or repository settings. Do 
 
 Do not record what the filesystem already answers. Language and package manager are read from the manifests present, so a recorded copy is a second source of truth that only goes stale — `libs/detect.sh` answers the question at any moment and a manifest added later never updates a field. `visibility` is recorded despite being live-readable because it is an argument to repository creation, and `features` because it records which absences were deliberate: an omitted `codeql.yml` and a dropped one look identical on disk.
 
+`generation.applications` lists the deployable names [Wayfinding](#wayfinding) established, and nothing else about them. It is recorded because an update has to know that `apps/app-name` was renamed rather than deleted, which the destination tree can no longer say. The choke point and the language behind each name are not recorded here: the language is answered by the manifests present under the rule above, and the choke point is an argument rather than a fact, so it belongs in the ADR that makes it. A manifest still recording the earlier single `application_name` is left as it is — it records what that generation chose, and an update rewriting it would claim a decision the update did not make.
+
 ## Ownership
 
 Ownership answers whether a path participates in template updates:
@@ -106,6 +109,54 @@ Ask each distinct `value_key` once, not once per file. The repository owner is s
 
 Report every region as done or as outstanding. An addon left with an unfilled slot is worse than one not taken, because the repository now carries a document that reads as finished.
 
+## Wayfinding
+
+Generation has to know how many applications the repository holds, what each is called, and what each is written in. Those are not preferences to collect. They follow from the decomposition in [`choosing_a_language.md`](choosing_a_language.md), and wayfinding derives them with the user before any directory exists.
+
+It is short by default — two questions asked once — and expands into the full method only where the short form fails to settle something. The full session is a real cost to put in front of someone who asked for a repository, and most repositories do not need it.
+
+Run it at [Generate](#generate) step 2. Skip it only when the invocation already names every deployable and its language, and say so in the final report — a supplied name and a derived one are identical on disk, and only the derived one has an ADR behind it.
+
+### The short form
+
+Do not open a full Event Storming workshop to create a directory. Ask the two questions that decide `apps/`, in one structured prompt, with your own reading of the request as the options:
+
+1. **What ships separately?** Offer the candidate decompositions the request supports — one service; a client and a server; an API and a worker — and name what each would be called. This answers how many `apps/<name>/` directories exist and what each is.
+2. **What binds first, for each of those?** Offer the five constraints from the reference — browser or device execution, deployment glue, an ecosystem only one language has, many long-lived connections with per-connection flow control, a hard memory or hardware limit — plus *none of these bind*. This answers the language.
+
+Propose, and let the user dispose. That is the reason for putting your reading into the options rather than asking open questions: a proposal the user can see and reject has been tested, and an assumption you made silently has not. But the options are a shortcut, not the answer — *Other* is the load-bearing choice here, and a split nobody picked off the list is the ordinary outcome for anything the request did not already spell out.
+
+Two answers close the session for most repositories. Take the names from the decomposition, confirm them as kebab-case, and go.
+
+### When to run the full method
+
+The short form is a path through [`choosing_a_language.md`](choosing_a_language.md), not a replacement for it. It works when the user can already say what ships. Stop and run the full session — Steps 1 through 6, one step per exchange, applying each test as the reference gives it — when any of these holds:
+
+- the user rejects every offered split and describes one the request does not obviously support, which means the boundary is the open question rather than the naming;
+- more than one constraint is selected for a single deployable and which one is tightest is not settled by what that deployable promised at its seam;
+- two proposed deployables turn out to need the same concept under different meanings — the reference's Speaker case, where the boundary is what is actually in dispute;
+- the repository is being designed rather than described: the user can say what the software should do but not what ships.
+
+In that session the value is concentrated in the places where the first answer was wrong — a UI event mistaken for a domain event, a noun that turned out to be a field on an aggregate rather than an aggregate, two aggregates that looked like one until asked whether either could change alone. Do not answer all six steps in one pass and present a finished decomposition for approval; an agent that fills in every step from its own priors reproduces the priors instead of testing them, and the user holds the domain knowledge that overturns them.
+
+### What the session must produce
+
+For every deployable, in either form: a kebab-case name, the constraint identified as its choke point, and the language that constraint selects.
+
+The full session additionally produces the context each deployable belongs to, and for every seam the two contexts and the contract between them. The short form does not, and must not invent them — a context named without the aggregates under it is a label, and a seam contract asserted without asking is the preference-justified-after-the-fact this section exists to prevent.
+
+The number of deployables is the number of `apps/<name>/` directories to create. It is not the number of contexts. The reference names collapsing context, deployable, and language choice as the most common way the method gets misapplied, and this is the step where that collapse would happen.
+
+### Recording the outcome
+
+Write one ADR per deployable under `docs/adrs/`, copied from `0000-template.md` and numbered from `0001`. Set `scope` to `apps/<name>` and the `lang:<language>` tag, state the choke point in **Context** — with the seam contract behind it when the full session established one — and record in **Alternatives Considered** the constraints that were checked and did not bind.
+
+Set `status: accepted`, not the template's `status: proposed`. Generation acted on this decision: the directory exists and the language is chosen. Shipping it as a proposal describes a deliberation that already concluded, and leaves every generated repository with a decision log nobody appears to have agreed to.
+
+That last part is the reason for writing any of this down. A constraint checked and found not to bind and a constraint nobody looked at are indistinguishable a year later, and the ADR is the only thing that can tell them apart. The short form's *none of these bind* is exactly such a finding, and it reaches the ADR as one.
+
+Say in **Context** how the choke point was established: chosen from the short form's list, reasoned from the seam contract, or measured against it. The reference's one reversal turned on that difference, and the weaker the footing the sooner the decision is worth revisiting.
+
 ## Generate
 
 1. Resolve the requested source to an exact commit and run:
@@ -121,19 +172,20 @@ Report every region as done or as outstanding. An addon left with an unfilled sl
 
    `generate` validates the source only. It takes the destination as a name, never inspects it, and so cannot tell an empty repository from one with content. Establish that yourself before materializing.
 
-2. Collect only unresolved decisions: owner/name, visibility, application boundary/name, public-repository files, release behavior, feature availability, and automatic head branch deletion.
+2. Collect only unresolved decisions: owner/name, visibility, public-repository files, release behavior, feature availability, and automatic head branch deletion. The application boundaries are derived rather than collected — run [Wayfinding](#wayfinding) here.
 
    Automatic head branch deletion is collected here rather than at step 9, where it is applied, because the remote action gate in step 7 lists it among the settings it authorizes. A gate cannot name a choice that has not been made yet — asking after it would take authorization for one plan and then write a setting under another.
 
    The public-repository files are the repository addons, held back rather than shipped and offered against the conditions the answers to this step have established. Adopt the ones taken as the [Addon adoption](#addon-adoption) section directs, from this same source commit.
 
-   Do not collect stacks or package managers, and do not render a root manifest. A template cannot know the ecosystem a repository will use, and a wrong guess is worse than an absent file — the same reasoning `.github/dependabot.yml` follows in listing only the two manifests the template itself ships. A generated repository with no manifest is reported honestly by `scripts/ci` as nothing to check yet, with every check becoming required the moment one is added. The first real commit brings the manifest.
+   Do not render a root manifest, even for a language wayfinding selected. The session establishes which constraint binds; it does not establish a package manager, a version, or a project layout, and none of those follow from a choke point. It also reasons rather than measures — the reference is explicit that an unmeasured constraint and an absent one are indistinguishable until something measures — so a rendered manifest asserts more confidence than the session produced. A wrong guess is worse than an absent file, the same reasoning `.github/dependabot.yml` follows in listing only the two manifests the template itself ships. A generated repository with no manifest is reported honestly by `scripts/ci` as nothing to check yet, with every check becoming required the moment one is added. The first real commit brings the manifest.
 
    Say so in the handover: the root manifest is what makes a package visible to the checks, and a manifest nested under `apps/` instead is invisible to all of them. `scripts/doctor` fails on that shape rather than passing over it.
 3. Materialize the subtree from that exact commit into an isolated local directory. Do not substitute the current working tree.
 4. Personalize the candidate:
-   - move `apps/app-name` to the kebab-case application name (do not copy it), verify the old path is absent, and update every reference;
-   - replace the root `AGENTS.md` placeholder section and bootstrap Child Index with repository-specific content;
+   - create one `apps/<name>/` per deployable wayfinding established. Move `apps/app-name` to the first (do not copy it) and replicate its skeleton — `src/`, `tests/`, `docs/specs/` — for each one after that. Verify `apps/app-name` is absent afterwards and update every reference. One deployable is the ordinary case and needs no replication;
+   - write one ADR per deployable recording its choke point and language, as [Wayfinding](#wayfinding) directs;
+   - replace the root `CLAUDE.md` placeholder section and bootstrap Child Index with repository-specific content, carrying the wayfinding result into it: each deployable, what it is for, and the language it is written in. The ADRs record why that language was chosen; `CLAUDE.md` is where an agent reads what the repository is before touching anything, and a Child Index naming the apps without saying what each one is leaves the boundaries derivable only from a directory listing;
    - initialize `docs/LESSONS.md` metadata and remove generation placeholders while retaining its durable writing guidance. Set `generated.by` to the actual author — the repo-builder agent, not the operator on whose behalf it ran — and capture `generated.at` from the real clock (e.g. `date -u +%Y-%m-%dT%H:%M:%SZ`) at the moment of writing rather than composing a plausible-looking value; a rounded time such as midnight is a placeholder wearing a valid format, not a captured one;
    - keep `docs/adrs/0000-template.md` as the reusable ADR template;
    - create `.repo-template.json`;
@@ -167,7 +219,7 @@ Report every region as done or as outstanding. An addon left with an unfilled sl
 
     Adopting `CODEOWNERS` changes what "appropriate" means here. It is the only addon finished by a repository setting rather than by an edit: without a rule requiring code owner review, the file requests a reviewer and nothing waits for the answer. Enabling it is not the safe default it looks like, for the reason its manifest entry gives — ask.
 
-    Squash merging is turned off unconditionally here, not collected as a preference in step 2. `AGENTS.md` documents Conventional Commit messages checked by a `commit-msg` hook; a squashed merge takes its message from the pull request title instead, written in GitHub's web interface where no local hook can reach it, so leaving it on lets one click bypass every rule in `.commitlintrc.yaml`. Unlike push protection and rulesets, it is offered on every plan, so it needs no plan/visibility check before applying it.
+    Squash merging is turned off unconditionally here, not collected as a preference in step 2. `CLAUDE.md` documents Conventional Commit messages checked by a `commit-msg` hook; a squashed merge takes its message from the pull request title instead, written in GitHub's web interface where no local hook can reach it, so leaving it on lets one click bypass every rule in `.commitlintrc.yaml`. Unlike push protection and rulesets, it is offered on every plan, so it needs no plan/visibility check before applying it.
 
     ```bash
     gh api -X PATCH repos/<owner>/<name> -f allow_squash_merge=false
@@ -202,6 +254,8 @@ Report every region as done or as outstanding. An addon left with an unfilled sl
 
     A bootstrap generate is the one case where "do not merge" inverts. The destination's default branch is still the empty root commit, so no worktree can be created against it to review the PR before it merges — `git worktree add` against an empty tree checks out nothing, and a hook that expects the repository's own files (a missing `.pre-commit-config.yaml`, for instance) then fails on an empty checkout that was never the defect. Once checks pass, repo-builder may merge this one pull request itself, gated the same as any other remote action: present it as an explicit action against this exact repository and obtain confirmation before running it. The exception is scoped to this bootstrap PR alone — update, adopt, and a generate into an already-populated destination all have a destination worktree available for ordinary review, so their pull requests are never merged by repo-builder.
 
+Having merged it, verify the default branch. This is the only merge in the lifecycle, and it is the first time the repository's workflows run against `main` with content in it — a green pull request does not carry over, because the PR ran against a merge of an empty base and `main` afterwards is a different commit with a different trigger. Read that commit's check-suites the same way step 11 reads the PR's, keep the same distinction between a failing run and no run dispatched, and report the result. A red default branch immediately after generation is a finding to hand over, not a state to leave unmentioned because the pull request was green.
+
 ## Generate into a repository that already has content
 
 The steps above assume an empty destination. A destination with existing content is a generation whose collisions are decided by hand, and it needs its own rules:
@@ -211,7 +265,7 @@ The steps above assume an empty destination. A destination with existing content
 3. For each collision, decide between the payload version, the destination version, and a merge — then state the decision and the reason per file. Verify afterwards that no destination-only content was dropped, naming what was preserved.
 4. Never delete destination content to resolve a collision. A payload path that cannot be reconciled is a conflict to report, not a file to overwrite.
 5. Record the collision decisions in `generation`, since they are choices a later update has to respect rather than re-litigate.
-6. Do not create the placeholder application when the destination already has its own application boundary. Record the real boundary in `generation.application_name` and drop the payload's Placeholders section.
+6. Do not create the placeholder application when the destination already has its own application boundaries. Record the real ones in `generation.applications` and drop the payload's Placeholders section. Wayfinding still runs, but against what is there: it names the choke point each existing deployable already answers to rather than proposing a new decomposition, and it writes an ADR only where the repository has none for that deployable. A generation is not the occasion to re-cut boundaries someone is already shipping against.
 
 Ownership still governs what a later update may touch, and a hand-merged file is managed content whose destination edits are real intent. Classify deliberately: marking a whole tree product to protect it also freezes it.
 
@@ -314,6 +368,12 @@ Use this stable shape. On a generate the Reconciliation lines are empty or trivi
 - Renamed/deleted: <paths or none>
 - Conflicted: <paths and competing intents, or none>
 
+### Application boundaries
+- <deployable>: choke point <constraint, or "none bound; time-to-working-code"> -> <language>, <selected from list | reasoned from the seam contract | measured against it>
+- Full method run: yes (<which trigger>) | no, short form settled it
+- ADRs written: <paths, or none>
+- <deployables supplied in the invocation rather than derived, on one line, or none>
+
 ### File list
 - <payload paths accounted for, and every difference named as intended or as a defect>
 
@@ -326,6 +386,7 @@ Use this stable shape. On a generate the Reconciliation lines are empty or trivi
 
 ### Verification
 - `<exact command>`: pass | fail | unavailable (<reason>)
+- Default branch after merge: <check-suite result> | n/a (nothing merged)
 
 ### Pending action
 <none, or the exact decision/authorization needed>

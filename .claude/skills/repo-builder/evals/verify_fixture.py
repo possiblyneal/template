@@ -61,9 +61,9 @@ def generation(root: Path, fixture: dict[str, object]) -> list[Check]:
         ("application renamed", (candidate / "apps/billing-api").is_dir(), "apps/billing-api exists"),
         ("placeholder app removed", not (candidate / "apps/app-name").exists(), "apps/app-name absent"),
         (
-            "AGENTS bootstrap resolved",
-            contains_none(candidate / "AGENTS.md", ("apps/app-name", "not yet indexed", "## Placeholders")),
-            "root AGENTS.md has no generation placeholders",
+            "CLAUDE bootstrap resolved",
+            contains_none(candidate / "CLAUDE.md", ("apps/app-name", "not yet indexed")),
+            "root CLAUDE.md has no generation placeholders",
         ),
         (
             "lessons initialized",
@@ -78,9 +78,102 @@ def generation(root: Path, fixture: dict[str, object]) -> list[Check]:
         ),
         report_check(
             report,
+            "boundaries reported as supplied",
+            lambda text: "billing-api" in text and any(
+                term in text.lower() for term in ("supplied", "not derived", "skipped")
+            ),
+            "report names the deployable and says it was supplied rather than derived",
+        ),
+        report_check(
+            report,
             "PR bootstrap described",
             lambda text: all(term in text.lower() for term in ("empty", "main", "branch", "pull request")),
             "report describes empty main base and content PR",
+        ),
+        (
+            "no configured remote",
+            not (candidate / ".git").exists() or not git(candidate, "remote"),
+            "candidate has no Git remote",
+        ),
+    ]
+
+
+def adr_records(candidate: Path) -> list[Path]:
+    """Every ADR the build wrote, excluding the retained template."""
+    adrs = candidate / "docs/adrs"
+    if not adrs.is_dir():
+        return []
+    return sorted(p for p in adrs.glob("[0-9][0-9][0-9][0-9]-*.md") if p.name != "0000-template.md")
+
+
+def generation_multi(root: Path, fixture: dict[str, object]) -> list[Check]:
+    """Two deployables derived by wayfinding, each with a directory and an ADR."""
+    candidate = root.parent / "candidate"
+    report = root.parent / "report.md"
+    manifest_path = candidate / ".repo-template.json"
+    manifest = json.loads(manifest_path.read_text()) if manifest_path.is_file() else {}
+    applications = manifest.get("generation", {}).get("applications", []) if isinstance(manifest, dict) else []
+    expected = ("recorder", "ingest-api")
+    records = adr_records(candidate)
+    adr_text = "\n".join(p.read_text(encoding="utf-8") for p in records)
+    return [
+        (
+            "both deployables created",
+            all((candidate / f"apps/{name}").is_dir() for name in expected),
+            "apps/recorder and apps/ingest-api exist",
+        ),
+        (
+            "skeleton replicated",
+            all(
+                (candidate / f"apps/{name}" / sub).is_dir()
+                for name in expected
+                for sub in ("src", "tests", "docs/specs")
+            ),
+            "each app carries src, tests, and docs/specs",
+        ),
+        ("placeholder app removed", not (candidate / "apps/app-name").exists(), "apps/app-name absent"),
+        (
+            "manifest lists both",
+            sorted(applications) == sorted(expected),
+            "generation.applications names exactly the two deployables",
+        ),
+        (
+            "no language in manifest",
+            not any(
+                lang in json.dumps(manifest.get("generation", {})).lower()
+                for lang in ("typescript", "golang", '"go"', "python", "rust")
+            ),
+            "generation records names only; language lives in the ADRs",
+        ),
+        ("one ADR per deployable", len(records) == 2, f"two numbered ADRs, found {len(records)}"),
+        (
+            "ADRs scoped to their app and language",
+            all(f"apps/{name}" in adr_text for name in expected) and adr_text.count("lang:") >= 2,
+            "each ADR scopes to apps/<name> and a lang: tag",
+        ),
+        (
+            "ADRs accepted, not proposed",
+            bool(records) and all("status: accepted" in p.read_text(encoding="utf-8") for p in records),
+            "every written ADR records status: accepted",
+        ),
+        (
+            "ADR template retained",
+            (candidate / "docs/adrs/0000-template.md").is_file()
+            and "type: Template" in (candidate / "docs/adrs/0000-template.md").read_text(encoding="utf-8"),
+            "docs/adrs/0000-template.md remains a template",
+        ),
+        (
+            "boundaries carried into CLAUDE.md",
+            contains_none(candidate / "CLAUDE.md", ("apps/app-name", "not yet indexed"))
+            and all(name in (candidate / "CLAUDE.md").read_text(encoding="utf-8") for name in expected),
+            "root CLAUDE.md names both deployables and keeps no placeholders",
+        ),
+        report_check(
+            report,
+            "choke points reported",
+            lambda text: all(name in text for name in expected)
+            and "choke point" in text.lower(),
+            "report names each deployable with the constraint that selected its language",
         ),
         (
             "no configured remote",
@@ -182,7 +275,12 @@ def main() -> int:
     fixture_path = args.fixture.resolve()
     fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
     scenario = str(fixture["scenario"])
-    checks = generation(fixture_path.parent, fixture) if scenario == "generation" else update(fixture_path.parent, fixture, scenario)
+    if scenario == "generation":
+        checks = generation(fixture_path.parent, fixture)
+    elif scenario == "generation-multi":
+        checks = generation_multi(fixture_path.parent, fixture)
+    else:
+        checks = update(fixture_path.parent, fixture, scenario)
     result = {
         "scenario": scenario,
         "passed": sum(passed for _, passed, _ in checks),

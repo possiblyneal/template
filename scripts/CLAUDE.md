@@ -1,1 +1,99 @@
-@AGENTS.md
+# Scripts
+
+## Purpose
+
+Every portable shell script, whether a person runs it or a workflow does. Project logic lives here rather than in YAML so it runs locally exactly as it runs in GitHub Actions.
+
+## Ownership
+
+One flat directory, not a `ci/` and a `scripts/` split. The boundary that split would need does not hold: `check` calls `ci` and `security`, `release` calls `ci`, and every script sources the same detection library, so a file's caller is not a property that stays put.
+
+- `doctor`, `check`, `fix`, `clean`, `dev` — run by a person
+- `ci`, `security`, `release`, `detect` — called by `.github/workflows/`
+- `repo-settings check` — hosted GitHub state, run explicitly
+- `adr-index` — called by pre-commit; regenerates `docs/adrs/index.md`
+- `changelog-check` — called by pre-commit at `pre-push`, and by `ci.yml` over a pull-request range; validates `CHANGELOG.md` structure
+- `protect-branch` — called by pre-commit at `pre-push`; refuses a push whose destination ref is `main` or `master`
+- `worktree-cleanup` — called by pre-commit at `post-checkout` and `post-merge`, and by the SessionStart hook with `--report`; prunes Git's records for worktrees whose directories are gone
+- `libs/detect.sh` — the detection library, sourced by all of the above
+- `libs/precommit.sh` — which git hooks the config asks for and which this clone lacks; sourced by `doctor` and by `~/.claude/hooks/session-start.sh`
+- `tests/*-test` — assertions about the wiring itself
+- `tests/libs/harness.sh` — the assertion counting those tests share
+
+A helper that must be built before it runs belongs in `tools/`, not here.
+
+## Local Contracts
+
+**`libs/detect.sh` owns every language-specific decision.** Command scripts name a capability — `lint`, `test`, `audit`, `format-write` — and never name a language adapter. `DETECT_LANGUAGES` is the single list of supported languages; iterate it rather than keeping a second copy. Detection was once duplicated across eight files and the copies disagreed, which is the failure this module exists to remove: a language wired into some checks and not others produces a green run over work nothing looked at. `DETECT_PRUNE_DIRS` gets the same treatment: `scripts/clean` builds its own find prune expression from it via `detect_prune_expr` rather than keeping a second, driftable copy of the list — `scripts/clean` once did, and the second copy was missing `.venv`, `venv`, `vendor`, and `target`, so it deleted gitignored caches inside a virtualenv or a vendored tree with nothing in `git status` to show for it.
+
+**The orphan rule tests the exact root manifest, not language presence.** `has_go` accepts `go.mod` or `go.work`, and `has_kotlin` accepts `build.gradle.kts` or `settings.gradle.kts`, so testing `has_language` for the skip would let a root `go.mod` (a plain module, not a workspace) or a root `build.gradle.kts` (a single-project build, not a multi-project settings file) wrongly count as having wired up a *nested* module that neither file actually includes. `detect_orphan_manifests` tests the pair's own `root` filename instead, and separately excludes a match at the repository root itself from the nested search, since that is this project's own top-level manifest rather than an orphan.
+
+**A check that did not run is not a check that passed.** Results are `pass`, `not-applicable`, `unavailable`, or `FAIL`. `unavailable` fails the run whenever the check was expected, because a present manifest with a missing toolchain must not report success for work it did not do. `audit:kotlin` and `audit:swift` are `not-applicable`, not `unavailable`, when `gradle.lockfile`/`Package.resolved` is absent: Gradle writes a lockfile only once dependency locking is turned on and a Swift package with no dependencies writes no `Package.resolved`, so "nothing to scan" is not "trivy is missing" and must not fail a run whose audit tool is installed and idle.
+
+**Pipes end in a variable or a `-print -quit` test, never in a reader that exits early.** Under `set -euo pipefail` a `grep -q` or `head` closes the pipe, the writer dies of SIGPIPE, and pipefail reports 141 — which a detection function reads as "absent". That is a wrong answer that is silent rather than loud. `swift_each` and `trivy_each` read their manifest list on fd 3 rather than stdin for the same class of reason: `swift test`/`trivy fs` can read stdin themselves, and a loop reading the list on fd 0 would have that read silently consumed by the command it runs, skipping every manifest after the first.
+
+**Four runners contradict the pass/fail rule and are special-cased deliberately.** pytest exits 5 on collecting no tests; `npm init -y` writes a placeholder test script that exits 1; `uv run <tool>` exits 2 when the tool is not installed; `uv audit` is a subcommand rather than a tool uv runs, so a uv predating it exits 2 the same way an audit that found vulnerabilities does, and support is probed with `--help` first. Each is translated to "no runner" or success rather than being reported as a failing suite. Do not remove these without reading why they are there.
+
+**A capability adapter captures a tool's own exit status, not just its output.** `_capability_format_check_go` once read only `gofmt -l .`'s stdout; a runner function is called as `"$function" || status=$?`, not under `set -e`, so `gofmt`'s own failure (a parse error: nonzero exit, nothing on stdout) went uncaptured and read as "nothing to format" — a pass. The exit status is now captured alongside the output before the emptiness check runs.
+
+**`scripts/check`'s test-runner glob uses `nullglob`.** Without it, an empty `scripts/tests/` leaves `scripts/tests/*-test` unexpanded, and the loop reads the literal glob string as one test script that is missing and not executable — a real "no tests found" state hidden behind a misleading path.
+
+**`libs/precommit.sh` owns the question of which git hooks are owed, and parses rather than greps.** `doctor` reports the gap and `~/.claude/hooks/session-start.sh` closes it; both need the same answer, and the two copies that preceded this module had already drifted apart in how they tested for a hook file. It is not part of `libs/detect.sh`, which owns language-specific decisions — a git hook is present whatever the repository is written in.
+
+`default_install_hook_types` is valid as a flow list, as a flow list wrapped across lines, and as a block list, and a single-line pattern matches only the first. Against the others it finds nothing or half a list, reports no hooks owed, and both callers agree a clone with no commit-msg hook is correctly set up — a check that did not run reading as a check that passed, with no output to say so. `tests/precommit-hooks-test` covers all three, plus the scalar that must not be read as an unterminated list.
+
+The config path is a parameter to both functions; the clone is the working directory, since `git rev-parse` answers from where it runs and is not a path a caller chooses.
+
+**`libs/detect.sh` and `tests/libs/harness.sh` are sourced, never executed.** No shebang, no executable bit, `.sh` extension so linters recognize it. Every other script here is extensionless and executable — pre-commit identifies them as shell by reading the shebang, and only reads it on an executable file, so a script committed without that bit is skipped in silence. `harness.sh` holds the assertion counting, the tally, and `cleanup` with the `work` directory it removes; each suite keeps its own `fixture`, since they scaffold different worlds and only the counting and the teardown are common. `capabilities-test` overrides `cleanup` because it cd's into the directory being removed.
+
+**`adr-index` is a pre-commit hook, not a capability.** It does not source `libs/detect.sh` and is not dispatched by `language_capabilities`, because ADRs are prose present in every repository whatever it is written in — there is no language to detect.
+
+Two things about its wiring are load-bearing and were each a bug first. It self-reports the rewrite with a non-zero exit rather than relying on pre-commit's modified-files detection, which does not fire the first time the index is created: the file is untracked then, so pre-commit sees no change and the commit lands without it. And it runs with `always_run` and no `files:` filter, because that filter reads the staged paths, which exclude deletions — `git rm` of a record would skip the hook on the one commit that made the index stale. `tests/adr-index-test` drives a real repository through pre-commit for both.
+
+**`changelog-check` validates only the paths it is given, and runs at `pre-push` rather than `pre-commit`.** It is a structural check on Keep a Changelog form — heading order, the six categories, a link reference per version — not a judgment about whether a change owed an entry. A repository with no `CHANGELOG.md` never invokes it, because pre-commit passes it the changed paths and there are none; that is what lets the same hook ship to a generated repository that has not adopted the addon yet. It sits at `pre-push` because a broken entry is worth catching before review and not worth failing every commit on a work-in-progress section, and CI re-runs it across the whole pull-request range so a fixup commit cannot hide a bad entry an earlier commit introduced.
+
+**`protect-branch` reads the push destination, not the current branch.** That is the whole reason it exists: `no-commit-to-branch` fires only while HEAD *is* the protected branch, so `git push origin HEAD:main` from a feature branch never reaches it, and on a plan without push protection or branch rulesets nothing hosted refuses it either. A permission rule cannot cover it — an ask rule matches a command prefix and the destination is an argument.
+
+Two limits come from pre-commit's own pre-push parser rather than from the script, and both are deliberately left to the server. It exports only the first qualifying ref of a multi-ref push, and it exports nothing at all when the local sha is all zeros, which is every `git push --delete`. So the script exits 0 and prints nothing when `PRE_COMMIT_REMOTE_BRANCH` is unset: failing closed there would refuse every routine deletion of a feature branch, and GitHub already refuses to delete the branch its HEAD points at. A pre-push guard that fires on ordinary work gets bypassed with `--no-verify`, and then it guards nothing.
+
+**`worktree-cleanup` prunes metadata and never deletes a directory.** It calls `git worktree prune`, which drops Git's administrative record for a linked worktree whose directory has already disappeared; a live worktree is untouched by construction rather than by a guard. It exits early when the dry run reports nothing, so the ordinary checkout costs one `git` invocation and prints nothing.
+
+Its positional arguments are ignored on purpose. `post-checkout` passes three (previous HEAD, new HEAD, branch flag) and `post-merge` passes one, and a hook that read them as paths would misbehave differently at each stage; only `--report` is interpreted. That flag is what SessionStart uses, so starting a session names the stale metadata without changing the clone, and its failure is swallowed rather than costing the session context printed after it.
+
+**`check`'s pre-commit sweep covers untracked files, in a second pass by path.** `--all-files` enumerates through git and cannot see a file that has not been staged, which makes the gate blindest to the files most likely to be new. A new script would pass `check` and then fail the hook at commit time, having never been read. `--files` takes a path whether or not git tracks it; `git ls-files --others --exclude-standard` supplies the list, so an ignored path stays ignored.
+
+**Local commands stay off hosted GitHub state.** `doctor`, `check`, and `dev` must not read or write repository settings, branches, or releases. Hosted inspection happens only through `repo-settings check`, so ordinary local work is not coupled to `gh` authentication. `tests/health-checks-test` enforces this by stubbing `gh`.
+
+This is not a promise that nothing reaches the network. pre-commit downloads a hook environment the first time each hook runs, which `check` has always triggered, and `tests/commitlint-test` needs one for commitlint specifically. The boundary is hosted repository state, not connectivity.
+
+**`release` is the only script here that writes to GitHub.** A changelog is an addition by occasion, so the script handles both cases and announces which one it took. With a `CHANGELOG.md` it publishes the section matching the tag and refuses when that section is missing or empty, so a version cannot be published before it has been cut. Without the file it releases with GitHub-generated notes, because a project that has not reached a changelog still has versions to tag. What it must never do is treat an uncut version and an absent changelog as the same thing — the first is a mistake and the second is not. It runs `scripts/ci` itself rather than trusting an earlier job to have done it, which is why the release workflow holds `contents: write` while the gate runs. Nothing else should call it.
+
+**`repo-settings` reports and never changes.** Squash merging and automatic head branch deletion are checked first and unconditionally, because both are offered on every plan while push protection and rulesets return early when they are not. Enabling a setting writes state the whole repository sees, and a ruleset write replaces rather than merges, so an automatic correction could silently revert a deliberate loosening. Three outcomes are distinct and the difference matters: enabled, disabled, and not offered for the plan and visibility.
+
+**The CODEOWNERS section runs above the admin gate, deliberately, and a fourth outcome joins the three above.** Every way a CODEOWNERS file fails is silent — a rejected line is skipped while the rest of the file still applies, an owner without write access is dropped — so it is asked about rather than waited on. `codeowners/errors` needs only read access, and a non-admin is exactly who benefits from being told the file is broken, so the section sits above the admin early-return. It sits below the read-access check because that is what makes a 404 from that endpoint mean "no CODEOWNERS file" rather than "no access to look"; the two are the same status code. Neither position is arbitrary.
+
+The requirement that makes the file binding can come from a ruleset or from classic branch protection, and `rules/branches` reports only the first, so a repository protected the classic way reads as unrequired there. Reading the second needs admin. That produces the fourth outcome — *not readable from here* — which is reported as itself rather than collapsed into "not required," because a file wrongly reported as binding is the one error that leaves someone trusting a review gate that does not exist. An absent CODEOWNERS file is reported as `ok`, not as missing: it is an addition by occasion, not something owed.
+
+## Work Guidance
+
+Adding a language means: add it to `DETECT_LANGUAGES`, add its `has_<lang>` detector, add a `_capability_<check>_<lang>` function for each capability, add a `_codeql_entry` row, and add its toolchain to `.github/actions/setup-toolchains/action.yml`. `tests/capabilities-test` fails when a present language is not dispatched to every check — that is the one property nothing else reports on, since a dropped language produces a shorter green run rather than a failure.
+
+Adding a check means adding it to `_capability_is_supported` and writing an adapter per language, or declaring it not-applicable in `_capability_is_not_applicable`.
+
+Changes here almost always belong in `apps/github-repository-template/src/base-repo/scripts/` too. Decide explicitly; a fix in one tree only is how the two drift.
+
+## Verification
+
+- `scripts/tests/capabilities-test` — dispatch coverage, using `CI_DRY_RUN=1` so the result comes from wiring alone and is identical on a machine with no toolchains; also covers the orphan rule's use of the exact root manifest rather than language presence, `audit`'s not-applicable outcome when no lockfile exists, `gofmt`'s own exit status surviving alongside its output, and `swift_each`/`trivy_each` reading the manifest list on fd 3 so a command that reads stdin cannot consume it
+- `scripts/tests/clean-test` — `scripts/clean` prunes the same directories `libs/detect.sh` does rather than keeping a second, drifted list, and still removes this repository's own generated caches
+- `scripts/tests/health-checks-test` — the offline boundary
+- `scripts/tests/adr-index-test` — the generated index converges, and pre-commit actually invokes the hook
+- `scripts/tests/commitlint-test` — the `commit-msg` hook is installed by a bare `pre-commit install`, and commitlint rejects a malformed message and tolerates a generated merge subject. The only suite here that needs the network, since proving a JavaScript linter rejects anything means installing and running it
+- `scripts/tests/worktree-cleanup-test` — pruning removes stale records, leaves a live worktree, is idempotent, and tolerates the arguments each git hook stage passes
+- `scripts/tests/session-start-test` — exercises `~/.claude/hooks/session-start.sh`, the operator's global copy: the hook reports stale metadata without pruning it, and still prints the session context when `scripts/worktree-cleanup` is absent. Reports `unavailable` and passes trivially when the hook itself is absent, which it always is on a CI runner or a clone whose operator has not set it up — the wiring this suite covers has no local fallback, so there is nothing to exercise there
+- `scripts/tests/changelog-check-test` — each structural rule rejects what it is meant to reject and the shipped addon changelog passes. Needs neither `pre-commit` nor the network
+- `scripts/tests/precommit-hooks-test` — `libs/precommit.sh` reads the hook list out of each YAML list form, and reports exactly the hooks a clone lacks. Needs neither `pre-commit` nor the network, so it always runs — which is the point, since this is the half of the wiring that fails silently
+- `scripts/tests/protect-branch-test` — `main` and `master` are refused whether the destination arrives bare or fully qualified, a branch merely containing or ending in `main` is let through, and an unset destination is silent. Reads one environment variable and writes no files, so it needs neither `git` nor the network
+- `scripts/check` runs all ten before the checks they guard; `ci.yml` runs them before toolchain setup
+- Both hook-wiring suites skip their cases when `pre-commit` is absent, so `ci.yml` installs `pre-commit` ahead of them. Without that install they report a smaller green run in CI than they do locally, and the assertions covering the wiring above are the ones lost
+- shellcheck via pre-commit, with `-x` so it follows `source` into `libs/detect.sh`
