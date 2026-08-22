@@ -1,1 +1,77 @@
-@AGENTS.md
+## What this repository is
+
+This repository builds other repositories. It holds two trees and they must not be confused:
+
+- **Live configuration** — `scripts/`, `.github/`, `.claude/`, and the root dotfiles govern *this* repository, the same way they govern any other.
+- **Template payload** — `apps/github-repository-template/src/base-repo/` is the content copied into repositories generated from this one. Editing a file there changes every future generated repository and changes nothing here.
+
+The two trees hold near-identical files. Before editing, decide which one the change belongs to: a fix applied only at the root leaves the template shipping the bug, and a fix applied only in the payload leaves this repository running it. Editing under `src/` prompts for approval so the choice stays deliberate.
+
+This repository was generated from its own payload, so the root files are that payload plus repository-specific merges. `.repo-template.json` records the payload commit the root was last reconciled with, and marks `apps/**` as product so an update never overwrites the payload that produced it.
+
+`apps/github-repository-template/docs/github_repository_structure.md` is the structure and bill of materials for the payload, naming briefly what each file and folder is for. Read it before changing what the template ships, to see where a file belongs and what it is there to do.
+
+## Commands
+
+Use these instead of per-language tools; each detects the languages present and fails when an expected check cannot run.
+
+- `scripts/doctor` — verify local toolchains, dependencies, hooks, and configuration without contacting hosted services
+- `scripts/repo-settings check` — inspect GitHub-hosted security and branch settings; run explicitly because it needs network access and repository administration visibility
+- `scripts/check` — full local gate: `doctor`, the script tests, then lint, format, type check, test, build, then the security audit and pre-commit across every file, tracked and untracked, not just staged ones. Local means it reads no hosted GitHub state, not that it stays offline: `commitlint-test` and pre-commit's own hook environments fetch on first use
+- `scripts/fix` — rewrite formatting for every detected stack; the write half of `check`'s format check, no lint autofixes
+- `scripts/clean` — recursively delete build output and tool caches (`dist`, `build`, `coverage`, `__pycache__`, `.*_cache`, `*.pyc`)
+- `scripts/dev [app-name]` — start the dev server; requires the app name when several stacks are present, since only one process can run
+
+Every check runs for every language present, not the first one detected. Results distinguish `pass`, `not-applicable`, `unavailable`, and `FAIL`, so an intentional no-op cannot look like a runner that executed. See `scripts/CLAUDE.md` before adding a language or a check.
+
+This repository has no root language manifest, so `scripts/check` reports there is nothing to check and never reaches the Python under `.claude/skills/repo-builder/`. Run those tests directly: `uv run --with pytest python -m pytest .claude/skills/repo-builder/scripts/tests/`.
+
+## Git
+
+- Pre-commit blocks direct commits to `main` and `master`. Branch before you start; a commit attempted on either fails at the hook, not at review.
+- Run `scripts/check` before committing. It runs the same checks CI does, plus pre-commit across every file rather than the staged ones.
+- These prompt for approval and cannot be assumed: `git reset --hard`, `git clean`, `git rebase`, `rm` and `git rm`, and the `gh` commands that merge pull requests, cut releases, or delete the repository.
+- So do these paths, whether the change creates or modifies: any dotfile or dot-folder, anything under a `src/` directory, and anything directly in the repository root. Only the `src/` rule lives in this repository's `.claude/settings.json`, since it protects a boundary specific to this repo; the rest, and the `rm` rules above, come from the operator's global `~/.claude/settings.json`. `.claude/CLAUDE.md` explains the split and why deletion needs the `rm` rules rather than a path rule.
+- Work reaches `main` through a pull request, where `.github/PULL_REQUEST_TEMPLATE.md` applies.
+- Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/): `type(optional scope): subject`, a blank line, then the body. commitlint enforces it at `commit-msg` and the rules live in `.commitlintrc.yaml`, so a malformed message fails at the hook rather than at review. The subject is lowercase after the type and takes no trailing period. A body is optional to the tool and expected here — the session that made the change ends with it, and the body is the only surviving record of why.
+- Pull requests merge; they are not squashed. A squashed commit takes its message from the pull request title, which is written in GitHub's web interface where no local hook can reach it. A merge subject is generated by GitHub and sits on commitlint's default ignore list, so it passes untouched and needs no second check in CI.
+- A changed `CHANGELOG.md` is structurally checked at `pre-push` and again for its pull-request range in CI. That validates an entry chosen for review; it does not decide whether a change owes one.
+- This repository keeps no `CHANGELOG.md` of its own — it is a repository addon, held back at `apps/github-repository-template/src/repository-addons/CHANGELOG.md` for a generated repository to adopt. The check still fires here when that addon template is edited, which is the only changelog this tree has.
+- The commit type is a signal about the changelog, not a rule for it. `feat`, `fix`, and anything carrying `!` or a `BREAKING CHANGE:` footer usually owe an entry; `docs`, `style`, `test`, `ci`, and `chore` usually owe none. Notability is still judged per pull request.
+- Plan mode writes to `docs/plans/`, which is tracked. A plan lands in the diff alongside the code it describes.
+
+## Layout
+
+Where a new file goes, and why the boundary exists:
+
+- `apps/<name>/` — one deployable service or one durable domain boundary: the unit owning its own dependencies, tests, and specs. Its tests live in `apps/<name>/tests/` and its specs in `apps/<name>/docs/specs/`.
+- `libs/` — shared internal libraries and schemas used by apps. They need not be publishable.
+- `tests/` — repo-level tests spanning several apps or libraries. App-local tests do not belong here.
+- `scripts/` — every portable shell script, whether a person or a workflow runs it.
+- `tools/` — helpers that must be built before they run, one directory per program with its own manifest. The split from `scripts/` is by artifact, not by caller; a script written for CI is the first thing someone runs locally to reproduce a failure.
+- `docs/specs/` — contracts spanning apps. Single-unit specs stay with their unit.
+- `docs/adrs/` — one repo-wide numbered sequence. See `docs/CLAUDE.md`.
+
+A package under `apps/` or `libs/` whose language has no root manifest fails the run rather than passing, because every check runs from the repository root and nothing would look at it. The failure names the root manifest to add.
+
+## Repository settings
+
+Some guarantees these files make are only half-kept by the files themselves. Current state on `possiblyneal/template`:
+
+- Dependabot alerts and security updates: **enabled**. `scripts/security` fails a pull request introducing a CVE; these open the pull request that resolves it.
+- Push protection and branch rulesets: **unavailable** on this plan. So two local hooks are the whole of it: `no-commit-to-branch` refuses a commit made while HEAD is `main`, and `scripts/protect-branch` refuses a push whose destination ref is `main` — the case the first cannot see, since `git push origin HEAD:main` from a feature branch never makes HEAD `main`. Both live in each clone and both yield to `--no-verify`. gitleaks in `.pre-commit-config.yaml` is likewise the only check seeing a secret before it is pushed.
+- Squash merging: **disabled**. This is what makes the commit-message rules hold. A squashed commit takes its subject from the pull request title, written in GitHub's web interface where no hook can reach it, so leaving it enabled puts every rule in `.commitlintrc.yaml` one click away from being bypassed. `scripts/repo-settings check` reports it; unlike code scanning below, it is offered on every plan.
+- Automatic head branch deletion: **enabled**. GitHub deletes the head ref when a pull request merges, so the remote branch list stays the set of work in flight; the local branch and its remote-tracking ref survive until `git fetch --prune`. `scripts/repo-settings check` reports it, and it is a checkbox rather than a workflow on purpose — deleting the head ref from Actions means a `pull_request: closed` job holding `contents: write` to reimplement a setting GitHub offers on every plan.
+- Code scanning: **unavailable**, so `.github/workflows/codeql.yml` fails its `scanning` job in seconds rather than analyzing for an hour and dying at the upload step. That red check is accurate — this repository has no static analysis coverage — and it clears itself when the repository goes public. Confirmed nothing else holds it back: the same workflow analyzed three languages and uploaded cleanly on a public repository generated from this payload. Read `docs/LESSONS.md` before making it green any other way.
+- GitHub Actions: **verified**. `ci.yml` and `security.yml` pass on `main`. `codeql.yml` is red at `Code scanning enabled`, by design, until this repository is public.
+
+A generated repository is where a guarantee unavailable on this plan can actually be observed. Push protection, branch rulesets, and code scanning are all free on a public repository and unavailable on a private one here, so `scripts/repo-settings check` reports `not offered for the plan` against this repository whether or not the check works. Build a public repository from the payload to tell those apart.
+
+## Child Index
+
+- `apps/github-repository-template/CLAUDE.md` — the template payload and the reference docs explaining it
+- `scripts/CLAUDE.md` — the language-capabilities interface, and what adding a language or check requires
+- `.claude/CLAUDE.md` — settings and skills; what a session may not grant itself
+- `docs/CLAUDE.md` — ADRs, specs, plans, and lessons
+
+Read the nearest `CLAUDE.md` above every path you touch before editing, and update the owning file after meaningful changes.

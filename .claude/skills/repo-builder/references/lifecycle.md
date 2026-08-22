@@ -133,7 +133,7 @@ Report every region as done or as outstanding. An addon left with an unfilled sl
 3. Materialize the subtree from that exact commit into an isolated local directory. Do not substitute the current working tree.
 4. Personalize the candidate:
    - move `apps/app-name` to the kebab-case application name (do not copy it), verify the old path is absent, and update every reference;
-   - replace the root `AGENTS.md` placeholder section and bootstrap Child Index with repository-specific content;
+   - replace the root `CLAUDE.md` placeholder section and bootstrap Child Index with repository-specific content;
    - initialize `docs/LESSONS.md` metadata and remove generation placeholders while retaining its durable writing guidance. Set `generated.by` to the actual author — the repo-builder agent, not the operator on whose behalf it ran — and capture `generated.at` from the real clock (e.g. `date -u +%Y-%m-%dT%H:%M:%SZ`) at the moment of writing rather than composing a plausible-looking value; a rounded time such as midnight is a placeholder wearing a valid format, not a captured one;
    - keep `docs/adrs/0000-template.md` as the reusable ADR template;
    - create `.repo-template.json`;
@@ -167,7 +167,7 @@ Report every region as done or as outstanding. An addon left with an unfilled sl
 
     Adopting `CODEOWNERS` changes what "appropriate" means here. It is the only addon finished by a repository setting rather than by an edit: without a rule requiring code owner review, the file requests a reviewer and nothing waits for the answer. Enabling it is not the safe default it looks like, for the reason its manifest entry gives — ask.
 
-    Squash merging is turned off unconditionally here, not collected as a preference in step 2. `AGENTS.md` documents Conventional Commit messages checked by a `commit-msg` hook; a squashed merge takes its message from the pull request title instead, written in GitHub's web interface where no local hook can reach it, so leaving it on lets one click bypass every rule in `.commitlintrc.yaml`. Unlike push protection and rulesets, it is offered on every plan, so it needs no plan/visibility check before applying it.
+    Squash merging is turned off unconditionally here, not collected as a preference in step 2. `CLAUDE.md` documents Conventional Commit messages checked by a `commit-msg` hook; a squashed merge takes its message from the pull request title instead, written in GitHub's web interface where no local hook can reach it, so leaving it on lets one click bypass every rule in `.commitlintrc.yaml`. Unlike push protection and rulesets, it is offered on every plan, so it needs no plan/visibility check before applying it.
 
     ```bash
     gh api -X PATCH repos/<owner>/<name> -f allow_squash_merge=false

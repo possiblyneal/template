@@ -54,7 +54,7 @@ The file sets one thing: the `unpinned-uses` policy. Since v1.20.0 zizmor requir
 
 The specific operating parameters for the AI agent.
 
-`.claude/rules/`: Core behavioral constraints, domain-specific heuristics, and strict formatting requirements the AI must follow during generation. A rule without `paths:` frontmatter loads at session start at the same priority as `AGENTS.md`; a rule with it loads only when a matching file enters context, keeping a long contract out of sessions that never touch its subject. Ships empty.
+`.claude/rules/`: Core behavioral constraints, domain-specific heuristics, and strict formatting requirements the AI must follow during generation. A rule without `paths:` frontmatter loads at session start at the same priority as `CLAUDE.md`; a rule with it loads only when a matching file enters context, keeping a long contract out of sessions that never touch its subject. Ships empty.
 
 `.claude/skills/`: Reusable, parameterized prompts that you or the AI can invoke by name to execute complex, multi-step actions. Each `<name>/SKILL.md` is also invocable as `/name`, which is why the template ships no `.claude/commands/`: commands are the legacy single-file form of the same shortcut, and one directory holding both roles beats two whose boundary needs explaining. Ships empty.
 
@@ -72,9 +72,9 @@ The specific operating parameters for the AI agent.
 
 `.mcp.json`: Configures Model Context Protocol MCP servers for this project only, granting the AI read/write access to external tools like databases, APIs, or local browsers.
 
-`AGENTS.md`: The project-specific system prompt. Houses your conventions, common commands, and architectural context so the AI operates with the same baseline assumptions as a human developer. The template ships four sections.
+`CLAUDE.md`: The project-specific system prompt. Houses your conventions, common commands, and architectural context so the AI operates with the same baseline assumptions as a human developer. The template ships four sections.
 
-`CLAUDE.local.md`: Personal, per-machine instructions loaded alongside `AGENTS.md` and excluded by `.gitignore`. Not shipped; the entry exists so local preferences have a home that is not a diff.
+`CLAUDE.local.md`: Personal, per-machine instructions loaded alongside `CLAUDE.md` and excluded by `.gitignore`. Not shipped; the entry exists so local preferences have a home that is not a diff.
 
 ### Source Code, Tests & Infrastructure
 
@@ -134,7 +134,7 @@ YAML files use `.yml` except where a tool fixes the name, which is why `.pre-com
 
 `.env`: The git-ignored config file for storing active sensitive environment variables.
 
-`.gitignore`: Specifies intentionally untracked files and directories. Ignores `.claude/` and the root `CLAUDE.md` so a generated repository carries them in its working tree without committing them. The `CLAUDE.md` pattern is anchored: a nested `CLAUDE.md` is the `@AGENTS.md` shim that loads its folder's contract, and must be committable.
+`.gitignore`: Specifies intentionally untracked files and directories. Ignores `.claude/` so a generated repository carries it in its working tree without committing it.
 `.gitattributes`: Git behavior rules for line endings, diffs, and GitHub Linguist classification.
 
 `.pre-commit-config.yaml`: Local guardrails that run automatically before code gets committed, catching AI syntax mistakes early. **`.commitlintrc.yaml`**: The commit message rules. Messages follow Conventional Commits — `type(optional scope): subject`, a blank line, then the body.

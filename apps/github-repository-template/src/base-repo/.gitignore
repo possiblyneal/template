@@ -22,10 +22,6 @@ service-account*.json
 
 # Claude config: copied into a generated repo but not committed there.
 .claude/
-# Anchored: the root shim arrives via the working tree like `.claude/`
-# and stays out of history. A nested CLAUDE.md is the only thing that
-# loads its folder's contract, so it must be committable.
-/CLAUDE.md
 CLAUDE.local.md
 
 # Local scratch

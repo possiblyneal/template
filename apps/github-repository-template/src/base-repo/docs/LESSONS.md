@@ -44,7 +44,7 @@ references before adding code.
 **Why:** A later rename becomes unnecessarily broad and leaves the application
 boundary ambiguous.
 
-**Source:** [Repository instructions](../AGENTS.md)
+**Source:** [Repository instructions](../CLAUDE.md)
 ```
 
 ## Lessons
