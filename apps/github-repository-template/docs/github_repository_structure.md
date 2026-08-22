@@ -113,6 +113,8 @@ These live in `src/repository-addons/` and are never copied during generation â€
 
 `CHANGELOG.md`: A per-version record of what changed, in Keep a Changelog format.
 
+`.claude/rules/changelog.md`: Teaches the agent when a changelog entry is owed and how to write one, loading only when `CHANGELOG.md` enters context. Adopted together with `CHANGELOG.md` â€” one without the other is a defect, not a lighter choice.
+
 `LICENSE`: The terms under which others may use, modify, and distribute the work. Ships as GNU GPL-3.0-or-later.
 
 `SECURITY.md`: The private channel for reporting a vulnerability, and what to expect after.
@@ -144,6 +146,10 @@ These live in `src/repository-addons/` and are never copied during generation â€
 #### When the project has gained traction
 
 `.github/FUNDING.yml`: Displays a sponsor button on the repository. Read only from `.github/`.
+
+#### When a helper needs to be built before it runs
+
+`tools/`: Ships as an empty placeholder in `repository-addons/`, copied in only when the project needs a helper that must be built before it runs â€” a linter, a code generator, a protobuf plugin. Each gets its own `tools/<name>/` with its own manifest and source; a helper that's just a shell script belongs in `scripts/` instead.
 
 ### Program Language Metadata
 
