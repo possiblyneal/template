@@ -35,7 +35,7 @@ Specs for a single unit belong to that unit, under `apps/<name>/docs/specs/`, an
 
 `docs/` is product-owned in `.repo-template.json`, so a template update never overwrites anything here. `adrs/0000-template.md` arrived from the payload and stays as the reusable template; edits to the ADR *format* belong in the payload copy as well.
 
-The payload's file-by-file inventory lives in `apps/github-repository-template/docs/github_repository_structure.md` — what each file is, not why.
+The payload's inventory lives in `apps/github-repository-template/docs/github_repository_structure.md`. Do not restate it here.
 
 ## Verification
 
