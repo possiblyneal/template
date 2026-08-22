@@ -202,7 +202,7 @@ else
 fi
 cleanup
 
-# docs/AGENTS.md contemplates an app keeping its own adr directory once local
+# docs/CLAUDE.md contemplates an app keeping its own adr directory once local
 # decisions would drown the repo-wide ones, so a replacement is not always a
 # sibling. The link has to climb out of docs/adrs to reach it.
 fixture "a replacement outside the ADR directory links out"
