@@ -89,6 +89,8 @@ The specific operating parameters for the AI agent.
 
 `docs/plans/`: Plans written in plan mode, tracked so they land in the diff with the code they describe.
 
+`docs/agents/`: Not shipped here. `/repo-builder` writes it during generation by invoking `/setup-matt-pocock-skills`, which records where the repository tracks its issues, its triage label vocabulary, and its domain-doc layout. The engineering skills read it; `/wayfinder` reads `issue-tracker.md` to decide where a map lives.
+
 ### Root Configuration Files
 
 `.worktreeinclude`: Lists git-ignored files to copy into new Claude Code worktrees.

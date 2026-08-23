@@ -43,6 +43,27 @@ def report_check(report: Path, name: str, predicate: Callable[[str], bool], expe
     return name, predicate(text), expected
 
 
+def setup_checks(candidate: Path) -> list[Check]:
+    """`/setup-matt-pocock-skills` ran: every generate configures the tracker."""
+    agents = candidate / "docs/agents"
+    claude = candidate / "CLAUDE.md"
+    return [
+        (
+            "engineering-skill config written",
+            all(
+                (agents / name).is_file()
+                for name in ("issue-tracker.md", "domain.md", "triage-labels.md")
+            ),
+            "docs/agents holds issue-tracker.md, domain.md, and triage-labels.md",
+        ),
+        (
+            "agent skills block added",
+            claude.is_file() and "## Agent skills" in claude.read_text(encoding="utf-8"),
+            "root CLAUDE.md carries the ## Agent skills block",
+        ),
+    ]
+
+
 def generation(root: Path, fixture: dict[str, object]) -> list[Check]:
     candidate = root.parent / "candidate"
     report = root.parent / "report.md"
@@ -95,6 +116,7 @@ def generation(root: Path, fixture: dict[str, object]) -> list[Check]:
             not (candidate / ".git").exists() or not git(candidate, "remote"),
             "candidate has no Git remote",
         ),
+        *setup_checks(candidate),
     ]
 
 
@@ -180,6 +202,83 @@ def generation_multi(root: Path, fixture: dict[str, object]) -> list[Check]:
             not (candidate / ".git").exists() or not git(candidate, "remote"),
             "candidate has no Git remote",
         ),
+        *setup_checks(candidate),
+    ]
+
+
+def generation_handoff(root: Path, fixture: dict[str, object]) -> list[Check]:
+    """The decomposition is fogged: the generate stops at the wayfinding handoff."""
+    candidate = root.parent / "candidate"
+    report = root.parent / "report.md"
+    # The eval forbids contacting GitHub, so step 6 has no remote to propose from
+    # and records local markdown. `/wayfinder` charts where that file sends it.
+    map_dir = candidate / ".scratch"
+    tracker = candidate / "docs/agents/issue-tracker.md"
+    return [
+        (
+            "candidate materialized",
+            (candidate / "scripts").is_dir() and (candidate / "docs/adrs/0000-template.md").is_file(),
+            "the subtree was copied before the stop, so a resume need not rebuild it",
+        ),
+        (
+            "placeholder app retained",
+            (candidate / "apps/app-name").is_dir(),
+            "personalization has not run; apps/app-name is still the placeholder",
+        ),
+        (
+            "no boundaries invented",
+            not adr_records(candidate),
+            "no numbered ADR written, since no choke point was established",
+        ),
+        (
+            "tracker recorded before charting",
+            tracker.is_file() and "markdown" in tracker.read_text(encoding="utf-8").lower(),
+            "docs/agents/issue-tracker.md records the local-markdown tracker",
+        ),
+        (
+            "map charted on the tracker",
+            map_dir.is_dir() and any(map_dir.glob("**/*.md")),
+            "the map is under .scratch/, where the recorded tracker puts issues",
+        ),
+        (
+            "map has open tickets",
+            any(p.name != "map.md" for p in map_dir.glob("**/*.md")) if map_dir.is_dir() else False,
+            "charting produced tickets, not just a map body",
+        ),
+        (
+            "no ticket resolved",
+            not any(
+                "status: resolved" in p.read_text(encoding="utf-8").lower()
+                for p in map_dir.glob("**/*.md")
+            )
+            if map_dir.is_dir()
+            else False,
+            "charting hand-resolves nothing; every ticket is still open",
+        ),
+        report_check(
+            report,
+            "reported as stopped",
+            lambda text: "stopped" in text.lower() and "not created" in text.lower(),
+            "Operation: stopped with no pull request",
+        ),
+        report_check(
+            report,
+            "handoff named",
+            lambda text: "/wayfinder" in text and ".scratch" in text,
+            "report hands off to /wayfinder and points at the map",
+        ),
+        report_check(
+            report,
+            "trigger named",
+            lambda text: "wayfinding:" in text.lower(),
+            "the Wayfinding line records which trigger fired",
+        ),
+        (
+            "no configured remote",
+            not (candidate / ".git").exists() or not git(candidate, "remote"),
+            "candidate has no Git remote",
+        ),
+        *setup_checks(candidate),
     ]
 
 
@@ -279,6 +378,8 @@ def main() -> int:
         checks = generation(fixture_path.parent, fixture)
     elif scenario == "generation-multi":
         checks = generation_multi(fixture_path.parent, fixture)
+    elif scenario == "generation-handoff":
+        checks = generation_handoff(fixture_path.parent, fixture)
     else:
         checks = update(fixture_path.parent, fixture, scenario)
     result = {

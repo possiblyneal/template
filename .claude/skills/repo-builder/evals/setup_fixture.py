@@ -377,7 +377,18 @@ def build_adopt(root: Path) -> dict[str, object]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("scenario", choices=("generation", "generation-multi", "clean-update", "unrelated", "conflict", "adopt"))
+    parser.add_argument(
+        "scenario",
+        choices=(
+            "generation",
+            "generation-multi",
+            "generation-handoff",
+            "clean-update",
+            "unrelated",
+            "conflict",
+            "adopt",
+        ),
+    )
     parser.add_argument("output", type=Path)
     parser.add_argument("--force", action="store_true", help="replace an existing output directory")
     args = parser.parse_args()
@@ -390,7 +401,7 @@ def main() -> int:
     output.mkdir(parents=True)
 
     try:
-        if args.scenario in ("generation", "generation-multi"):
+        if args.scenario in ("generation", "generation-multi", "generation-handoff"):
             details = build_generation(output, args.scenario)
         elif args.scenario == "adopt":
             details = build_adopt(output)

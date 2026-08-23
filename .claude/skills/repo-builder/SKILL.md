@@ -6,7 +6,7 @@ compatibility: Requires Python 3, Git, and gh for authorized GitHub repository a
 
 # Repo Builder
 
-Read `references/lifecycle.md` before acting. It defines the manifest, ownership rules, the wayfinding session, generation/update flows, remote confirmation gates, failure behavior, and final report. `references/choosing_a_language.md` is the method that session runs on.
+Read `references/lifecycle.md` before acting. It defines the manifest, ownership rules, the wayfinding step and its handoffs to `/setup-matt-pocock-skills` and `/wayfinder`, generation/update flows, remote confirmation gates, failure behavior, and final report. `references/choosing_a_language.md` is the method behind both.
 
 ## Choose the operation
 
@@ -17,7 +17,11 @@ Read `references/lifecycle.md` before acting. It defines the manifest, ownership
 
 Generation into a destination that already has content is still a generate, but its collisions are decided by hand and it never resolves one by deleting. `references/lifecycle.md` carries those rules; read them before writing to a non-empty destination.
 
-A generate derives its application boundaries rather than collecting them. How many `apps/<name>/` directories the repository gets, what each is called, and what each is written in come out of wayfinding, run with the user before anything is materialized. It is two questions asked in one structured prompt — what ships separately, and what binds first for each — with your reading of the request as the options, and it expands into the full method in `references/choosing_a_language.md` only against the triggers `references/lifecycle.md` names. Do not open the full session by default. Skip wayfinding entirely when the invocation already names every deployable and its language, and report that it was skipped.
+A generate derives its application boundaries rather than collecting them. How many `apps/<name>/` directories the repository gets, what each is called, and what each is written in come out of wayfinding, run with the user once the candidate is materialized, the destination repository exists, and `/setup-matt-pocock-skills` has recorded where that repository tracks its issues — and before the candidate is personalized. It is two questions asked in one structured prompt — what ships separately, and what binds first for each — with your reading of the request as the options. Skip it entirely when the invocation already names every deployable and its language, and report that it was skipped.
+
+Invoke `/setup-matt-pocock-skills` with the Skill tool at the step `references/lifecycle.md` gives it, before wayfinding. Invoke it rather than answering its questions yourself or reproducing what it writes: it owns its own questions, and they are expected to change.
+
+When those two questions do not settle it, the rest is the full method in `references/choosing_a_language.md`, and that is `/wayfinder`'s job rather than this skill's. Against the triggers `references/lifecycle.md` names, invoke `/wayfinder` with the destination and notes that section specifies, and stop once the map is charted — leaving the candidate and the repository in place to resume against. Name no effort directory: `/wayfinder` charts wherever `docs/agents/issue-tracker.md` sends it, which is the reason the repository and its tracker exist before wayfinding runs. Do not work a ticket and do not answer the six steps yourself: charting hand-resolves nothing by design, and a generate that pushed on through its own map would return the decomposition it had already guessed.
 
 ## Preflight before editing
 
@@ -29,9 +33,9 @@ Use `scripts/preflight.py` for deterministic validation and retain its JSON in t
 
 The helper is read-only and only authorizes the next stage. Claude owns personalization and semantic reconciliation; do not replace judgment with a blind copy, overlay, or text merge. Keep provenance, ancestry, ownership, validation, and remote-action gates even when simplifying the work. Unless preflight rejects the operation or reconciliation finds a real conflict, continue through materialization, local edits, manifest advancement, and verification. A preflight report alone is not a completed build or update.
 
-## Work locally, then publish
+## Publish an empty base, build locally, then publish content
 
-1. Build an isolated local candidate from the exact source commit. For updates, read the old and new blobs for every preflight delta, compare them with the destination blob, and edit the destination candidate; do not stop at a proposed classification.
+1. Create the destination repository and its empty base early, at its own gate, then build an isolated local candidate from the exact source commit against it. On a generate the repository comes first so the issue tracker and the wayfinding map have somewhere real to live; everything after it is built and checked locally before anything is published. For updates, read the old and new blobs for every preflight delta, compare them with the destination blob, and edit the destination candidate; do not stop at a proposed classification.
 2. Preserve product-owned content and reconcile managed content against destination intent. Apply every conflict-free managed delta to disk. When the template renames an unchanged managed file, move the destination file to the new path rather than retaining both names. If the destination also changed the file non-overlappingly, move it and carry those edits into the new template version.
 3. Verify the candidate files contain the intended new template behavior and preserved destination behavior. Stage the candidate before running checks, since `pre-commit run --all-files` reads the Git index and passes trivially over unstaged work. Run documented checks and report unavailable checks as unavailable, not passed.
 4. Verify the file list against the payload's tracked paths, not only the content of the files present. Absence has no runner, so a dropped file produces a green run.
@@ -59,8 +63,8 @@ On update, advance `.repo-template.json` only after the candidate validates, and
 
 ### Application boundaries
 - <deployable>: choke point <constraint, or "none bound; time-to-working-code"> -> <language>, <selected from list | reasoned from the seam contract | measured against it>
+- Wayfinding: short form settled it | handed off to `/wayfinder` (<which trigger>), map at <URL or path> | skipped, supplied in the invocation
 - ADRs written: <paths, or none>
-- <deployables supplied in the invocation rather than derived, on one line, or none>
 
 ### File list
 - <payload paths accounted for, and every difference named as intended or as a defect>
@@ -71,6 +75,7 @@ On update, advance `.repo-template.json` only after the candidate validates, and
 
 ### Repository settings
 - <setting>: enabled | unavailable (<reason>) | not requested
+- Issue tracker: <GitHub | GitLab | local markdown | other>, recorded in `docs/agents/issue-tracker.md`; triage labels: default | overridden | not configured
 
 ### Verification
 - `<exact command>`: pass | fail | unavailable (<reason>)
