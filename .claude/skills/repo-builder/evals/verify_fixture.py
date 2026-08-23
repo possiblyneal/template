@@ -47,19 +47,26 @@ def setup_checks(candidate: Path) -> list[Check]:
     """`/setup-matt-pocock-skills` ran: every generate configures the tracker."""
     agents = candidate / "docs/agents"
     claude = candidate / "CLAUDE.md"
+    text = claude.read_text(encoding="utf-8") if claude.is_file() else ""
+    # The skill writes triage-labels.md and its sub-block only where the `triage`
+    # skill is installed beside it, so the pair is what holds, not either half.
+    labels = (agents / "triage-labels.md").is_file()
+    sub_block = "### Triage labels" in text
     return [
         (
             "engineering-skill config written",
-            all(
-                (agents / name).is_file()
-                for name in ("issue-tracker.md", "domain.md", "triage-labels.md")
-            ),
-            "docs/agents holds issue-tracker.md, domain.md, and triage-labels.md",
+            all((agents / name).is_file() for name in ("issue-tracker.md", "domain.md")),
+            "docs/agents holds issue-tracker.md and domain.md",
         ),
         (
             "agent skills block added",
-            claude.is_file() and "## Agent skills" in claude.read_text(encoding="utf-8"),
+            "## Agent skills" in text,
             "root CLAUDE.md carries the ## Agent skills block",
+        ),
+        (
+            "triage labels consistent",
+            labels == sub_block,
+            "triage-labels.md and the ### Triage labels sub-block are both present or both absent",
         ),
     ]
 
