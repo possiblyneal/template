@@ -230,6 +230,8 @@ Say in **Context** how the choke point was established: chosen from the short fo
 
    Its output is the evidence for the settings section of the report, and `not offered for the plan` is a distinct outcome from disabled — do not collapse them.
 
+   Ruleset creation can also be refused outright, and that is a different outcome from a ruleset that does not bind. A repository on a plan that does not offer rulesets returns 403, so there is no 201 to be suspicious of and the refusal is itself the measurement: record `not offered for the plan` and do not probe. Pushing anyway learns nothing the 403 has not already said, and an unprotected branch does not reject it — the probe commit lands on top of step 4's empty root and becomes the default-branch tip, with nothing verified and a commit that only a force-push removes. Probe only where creation returned 201.
+
    A ruleset that was accepted is not a ruleset that binds. Creation returns 201 either way, so prove enforcement rather than inferring it: put a throwaway commit on the default branch, push it directly, and require the `GH013` rejection. An unprotected branch accepts that push, which is the finding.
 
    ```bash
@@ -238,7 +240,11 @@ Say in **Context** how the choke point was established: chosen from the short fo
    git update-ref refs/heads/<default-branch> origin/<default-branch>
    ```
 
-   Make the probe empty and undo it with `update-ref` rather than `git reset --hard`. The materialized payload is sitting untracked in this worktree, and a hard reset against an empty base takes the working tree with the probe.
+   The probe is a commit on the default branch and a direct push to it, which is exactly what `no-commit-to-branch` and `protect-branch` exist to refuse. Step 4's note above applies to it unchanged, including the explicit confirmation that bypass needs: a resumed generate reaches this step with both hooks installed. Do not resolve a refusal by skipping the probe, which reports an unverified ruleset as verified.
+
+   Make the probe empty and rewind it with `update-ref` rather than `git reset --hard`. The materialized payload is sitting untracked in this worktree, and a hard reset against an empty base takes the working tree with the probe.
+
+   That rewind is local, and it removes the probe only where the push was rejected. Where the push was accepted, `origin/<default-branch>` is the probe commit, so the rewind syncs to it rather than undoing it and the commit stays on the remote default branch. That is the finding, and it is a failed verification: stop under [Failure and recovery](#failure-and-recovery), name the repository and say it carries the probe commit, and leave removing it to a decision at a gate. Removing it means force-pushing the default branch, which is not an operation to perform on the way past.
 
 6. Configure the repository for the engineering skills — invoke `/setup-matt-pocock-skills` with the Skill tool. Invoke it; do not answer for the user and do not reproduce what it does by hand. It is the source of truth for its own questions, and a copy of them here goes stale the first time it changes.
 
@@ -362,7 +368,7 @@ Remote execution
 - create: owner/repository (private, uninitialized)
 - push: empty root commit -> main
 - settings: Dependabot alerts/updates; push protection if available; squash merging disabled; main ruleset; automatic head branch deletion if chosen
-- push: throwaway ruleset probe -> main; rejection is what proves the ruleset binds, so where rulesets are unavailable it is not rejected and the commit lands on the remote default branch
+- push: throwaway ruleset probe -> main, only where ruleset creation returned 201; rejection is what proves the ruleset binds, so a ruleset that was accepted without binding leaves that commit on the remote default branch
 - labels: triage labels from `/setup-matt-pocock-skills`, if step 6 records a hosted tracker and the `triage` skill is installed
 - issues: map and tickets from `/wayfinder`, if step 6 records a hosted tracker
 - push: repo-builder/<short-target> -> generated content or template update
@@ -386,7 +392,7 @@ Stop before editing when:
 
 The [Wayfinding](#wayfinding) handoff is also a stop, and the one that is not a failure: nothing is wrong, the decomposition is simply not this skill's to settle. Report it as `stopped` like any other, but do not report it as a defect in the candidate or the request, and do not discard the materialized candidate — it is what the resumed session re-enters at. By this point the destination repository exists, configured, with its default branch still the empty root commit and its map on its tracker. That is the state to leave and to describe, not a half-finished generate to roll back; the repository is where the map lives, so deleting it discards the only thing the stop produced.
 
-Stop before further remote actions when semantic intent conflicts or verification fails. On a generate that no longer means before any remote action at all: steps 4 and 5 have already created the repository and applied its settings, so a failure at any step from 5 to 10 leaves a real repository whose content was never published. Its default branch is the empty root commit, except after a failure at step 5 on a plan without rulesets, where the probe commit is not rejected and stays there. Name it, say what it already carries, and say whether resuming against it or deleting it is the next action — a stop reported as though nothing was created sends the user looking for a repository they already own. Keep `template.commit` at the previous version. Report exact paths, Git evidence, checks, and a recoverable next action. Do not approximate a missing old version, rebase unrelated template histories, reset/clean the destination, or claim a partial update succeeded.
+Stop before further remote actions when semantic intent conflicts or verification fails. On a generate that no longer means before any remote action at all: steps 4 and 5 have already created the repository and applied its settings, so a failure at any step from 5 to 10 leaves a real repository whose content was never published. Its default branch is the empty root commit, except after a failure at step 5 where the probe ran and was not rejected: its commit stays there. Name it, say what it already carries, and say whether resuming against it or deleting it is the next action — a stop reported as though nothing was created sends the user looking for a repository they already own. Keep `template.commit` at the previous version. Report exact paths, Git evidence, checks, and a recoverable next action. Do not approximate a missing old version, rebase unrelated template histories, reset/clean the destination, or claim a partial update succeeded.
 
 Report a check by what it did, and keep the four outcomes distinct: a check that passed, one that reported nothing to do, one whose runner was missing, and one that never ran. The candidate's own scripts make that distinction, and collapsing it in the report discards the thing they were built to preserve. A run reporting no project manifest checked nothing; a green pull request with no workflow runs verified nothing; a file that was never written cannot fail.
 
