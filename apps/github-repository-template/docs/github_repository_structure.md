@@ -89,8 +89,6 @@ The specific operating parameters for the AI agent.
 
 `docs/plans/`: Plans written in plan mode, tracked so they land in the diff with the code they describe.
 
-`docs/agents/`: Not shipped here. `/repo-builder` writes it during generation by invoking `/setup-matt-pocock-skills`, which records where the repository tracks its issues, its triage label vocabulary, and its domain-doc layout. The engineering skills read it; `/wayfinder` reads `issue-tracker.md` to decide where a map lives.
-
 ### Root Configuration Files
 
 `.worktreeinclude`: Lists git-ignored files to copy into new Claude Code worktrees.
@@ -152,6 +150,12 @@ These live in `src/repository-addons/` and are never copied during generation â€
 #### When a helper needs to be built before it runs
 
 `tools/`: Ships as an empty placeholder in `repository-addons/`, copied in only when the project needs a helper that must be built before it runs â€” a linter, a code generator, a protobuf plugin. Each gets its own `tools/<name>/` with its own manifest and source; a helper that's just a shell script belongs in `scripts/` instead.
+
+### Written During Generation
+
+Not part of the payload. `/repo-builder` writes these into the generated repository, so they appear in a generated tree and never in this inventory.
+
+`docs/agents/`: Written by invoking `/setup-matt-pocock-skills`, which records where the repository tracks its issues, its triage label vocabulary, and its domain-doc layout. The engineering skills read it; `/wayfinder` reads `issue-tracker.md` to decide where a map lives.
 
 ### Program Language Metadata
 

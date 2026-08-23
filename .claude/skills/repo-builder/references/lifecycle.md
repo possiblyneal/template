@@ -13,6 +13,8 @@
 - [Failure and recovery](#failure-and-recovery)
 - [Final report](#final-report)
 
+Every `<placeholder>` in the commands below stands for a value the user supplied. Quote it when substituting — `git push origin "$branch"`, not a bare interpolation — and reject a repository or branch name outside `[A-Za-z0-9._/-]+` before it reaches a shell. These values come from someone naming their own repository, so the guard is against a stray metacharacter, not against an attacker.
+
 ## Manifest
 
 Every built repository tracks `.repo-template.json`:
@@ -149,7 +151,7 @@ The value of that session is concentrated in the places where the first answer w
 
 Charting is where the generate ends. `/wayfinder` resolves nothing while charting and never works more than one ticket per session, and that rule is the whole reason to reach for it: the value of the full method is in the answers only the user can give, so a generate that pushed on through its own map would hand back the decomposition it had already guessed, wearing an ADR that claims it was deliberated. Do not work a ticket, and do not answer any of the six steps yourself.
 
-So report `stopped` with the pull request not created, leave the materialized candidate and the created repository in place, and hand back two things: the map, and the resume. The user works the map with `/wayfinder` across as many sessions as it takes, then re-invokes `/repo-builder` against the same candidate. It re-enters at [Generate](#generate) step 8 and reads the decomposition out of the map's Decisions so far.
+So report `stopped` with the pull request not created, leave the materialized candidate and the created repository in place, and hand back two things: the map, and the resume. The user works the map with `/wayfinder` across as many sessions as it takes, then re-invokes `/repo-builder` against the same candidate once the map has no open tickets, and not before. The destination handed to `/wayfinder` is the decomposition itself, so an open ticket is a piece of it still undecided; resuming with one open reads a partial answer out of Decisions so far and writes an ADR claiming it was settled. It re-enters at [Generate](#generate) step 8 and reads the decomposition out of that section.
 
 ### What wayfinding must produce
 
@@ -252,7 +254,7 @@ Say in **Context** how the choke point was established: chosen from the short fo
 8. Personalize the candidate:
    - create one `apps/<name>/` per deployable wayfinding established. Move `apps/app-name` to the first (do not copy it) and replicate its skeleton — `src/`, `tests/`, `docs/specs/` — for each one after that. Verify `apps/app-name` is absent afterwards and update every reference. One deployable is the ordinary case and needs no replication;
    - write one ADR per deployable recording its choke point and language, as [Wayfinding](#wayfinding) directs;
-   - replace the root `CLAUDE.md` bootstrap Child Index with repository-specific content, carrying the wayfinding result into it: each deployable, what it is for, and the language it is written in. The ADRs record why that language was chosen; `CLAUDE.md` is where an agent reads what the repository is before touching anything, and a Child Index naming the apps without saying what each one is leaves the boundaries derivable only from a directory listing;
+   - replace the root `CLAUDE.md` bootstrap Child Index with repository-specific content, carrying the wayfinding result into it: each deployable, what it is for, and the language it is written in. The ADRs record why that language was chosen; `CLAUDE.md` is where an agent reads what the repository is before touching anything, and a Child Index naming the apps without saying what each one is leaves the boundaries derivable only from a directory listing. Then read the file back and confirm step 6's `## Agent skills` block is still in it. Nothing else verifies that: step 10 compares paths rather than content, and the file exists either way. Clobbering the block silently stops the engineering skills finding the tracker in a repository that otherwise looks correct;
    - initialize `docs/LESSONS.md` metadata and remove generation placeholders while retaining its durable writing guidance. Set `generated.by` to the actual author — the repo-builder agent, not the operator on whose behalf it ran — and capture `generated.at` from the real clock (e.g. `date -u +%Y-%m-%dT%H:%M:%SZ`) at the moment of writing rather than composing a plausible-looking value; a rounded time such as midnight is a placeholder wearing a valid format, not a captured one;
    - keep `docs/adrs/0000-template.md` as the reusable ADR template;
    - create `.repo-template.json`;

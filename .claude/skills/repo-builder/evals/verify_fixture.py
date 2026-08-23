@@ -43,7 +43,16 @@ def report_check(report: Path, name: str, predicate: Callable[[str], bool], expe
     return name, predicate(text), expected
 
 
-def setup_checks(candidate: Path) -> list[Check]:
+def no_remote_check(candidate: Path) -> Check:
+    """A generate forbidden from contacting GitHub stops at step 4's gate, so no remote is set."""
+    return (
+        "no configured remote",
+        not (candidate / ".git").exists() or not git(candidate, "remote"),
+        "candidate has no Git remote",
+    )
+
+
+def setup_skill_checks(candidate: Path) -> list[Check]:
     """`/setup-matt-pocock-skills` ran: every generate configures the tracker."""
     agents = candidate / "docs/agents"
     claude = candidate / "CLAUDE.md"
@@ -118,12 +127,8 @@ def generation(root: Path, fixture: dict[str, object]) -> list[Check]:
             lambda text: all(term in text.lower() for term in ("empty", "main", "branch", "pull request")),
             "report describes empty main base and content PR",
         ),
-        (
-            "no configured remote",
-            not (candidate / ".git").exists() or not git(candidate, "remote"),
-            "candidate has no Git remote",
-        ),
-        *setup_checks(candidate),
+        no_remote_check(candidate),
+        *setup_skill_checks(candidate),
     ]
 
 
@@ -204,12 +209,8 @@ def generation_multi(root: Path, fixture: dict[str, object]) -> list[Check]:
             and "choke point" in text.lower(),
             "report names each deployable with the constraint that selected its language",
         ),
-        (
-            "no configured remote",
-            not (candidate / ".git").exists() or not git(candidate, "remote"),
-            "candidate has no Git remote",
-        ),
-        *setup_checks(candidate),
+        no_remote_check(candidate),
+        *setup_skill_checks(candidate),
     ]
 
 
@@ -220,6 +221,7 @@ def generation_handoff(root: Path, fixture: dict[str, object]) -> list[Check]:
     # The eval forbids contacting GitHub, so step 6 has no remote to propose from
     # and records local markdown. `/wayfinder` charts where that file sends it.
     map_dir = candidate / ".scratch"
+    map_files = sorted(map_dir.glob("**/*.md")) if map_dir.is_dir() else []
     tracker = candidate / "docs/agents/issue-tracker.md"
     return [
         (
@@ -244,22 +246,18 @@ def generation_handoff(root: Path, fixture: dict[str, object]) -> list[Check]:
         ),
         (
             "map charted on the tracker",
-            map_dir.is_dir() and any(map_dir.glob("**/*.md")),
+            bool(map_files),
             "the map is under .scratch/, where the recorded tracker puts issues",
         ),
         (
             "map has open tickets",
-            any(p.name != "map.md" for p in map_dir.glob("**/*.md")) if map_dir.is_dir() else False,
+            any(p.name != "map.md" for p in map_files),
             "charting produced tickets, not just a map body",
         ),
         (
             "no ticket resolved",
-            not any(
-                "status: resolved" in p.read_text(encoding="utf-8").lower()
-                for p in map_dir.glob("**/*.md")
-            )
-            if map_dir.is_dir()
-            else False,
+            bool(map_files)
+            and not any("status: resolved" in p.read_text(encoding="utf-8").lower() for p in map_files),
             "charting hand-resolves nothing; every ticket is still open",
         ),
         report_check(
@@ -280,12 +278,8 @@ def generation_handoff(root: Path, fixture: dict[str, object]) -> list[Check]:
             lambda text: "wayfinding:" in text.lower(),
             "the Wayfinding line records which trigger fired",
         ),
-        (
-            "no configured remote",
-            not (candidate / ".git").exists() or not git(candidate, "remote"),
-            "candidate has no Git remote",
-        ),
-        *setup_checks(candidate),
+        no_remote_check(candidate),
+        *setup_skill_checks(candidate),
     ]
 
 
