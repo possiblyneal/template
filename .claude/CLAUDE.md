@@ -10,7 +10,11 @@ The agent's operating parameters for this repository: permission rules and the s
 - `skills/` — reusable multi-step prompts, each invocable as `/name`
 - `hooks/`, `rules/`, `output-styles/`, `agents/`, `workflows/` — empty, shipped so the available surfaces are visible without inheriting rules
 
-`skills/repo-builder/` is this repository's own product, not configuration. Its contract is `skills/repo-builder/references/lifecycle.md`, and `skills/repo-builder/references/choosing_a_language.md` is the method its wayfinding session runs on — how a repository's application boundaries and their languages get derived rather than asked for.
+`skills/repo-builder/` is this repository's own product, not configuration. Its contract is `skills/repo-builder/references/lifecycle.md`, and `skills/repo-builder/references/choosing_a_language.md` is the method behind its wayfinding step — how a repository's application boundaries and their languages get derived rather than asked for.
+
+That step is where repo-builder depends on skills it does not ship, and there are two of them. Every generate invokes the operator's global `/setup-matt-pocock-skills` to record where the new repository tracks its issues; when the two short-form questions fail to settle the decomposition, the contract then invokes `/wayfinder` to chart the remaining decisions as a map on that tracker and stops, because charting hand-resolves nothing and a generate that worked its own map would return the decomposition it had already guessed. Both are invoked rather than reimplemented.
+
+That dependency is why a generate creates the destination repository as its fourth step, immediately after materializing the candidate and before configuring or personalizing it. `/setup-matt-pocock-skills` proposes a tracker from `git remote -v` and `/wayfinder` charts wherever that answer sends it, so both give the wrong answer against a candidate with no remote. A session running without either global skill installed hits a stop with nowhere to send the user — the same personal-use tradeoff the settings note below records, and it reaches the generated repository too, since nothing in the payload supplies either skill.
 
 ## Local Contracts
 

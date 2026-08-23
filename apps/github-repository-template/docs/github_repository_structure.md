@@ -151,6 +151,12 @@ These live in `src/repository-addons/` and are never copied during generation â€
 
 `tools/`: Ships as an empty placeholder in `repository-addons/`, copied in only when the project needs a helper that must be built before it runs â€” a linter, a code generator, a protobuf plugin. Each gets its own `tools/<name>/` with its own manifest and source; a helper that's just a shell script belongs in `scripts/` instead.
 
+### Written During Generation
+
+Not part of the payload. `/repo-builder` writes these into the generated repository, so they appear in a generated tree and never in this inventory.
+
+`docs/agents/`: Written by invoking `/setup-matt-pocock-skills`, which records where the repository tracks its issues, its triage label vocabulary, and its domain-doc layout. The engineering skills read it; `/wayfinder` reads `issue-tracker.md` to decide where a map lives.
+
 ### Program Language Metadata
 
 These languages have built-in or universally accepted package managers, meaning they have strict, required root-level files and app-level files
