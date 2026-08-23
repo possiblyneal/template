@@ -19,6 +19,23 @@
 # Callers use `set -uo pipefail` without -e: a failing assertion is recorded and
 # the remaining cases still run, so one break does not hide the rest.
 
+# Every suite here scaffolds throwaway Git repositories, and a fixture inherits
+# the operator's global config unless told not to. One setting breaks them
+# outright: a machine-wide core.hooksPath, set for an unrelated purpose such as
+# an editor's Git integration or another agent's attribution hook, redirects
+# every fixture's hooks away from .git/hooks. `pre-commit install` still reports
+# success and the hook then never fires, so a suite asserting that a hook blocks
+# a commit watches the commit succeed and reports the operator's config as a
+# defect in this repository.
+#
+# Neutralize it by isolating the fixtures from user and system config entirely
+# rather than by unsetting the one key. A fixture reading anything from outside
+# the repository is the bug in general, and the empty-string override for this
+# key specifically is a trap: `git config core.hooksPath ""` satisfies
+# pre-commit's refusal check and installs, and the hook still does not run.
+export GIT_CONFIG_GLOBAL=/dev/null
+export GIT_CONFIG_SYSTEM=/dev/null
+
 passed=0
 failed=0
 current=""
