@@ -45,7 +45,6 @@ Every built repository tracks `.repo-template.json`:
     {"path": ".claude/settings.json", "mode": "managed"},
     {"path": ".pre-commit-config.yaml", "mode": "managed"},
     {"path": ".commitlintrc.yaml", "mode": "managed"},
-    {"path": "zizmor.yml", "mode": "managed"},
     {"path": ".gitattributes", "mode": "managed"},
     {"path": ".gitignore", "mode": "managed"},
     {"path": ".worktreeinclude", "mode": "managed"},
@@ -85,7 +84,7 @@ Ownership answers whether a path participates in template updates:
 
 The longest matching path wins; equal patterns are invalid. The old-to-new template delta bounds update scope. Do not edit an unrelated destination path merely because a broad ownership rule matches it.
 
-Unmatched defaulting to product is the safe direction for a path the template does not ship, and the wrong one for a path it does. A file at the repository root matches no directory pattern, so `.pre-commit-config.yaml`, `.commitlintrc.yaml`, `.gitattributes`, `.gitignore`, and `zizmor.yml` fall through to product unless named individually — and those files carry the pinned hook revisions behind the secret scanner, the commit-message rules, the merge policy keeping a lockfile from being line-merged, and the action-pinning policy. The list grows: every root file the payload adds needs a line here, and the omission is invisible until a payload fix silently fails to land. A payload fix to any of them would land nowhere while the update reported success. Every path the template ships needs an ownership rule that reaches it; verify with `classify_path` rather than assuming a directory pattern covers a file at the root.
+Unmatched defaulting to product is the safe direction for a path the template does not ship, and the wrong one for a path it does. A file at the repository root matches no directory pattern, so `.pre-commit-config.yaml`, `.commitlintrc.yaml`, `.gitattributes`, and `.gitignore` fall through to product unless named individually — and those files carry the pinned hook revisions behind the secret scanner, the commit-message rules, and the merge policy keeping a lockfile from being line-merged. The list grows: every root file the payload adds needs a line here, and the omission is invisible until a payload fix silently fails to land. A payload fix to any of them would land nowhere while the update reported success. Every path the template ships needs an ownership rule that reaches it; verify with `classify_path` rather than assuming a directory pattern covers a file at the root.
 
 A rename or delete of a destination-modified managed file needs semantic review. Product-created files under managed directories remain untouched unless the new template introduces the same path.
 
@@ -98,6 +97,12 @@ The repository addons are the public-repository files a generation holds back: `
 Four of them travel as two pairs. `CONTRIBUTORS.md` and `.all-contributorsrc` are one record split across two files: the contributor table is generated from the config's `contributors` array and never parsed back out of the Markdown, so taking the Markdown alone leaves a table nothing can update, and taking the config alone leaves it writing to a file that is not there.
 
 The other pair is `CHANGELOG.md` and `.claude/rules/changelog.md`. The rule instructs an agent to maintain the file, so adopting the rule without the file states a contract that cannot be satisfied, and adopting the file without the rule leaves nothing keeping it current. `scripts/release` reads whichever world it lands in and says which one it took, so neither is required — but half of the pair is a defect rather than a lighter choice.
+
+One pair is exclusive, where adopting both is the defect: `_config.yml` and `.nojekyll`. `.nojekyll` turns off the Jekyll processor `_config.yml` exists to configure, so a repository holding both publishes a site whose configuration nothing reads. Nothing about that combination fails — both files are valid, the site builds, and the config that is never read looks exactly like the config that is. `preflight.py` rejects the two named together, and rejects either one against a destination already holding the other — the sequential path being how a repository really acquires both, since the occasion for the second arrives long after the first.
+
+`SUPPORT.md` pairs with a file that is not an addon at all. The payload's `.github/ISSUE_TEMPLATE/config.yml` ships a commented-out `contact_links` block; adopting `SUPPORT.md` means uncommenting it against the same destination, because the template chooser is one step earlier than the new-issue banner GitHub links `SUPPORT.md` from, and two different answers to "where do I ask?" reach the same person seconds apart.
+
+No addon shares a path with a payload file, and that is an invariant rather than a coincidence — adoption copies into a tree that already holds the payload, so a shared path overwrites instead of adding, and reads as an addition everywhere the directory is described. `test_addon_adoption.py` fails on any addon at a path the payload ships. Guidance about such a path goes in the payload file, commented out, the way `.github/dependabot.yml` carries the ecosystem entry to copy when a real manifest arrives.
 
 Copying an addon is not adopting it. Most arrive with regions that are wrong until someone edits them, and the failure mode is silent — a Code of Conduct promising a reporting channel that does not exist, a funding button pointing at a stranger's donation page, a citation crediting `REPLACE-FAMILY-NAME`. None of these are errors to any tool; they render, validate, and publish. `apps/github-repository-template/src/addon-adoption.json` is the index of those regions, a sibling of the addons directory rather than a file inside it, and is read rather than copied — a generated repository has no `repository-addons/` for it to describe.
 

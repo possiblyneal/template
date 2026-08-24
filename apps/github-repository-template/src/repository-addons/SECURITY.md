@@ -7,11 +7,12 @@ is worse than no policy at all, because a reporter relies on it at the one momen
 it matters and the weakness goes public instead. Every commitment below is one
 this project can actually honour, or it does not belong here.
 
-GitHub reads this file from `.github/`, then the repository root, then `docs/` --
-first one found wins. It ships at the root; move it if you want it elsewhere,
-but do not keep two copies, because only the first is ever read. When present,
-GitHub links it from the repository's **Security** tab and from the banner shown
-when someone opens a new issue.
+GitHub looks for this file in the repository root, in `docs/`, and in `.github/`,
+and links it from the repository's **Security** tab and from the banner shown
+when someone opens a new issue. It ships at the root; move it if you want it
+elsewhere, but keep exactly one copy. GitHub documents no precedence between
+those three locations, so two copies means the address a reporter reads is the
+one you did not update.
 
 ## Reporting a vulnerability
 

@@ -22,19 +22,39 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[5]
 ADDONS = REPOSITORY_ROOT / "apps/github-repository-template/src/repository-addons"
+PAYLOAD = REPOSITORY_ROOT / "apps/github-repository-template/src/base-repo"
 MANIFEST = REPOSITORY_ROOT / "apps/github-repository-template/src/addon-adoption.json"
 
 # .gitkeep exists to make an empty directory survive Git, and is never adopted.
+# Ignoring it on the payload side too is harmless: a shadowed .gitkeep would
+# overwrite a placeholder with a placeholder.
 IGNORED = {".gitkeep"}
+
+
+def files_under(directory):
+    """Every file in a tree, as a path relative to that tree's root.
+
+    Raises rather than returning an empty set when the directory is missing: a
+    moved or renamed tree would otherwise turn every comparison below into a
+    comparison against nothing, and pass.
+    """
+    if not directory.is_dir():
+        raise AssertionError(f"expected a directory at {directory}")
+    return {
+        str(path.relative_to(directory))
+        for path in directory.rglob("*")
+        if path.is_file() and path.name not in IGNORED
+    }
 
 
 def addon_paths():
     """Every adoptable file, as a path relative to the addons directory."""
-    return {
-        str(path.relative_to(ADDONS))
-        for path in ADDONS.rglob("*")
-        if path.is_file() and path.name not in IGNORED
-    }
+    return files_under(ADDONS)
+
+
+def payload_paths():
+    """Every file the payload ships, as a path relative to the subtree."""
+    return files_under(PAYLOAD)
 
 
 def manifest_entries():
@@ -54,6 +74,25 @@ class AddonAdoptionManifest(unittest.TestCase):
         orphaned = sorted(manifest_entries().keys() - addon_paths())
         self.assertEqual(
             orphaned, [], f"entries in {MANIFEST.name} with no such addon: {orphaned}"
+        )
+
+    def test_no_addon_shadows_a_payload_path(self):
+        """An addon at a path the payload already ships overwrites that file
+        instead of adding one, and every reader of the directory -- the
+        walkthrough, the structure doc, an operator copying by hand -- reads it
+        as an addition. Nothing else here would notice: the overwriting file is
+        valid, the file it replaced was valid, and the difference only shows up
+        as a setting that silently stopped applying in the generated repository.
+
+        Adopting an addon is a copy into a tree that already has the payload in
+        it, so the two namespaces have to stay disjoint. Guidance about a path
+        the payload ships belongs in that payload file, commented out, the way
+        .github/dependabot.yml carries the ecosystem entry to copy when a real
+        manifest arrives.
+        """
+        shadowed = sorted(addon_paths() & payload_paths())
+        self.assertEqual(
+            shadowed, [], f"addons at a path the payload already ships: {shadowed}"
         )
 
     def test_declared_slot_tokens_are_present_in_their_file(self):

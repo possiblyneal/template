@@ -173,6 +173,37 @@ class AdoptTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("must be adopted with its pair", result.stderr)
 
+    def test_adopt_rejects_both_halves_of_an_exclusive_choice(self) -> None:
+        """_config.yml and .nojekyll cancel each other, and nothing downstream
+        would say so: both files copy, both are valid, and the site builds with
+        its configuration never read."""
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._build_fixture(directory)
+            result = self._run_adopt(fixture, "_config.yml", ".nojekyll")
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("cannot be adopted with", result.stderr)
+
+    def test_adopt_rejects_the_second_half_adopted_later(self) -> None:
+        """One at a time is how a repository really ends up holding both: the
+        occasion for the second addon arrives months after the first."""
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._build_fixture(directory)
+            destination = Path(fixture["destination"])
+            (destination / "_config.yml").write_text("theme: minima\n", encoding="utf-8")
+            subprocess.run(["git", "add", "_config.yml"], cwd=destination, check=True)
+            subprocess.run(
+                ["git", "commit", "--no-verify", "-m", "chore: adopt _config.yml"],
+                cwd=destination,
+                check=True,
+                stdout=subprocess.DEVNULL,
+            )
+
+            result = self._run_adopt(fixture, ".nojekyll")
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("destination holding _config.yml", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
