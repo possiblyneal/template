@@ -4,8 +4,9 @@
        ?expand=1&template=release.md
 
      Nothing offers it in the UI. The default template at
-     .github/PULL_REQUEST_TEMPLATE.md is what a PR gets otherwise, so link this
-     one from there if it should be reachable by clicking. -->
+     .github/PULL_REQUEST_TEMPLATE.md is what a PR gets otherwise, and it ships
+     a line of links to this file commented out at the top. Uncomment that line
+     to make this one reachable by clicking. -->
 
 ## Release
 

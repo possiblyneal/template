@@ -25,13 +25,16 @@ ADDONS = REPOSITORY_ROOT / "apps/github-repository-template/src/repository-addon
 PAYLOAD = REPOSITORY_ROOT / "apps/github-repository-template/src/base-repo"
 MANIFEST = REPOSITORY_ROOT / "apps/github-repository-template/src/addon-adoption.json"
 
-# .gitkeep exists to make an empty directory survive Git, and is never adopted.
-# Ignoring it on the payload side too is harmless: a shadowed .gitkeep would
-# overwrite a placeholder with a placeholder.
-IGNORED = {".gitkeep"}
+# Payload-side only. A .gitkeep there holds an empty directory open for a
+# generated repository to fill, and a shadowed one would overwrite a placeholder
+# with a placeholder. On the addon side it is not ignored: an addon is a file
+# someone copies by hand, a placeholder is not worth copying, and ignoring it
+# here would exempt it from every check below -- entry coverage, payload
+# shadowing, and the empty-file rule a one-byte placeholder already slips past.
+PAYLOAD_IGNORED = {".gitkeep"}
 
 
-def files_under(directory):
+def files_under(directory, ignore=frozenset()):
     """Every file in a tree, as a path relative to that tree's root.
 
     Raises rather than returning an empty set when the directory is missing: a
@@ -43,7 +46,7 @@ def files_under(directory):
     return {
         str(path.relative_to(directory))
         for path in directory.rglob("*")
-        if path.is_file() and path.name not in IGNORED
+        if path.is_file() and path.name not in ignore
     }
 
 
@@ -54,7 +57,7 @@ def addon_paths():
 
 def payload_paths():
     """Every file the payload ships, as a path relative to the subtree."""
-    return files_under(PAYLOAD)
+    return files_under(PAYLOAD, PAYLOAD_IGNORED)
 
 
 def manifest_entries():
@@ -131,10 +134,12 @@ class AddonAdoptionManifest(unittest.TestCase):
         has no manifest to read. A blank file gives them a name and a path and
         nothing else, and reads as a file whose content is still to come.
 
-        This scans the directory rather than the manifest, and deliberately does
-        not skip .gitkeep: a placeholder holding an empty directory open is
-        exactly the blank file this rule is about. An addon directory earns its
-        place by holding something worth copying.
+        This scans the directory rather than the manifest, and skips nothing:
+        a placeholder holding an empty directory open is exactly the blank file
+        this rule is about. An addon directory earns its place by holding
+        something worth copying. Nothing here is ignored on the addon side --
+        see PAYLOAD_IGNORED -- so a placeholder with a byte in it still has to
+        earn an entry in the manifest.
         """
         blank = sorted(
             str(path.relative_to(ADDONS))

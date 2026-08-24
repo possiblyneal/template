@@ -4,8 +4,9 @@
        ?expand=1&template=hotfix.md
 
      Nothing offers it in the UI. The default template at
-     .github/PULL_REQUEST_TEMPLATE.md is what a PR gets otherwise, so link this
-     one from there if it should be reachable by clicking.
+     .github/PULL_REQUEST_TEMPLATE.md is what a PR gets otherwise, and it ships
+     a line of links to this file commented out at the top. Uncomment that line
+     to make this one reachable by clicking.
 
      This template is shorter than the default on purpose. It is not a lighter
      standard -- it asks the questions that are answerable while something is
@@ -58,7 +59,13 @@ Skipped:
 
 <!-- What the normal process would have caught that this did not run: review
      depth, integration tests, staging, manual QA. This section is the point of
-     the template. An empty one claims the shortcut was free. -->
+     the template. An empty one claims the shortcut was free.
+
+     Two things never belong in this list. The secret scan and the branch guard
+     are the only checks standing between a hurried commit and a leaked
+     credential or an unreviewed push to the default branch, they run locally at
+     pre-commit and pre-push, and both yield to --no-verify. Skipping either is
+     not a shortcut, it is the incident after this one. -->
 
 ## Rollback
 

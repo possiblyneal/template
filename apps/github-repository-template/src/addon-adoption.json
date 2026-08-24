@@ -21,7 +21,12 @@
           "decision": "This file is committed and .env is not, which is the point of the pair and also its hazard: everything here is published. Give each variable its shape and never a working value. gitleaks runs at pre-commit and catches the formats it knows -- an AWS key, a GitHub token, a private key block -- and does not know a password, a database URL with credentials in it, or a token this project invented, so one of those reaches the remote with every check green. A real value committed once stays in the history after the next commit deletes it."
         }
       ],
-      "external": []
+      "external": [
+        {
+          "step": "Confirm the destination ignores .env and does not ignore this file: `git check-ignore -v .env .env.example` should name a rule for the first and nothing for the second.",
+          "consequence": "The file's own first paragraph tells the reader that .env is gitignored and this one is not. That is true of the payload's .gitignore, and the addon is adopted into repositories whose .gitignore has been edited since. If the negation is missing, this file is ignored and the clone it exists to serve never sees it; if the .env rule is missing, the file's assurance is false at the moment someone fills a real credential into the copy beside it."
+        }
+      ]
     },
     "README.md": {
       "slots": [
@@ -277,7 +282,7 @@
         },
         {
           "section": "the checklist",
-          "decision": "Its first three items reference a changelog. Adopted without the CHANGELOG.md addon, they ask a reviewer to check a file that is not there, and the usual outcome is a ticked box meaning nothing. Drop them or adopt the changelog."
+          "decision": "Its first and third items reference a changelog; the second, on the version being recorded consistently, does not and stays either way. Adopted without the CHANGELOG.md addon, the changelog items ask a reviewer to check a file that is not there, and the usual outcome is a ticked box meaning nothing. Drop those two or adopt the changelog."
         }
       ],
       "external": []
@@ -335,7 +340,7 @@
         {
           "token": "REPLACE-PROJECT-TITLE",
           "value_key": "project-title",
-          "what": "The project name, as it will read inside the copyright notices in the source files: \"The <project> Authors\". Shared with README.md, CITATION.cff, and _config.yml, so it is the same answer asked once."
+          "what": "The project name, as it will read inside the copyright notices in the source files: \"The <project> Authors\". Shared with README.md, CONTRIBUTING.md, CITATION.cff, _config.yml, and .devcontainer/devcontainer.json, so it is the same answer asked once."
         },
         {
           "token": "REPLACE-COPYRIGHT-HOLDER",
@@ -572,7 +577,7 @@
       "reviews": [
         {
           "section": "the image, and the features added to it",
-          "decision": "It ships as the generic Debian base image with no features, which builds and gives a shell and nothing else -- deliberately, because the toolchains a repository needs are exactly what the template cannot know. Add the language features this repository's manifests require, or replace the image outright. An unchanged image is not broken, it is empty, and the failure shows up as a missing compiler at the first build rather than at container creation."
+          "decision": "It ships as the generic Debian base image with no features, which builds and gives a shell and nothing else -- deliberately, because the toolchains a repository needs are exactly what the template cannot know. Add the language features this repository's manifests require, or replace the image outright. An unchanged image is not broken, it is empty, and the failure shows up as a missing compiler at the first build rather than at container creation. Every feature added here is version-pinned and nothing bumps it: add `package-ecosystem: devcontainers` to .github/dependabot.yml in the same edit. The file ships without it because an ecosystem entry naming a manifest the repository does not have fails with dependency_file_not_found rather than being skipped, so the entry is wrong until the first feature exists and required from then on."
         },
         {
           "section": "the image tag",
