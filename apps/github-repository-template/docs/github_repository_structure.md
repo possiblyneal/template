@@ -19,7 +19,7 @@ type: Note
 
 `.github/dependabot.yml`: Opens one grouped weekly pull request updating pinned action versions in `.github/`.
 
-`.github/ISSUE_TEMPLATE/`: Structured issue forms — `bug_report.yml`, `feature_request.yml`, and `config.yml` (disables blank issues).
+`.github/ISSUE_TEMPLATE/`: Structured issue forms — `bug_report.yml`, `feature_request.yml`, and `config.yml`, which disables blank issues and carries a commented-out `contact_links` block to uncomment once a destination for questions exists.
 
 `.github/PULL_REQUEST_TEMPLATE.md`: Structures a pull request description for review.
 
@@ -79,8 +79,6 @@ The specific operating parameters for the AI agent.
 
 ### Documentation & Knowledge Base
 
-`TODO.md`: A plain-text backlog of informal tasks.
-
 `docs/adrs/`: Architectural Decision Records — why past decisions were made.
 
 `docs/specs/`: Specs for contracts spanning multiple apps.
@@ -119,7 +117,7 @@ These live in `src/repository-addons/` and are never copied during generation �
 
 `SECURITY.md`: The private channel for reporting a vulnerability, and what to expect after.
 
-`SUPPORT.md`: Routes users to help, separate from the issue tracker.
+`SUPPORT.md`: Routes users to help, separate from the issue tracker. Uncomment the `contact_links` block in the payload's `.github/ISSUE_TEMPLATE/config.yml` to name the same destination on the template chooser.
 
 `.env.example`: A sanitized template of `.env` listing required variables without exposing secrets. Ships empty.
 
@@ -138,6 +136,24 @@ These live in `src/repository-addons/` and are never copied during generation �
 `CONTRIBUTORS.md`: A public ledger crediting contributors, maintained by the All Contributors bot.
 
 `.all-contributorsrc`: The All Contributors bot's configuration and contributor state.
+
+#### When the repository has Discussions
+
+`.github/DISCUSSION_TEMPLATE/<category-slug>.yml`: A discussion form, one file per category. Ships as `general.yml`; the file name has to be the slug of a real category or the form is silently never shown.
+
+#### When releases are published from GitHub
+
+`.github/release.yml`: Groups and filters the pull requests in GitHub's generated release notes. Read only when the notes are generated at all, which `scripts/release` does only for a repository with no `CHANGELOG.md` — the two are alternatives.
+
+#### When the project publishes a site
+
+`_config.yml`: Jekyll's configuration, read when the Pages source is "Deploy from a branch".
+
+`.nojekyll`: Turns Jekyll off, for a site that is already built HTML or has a path starting with an underscore. Ships empty. Exactly one of these two is adopted: `.nojekyll` disables the processor `_config.yml` configures.
+
+#### When the development environment ships with the repository
+
+`.devcontainer/devcontainer.json`: The container Codespaces and the editors' dev-container support build for this repository. Ships as a bare Debian image with no features, because the toolchains are what the template cannot know.
 
 #### When the work is academically valuable
 

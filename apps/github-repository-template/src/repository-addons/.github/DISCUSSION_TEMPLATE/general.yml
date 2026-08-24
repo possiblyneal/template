@@ -1,0 +1,40 @@
+# A discussion category form. GitHub matches the file name to the slug of a
+# discussion category, so this file serves the "General" category and only that
+# one. Rename it to the slug of the category it belongs to -- lowercase and
+# hyphenated: GitHub's own example is `announcements.yml` for the Announcements
+# category. Copy the slug out of the category's URL rather than guessing it. A
+# file name matching no category means the form is simply never shown, with
+# nothing reporting why.
+#
+# The field syntax is the issue forms syntax: markdown, input, textarea,
+# dropdown, checkboxes.
+#
+# `labels:` is available here and is deliberately absent: a label that does not
+# already exist in the repository is not created by being named.
+
+title: "[General] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Questions about using this project belong here. Bugs and feature
+        requests belong in the issue tracker, whose forms ask for what a
+        maintainer needs in order to act.
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: What are you trying to do?
+      description: The goal, not only the error you hit on the way to it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What have you tried?
+      description: >-
+        Commands, code, and their output. Include the version, tag, or commit
+        you are on, and the platform.
+    validations:
+      required: false

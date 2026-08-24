@@ -1,0 +1,38 @@
+# Shapes the release notes GitHub generates: which pull requests appear under
+# which heading, and which are left out of the list entirely.
+#
+# It is read only when notes are generated at all. `scripts/release` publishes
+# the `## [version]` section of CHANGELOG.md when that file exists and falls
+# back to `--generate-notes` only when it does not, so this file and an adopted
+# CHANGELOG.md are alternatives rather than a pair: with both present the
+# changelog wins and nothing below is ever consulted.
+#
+# Nothing validates the label names. A category naming a label the repository
+# never applies renders as no heading at all, which reads as "there were no
+# changes of that kind" rather than as a typo.
+
+changelog:
+  # The two categories below need no label vocabulary of their own: `*` is the
+  # catch-all, and `dependencies` is the label Dependabot applies to its own
+  # pull requests. That makes this configuration true of a repository on its
+  # first day, which a list of Semver-Major/enhancement/bug categories would
+  # not be. Add those once the labels behind them exist and are applied.
+  categories:
+    - title: Changes
+      labels:
+        - "*"
+      exclude:
+        labels:
+          - dependencies
+
+    - title: Dependencies
+      labels:
+        - dependencies
+
+  # Uncomment and fill once there is a label meaning "do not list this", or an
+  # automation account whose pull requests are noise in a release.
+  # exclude:
+  #   labels:
+  #     - ignore-for-release
+  #   authors:
+  #     - some-bot
