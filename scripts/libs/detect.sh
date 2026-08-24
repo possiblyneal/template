@@ -165,10 +165,10 @@ swift_each() {
 # Runs a command once per Go module. This is not a single run from the
 # repository root because `./...` matches only packages inside a module, and the
 # root of a workspace is not itself in one: `go build ./...` there refuses the
-# pattern outright and checks nothing, so a repository whose only module sits
-# under apps/ would report a green run over work nothing looked at. `go list -m`
-# names the directories to enter -- the main module for a plain go.mod, every
-# `use` entry under a go.work.
+# pattern and exits 1, so every Go check on a repository whose only module sits
+# under apps/ failed on the invocation rather than on the code, and no change to
+# the code could turn it green. `go list -m` names the directories to enter --
+# the main module for a plain go.mod, every `use` entry under a go.work.
 #
 # A listing that fails or comes back empty is a failure, not an empty success:
 # it means the module graph could not be read at all.

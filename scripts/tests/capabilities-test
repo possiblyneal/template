@@ -286,8 +286,8 @@ cleanup
 
 # `./...` matches only packages inside a module, and the root of a Go workspace
 # is not itself in one, so a single `go build ./...` from the root refuses the
-# pattern and checks nothing -- a green run over every package the repository
-# actually has. go_each enters each module instead. The stub consumes stdin, so
+# pattern and exits 1 -- every Go check failing on the invocation rather than on
+# the code. go_each enters each module instead. The stub consumes stdin, so
 # this also covers the module list being read on fd 3 rather than fd 0.
 fixture "go_each runs the command in every workspace module"
 marker="$PWD/visited"
@@ -304,7 +304,8 @@ pwd >> "$marker"
 EOF
 chmod +x bin/go
 PATH="$PWD/bin:$PATH" _capability_build_go
-if [[ "$(tr '\n' ' ' < "$marker")" == "$PWD/apps/one $PWD/apps/two " ]]; then
+status=$?
+if (( status == 0 )) && [[ "$(tr '\n' ' ' < "$marker")" == "$PWD/apps/one $PWD/apps/two " ]]; then
   pass
 else
   fail "go_each visited $(tr '\n' ' ' < "$marker")rather than both workspace modules"

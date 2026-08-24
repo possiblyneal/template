@@ -52,7 +52,7 @@ Where a new file goes, and why the boundary exists:
 - `docs/specs/` — contracts spanning apps. Single-unit specs stay with their unit.
 - `docs/adrs/` — one repo-wide numbered sequence. See `docs/CLAUDE.md`.
 
-A package under `apps/` or `libs/` whose language has no root manifest fails the run rather than passing, because the root manifest is the only thing that names it: a check reaches a nested package by being told where it is, never by finding it. The failure names the root manifest to add.
+A package under `apps/` or `libs/` whose language has no root manifest fails the run rather than passing, because for the languages this rule covers the root manifest is what lists it: `go list -m` names the `use` entries in `go.work` and nothing else, and the Gradle settings file the same. Swift is excluded deliberately — it has no root manifest, so its packages are found by searching and nested ones are how a Swift repository is supposed to look. The failure names the root manifest to add.
 
 ## Repository settings
 
