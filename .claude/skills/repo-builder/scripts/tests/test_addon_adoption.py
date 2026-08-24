@@ -22,6 +22,7 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[5]
 ADDONS = REPOSITORY_ROOT / "apps/github-repository-template/src/repository-addons"
+PAYLOAD = REPOSITORY_ROOT / "apps/github-repository-template/src/base-repo"
 MANIFEST = REPOSITORY_ROOT / "apps/github-repository-template/src/addon-adoption.json"
 
 # .gitkeep exists to make an empty directory survive Git, and is never adopted.
@@ -34,6 +35,15 @@ def addon_paths():
         str(path.relative_to(ADDONS))
         for path in ADDONS.rglob("*")
         if path.is_file() and path.name not in IGNORED
+    }
+
+
+def payload_paths():
+    """Every file the payload ships, as a path relative to the subtree."""
+    return {
+        str(path.relative_to(PAYLOAD))
+        for path in PAYLOAD.rglob("*")
+        if path.is_file()
     }
 
 
@@ -54,6 +64,25 @@ class AddonAdoptionManifest(unittest.TestCase):
         orphaned = sorted(manifest_entries().keys() - addon_paths())
         self.assertEqual(
             orphaned, [], f"entries in {MANIFEST.name} with no such addon: {orphaned}"
+        )
+
+    def test_no_addon_shadows_a_payload_path(self):
+        """An addon at a path the payload already ships overwrites that file
+        instead of adding one, and every reader of the directory -- the
+        walkthrough, the structure doc, an operator copying by hand -- reads it
+        as an addition. Nothing else here would notice: the overwriting file is
+        valid, the file it replaced was valid, and the difference only shows up
+        as a setting that silently stopped applying in the generated repository.
+
+        Adopting an addon is a copy into a tree that already has the payload in
+        it, so the two namespaces have to stay disjoint. Guidance about a path
+        the payload ships belongs in that payload file, commented out, the way
+        .github/dependabot.yml carries the ecosystem entry to copy when a real
+        manifest arrives.
+        """
+        shadowed = sorted(addon_paths() & payload_paths())
+        self.assertEqual(
+            shadowed, [], f"addons at a path the payload already ships: {shadowed}"
         )
 
     def test_declared_slot_tokens_are_present_in_their_file(self):

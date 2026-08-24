@@ -102,6 +102,8 @@ Two more travel as exclusive choices, where adopting both is the defect. `_confi
 
 `SUPPORT.md` pairs with a file that is not an addon at all. The payload's `.github/ISSUE_TEMPLATE/config.yml` ships a commented-out `contact_links` block; adopting `SUPPORT.md` means uncommenting it against the same destination, because the template chooser is one step earlier than the new-issue banner GitHub links `SUPPORT.md` from, and two different answers to "where do I ask?" reach the same person seconds apart.
 
+No addon shares a path with a payload file, and that is an invariant rather than a coincidence — adoption copies into a tree that already holds the payload, so a shared path overwrites instead of adding, and reads as an addition everywhere the directory is described. `test_addon_adoption.py` fails on any addon at a path the payload ships. Guidance about such a path goes in the payload file, commented out, the way `.github/dependabot.yml` carries the ecosystem entry to copy when a real manifest arrives.
+
 Copying an addon is not adopting it. Most arrive with regions that are wrong until someone edits them, and the failure mode is silent — a Code of Conduct promising a reporting channel that does not exist, a funding button pointing at a stranger's donation page, a citation crediting `REPLACE-FAMILY-NAME`. None of these are errors to any tool; they render, validate, and publish. `apps/github-repository-template/src/addon-adoption.json` is the index of those regions, a sibling of the addons directory rather than a file inside it, and is read rather than copied — a generated repository has no `repository-addons/` for it to describe.
 
 Walk its entry for every addon taken, and for nothing else. It sorts each region by what the operator has to do:

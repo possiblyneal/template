@@ -7,7 +7,7 @@ Owns the payload copied into every repository generated from this template, and 
 ## Ownership
 
 - `src/base-repo/` — the payload. Every file here is destined for other repositories.
-- `src/repository-addons/` — files held back from the payload because each answers a condition the template cannot know has arrived. Not copied during generation; added by hand when the occasion does arrive. `docs/github_repository_structure.md` groups them under "Additions by Occasion" and names the condition for each.
+- `src/repository-addons/` — files held back from the payload because each answers a condition the template cannot know has arrived. Not copied during generation; added by hand when the occasion does arrive. `docs/github_repository_structure.md` groups them under "Additions by Occasion" and names the condition for each. No addon shares a path with `src/base-repo/`: adoption copies into a tree that already holds the payload, so a shared path would overwrite a shipped file while reading as an addition everywhere the directory is described. Guidance about a payload path belongs in that payload file, commented out. The test below enforces it.
 - `src/addon-adoption.json` — which regions of each addon must be edited before that addon is safe to ship: `slots` (a token to replace), `reviews` (a section demanding a judgement, with no token to grep for), `external` (a step outside the repository). Read by the `repo-builder` skill's Addon adoption walkthrough in `.claude/skills/repo-builder/references/lifecycle.md`.
 - `docs/github_repository_structure.md` — Structure and bill of materials for this repo, and briefly what each file/folder is for.
 
@@ -47,7 +47,7 @@ When the structure doc and the payload disagree, one of them is wrong — fix bo
 
 The root `scripts/check` runs shellcheck and actionlint over these files through pre-commit, which is syntax-level only.
 
-One check reads this directory semantically: the `addon-adoption` pre-commit hook runs `.claude/skills/repo-builder/scripts/tests/test_addon_adoption.py`, which fails when `src/addon-adoption.json` and `src/repository-addons/` disagree about which files exist, when an entry declares a slot token no longer present in its file, or when a file flagged `authored_on_adoption` ships content. It runs on every commit rather than on a path filter, because `git rm` of an addon is the case a filter cannot see. It does not check that a described region is described *well* — only that it exists.
+One check reads this directory semantically: the `addon-adoption` pre-commit hook runs `.claude/skills/repo-builder/scripts/tests/test_addon_adoption.py`, which fails when `src/addon-adoption.json` and `src/repository-addons/` disagree about which files exist, when an addon sits at a path `src/base-repo/` already ships, when an entry declares a slot token no longer present in its file, or when a file flagged `authored_on_adoption` ships content. It runs on every commit rather than on a path filter, because `git rm` of an addon is the case a filter cannot see. It does not check that a described region is described *well* — only that it exists.
 
 The payload's behavior is verified where it lands: by `src/base-repo/scripts/tests/*-test` once a repository is generated, and by the `repo-builder` evals under `.claude/skills/repo-builder/evals/`.
 
