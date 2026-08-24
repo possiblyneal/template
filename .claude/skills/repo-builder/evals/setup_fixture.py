@@ -163,7 +163,7 @@ def addon_payload(repo: Path) -> None:
     # The GitHub Pages exclusive pair, here so preflight's rejection of the two
     # together has something real to reject.
     write(repo, "repository-addons/_config.yml", "theme: minima\n")
-    write(repo, "repository-addons/.nojekyll", "")
+    write(repo, "repository-addons/.nojekyll", "Turns the Jekyll processor off.\n")
     index = {
         "_about": ["Fixture addon adoption index."],
         "files": {

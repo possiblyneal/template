@@ -9,8 +9,20 @@
     "value_key groups one answer asked once: the repository owner is spelled three ways across three files."
   ],
   "files": {
-    ".env.example": { "authored_on_adoption": true, "slots": [], "reviews": [], "external": [] },
-
+    ".env.example": {
+      "slots": [],
+      "reviews": [
+        {
+          "section": "the variables listed, against what the code actually reads",
+          "decision": "The shipped entries are shapes -- an endpoint, an empty credential, a local override -- and none of them is a variable this repository has. Replace them with the real ones and delete the rest. The two ways it goes wrong are silent in opposite directions: a variable the code requires and this file omits fails at run time in someone else's checkout, with an error naming a key rather than the file it belongs in; a variable listed here that nothing reads sends them looking for a value to supply that is never consumed."
+        },
+        {
+          "section": "every value written into it",
+          "decision": "This file is committed and .env is not, which is the point of the pair and also its hazard: everything here is published. Give each variable its shape and never a working value. gitleaks runs at pre-commit and catches the formats it knows -- an AWS key, a GitHub token, a private key block -- and does not know a password, a database URL with credentials in it, or a token this project invented, so one of those reaches the remote with every check green. A real value committed once stays in the history after the next commit deletes it."
+        }
+      ],
+      "external": []
+    },
     "README.md": {
       "slots": [
         {
@@ -67,7 +79,6 @@
         }
       ]
     },
-
     "SECURITY.md": {
       "slots": [
         {
@@ -97,7 +108,6 @@
         }
       ]
     },
-
     "SUPPORT.md": {
       "slots": [
         {
@@ -131,7 +141,6 @@
         }
       ]
     },
-
     ".github/DISCUSSION_TEMPLATE/general.yml": {
       "slots": [],
       "reviews": [
@@ -151,7 +160,6 @@
         }
       ]
     },
-
     "GOVERNANCE.md": {
       "slots": [
         {
@@ -172,7 +180,6 @@
       ],
       "external": []
     },
-
     "CODEOWNERS": {
       "slots": [
         {
@@ -202,7 +209,6 @@
         }
       ]
     },
-
     "CONTRIBUTING.md": {
       "slots": [
         {
@@ -235,7 +241,6 @@
       ],
       "external": []
     },
-
     "CODE_OF_CONDUCT.md": {
       "slots": [
         {
@@ -252,7 +257,6 @@
       ],
       "external": []
     },
-
     "LICENSE": {
       "slots": [],
       "reviews": [
@@ -267,11 +271,18 @@
       ],
       "external": []
     },
-
     "CHANGELOG.md": {
       "slots": [
-        { "token": "<owner>", "value_key": "repo-owner", "what": "Repository owner in the Unreleased compare link at the bottom." },
-        { "token": "<repo>", "value_key": "repo-name", "what": "Repository name in the same link." }
+        {
+          "token": "<owner>",
+          "value_key": "repo-owner",
+          "what": "Repository owner in the Unreleased compare link at the bottom."
+        },
+        {
+          "token": "<repo>",
+          "value_key": "repo-name",
+          "what": "Repository name in the same link."
+        }
       ],
       "reviews": [
         {
@@ -281,13 +292,11 @@
       ],
       "external": []
     },
-
     ".claude/rules/changelog.md": {
       "slots": [],
       "reviews": [],
       "external": []
     },
-
     ".github/release.yml": {
       "slots": [],
       "reviews": [
@@ -302,7 +311,6 @@
       ],
       "external": []
     },
-
     "CONTRIBUTORS.md": {
       "slots": [],
       "reviews": [],
@@ -313,23 +321,49 @@
         }
       ]
     },
-
     ".all-contributorsrc": {
       "slots": [
-        { "token": "REPO-OWNER", "value_key": "repo-owner", "what": "projectOwner. Required, and the CLI throws rather than guessing, so this failure is at least loud. It builds the profile and commit links, so a wrong value gives a table of dead links instead of an error." },
-        { "token": "REPO-NAME", "value_key": "repo-name", "what": "projectName. Same." }
+        {
+          "token": "REPO-OWNER",
+          "value_key": "repo-owner",
+          "what": "projectOwner. Required, and the CLI throws rather than guessing, so this failure is at least loud. It builds the profile and commit links, so a wrong value gives a table of dead links instead of an error."
+        },
+        {
+          "token": "REPO-NAME",
+          "value_key": "repo-name",
+          "what": "projectName. Same."
+        }
       ],
       "reviews": [],
       "external": []
     },
-
     "CITATION.cff": {
       "slots": [
-        { "token": "REPLACE-PROJECT-TITLE", "value_key": "project-title", "what": "title. Every active REPLACE- value here is schema-valid, so a half-filled file validates, renders, and hands out a BibTeX entry crediting the placeholder. Nothing warns anyone." },
-        { "token": "REPLACE-FAMILY-NAME", "value_key": "author-family-name", "what": "authors[0].family-names." },
-        { "token": "REPLACE-GIVEN-NAME", "value_key": "author-given-name", "what": "authors[0].given-names." },
-        { "token": "REPO-OWNER", "value_key": "repo-owner", "what": "repository-code URL." },
-        { "token": "REPO-NAME", "value_key": "repo-name", "what": "repository-code URL." }
+        {
+          "token": "REPLACE-PROJECT-TITLE",
+          "value_key": "project-title",
+          "what": "title. Every active REPLACE- value here is schema-valid, so a half-filled file validates, renders, and hands out a BibTeX entry crediting the placeholder. Nothing warns anyone."
+        },
+        {
+          "token": "REPLACE-FAMILY-NAME",
+          "value_key": "author-family-name",
+          "what": "authors[0].family-names."
+        },
+        {
+          "token": "REPLACE-GIVEN-NAME",
+          "value_key": "author-given-name",
+          "what": "authors[0].given-names."
+        },
+        {
+          "token": "REPO-OWNER",
+          "value_key": "repo-owner",
+          "what": "repository-code URL."
+        },
+        {
+          "token": "REPO-NAME",
+          "value_key": "repo-name",
+          "what": "repository-code URL."
+        }
       ],
       "reviews": [
         {
@@ -347,7 +381,6 @@
       ],
       "external": []
     },
-
     ".github/FUNDING.yml": {
       "slots": [],
       "reviews": [
@@ -358,7 +391,6 @@
       ],
       "external": []
     },
-
     "_config.yml": {
       "slots": [
         {
@@ -393,7 +425,6 @@
         }
       ]
     },
-
     ".nojekyll": {
       "slots": [],
       "reviews": [
@@ -409,7 +440,6 @@
         }
       ]
     },
-
     ".devcontainer/devcontainer.json": {
       "slots": [
         {
@@ -430,6 +460,24 @@
         {
           "section": "the absent lifecycle command",
           "decision": "No postCreateCommand ships. scripts/doctor is the natural candidate once the image carries the toolchains it checks, and the wrong one before that: it would report every missing toolchain at creation and make a working container look broken. Add it in the same edit that adds the features it verifies."
+        }
+      ],
+      "external": []
+    },
+    "tools/CLAUDE.md": {
+      "slots": [],
+      "reviews": [
+        {
+          "section": "the root manifest the first tool needs",
+          "decision": "The warning this file carries is the whole reason it is worth copying: scripts/check runs from the repository root and reads the manifests it finds there, so a tool with its own go.mod or pyproject.toml and no root counterpart is linted, tested, and built by nobody, with nothing reporting the gap. Add the root manifest in the same change that adds the first tool."
+        },
+        {
+          "section": "the Ownership list",
+          "decision": "It ships empty because the template cannot know what this directory will hold. Add each tools/<name>/ to it as the tool arrives, or the file documents a boundary while leaving the directory itself unnavigable -- which is worse than no file, because a reader who finds this one stops looking."
+        },
+        {
+          "section": "registering it with the parent",
+          "decision": "The documentation contract is walked from the root downward through Child Index entries, so a child CLAUDE.md no parent lists is never read. Add tools/CLAUDE.md to the root CLAUDE.md's Child Index in the same change that adopts it."
         }
       ],
       "external": []

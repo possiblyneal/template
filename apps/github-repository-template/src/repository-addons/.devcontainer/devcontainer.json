@@ -1,5 +1,48 @@
+// The container Codespaces and the editors' dev-container support build for
+// this repository. devcontainer.json is JSON with comments by specification --
+// the schema sets allowComments -- so this guidance survives adoption. Delete
+// each comment as you settle what it describes.
+//
+// As shipped this builds and gives a shell and nothing else: the toolchains a
+// repository needs are exactly what a template cannot know. An unchanged file
+// is not broken, it is empty, and the failure arrives as a missing compiler at
+// the first build rather than at container creation.
 {
   "name": "REPLACE-PROJECT-TITLE",
+
+  // bookworm is a mutable tag, and a dev container is rebuilt without being
+  // asked -- Codespaces and the editors do it on their own -- so what this
+  // resolves to changes under the repository with no diff. Pinning a digest is
+  // not strictly better: Dependabot's devcontainers ecosystem updates Features
+  // and not the base image, so a pin goes stale as quietly as a tag moves. Pin
+  // where a reproducible environment matters more than picking up patches, and
+  // put a calendar reminder behind the pin rather than a bot.
+  //
+  // What makes the tag tolerable as a default is everything below it: no
+  // features, no mounts, no lifecycle command, so a changed base image runs
+  // nothing this repository wrote.
   "image": "mcr.microsoft.com/devcontainers/base:bookworm",
+
+  // The language toolchains this repository's manifests require, from
+  // https://containers.dev/features -- for example:
+  //
+  //   "ghcr.io/devcontainers/features/go:1": {},
+  //   "ghcr.io/devcontainers/features/python:1": {}
+  //
+  // Or replace the image above outright with one that already carries them.
+  // Once features are listed, add the entry that keeps their versions current
+  // to .github/dependabot.yml, beside the ones already there:
+  //
+  //   - package-ecosystem: devcontainers
+  //     directory: /
+  //     schedule:
+  //       interval: weekly
   "features": {}
+
+  // No postCreateCommand ships. scripts/doctor is the natural one once the
+  // image carries the toolchains it checks, and the wrong one before that: it
+  // reports every missing toolchain at creation and makes a working container
+  // look broken. Add it in the same edit that adds the features it verifies.
+  //
+  // "postCreateCommand": "scripts/doctor"
 }

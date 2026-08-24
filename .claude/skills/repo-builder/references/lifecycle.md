@@ -112,7 +112,7 @@ Walk its entry for every addon taken, and for nothing else. It sorts each region
 - `reviews` — a section to read and a judgement to make, with no token to find. These are the ones a search cannot surface, which is the only reason they are written down.
 - `external` — a step outside the repository entirely, such as installing a GitHub App. Nothing in the tree reports these undone.
 
-Ask each distinct `value_key` once, not once per file. The repository owner is spelled `REPO-OWNER` in two addons and `<owner>` in a third; asking in each file's own vocabulary asks the same question three times and invites three answers. An entry flagged `authored_on_adoption` has no regions because the file ships empty — it is written, not filled, and the occasion for it is in `docs/github_repository_structure.md`.
+Ask each distinct `value_key` once, not once per file. The repository owner is spelled `REPO-OWNER` in two addons and `<owner>` in a third; asking in each file's own vocabulary asks the same question three times and invites three answers. No addon ships empty: each carries its own guidance in it, so a copy explains itself before a single region is filled, and `test_addon_adoption.py` fails on a zero-byte addon. An entry with no regions at all — `.claude/rules/changelog.md` is one — is a file to copy and read, not a file to write.
 
 Report every region as done or as outstanding. An addon left with an unfilled slot is worse than one not taken, because the repository now carries a document that reads as finished.
 
@@ -358,7 +358,7 @@ Adopt lands a held-back repository addon into a repository that already carries 
 
    It validates the manifest, both repository identities, a clean worktree, and the recorded commit, then for each addon confirms the blob exists in `repository-addons/` at that commit, carries an `addon-adoption.json` entry, completes its pair, and is absent from the destination. A half pair or an already-present addon is a hard stop. Retain the JSON.
 3. Copy each addon from the recorded commit out of `repository-addons/` — a sibling of the subtree, not inside it — into the candidate at its destination-relative path. Adopt the two pairs whole: `CONTRIBUTORS.md` with `.all-contributorsrc`, and `CHANGELOG.md` with `.claude/rules/changelog.md`.
-4. Run the [Addon adoption](#addon-adoption) walkthrough for every addon taken: ask each distinct `value_key` once, fill every slot, surface each review judgement, list each external step, and write any `authored_on_adoption` file. Report each region as done or outstanding.
+4. Run the [Addon adoption](#addon-adoption) walkthrough for every addon taken: ask each distinct `value_key` once, fill every slot, surface each review judgement, and list each external step. Report each region as done or outstanding.
 5. Do not advance `template.commit` and do not record the addon in the manifest. Ownership already treats a later-seen adopted file as destination-added rather than a template deletion, so a subsequent update leaves it alone.
 6. Stage the candidate and run the destination's documented checks, keeping the four outcomes distinct: pass, nothing to do, runner unavailable, never ran. The `core.hooksPath` gotcha noted under Generate step 9 applies equally here if the destination's hook is not yet installed.
 7. Create a feature branch from the current remote default branch. Commit only the adopted addon paths, present the remote gate, push, and open a PR. Never merge.

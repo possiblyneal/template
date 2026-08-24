@@ -119,7 +119,7 @@ These live in `src/repository-addons/` and are never copied during generation â€
 
 `SUPPORT.md`: Routes users to help, separate from the issue tracker. Uncomment the `contact_links` block in the payload's `.github/ISSUE_TEMPLATE/config.yml` to name the same destination on the template chooser.
 
-`.env.example`: A sanitized template of `.env` listing required variables without exposing secrets. Ships empty.
+`.env.example`: A sanitized template of `.env` listing required variables without exposing secrets. Ships as a commented scaffold â€” what the file is for, why every value in it is published, and example shapes to replace with this project's own variables.
 
 #### When someone else will contribute code
 
@@ -149,11 +149,11 @@ These live in `src/repository-addons/` and are never copied during generation â€
 
 `_config.yml`: Jekyll's configuration, read when the Pages source is "Deploy from a branch".
 
-`.nojekyll`: Turns Jekyll off, for a site that is already built HTML or has a path starting with an underscore. Ships empty. Exactly one of these two is adopted: `.nojekyll` disables the processor `_config.yml` configures.
+`.nojekyll`: Turns Jekyll off, for a site that is already built HTML or has a path starting with an underscore. Exactly one of these two is adopted: `.nojekyll` disables the processor `_config.yml` configures. It ships carrying a note explaining that choice, which is safe because Pages reads only whether the file exists and never what is in it.
 
 #### When the development environment ships with the repository
 
-`.devcontainer/devcontainer.json`: The container Codespaces and the editors' dev-container support build for this repository. Ships as a bare Debian image with no features, because the toolchains are what the template cannot know.
+`.devcontainer/devcontainer.json`: The container Codespaces and the editors' dev-container support build for this repository. Ships as a bare Debian image with no features, because the toolchains are what the template cannot know. Written as JSON with comments, which the dev container schema allows and `check-json` does not â€” both `.pre-commit-config.yaml` copies exclude the path for that reason.
 
 #### When the work is academically valuable
 
@@ -165,7 +165,7 @@ These live in `src/repository-addons/` and are never copied during generation â€
 
 #### When a helper needs to be built before it runs
 
-`tools/`: Ships as an empty placeholder in `repository-addons/`, copied in only when the project needs a helper that must be built before it runs â€” a linter, a code generator, a protobuf plugin. Each gets its own `tools/<name>/` with its own manifest and source; a helper that's just a shell script belongs in `scripts/` instead.
+`tools/CLAUDE.md`: Creates `tools/` and owns it as a documented boundary â€” each helper gets its own `tools/<name>/` with its own manifest and source, and a helper that's just a shell script belongs in `scripts/` instead. Copied in only when the project needs a helper that must be built before it runs: a linter, a code generator, a protobuf plugin. Its sections ship seeded with what the template can know, including the trap: `scripts/check` reads the manifests at the repository root, so a tool whose language has no root manifest is built and tested by nobody. Being a child document, it has to be added to the root `CLAUDE.md`'s Child Index when adopted, or nothing walking the tree reaches it.
 
 ### Written During Generation
 

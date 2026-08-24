@@ -1,0 +1,15 @@
+Presence is the whole signal. GitHub Pages checks whether this file exists and
+never reads what is in it, which is what makes a note here safe to write.
+
+It turns the Jekyll processor off, so the site is served exactly as the source
+holds it -- including paths beginning with an underscore, which Jekyll
+otherwise refuses to publish. Take it for a site that is already built HTML: a
+static-site generator's output, Sphinx, Doxygen, a bundled single-page app. A
+site GitHub builds with Jekyll from source wants _config.yml instead, and the
+two are alternatives rather than a pair: adopting both leaves a configuration
+that nothing reads, looking exactly like a configuration that something does.
+
+Place this file at the root of what Pages publishes -- the repository root for
+a branch source, the root of the uploaded artifact for a workflow source.
+Anywhere else it does nothing at all, and the symptom is an underscore-prefixed
+path 404ing on a site that otherwise looks fine.

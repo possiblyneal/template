@@ -177,7 +177,15 @@ repos:
       - id: end-of-file-fixer
       - id: trailing-whitespace
       - id: check-yaml
+      # devcontainer.json is JSON with comments -- the dev container schema
+      # sets allowComments -- and the addon copy carries its adoption guidance
+      # in them, the way every other addon carries its own. check-json parses
+      # strict JSON and fails on the first `//`, so that one path is named here
+      # rather than the hook being dropped. Root-only: the path is an addon,
+      # which never reaches a generated repository. The payload excludes the
+      # destination path instead, for the copy that lands there.
       - id: check-json
+        exclude: ^apps/github-repository-template/src/repository-addons/\.devcontainer/devcontainer\.json$
       - id: check-toml
 
       # Guards against a file committed by accident, not against a large

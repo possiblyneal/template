@@ -122,18 +122,26 @@ class AddonAdoptionManifest(unittest.TestCase):
                         f"{name} declares slot {slot['token']!r}, which is not in the file",
                     )
 
-    def test_authored_on_adoption_files_ship_empty(self):
-        """The flag means "you write this one". A populated file carrying it is
-        claiming to be a blank the operator must fill, and hides real content."""
-        for name, entry in sorted(manifest_entries().items()):
-            if entry.get("authored_on_adoption"):
-                with self.subTest(addon=name):
-                    path = ADDONS / name
-                    self.assertEqual(
-                        path.stat().st_size if path.is_file() else 0,
-                        0,
-                        f"{name} is flagged authored_on_adoption but ships content",
-                    )
+    def test_no_addon_ships_empty(self):
+        """Every addon is a template, and a zero-byte file teaches nothing.
+
+        An addon arrives at a destination as a copy someone reads before they
+        edit it, and each carries its own guidance -- comments where the format
+        has them, prose where it does not -- because the person adopting by hand
+        has no manifest to read. A blank file gives them a name and a path and
+        nothing else, and reads as a file whose content is still to come.
+
+        This scans the directory rather than the manifest, and deliberately does
+        not skip .gitkeep: a placeholder holding an empty directory open is
+        exactly the blank file this rule is about. An addon directory earns its
+        place by holding something worth copying.
+        """
+        blank = sorted(
+            str(path.relative_to(ADDONS))
+            for path in ADDONS.rglob("*")
+            if path.is_file() and path.stat().st_size == 0
+        )
+        self.assertEqual(blank, [], f"addons shipping no content: {blank}")
 
 
 if __name__ == "__main__":
