@@ -399,7 +399,7 @@
       "reviews": [
         {
           "section": "whether this is the file this site wants",
-          "decision": "It turns the Jekyll processor off. Take it for a site that is already built HTML -- output from a generator, or anything with a path component starting with an underscore, which Jekyll otherwise refuses to serve. A site GitHub builds with Jekyll from source wants _config.yml instead, and adopting both publishes a site whose configuration is never read."
+          "decision": "It turns the Jekyll processor off. Take it for a site that is already built HTML -- output from a generator, or anything with a path component starting with an underscore, which Jekyll otherwise refuses to serve. A site GitHub builds with Jekyll from source wants _config.yml instead."
         }
       ],
       "external": [

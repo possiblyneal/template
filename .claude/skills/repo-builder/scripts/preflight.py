@@ -455,6 +455,16 @@ def adopt_preflight(arguments: argparse.Namespace) -> dict[str, object]:
         entry = require_addon(template_repo, recorded, subtree, addon)
         if (destination / addon).exists():
             raise PreflightError(f"addon already present in destination: {addon}")
+        exclusive = ADDON_EXCLUSIVE.get(addon)
+        # The same check across runs. One-at-a-time is the realistic sequence
+        # for occasion-gated addons, and the second adopt is the harmful one:
+        # taking .nojekyll into a repository already publishing through
+        # _config.yml turns Jekyll off, and the exclude list stops applying to
+        # a site that keeps building.
+        if exclusive and (destination / exclusive).exists():
+            raise PreflightError(
+                f"addon {addon} cannot be adopted into a destination holding {exclusive}"
+            )
         mode, rule = classify_path(addon, rules)
         addons.append(
             {

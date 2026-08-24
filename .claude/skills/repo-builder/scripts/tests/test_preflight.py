@@ -184,6 +184,26 @@ class AdoptTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("cannot be adopted with", result.stderr)
 
+    def test_adopt_rejects_the_second_half_adopted_later(self) -> None:
+        """One at a time is how a repository really ends up holding both: the
+        occasion for the second addon arrives months after the first."""
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._build_fixture(directory)
+            destination = Path(fixture["destination"])
+            (destination / "_config.yml").write_text("theme: minima\n", encoding="utf-8")
+            subprocess.run(["git", "add", "_config.yml"], cwd=destination, check=True)
+            subprocess.run(
+                ["git", "commit", "--no-verify", "-m", "chore: adopt _config.yml"],
+                cwd=destination,
+                check=True,
+                stdout=subprocess.DEVNULL,
+            )
+
+            result = self._run_adopt(fixture, ".nojekyll")
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("destination holding _config.yml", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
