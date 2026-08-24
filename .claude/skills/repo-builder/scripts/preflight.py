@@ -22,6 +22,11 @@ ADDON_PAIRS = {
     ".all-contributorsrc": "CONTRIBUTORS.md",
     "CHANGELOG.md": ".claude/rules/changelog.md",
     ".claude/rules/changelog.md": "CHANGELOG.md",
+    # One-directional, unlike the two above. AUTHORS lists the copyright
+    # holders that the notices in the source tree point at, and a copyright
+    # notice with no license beside it grants nothing. LICENSE without AUTHORS
+    # is the ordinary case, so the reverse entry would be wrong.
+    "AUTHORS": "LICENSE",
 }
 # The inverse: adopting both is the defect. `.nojekyll` turns off the Jekyll
 # processor `_config.yml` exists to configure, and neither file complains --
@@ -444,7 +449,12 @@ def adopt_preflight(arguments: argparse.Namespace) -> dict[str, object]:
 
     for addon in requested:
         pair = ADDON_PAIRS.get(addon)
-        if pair and pair not in seen:
+        # Satisfied by the destination as well as by this run. The two-way
+        # pairs are adopted together, but a one-way pair is acquired in
+        # sequence -- AUTHORS arrives long after LICENSE did -- and requesting
+        # the pair again is itself rejected below as already present. Reading
+        # only `seen` makes that second adopt unreachable by either route.
+        if pair and pair not in seen and not (destination / pair).exists():
             raise PreflightError(f"addon {addon} must be adopted with its pair {pair}")
         exclusive = ADDON_EXCLUSIVE.get(addon)
         if exclusive and exclusive in seen:

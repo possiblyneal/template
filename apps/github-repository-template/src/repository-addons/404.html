@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<!--
+  The page GitHub Pages serves for any path under this site that does not exist.
+
+  It is served by the Pages web server, not built by Jekyll, so it works
+  whichever way the site is published -- a Jekyll build, a static generator's
+  output with .nojekyll beside it, or files uploaded by a workflow. It has to
+  sit at the root of what Pages publishes, and it has to be named 404.html.
+  (The Markdown form, 404.md, needs Jekyll and needs `permalink: /404.html` in
+  its front matter to end up at the same address. This file needs neither.)
+
+  Deliberately one file with no dependencies: a stylesheet, font, or script
+  referenced from here is itself a path that can 404, and a broken error page
+  is the one failure nobody sees until it matters. Everything is inline.
+
+  Two things this does not do. It cannot set the HTTP status -- Pages serves it
+  with 404 already. And it never appears on a repository that does not publish
+  a site; Pages is the only thing that reads it.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>404 — Page not found</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        line-height: 1.5;
+        text-align: center;
+        padding: 1.5rem;
+      }
+      main {
+        max-width: 32rem;
+      }
+      h1 {
+        font-size: 4rem;
+        margin: 0;
+        letter-spacing: -0.03em;
+      }
+      p {
+        margin: 0.75rem 0 0;
+      }
+      .muted {
+        opacity: 0.7;
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>404</h1>
+      <p>That page does not exist.</p>
+      <p class="muted">
+        It may have moved, or the link that sent you here may be out of date.
+      </p>
+      <!--
+        A project site lives under /<repository-name>/, so a bare href="/" walks
+        out of it and lands on the account's own site. Replace the token with
+        the site's root path, trailing slash included: "/" for a user or
+        organization site, "/<repository-name>/" for a project site.
+      -->
+      <p><a href="REPLACE-SITE-ROOT">Back to the start</a></p>
+    </main>
+  </body>
+</html>

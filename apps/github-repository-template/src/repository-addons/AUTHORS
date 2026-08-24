@@ -1,0 +1,36 @@
+# AUTHORS -- the copyright holders of REPLACE-PROJECT-TITLE.
+#
+# This is not the contributor list, and the difference is the whole reason the
+# file exists. CONTRIBUTORS.md credits the people who worked on the project.
+# This file names who holds copyright in it -- which for anyone contributing
+# under a corporate agreement is their employer, not them. The two lists are
+# different lengths and neither substitutes for the other.
+#
+# What it buys you: copyright notices that do not have to be rewritten. Instead
+# of naming every holder in every source file and re-editing them all whenever
+# the list changes, notices point here:
+#
+#     Copyright (C) <year> The REPLACE-PROJECT-TITLE Authors
+#
+# and this file is the list they point at. Change it once, and every notice in
+# the project is current. Modern practice pairs that with a one-line SPDX tag
+# rather than the full license paragraph:
+#
+#     // SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Adopting this file is therefore a decision about the source tree, not about
+# this file alone. It does not change LICENSE and cannot: that file is the
+# license itself, reproduced verbatim under its own terms, and the
+# angle-bracket fields in its appendix are instructions for what to write in
+# your files, not blanks to fill in there.
+#
+# It is worth having when contributions arrive from more than one legal entity,
+# when a contributor agreement is in play, or when files are likely to be
+# copied out of this repository on their own. A single-author project gets
+# nothing from it that a name in the notice does not already give.
+#
+# Format is convention, not a specification -- nothing parses this file. One
+# entity per line, name then contact, most-significant first. Keep entries that
+# no longer contribute: copyright does not lapse when someone stops.
+
+REPLACE-COPYRIGHT-HOLDER

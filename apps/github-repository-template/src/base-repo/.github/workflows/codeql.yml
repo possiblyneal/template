@@ -116,6 +116,19 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
+          # Add .github/codeql/codeql-config.yml and uncomment the line below to
+          # scope what gets analyzed or change which queries run. The two things
+          # it is for: `paths` / `paths-ignore`, to keep vendored, generated, or
+          # fixture code out of the results, and `queries` / `packs`, to run a
+          # broader suite such as security-extended than the default one.
+          #
+          # It ships commented out because neither answer exists yet in a new
+          # repository -- there is no code to have produced a false positive,
+          # and the default suite is the right starting point. Note that the
+          # config file is read only through this key: adding the file without
+          # uncommenting the line leaves configuration that nothing applies and
+          # nothing reports.
+          # config-file: .github/codeql/codeql-config.yml
 
       - name: Analyze
         uses: github/codeql-action/analyze@v4

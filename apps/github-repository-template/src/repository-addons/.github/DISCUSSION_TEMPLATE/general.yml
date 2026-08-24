@@ -17,26 +17,39 @@ body:
   - type: markdown
     attributes:
       value: |
-        Questions about using this project belong here. Bugs and feature
-        requests belong in the issue tracker, whose forms ask for what a
-        maintainer needs in order to act.
+        For the question the documentation could not have anticipated — whether
+        this project is meant to handle your situation, which of two workable
+        approaches fits its design, whether a change would be welcome before you
+        write it. Answers here are judgment and context, not a page someone
+        forgot to write.
+
+        Two things belong elsewhere. A bug or a feature request belongs in the
+        issue tracker, whose forms ask for what a maintainer needs in order to
+        act. So does a question the documentation *should* have answered — that
+        is a documentation defect, and filing it as one is what gets it fixed
+        for the next person. If this thread turns out to be that, its output is
+        an issue.
 
   - type: textarea
-    id: goal
+    id: decision
     attributes:
-      label: What are you trying to do?
-      description: The goal, not only the error you hit on the way to it.
+      label: What are you trying to decide?
+      description: >-
+        The choice in front of you and what makes it a choice, not only the
+        error you hit on the way to it. If you are asking whether to build
+        something, say what you would build.
     validations:
       required: true
 
   - type: textarea
-    id: tried
+    id: context
     attributes:
-      label: What have you tried?
+      label: What have you already read or tried?
       description: >-
-        Commands, code, and their output. Include the version, tag, or commit
-        you are on, and the platform. Redact secrets, tokens, and private data
-        -- a discussion is public, and editing a post does not unpublish what
-        was in it.
+        Documentation, issues, and discussions you checked, and what they left
+        open. Commands, code, and output where they are relevant. Include the
+        version, tag, or commit you are on, and the platform. Redact secrets,
+        tokens, and private data -- a discussion is public, and editing a post
+        does not unpublish what was in it.
     validations:
       required: false

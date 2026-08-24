@@ -149,13 +149,36 @@
           "decision": "GitHub matches the file name to a discussion category slug, so this file serves the General category and nothing else. Rename it to the slug of the category it is for, taking that slug from the category's URL rather than guessing at how a name with an ampersand or a space is spelled. A name matching no category means the form is silently never shown, which is indistinguishable from having no form."
         },
         {
-          "section": "the questions in body",
-          "decision": "They ask what someone is trying to do and what they have already tried, which is the general-purpose pair. Replace them with what this project actually needs to answer a discussion, and keep the required flags honest: a required field someone cannot answer is a reason to close the tab rather than post."
+          "section": "the scope the intro sets",
+          "decision": "The form deliberately narrows General to the question documentation could not have anticipated, and sends anything the documentation should have answered to the issue tracker as a defect. That is a routing decision about this project, not a neutral default: a project that would rather answer usage questions in a thread has to edit the intro, because as written it tells those people to leave. Keep the questions and the required flags honest with whatever it says -- a required field someone cannot answer is a reason to close the tab rather than post."
         }
       ],
       "external": [
         {
           "step": "Enable Discussions at Settings -> General -> Features -> Discussions, and confirm the category this file is named for exists.",
+          "consequence": "Without the feature there is no category to match and the form is inert. Nothing in this repository reports whether it is on."
+        }
+      ]
+    },
+    ".github/DISCUSSION_TEMPLATE/ideas.yml": {
+      "slots": [],
+      "reviews": [
+        {
+          "section": "the file name",
+          "decision": "Ideas is one of GitHub's default categories and its slug is `ideas`, so this file usually needs no rename. Confirm it against the category's URL anyway: a category that was renamed, deleted, or recreated has a different slug, and a name matching no category means the form is silently never shown."
+        },
+        {
+          "section": "the boundary against the issue tracker",
+          "decision": "This form asks whether something should be built; the payload's .github/ISSUE_TEMPLATE/feature_request.yml asks for something to be built. Adopting both without saying which comes first leaves a contributor choosing at random between two forms that look equally correct. Say in CONTRIBUTING.md that an idea is discussed here and filed there, or drop one of the two."
+        },
+        {
+          "section": "the participation dropdown",
+          "decision": "It asks whether the proposer wants to implement the idea, which is only worth asking of a project that accepts outside code. Remove it from a repository that does not, where the honest answer is never the first option and asking implies otherwise."
+        }
+      ],
+      "external": [
+        {
+          "step": "Enable Discussions at Settings -> General -> Features -> Discussions, and confirm the Ideas category exists.",
           "consequence": "Without the feature there is no category to match and the form is inert. Nothing in this repository reports whether it is on."
         }
       ]
@@ -241,6 +264,42 @@
       ],
       "external": []
     },
+    ".github/PULL_REQUEST_TEMPLATE/release.md": {
+      "slots": [],
+      "reviews": [
+        {
+          "section": "how anyone reaches it",
+          "decision": "Nothing in GitHub's interface offers a named template. A pull request gets .github/PULL_REQUEST_TEMPLATE.md unless the URL asks for this file by name with ?expand=1&template=<name>.md, which means hand-editing a URL. The usual fix is to link the named templates from the default one -- the links are clickable from its Preview tab -- so decide whether this template is reachable by clicking or only by people who already know it exists. Left unlinked, it is a template nobody opens and nothing reports that."
+        },
+        {
+          "section": "whether this repository releases this way",
+          "decision": "The questions assume a tagged version cut from a range of commits, with a changelog entry to match. A project that publishes continuously, or from a branch rather than a tag, is answering a form about a process it does not run -- and a form answered mechanically stops being read. Rewrite it around the release this project actually performs, or do not adopt it."
+        },
+        {
+          "section": "the checklist",
+          "decision": "Its first three items reference a changelog. Adopted without the CHANGELOG.md addon, they ask a reviewer to check a file that is not there, and the usual outcome is a ticked box meaning nothing. Drop them or adopt the changelog."
+        }
+      ],
+      "external": []
+    },
+    ".github/PULL_REQUEST_TEMPLATE/hotfix.md": {
+      "slots": [],
+      "reviews": [
+        {
+          "section": "how anyone reaches it",
+          "decision": "Nothing in GitHub's interface offers a named template. A pull request gets .github/PULL_REQUEST_TEMPLATE.md unless the URL asks for this file by name with ?expand=1&template=<name>.md, which means hand-editing a URL. The usual fix is to link the named templates from the default one -- the links are clickable from its Preview tab -- so decide whether this template is reachable by clicking or only by people who already know it exists. Left unlinked, it is a template nobody opens and nothing reports that."
+        },
+        {
+          "section": "what counts as a hotfix here",
+          "decision": "This template is shorter than the default, which makes it the path of least resistance for anyone in a hurry. It stays rare only if the bar is written down: production impact, and a cost to waiting that is stated rather than assumed. Put that bar in CONTRIBUTING.md next to adopting this file, or the exception becomes the fast lane."
+        },
+        {
+          "section": "the last checklist item",
+          "decision": "It asks whether the fix landed on every branch that needs it, which presumes a release line separate from the default branch. On a repository with one long-lived branch there is nothing to answer and the item trains people to tick without reading. Remove it unless the project really maintains more than one."
+        }
+      ],
+      "external": []
+    },
     "CODE_OF_CONDUCT.md": {
       "slots": [
         {
@@ -267,6 +326,39 @@
         {
           "section": "or-later versus only",
           "decision": "LICENSE cannot express the choice -- its text is identical either way. Record it in the per-file SPDX headers and in CITATION.cff if that addon is also taken. Relicensing to a future GPLv4 needs every contributor's consent once the project has history, which is why the payload's own docs choose or-later."
+        }
+      ],
+      "external": []
+    },
+    "AUTHORS": {
+      "slots": [
+        {
+          "token": "REPLACE-PROJECT-TITLE",
+          "value_key": "project-title",
+          "what": "The project name, as it will read inside the copyright notices in the source files: \"The <project> Authors\". Shared with README.md, CITATION.cff, and _config.yml, so it is the same answer asked once."
+        },
+        {
+          "token": "REPLACE-COPYRIGHT-HOLDER",
+          "value_key": "copyright-holder",
+          "what": "The first copyright holder, as a legal name rather than a GitHub handle -- the person or the company that owns the copyright, since those are frequently not the same and only one of them is enforceable."
+        }
+      ],
+      "reviews": [
+        {
+          "section": "the source files this file exists to serve",
+          "decision": "Adopting AUTHORS is half a change. Its value is that copyright notices in the source tree stop naming individuals and read \"Copyright (C) <year> The <project> Authors\" instead, with an SPDX line above them, so the list changes in one place. Write those notices in the same change. Without them this is a list nothing references, and it will be out of date before anyone notices it is not being read."
+        },
+        {
+          "section": "whether the project needs it",
+          "decision": "It earns its place when contributions arrive from more than one legal entity, when a contributor agreement is in play, or when files are likely to be copied out of this repository on their own. A single-author project gets nothing from it that a name in the notice does not already give, and gains a second list to keep current."
+        },
+        {
+          "section": "LICENSE is not edited to match",
+          "decision": "It cannot be. LICENSE is the license text reproduced verbatim under its own terms, and the angle-bracket fields in its appendix are instructions describing what to write in your source files -- not blanks to fill in there. Every change this addon implies happens in the source tree, in README.md, and in CITATION.cff if that addon is also taken."
+        },
+        {
+          "section": "who keeps it current",
+          "decision": "Nothing generates this file and no check notices when a new entity starts contributing without being added. Name the moment it gets updated -- reviewing a first pull request from a new employer, or countersigning an agreement -- in CONTRIBUTING.md. A copyright list maintained by whoever remembers is a copyright list that is wrong."
         }
       ],
       "external": []
@@ -437,6 +529,35 @@
         {
           "step": "Place the file at the root of what Pages publishes -- the repository root for a branch source, or the root of the uploaded artifact for a workflow source.",
           "consequence": "Elsewhere it has no effect, and the symptom is underscore-prefixed paths silently 404ing on a site that otherwise looks fine."
+        }
+      ]
+    },
+    "404.html": {
+      "slots": [
+        {
+          "token": "REPLACE-SITE-ROOT",
+          "value_key": "site-root",
+          "what": "The path this site is served from, trailing slash included: \"/\" for a user or organization site, \"/<repository-name>/\" for a project site. The distinction matters here more than anywhere else on the site -- a bare \"/\" on a project site sends someone who already took a wrong turn out of the project entirely, onto the account's own page."
+        }
+      ],
+      "reviews": [
+        {
+          "section": "whether the project publishes a site at all",
+          "decision": "GitHub Pages is the only thing that reads this file. In a repository with Pages off it is an HTML file nobody serves, and its presence reads as a site that exists."
+        },
+        {
+          "section": "the styling and the wording",
+          "decision": "It ships generic and self-contained on purpose: every stylesheet, font, or script referenced from an error page is itself a path that can fail, and a broken 404 is the one failure nobody notices until it matters. Match it to the site's design by inlining, not by linking out. Add a search box or a link to the documentation index if the site is large enough that \"back to the start\" is not useful."
+        }
+      ],
+      "external": [
+        {
+          "step": "Place the file at the root of what Pages publishes -- the repository root for a branch source, the root of the uploaded artifact for a workflow source -- and keep the name 404.html exactly.",
+          "consequence": "Anywhere else, Pages never finds it and serves GitHub's own 404 instead, which is indistinguishable from having no custom page because that is what it is."
+        },
+        {
+          "step": "After the site deploys, request a path that does not exist and confirm this page is what comes back.",
+          "consequence": "It is the one page on the site no link points at, so it is the one page that stays broken unnoticed."
         }
       ]
     },
