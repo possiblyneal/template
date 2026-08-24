@@ -1,0 +1,5 @@
+{
+  "name": "REPLACE-PROJECT-TITLE",
+  "image": "mcr.microsoft.com/devcontainers/base:bookworm",
+  "features": {}
+}

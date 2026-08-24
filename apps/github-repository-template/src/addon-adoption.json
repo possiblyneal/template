@@ -98,6 +98,60 @@
       ]
     },
 
+    "SUPPORT.md": {
+      "slots": [
+        {
+          "token": "[REPLACE: the support channel you actually read]",
+          "value_key": "support-channel",
+          "what": "Where a question goes, in the Where to ask section. A visible bracket rather than a silent REPLACE- token, for the same reason SECURITY.md's reporting address is one: an unfilled copy has to announce itself in the rendered document rather than sending someone to a channel that does not exist. Kept separate from security-contact and conduct-contact -- a question is public and a vulnerability report is not, so the two rarely share a destination even for a solo maintainer."
+        }
+      ],
+      "reviews": [
+        {
+          "section": "the channels named in Where to ask",
+          "decision": "The file assumes there is somewhere other than the issue tracker to ask, and for many projects there is not. Name the channels that exist -- Discussions, a chat server, a mailing list -- and delete the rest; for a project small enough that one tracker is honest, say so plainly and let the issue forms carry questions too. Whichever destination is named, uncomment the contact_links block the payload already ships commented out in .github/ISSUE_TEMPLATE/config.yml and point it there: that surfaces the destination on the template chooser, one step before the new-issue banner GitHub uses to link this file, which is where someone with a question rather than a bug is still deciding what to open. Both must name the same channel -- two answers to \"where do I ask?\" reach the same person seconds apart."
+        },
+        {
+          "section": "the What to expect section",
+          "decision": "The shipped wording commits to nothing specific and says the project is maintained on a best-effort basis, which is honest as a default and needs no change to be true. It becomes a defect only when someone replaces it with a response time the project cannot hold -- a stated window that slips is worse than no statement, because a person waits on it instead of looking elsewhere. No token marks this for that reason."
+        },
+        {
+          "section": "what this file does not route",
+          "decision": "A vulnerability report is not a support question, and every channel this file names is public. If SECURITY.md was adopted, say so here and send reporters there; if it was not, this file is the only page a reporter reads, so it has to carry a private address of its own. A vulnerability routed into Discussions is disclosed by the act of reporting it."
+        }
+      ],
+      "external": [
+        {
+          "step": "If the contact_links block in .github/ISSUE_TEMPLATE/config.yml is uncommented, replace OWNER/REPO in its url before committing.",
+          "consequence": "A contact link renders as a working link. Left as shipped it points at github.com/OWNER/REPO/discussions, a real page belonging to someone else. Nothing here catches it: that file is payload rather than an addon, so it has no entry in this manifest and no adoption walkthrough passes over it."
+        },
+        {
+          "step": "If GitHub Discussions is the named channel, enable it at Settings -> General -> Features -> Discussions.",
+          "consequence": "Without it the link points at a tab that is not there. Nothing in this repository reports whether it is on. Skip this step if the channel is a chat server, a mailing list, or the issue tracker itself."
+        }
+      ]
+    },
+
+    ".github/DISCUSSION_TEMPLATE/general.yml": {
+      "slots": [],
+      "reviews": [
+        {
+          "section": "the file name",
+          "decision": "GitHub matches the file name to a discussion category slug, so this file serves the General category and nothing else. Rename it to the slug of the category it is for, taking that slug from the category's URL rather than guessing at how a name with an ampersand or a space is spelled. A name matching no category means the form is silently never shown, which is indistinguishable from having no form."
+        },
+        {
+          "section": "the questions in body",
+          "decision": "They ask what someone is trying to do and what they have already tried, which is the general-purpose pair. Replace them with what this project actually needs to answer a discussion, and keep the required flags honest: a required field someone cannot answer is a reason to close the tab rather than post."
+        }
+      ],
+      "external": [
+        {
+          "step": "Enable Discussions at Settings -> General -> Features -> Discussions, and confirm the category this file is named for exists.",
+          "consequence": "Without the feature there is no category to match and the form is inert. Nothing in this repository reports whether it is on."
+        }
+      ]
+    },
+
     "GOVERNANCE.md": {
       "slots": [
         {
@@ -234,6 +288,21 @@
       "external": []
     },
 
+    ".github/release.yml": {
+      "slots": [],
+      "reviews": [
+        {
+          "section": "the categories, against this repository's label vocabulary",
+          "decision": "The shipped categories key on `*` and on `dependencies`, the label Dependabot applies to its own pull requests, so the file is true of a repository on its first day. Extend it only with labels that exist and are actually applied -- a category naming an unused label renders as no heading at all, which reads as \"no changes of that kind\" rather than as a typo. For a repository set up by /setup-matt-pocock-skills, docs/agents/ records the triage label vocabulary this should agree with."
+        },
+        {
+          "section": "which paths actually reach this file",
+          "decision": "It is read whenever GitHub generates release notes: the Generate release notes button, the POST /repos/{owner}/{repo}/releases/generate-notes endpoint, and scripts/release, which passes --generate-notes only for a repository with no CHANGELOG.md. So a repository publishing from its changelog still reaches this file, just never through scripts/release -- do not read a green release as evidence the categories are right when the first thing to exercise them will be someone clicking the button."
+        }
+      ],
+      "external": []
+    },
+
     "CONTRIBUTORS.md": {
       "slots": [],
       "reviews": [],
@@ -285,6 +354,82 @@
         {
           "section": "every platform entry",
           "decision": "All ship commented out, which is the correct state until an account exists. Uncomment only lines whose account is real and replace USERNAME. Nothing validates these: an uncommented placeholder is not an error, it is a working button pointing at a stranger's donation page."
+        }
+      ],
+      "external": []
+    },
+
+    "_config.yml": {
+      "slots": [
+        {
+          "token": "REPLACE-PROJECT-TITLE",
+          "value_key": "project-title",
+          "what": "The site title, rendered in the theme's header and in the browser tab. Shared with CITATION.cff and CONTRIBUTING.md, so it is the same answer asked once."
+        },
+        {
+          "token": "REPLACE-PROJECT-DESCRIPTION",
+          "value_key": "project-description",
+          "what": "The site description, rendered by most themes under the title and used in the feed metadata. One sentence saying what the project is."
+        }
+      ],
+      "reviews": [
+        {
+          "section": "whether Pages builds with Jekyll at all",
+          "decision": "This file is read when the Pages source is \"Deploy from a branch\". A site published by a GitHub Actions workflow is built however that workflow says, and this file is inert there unless the workflow runs Jekyll itself -- adopted into that setup it is a config nothing reads, which looks like configuration and is not."
+        },
+        {
+          "section": "the exclude list",
+          "decision": "Jekyll copies anything it does not recognize into the published site, so every path that is the project rather than the site has to be named. Two things about the shipped list. It repeats Jekyll's own default exclusions on purpose -- GitHub Pages pins Jekyll 3, where the `exclude` key replaces the defaults instead of adding to them, so dropping those lines is how a repository starts publishing node_modules/. And the entries after them are this repository's own directories, which is only right while the site lives outside all of them: delete the line for whichever directory holds the site, and add whatever this repository added beside them. What is missed is published, not flagged."
+        },
+        {
+          "section": "the theme",
+          "decision": "minima is the default GitHub Pages theme and renders. Change it to any other supported theme, or to a remote_theme, before deciding the site looks the way it should."
+        }
+      ],
+      "external": [
+        {
+          "step": "Turn on Pages at Settings -> Pages and set the source to Deploy from a branch.",
+          "consequence": "Without it nothing is published and the file does nothing. Nothing in this repository reports whether Pages is on."
+        }
+      ]
+    },
+
+    ".nojekyll": {
+      "slots": [],
+      "reviews": [
+        {
+          "section": "whether this is the file this site wants",
+          "decision": "It turns the Jekyll processor off. Take it for a site that is already built HTML -- output from a generator, or anything with a path component starting with an underscore, which Jekyll otherwise refuses to serve. A site GitHub builds with Jekyll from source wants _config.yml instead."
+        }
+      ],
+      "external": [
+        {
+          "step": "Place the file at the root of what Pages publishes -- the repository root for a branch source, or the root of the uploaded artifact for a workflow source.",
+          "consequence": "Elsewhere it has no effect, and the symptom is underscore-prefixed paths silently 404ing on a site that otherwise looks fine."
+        }
+      ]
+    },
+
+    ".devcontainer/devcontainer.json": {
+      "slots": [
+        {
+          "token": "REPLACE-PROJECT-TITLE",
+          "value_key": "project-title",
+          "what": "The `name` field, shown as the environment's label in Codespaces and in the editor's remote indicator. The same answer as the title asked for CITATION.cff and CONTRIBUTING.md."
+        }
+      ],
+      "reviews": [
+        {
+          "section": "the image, and the features added to it",
+          "decision": "It ships as the generic Debian base image with no features, which builds and gives a shell and nothing else -- deliberately, because the toolchains a repository needs are exactly what the template cannot know. Add the language features this repository's manifests require, or replace the image outright. An unchanged image is not broken, it is empty, and the failure shows up as a missing compiler at the first build rather than at container creation."
+        },
+        {
+          "section": "the image tag",
+          "decision": "bookworm is a mutable tag, and a dev container is rebuilt without being asked -- Codespaces and the editors do it on their own -- so what the tag resolves to changes under the repository with no diff. The alternative is not strictly better: nothing here bumps a digest either, since Dependabot's devcontainers ecosystem updates Features and not the base image, so a pinned digest goes stale as silently as a tag moves. Pin it where a reproducible environment matters more than picking up patches, and put a calendar reminder behind the pin rather than a bot. What makes the tag tolerable as the default is that the shipped file adds no features, no mounts, and no postCreateCommand, so a changed base image runs nothing this repository wrote."
+        },
+        {
+          "section": "the absent lifecycle command",
+          "decision": "No postCreateCommand ships. scripts/doctor is the natural candidate once the image carries the toolchains it checks, and the wrong one before that: it would report every missing toolchain at creation and make a working container look broken. Add it in the same edit that adds the features it verifies."
         }
       ],
       "external": []
