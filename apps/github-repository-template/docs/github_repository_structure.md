@@ -143,7 +143,7 @@ These live in `src/repository-addons/` and are never copied during generation �
 
 #### When releases are published from GitHub
 
-`.github/release.yml`: Groups and filters the pull requests in GitHub's generated release notes. Read only when the notes are generated at all, which `scripts/release` does only for a repository with no `CHANGELOG.md` — the two are alternatives.
+`.github/release.yml`: Groups and filters the pull requests in GitHub's generated release notes. Read whenever those notes are generated — from the web UI, from the API, and from `scripts/release`, which generates them only for a repository with no `CHANGELOG.md`. A repository publishing from its changelog still reaches this file by the first two routes.
 
 #### When the project publishes a site
 

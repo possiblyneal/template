@@ -1,11 +1,13 @@
 # Shapes the release notes GitHub generates: which pull requests appear under
 # which heading, and which are left out of the list entirely.
 #
-# It is read only when notes are generated at all. `scripts/release` publishes
-# the `## [version]` section of CHANGELOG.md when that file exists and falls
-# back to `--generate-notes` only when it does not, so this file and an adopted
-# CHANGELOG.md are alternatives rather than a pair: with both present the
-# changelog wins and nothing below is ever consulted.
+# It is read whenever those notes are generated: the "Generate release notes"
+# button, the releases/generate-notes API, and `scripts/release`, which
+# publishes the `## [version]` section of CHANGELOG.md when that file exists
+# and falls back to `--generate-notes` only when it does not. So a repository
+# releasing from its changelog never reaches this file through `scripts/release`
+# and still reaches it from the web UI -- do not read a green release as
+# evidence the categories below are right.
 #
 # Nothing validates the label names. A category naming a label the repository
 # never applies renders as no heading at all, which reads as "there were no

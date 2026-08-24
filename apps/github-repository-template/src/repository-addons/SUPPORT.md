@@ -6,10 +6,11 @@ quiet: a channel listed here that nobody reads sends a person away believing
 they have asked, and the question is answered by no one. Every channel below has
 to be one somebody actually watches, or it does not belong here.
 
-GitHub reads this file from `.github/`, then the repository root, then `docs/` --
-first one found wins. It ships at the root; move it if you want it elsewhere,
-but do not keep two copies, because only the first is ever read. When present,
-GitHub links it from the banner shown when someone opens a new issue.
+GitHub looks for this file in the repository root, in `docs/`, and in
+`.github/`, and links it from the banner shown when someone opens a new issue.
+It ships at the root; move it if you want it elsewhere, but keep exactly one
+copy. GitHub documents no precedence between those three locations, so two
+copies means the one someone reads is the one you did not update.
 
 ## Before you ask
 
@@ -40,6 +41,14 @@ rather than silently swallowing it.
 Open an issue instead when you have a reproducible bug or a concrete feature
 request; the issue forms will ask for what a maintainer needs.
 
+Do not report a security vulnerability through any channel on this page. Every
+one of them is public, and a vulnerability is disclosed by the act of reporting
+it there.
+
+<!-- ADOPT: point that paragraph somewhere. If SECURITY.md was adopted, link it
+     and delete this comment. If it was not, this file is the only page a
+     reporter reads, so name a private address here instead. -->
+
 ## What to include
 
 A question that arrives with its context gets answered once instead of three
@@ -47,7 +56,8 @@ times:
 
 - what you are trying to do, not only the error you hit;
 - the version, tag, or commit, and the platform you are on;
-- the exact command or code, and the output it produced;
+- the exact command or code, and the output it produced, with tokens, keys,
+  hostnames, and anything else private removed -- this is a public channel;
 - what you have already tried.
 
 ## What to expect

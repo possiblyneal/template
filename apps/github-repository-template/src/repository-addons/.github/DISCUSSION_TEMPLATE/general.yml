@@ -35,6 +35,8 @@ body:
       label: What have you tried?
       description: >-
         Commands, code, and their output. Include the version, tag, or commit
-        you are on, and the platform.
+        you are on, and the platform. Redact secrets, tokens, and private data
+        -- a discussion is public, and editing a post does not unpublish what
+        was in it.
     validations:
       required: false
