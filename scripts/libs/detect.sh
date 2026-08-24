@@ -162,6 +162,35 @@ swift_each() {
   return "$status"
 }
 
+# Runs a command once per Go module. This is not a single run from the
+# repository root because `./...` matches only packages inside a module, and the
+# root of a workspace is not itself in one: `go build ./...` there refuses the
+# pattern and exits 1, so every Go check on a repository whose only module sits
+# under apps/ failed on the invocation rather than on the code, and no change to
+# the code could turn it green. `go list -m` names the directories to enter --
+# the main module for a plain go.mod, every `use` entry under a go.work.
+#
+# A listing that fails or comes back empty is a failure, not an empty success:
+# it means the module graph could not be read at all.
+#
+# Read on fd 3, not stdin, for the same reason as swift_each: go test and go run
+# can read stdin, which would otherwise consume the remaining module list.
+go_each() {
+  local dir status=0 modules
+  modules="$(go list -m -f '{{.Dir}}')" || return 1
+  if [[ -z "$modules" ]]; then
+    echo "go list -m named no module directories" >&2
+    return 1
+  fi
+
+  while IFS= read -r dir <&3; do
+    [[ -n "$dir" ]] || continue
+    ( cd "$dir" && "$@" ) || status=1
+  done 3<<<"$modules"
+
+  return "$status"
+}
+
 # Gradle exposes lint and format tasks only when the matching plugin is applied,
 # so the task list decides which checks exist. Listing costs a daemon start, so
 # the result is read once and reused.
@@ -276,7 +305,7 @@ detect_orphan_manifests() {
 
 _capability_lint_node() { has_npm_script lint || return "$NO_RUNNER"; npm run lint; }
 _capability_lint_python() { uv_run ruff check .; }
-_capability_lint_go() { go vet ./...; }
+_capability_lint_go() { go_each go vet ./...; }
 _capability_lint_rust() { cargo clippy -- -D warnings; }
 _capability_lint_swift() { command -v swift >/dev/null 2>&1 || return "$NO_RUNNER"; swift_each swift format lint --recursive --strict .; }
 _capability_lint_kotlin() {
@@ -310,13 +339,13 @@ _capability_test_python() {
   fi
   return "$status"
 }
-_capability_test_go() { go test ./...; }
+_capability_test_go() { go_each go test ./...; }
 _capability_test_rust() { cargo test; }
 _capability_test_swift() { command -v swift >/dev/null 2>&1 || return "$NO_RUNNER"; swift_each swift test; }
 _capability_test_kotlin() { [[ -x ./gradlew ]] || return "$NO_RUNNER"; ./gradlew test; }
 
 _capability_build_node() { has_npm_script build || return "$NO_RUNNER"; npm run build; }
-_capability_build_go() { go build ./...; }
+_capability_build_go() { go_each go build ./...; }
 _capability_build_rust() { cargo build --locked; }
 _capability_build_swift() { command -v swift >/dev/null 2>&1 || return "$NO_RUNNER"; swift_each swift build; }
 _capability_build_kotlin() { [[ -x ./gradlew ]] || return "$NO_RUNNER"; ./gradlew build -x test; }
@@ -350,7 +379,7 @@ _capability_audit_python() {
   uv audit --help >/dev/null 2>&1 || return "$NO_RUNNER"
   uv audit --preview-features audit-command
 }
-_capability_audit_go() { command -v govulncheck >/dev/null 2>&1 || return "$NO_RUNNER"; govulncheck ./...; }
+_capability_audit_go() { command -v govulncheck >/dev/null 2>&1 || return "$NO_RUNNER"; go_each govulncheck ./...; }
 _capability_audit_rust() { command -v cargo-audit >/dev/null 2>&1 || return "$NO_RUNNER"; cargo audit; }
 _capability_audit_swift() { command -v trivy >/dev/null 2>&1 || return "$NO_RUNNER"; trivy_each Package.resolved; }
 _capability_audit_kotlin() { command -v trivy >/dev/null 2>&1 || return "$NO_RUNNER"; trivy_each gradle.lockfile; }
