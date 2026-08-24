@@ -163,7 +163,12 @@ def addon_payload(repo: Path) -> None:
     # The GitHub Pages exclusive pair, here so preflight's rejection of the two
     # together has something real to reject.
     write(repo, "repository-addons/_config.yml", "theme: minima\n")
-    write(repo, "repository-addons/.nojekyll", "")
+    write(repo, "repository-addons/.nojekyll", "Turns the Jekyll processor off.\n")
+    # The one-directional pair: AUTHORS requires LICENSE, and LICENSE alone is
+    # the ordinary case. Both here so preflight has something real to check
+    # against, including the sequence where LICENSE was adopted long before.
+    write(repo, "repository-addons/LICENSE", "License text, verbatim.\n")
+    write(repo, "repository-addons/AUTHORS", "REPLACE-COPYRIGHT-HOLDER\n")
     index = {
         "_about": ["Fixture addon adoption index."],
         "files": {
@@ -198,6 +203,18 @@ def addon_payload(repo: Path) -> None:
             },
             "_config.yml": {"slots": [], "reviews": [], "external": []},
             ".nojekyll": {"slots": [], "reviews": [], "external": []},
+            "LICENSE": {"slots": [], "reviews": [], "external": []},
+            "AUTHORS": {
+                "slots": [
+                    {
+                        "token": "REPLACE-COPYRIGHT-HOLDER",
+                        "value_key": "copyright-holder",
+                        "what": "The first copyright holder.",
+                    }
+                ],
+                "reviews": [],
+                "external": [],
+            },
         },
     }
     write(repo, "addon-adoption.json", json.dumps(index, indent=2) + "\n")

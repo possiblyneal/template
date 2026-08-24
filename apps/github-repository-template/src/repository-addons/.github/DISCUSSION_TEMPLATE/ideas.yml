@@ -1,0 +1,66 @@
+# A discussion category form for the "Ideas" category. The file name is the
+# category slug -- see the note in general.yml; the same rename rule and the
+# same silent failure apply here.
+#
+# Ideas is upstream of the issue tracker, not a duplicate of it. A feature
+# request asserts what should be built; this asks whether it should be, and the
+# form is shaped to make that difference hold. It asks for the problem before
+# the solution, because a proposal that arrives as a solution gets debated as
+# one and the underlying need never gets examined.
+
+title: "[Idea] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Somewhere to work out whether an idea is worth building before anyone
+        builds it. An idea that survives this thread can become a feature
+        request with the reasoning already attached.
+
+        If you are reporting something broken, use the issue tracker instead.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: >-
+        The situation you are in today and what it costs you. Concrete beats
+        general: what you were doing, what you had to do instead, how often.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What do you have in mind?
+      description: >-
+        The shape of the change, at whatever resolution you have. "I do not know
+        how this should work" is a complete answer if the problem above is
+        clear.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What else could solve it?
+      description: >-
+        Workarounds you use now, other designs you considered, and why they fall
+        short. An idea with no alternatives listed usually has not been compared
+        to anything.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: participation
+    attributes:
+      label: Would you want to work on this?
+      description: >-
+        Not a commitment, and not a condition. It tells a maintainer whether to
+        answer with a design or with a plan.
+      options:
+        - I would like to implement it
+        - I could help, with direction
+        - I am proposing it for someone else to build
+    validations:
+      required: false

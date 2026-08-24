@@ -154,7 +154,13 @@ repos:
       - id: end-of-file-fixer
       - id: trailing-whitespace
       - id: check-yaml
+      # devcontainer.json is JSON with comments by specification -- the dev
+      # container schema sets allowComments -- and the file ships with its
+      # guidance in them. check-json parses strict JSON and fails on the first
+      # `//`, so it would reject a valid devcontainer.json. Excluded whether or
+      # not this repository has one; the pattern matches nothing until it does.
       - id: check-json
+        exclude: ^\.devcontainer/devcontainer\.json$
       - id: check-toml
 
       # Guards against a file committed by accident, not against a large

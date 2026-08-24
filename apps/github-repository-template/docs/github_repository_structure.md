@@ -11,7 +11,7 @@ type: Note
 
 `.github/workflows/security.yml`: Runs dependency audits and, when a scanner is present, a secret scan.
 
-`.github/workflows/codeql.yml`: Runs GitHub's CodeQL static analysis on pull requests, on `main`, and on a weekly schedule.
+`.github/workflows/codeql.yml`: Runs GitHub's CodeQL static analysis on pull requests, on `main`, and on a weekly schedule. Its `init` step carries a commented-out `config-file:` line — uncomment it, and add the file it names, to scope which paths are analyzed or run a broader query suite than the default.
 
 `.github/actions/setup-toolchains/`: Installs a toolchain for each language manifest present in the repository.
 
@@ -21,7 +21,7 @@ type: Note
 
 `.github/ISSUE_TEMPLATE/`: Structured issue forms — `bug_report.yml`, `feature_request.yml`, and `config.yml`, which disables blank issues and carries a commented-out `contact_links` block to uncomment once a destination for questions exists.
 
-`.github/PULL_REQUEST_TEMPLATE.md`: Structures a pull request description for review.
+`.github/PULL_REQUEST_TEMPLATE.md`: Structures a pull request description for review. This is the one a pull request gets by default. It ships a commented-out line of links to the named templates under `.github/PULL_REQUEST_TEMPLATE/`, which are addons: nothing in GitHub's interface offers a named template, so uncommenting that line is what makes them reachable once the directory is adopted.
 
 ### AI Directives
 
@@ -115,15 +115,21 @@ These live in `src/repository-addons/` and are never copied during generation �
 
 `LICENSE`: The terms under which others may use, modify, and distribute the work. Ships as GNU GPL-3.0-or-later.
 
+`AUTHORS`: The copyright holders — not the contributor list, which is `CONTRIBUTORS.md`. It exists so notices in the source tree can read `Copyright (C) <year> The <project> Authors` and be updated in one place instead of file by file. Adopted only with `LICENSE`, and only when copyright is held by more than one party; it does not change `LICENSE`, which ships verbatim.
+
 `SECURITY.md`: The private channel for reporting a vulnerability, and what to expect after.
 
 `SUPPORT.md`: Routes users to help, separate from the issue tracker. Uncomment the `contact_links` block in the payload's `.github/ISSUE_TEMPLATE/config.yml` to name the same destination on the template chooser.
 
-`.env.example`: A sanitized template of `.env` listing required variables without exposing secrets. Ships empty.
+`.env.example`: A sanitized template of `.env` listing required variables without exposing secrets. Ships as a commented scaffold — what the file is for, why every value in it is published, and example shapes to replace with this project's own variables.
 
 #### When someone else will contribute code
 
 `CONTRIBUTING.md`: How a change reaches the default branch — reporting a bug, proposing an enhancement, and opening a pull request.
+
+`.github/PULL_REQUEST_TEMPLATE/release.md`: A pull request form for cutting a release — the version and range, what is shipping, breaking changes, migrations, and what publishing cannot undo.
+
+`.github/PULL_REQUEST_TEMPLATE/hotfix.md`: A pull request form for a production emergency. Shorter than the default on purpose, and the shortening is the point: it asks what is broken, why it cannot wait, and — the section the default does not have — which parts of the normal process were skipped. Both are reachable only through a `?expand=1&template=<name>.md` URL, so adopting either means uncommenting the line of links the payload's `.github/PULL_REQUEST_TEMPLATE.md` already carries.
 
 `CODE_OF_CONDUCT.md`: Baseline rules for community behavior. Ships as Contributor Covenant 3.0.
 
@@ -139,7 +145,11 @@ These live in `src/repository-addons/` and are never copied during generation �
 
 #### When the repository has Discussions
 
-`.github/DISCUSSION_TEMPLATE/<category-slug>.yml`: A discussion form, one file per category. Ships as `general.yml`; the file name has to be the slug of a real category or the form is silently never shown.
+`.github/DISCUSSION_TEMPLATE/<category-slug>.yml`: A discussion form, one file per category. The file name has to be the slug of a real category or the form is silently never shown. Two ship:
+
+`.github/DISCUSSION_TEMPLATE/general.yml`: For the question documentation could not have anticipated — whether the project handles a situation, which of two approaches fits. It routes anything the documentation *should* have answered to the issue tracker as a defect, which is a decision about this project rather than a neutral default.
+
+`.github/DISCUSSION_TEMPLATE/ideas.yml`: For working out whether something is worth building before anyone builds it. Asks for the problem before the solution, and sits upstream of the payload's `feature_request.yml` rather than duplicating it.
 
 #### When releases are published from GitHub
 
@@ -149,11 +159,13 @@ These live in `src/repository-addons/` and are never copied during generation �
 
 `_config.yml`: Jekyll's configuration, read when the Pages source is "Deploy from a branch".
 
-`.nojekyll`: Turns Jekyll off, for a site that is already built HTML or has a path starting with an underscore. Ships empty. Exactly one of these two is adopted: `.nojekyll` disables the processor `_config.yml` configures.
+`404.html`: The page GitHub Pages serves for any path under the site that does not exist. Served by the Pages web server rather than built, so it works whichever way the site is published — Jekyll or not. One self-contained file with nothing linked out: every stylesheet or script an error page references is another path that can fail.
+
+`.nojekyll`: Turns Jekyll off, for a site that is already built HTML or has a path starting with an underscore. Exactly one of these two is adopted: `.nojekyll` disables the processor `_config.yml` configures. It ships carrying a note explaining that choice, which is safe because Pages reads only whether the file exists and never what is in it.
 
 #### When the development environment ships with the repository
 
-`.devcontainer/devcontainer.json`: The container Codespaces and the editors' dev-container support build for this repository. Ships as a bare Debian image with no features, because the toolchains are what the template cannot know.
+`.devcontainer/devcontainer.json`: The container Codespaces and the editors' dev-container support build for this repository. Ships as a bare Debian image with no features, because the toolchains are what the template cannot know. Written as JSON with comments, which the dev container schema allows and `check-json` does not — both `.pre-commit-config.yaml` copies exclude the path for that reason.
 
 #### When the work is academically valuable
 
@@ -165,7 +177,7 @@ These live in `src/repository-addons/` and are never copied during generation �
 
 #### When a helper needs to be built before it runs
 
-`tools/`: Ships as an empty placeholder in `repository-addons/`, copied in only when the project needs a helper that must be built before it runs — a linter, a code generator, a protobuf plugin. Each gets its own `tools/<name>/` with its own manifest and source; a helper that's just a shell script belongs in `scripts/` instead.
+`tools/CLAUDE.md`: Creates `tools/` and owns it as a documented boundary — each helper gets its own `tools/<name>/` with its own manifest and source, and a helper that's just a shell script belongs in `scripts/` instead. Copied in only when the project needs a helper that must be built before it runs: a linter, a code generator, a protobuf plugin. Its sections ship seeded with what the template can know, including the trap: `scripts/check` reads the manifests at the repository root, so a tool whose language has no root manifest is built and tested by nobody. Being a child document, it has to be added to the root `CLAUDE.md`'s Child Index when adopted, or nothing walking the tree reaches it.
 
 ### Written During Generation
 

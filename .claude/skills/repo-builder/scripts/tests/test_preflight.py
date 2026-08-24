@@ -204,6 +204,38 @@ class AdoptTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("destination holding _config.yml", result.stderr)
 
+    def test_adopt_rejects_a_one_directional_pair_with_neither_half_present(self) -> None:
+        """AUTHORS names the copyright holders that the notices in the source
+        tree point at, and those notices grant nothing without a license."""
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._build_fixture(directory)
+            result = self._run_adopt(fixture, "AUTHORS")
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("must be adopted with its pair LICENSE", result.stderr)
+
+    def test_adopt_accepts_a_one_directional_pair_already_in_the_destination(self) -> None:
+        """The realistic sequence, and the one a seen-only check makes
+        impossible: LICENSE was adopted long ago, so it can be neither
+        requested again -- that is rejected as already present -- nor found."""
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._build_fixture(directory)
+            destination = Path(fixture["destination"])
+            (destination / "LICENSE").write_text("License text, verbatim.\n", encoding="utf-8")
+            subprocess.run(["git", "add", "LICENSE"], cwd=destination, check=True)
+            subprocess.run(
+                ["git", "commit", "--no-verify", "-m", "chore: adopt LICENSE"],
+                cwd=destination,
+                check=True,
+                stdout=subprocess.DEVNULL,
+            )
+
+            result = self._run_adopt(fixture, "AUTHORS")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["addons"][0]["path"], "AUTHORS")
+
 
 if __name__ == "__main__":
     unittest.main()

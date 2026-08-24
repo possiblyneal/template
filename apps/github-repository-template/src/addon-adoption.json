@@ -9,8 +9,25 @@
     "value_key groups one answer asked once: the repository owner is spelled three ways across three files."
   ],
   "files": {
-    ".env.example": { "authored_on_adoption": true, "slots": [], "reviews": [], "external": [] },
-
+    ".env.example": {
+      "slots": [],
+      "reviews": [
+        {
+          "section": "the variables listed, against what the code actually reads",
+          "decision": "The shipped entries are shapes -- an endpoint, an empty credential, a local override -- and none of them is a variable this repository has. Replace them with the real ones and delete the rest. The two ways it goes wrong are silent in opposite directions: a variable the code requires and this file omits fails at run time in someone else's checkout, with an error naming a key rather than the file it belongs in; a variable listed here that nothing reads sends them looking for a value to supply that is never consumed."
+        },
+        {
+          "section": "every value written into it",
+          "decision": "This file is committed and .env is not, which is the point of the pair and also its hazard: everything here is published. Give each variable its shape and never a working value. gitleaks runs at pre-commit and catches the formats it knows -- an AWS key, a GitHub token, a private key block -- and does not know a password, a database URL with credentials in it, or a token this project invented, so one of those reaches the remote with every check green. A real value committed once stays in the history after the next commit deletes it."
+        }
+      ],
+      "external": [
+        {
+          "step": "Confirm the destination ignores .env and does not ignore this file: `git check-ignore -v .env .env.example` should name a rule for the first and nothing for the second.",
+          "consequence": "The file's own first paragraph tells the reader that .env is gitignored and this one is not. That is true of the payload's .gitignore, and the addon is adopted into repositories whose .gitignore has been edited since. If the negation is missing, this file is ignored and the clone it exists to serve never sees it; if the .env rule is missing, the file's assurance is false at the moment someone fills a real credential into the copy beside it."
+        }
+      ]
+    },
     "README.md": {
       "slots": [
         {
@@ -67,7 +84,6 @@
         }
       ]
     },
-
     "SECURITY.md": {
       "slots": [
         {
@@ -97,7 +113,6 @@
         }
       ]
     },
-
     "SUPPORT.md": {
       "slots": [
         {
@@ -131,7 +146,6 @@
         }
       ]
     },
-
     ".github/DISCUSSION_TEMPLATE/general.yml": {
       "slots": [],
       "reviews": [
@@ -140,8 +154,8 @@
           "decision": "GitHub matches the file name to a discussion category slug, so this file serves the General category and nothing else. Rename it to the slug of the category it is for, taking that slug from the category's URL rather than guessing at how a name with an ampersand or a space is spelled. A name matching no category means the form is silently never shown, which is indistinguishable from having no form."
         },
         {
-          "section": "the questions in body",
-          "decision": "They ask what someone is trying to do and what they have already tried, which is the general-purpose pair. Replace them with what this project actually needs to answer a discussion, and keep the required flags honest: a required field someone cannot answer is a reason to close the tab rather than post."
+          "section": "the scope the intro sets",
+          "decision": "The form deliberately narrows General to the question documentation could not have anticipated, and sends anything the documentation should have answered to the issue tracker as a defect. That is a routing decision about this project, not a neutral default: a project that would rather answer usage questions in a thread has to edit the intro, because as written it tells those people to leave. Keep the questions and the required flags honest with whatever it says -- a required field someone cannot answer is a reason to close the tab rather than post."
         }
       ],
       "external": [
@@ -151,7 +165,29 @@
         }
       ]
     },
-
+    ".github/DISCUSSION_TEMPLATE/ideas.yml": {
+      "slots": [],
+      "reviews": [
+        {
+          "section": "the file name",
+          "decision": "Ideas is one of GitHub's default categories and its slug is `ideas`, so this file usually needs no rename. Confirm it against the category's URL anyway: a category that was renamed, deleted, or recreated has a different slug, and a name matching no category means the form is silently never shown."
+        },
+        {
+          "section": "the boundary against the issue tracker",
+          "decision": "This form asks whether something should be built; the payload's .github/ISSUE_TEMPLATE/feature_request.yml asks for something to be built. Adopting both without saying which comes first leaves a contributor choosing at random between two forms that look equally correct. Say in CONTRIBUTING.md that an idea is discussed here and filed there, or drop one of the two."
+        },
+        {
+          "section": "the participation dropdown",
+          "decision": "It asks whether the proposer wants to implement the idea, which is only worth asking of a project that accepts outside code. Remove it from a repository that does not, where the honest answer is never the first option and asking implies otherwise."
+        }
+      ],
+      "external": [
+        {
+          "step": "Enable Discussions at Settings -> General -> Features -> Discussions, and confirm the Ideas category exists.",
+          "consequence": "Without the feature there is no category to match and the form is inert. Nothing in this repository reports whether it is on."
+        }
+      ]
+    },
     "GOVERNANCE.md": {
       "slots": [
         {
@@ -172,7 +208,6 @@
       ],
       "external": []
     },
-
     "CODEOWNERS": {
       "slots": [
         {
@@ -202,7 +237,6 @@
         }
       ]
     },
-
     "CONTRIBUTING.md": {
       "slots": [
         {
@@ -235,7 +269,42 @@
       ],
       "external": []
     },
-
+    ".github/PULL_REQUEST_TEMPLATE/release.md": {
+      "slots": [],
+      "reviews": [
+        {
+          "section": "how anyone reaches it",
+          "decision": "Nothing in GitHub's interface offers a named template. A pull request gets .github/PULL_REQUEST_TEMPLATE.md unless the URL asks for this file by name with ?expand=1&template=<name>.md, which means hand-editing a URL. The payload's .github/PULL_REQUEST_TEMPLATE.md ships the fix commented out at the top -- a line of links that become clickable from that description's Preview tab. Uncomment it, and keep only the templates actually adopted. Left commented, this is a template nobody opens, and nothing reports that."
+        },
+        {
+          "section": "whether this repository releases this way",
+          "decision": "The questions assume a tagged version cut from a range of commits, with a changelog entry to match. A project that publishes continuously, or from a branch rather than a tag, is answering a form about a process it does not run -- and a form answered mechanically stops being read. Rewrite it around the release this project actually performs, or do not adopt it."
+        },
+        {
+          "section": "the checklist",
+          "decision": "Its first and third items reference a changelog; the second, on the version being recorded consistently, does not and stays either way. Adopted without the CHANGELOG.md addon, the changelog items ask a reviewer to check a file that is not there, and the usual outcome is a ticked box meaning nothing. Drop those two or adopt the changelog."
+        }
+      ],
+      "external": []
+    },
+    ".github/PULL_REQUEST_TEMPLATE/hotfix.md": {
+      "slots": [],
+      "reviews": [
+        {
+          "section": "how anyone reaches it",
+          "decision": "Nothing in GitHub's interface offers a named template. A pull request gets .github/PULL_REQUEST_TEMPLATE.md unless the URL asks for this file by name with ?expand=1&template=<name>.md, which means hand-editing a URL. The payload's .github/PULL_REQUEST_TEMPLATE.md ships the fix commented out at the top -- a line of links that become clickable from that description's Preview tab. Uncomment it, and keep only the templates actually adopted. Left commented, this is a template nobody opens, and nothing reports that."
+        },
+        {
+          "section": "what counts as a hotfix here",
+          "decision": "This template is shorter than the default, which makes it the path of least resistance for anyone in a hurry. It stays rare only if the bar is written down: production impact, and a cost to waiting that is stated rather than assumed. Put that bar in CONTRIBUTING.md next to adopting this file, or the exception becomes the fast lane."
+        },
+        {
+          "section": "the last checklist item",
+          "decision": "It asks whether the fix landed on every branch that needs it, which presumes a release line separate from the default branch. On a repository with one long-lived branch there is nothing to answer and the item trains people to tick without reading. Remove it unless the project really maintains more than one."
+        }
+      ],
+      "external": []
+    },
     "CODE_OF_CONDUCT.md": {
       "slots": [
         {
@@ -252,7 +321,6 @@
       ],
       "external": []
     },
-
     "LICENSE": {
       "slots": [],
       "reviews": [
@@ -267,11 +335,51 @@
       ],
       "external": []
     },
-
+    "AUTHORS": {
+      "slots": [
+        {
+          "token": "REPLACE-PROJECT-TITLE",
+          "value_key": "project-title",
+          "what": "The project name, as it will read inside the copyright notices in the source files: \"The <project> Authors\". Shared with README.md, CONTRIBUTING.md, CITATION.cff, _config.yml, and .devcontainer/devcontainer.json, so it is the same answer asked once."
+        },
+        {
+          "token": "REPLACE-COPYRIGHT-HOLDER",
+          "value_key": "copyright-holder",
+          "what": "The first copyright holder, as a legal name rather than a GitHub handle -- the person or the company that owns the copyright, since those are frequently not the same and only one of them is enforceable."
+        }
+      ],
+      "reviews": [
+        {
+          "section": "the source files this file exists to serve",
+          "decision": "Adopting AUTHORS is half a change. Its value is that copyright notices in the source tree stop naming individuals and read \"Copyright (C) <year> The <project> Authors\" instead, with an SPDX line above them, so the list changes in one place. Write those notices in the same change. Without them this is a list nothing references, and it will be out of date before anyone notices it is not being read."
+        },
+        {
+          "section": "whether the project needs it",
+          "decision": "It earns its place when contributions arrive from more than one legal entity, when a contributor agreement is in play, or when files are likely to be copied out of this repository on their own. A single-author project gets nothing from it that a name in the notice does not already give, and gains a second list to keep current."
+        },
+        {
+          "section": "LICENSE is not edited to match",
+          "decision": "It cannot be. LICENSE is the license text reproduced verbatim under its own terms, and the angle-bracket fields in its appendix are instructions describing what to write in your source files -- not blanks to fill in there. Every change this addon implies happens in the source tree, in README.md, and in CITATION.cff if that addon is also taken."
+        },
+        {
+          "section": "who keeps it current",
+          "decision": "Nothing generates this file and no check notices when a new entity starts contributing without being added. Name the moment it gets updated -- reviewing a first pull request from a new employer, or countersigning an agreement -- in CONTRIBUTING.md. A copyright list maintained by whoever remembers is a copyright list that is wrong."
+        }
+      ],
+      "external": []
+    },
     "CHANGELOG.md": {
       "slots": [
-        { "token": "<owner>", "value_key": "repo-owner", "what": "Repository owner in the Unreleased compare link at the bottom." },
-        { "token": "<repo>", "value_key": "repo-name", "what": "Repository name in the same link." }
+        {
+          "token": "<owner>",
+          "value_key": "repo-owner",
+          "what": "Repository owner in the Unreleased compare link at the bottom."
+        },
+        {
+          "token": "<repo>",
+          "value_key": "repo-name",
+          "what": "Repository name in the same link."
+        }
       ],
       "reviews": [
         {
@@ -281,13 +389,11 @@
       ],
       "external": []
     },
-
     ".claude/rules/changelog.md": {
       "slots": [],
       "reviews": [],
       "external": []
     },
-
     ".github/release.yml": {
       "slots": [],
       "reviews": [
@@ -302,7 +408,6 @@
       ],
       "external": []
     },
-
     "CONTRIBUTORS.md": {
       "slots": [],
       "reviews": [],
@@ -313,23 +418,49 @@
         }
       ]
     },
-
     ".all-contributorsrc": {
       "slots": [
-        { "token": "REPO-OWNER", "value_key": "repo-owner", "what": "projectOwner. Required, and the CLI throws rather than guessing, so this failure is at least loud. It builds the profile and commit links, so a wrong value gives a table of dead links instead of an error." },
-        { "token": "REPO-NAME", "value_key": "repo-name", "what": "projectName. Same." }
+        {
+          "token": "REPO-OWNER",
+          "value_key": "repo-owner",
+          "what": "projectOwner. Required, and the CLI throws rather than guessing, so this failure is at least loud. It builds the profile and commit links, so a wrong value gives a table of dead links instead of an error."
+        },
+        {
+          "token": "REPO-NAME",
+          "value_key": "repo-name",
+          "what": "projectName. Same."
+        }
       ],
       "reviews": [],
       "external": []
     },
-
     "CITATION.cff": {
       "slots": [
-        { "token": "REPLACE-PROJECT-TITLE", "value_key": "project-title", "what": "title. Every active REPLACE- value here is schema-valid, so a half-filled file validates, renders, and hands out a BibTeX entry crediting the placeholder. Nothing warns anyone." },
-        { "token": "REPLACE-FAMILY-NAME", "value_key": "author-family-name", "what": "authors[0].family-names." },
-        { "token": "REPLACE-GIVEN-NAME", "value_key": "author-given-name", "what": "authors[0].given-names." },
-        { "token": "REPO-OWNER", "value_key": "repo-owner", "what": "repository-code URL." },
-        { "token": "REPO-NAME", "value_key": "repo-name", "what": "repository-code URL." }
+        {
+          "token": "REPLACE-PROJECT-TITLE",
+          "value_key": "project-title",
+          "what": "title. Every active REPLACE- value here is schema-valid, so a half-filled file validates, renders, and hands out a BibTeX entry crediting the placeholder. Nothing warns anyone."
+        },
+        {
+          "token": "REPLACE-FAMILY-NAME",
+          "value_key": "author-family-name",
+          "what": "authors[0].family-names."
+        },
+        {
+          "token": "REPLACE-GIVEN-NAME",
+          "value_key": "author-given-name",
+          "what": "authors[0].given-names."
+        },
+        {
+          "token": "REPO-OWNER",
+          "value_key": "repo-owner",
+          "what": "repository-code URL."
+        },
+        {
+          "token": "REPO-NAME",
+          "value_key": "repo-name",
+          "what": "repository-code URL."
+        }
       ],
       "reviews": [
         {
@@ -347,7 +478,6 @@
       ],
       "external": []
     },
-
     ".github/FUNDING.yml": {
       "slots": [],
       "reviews": [
@@ -358,7 +488,6 @@
       ],
       "external": []
     },
-
     "_config.yml": {
       "slots": [
         {
@@ -393,7 +522,6 @@
         }
       ]
     },
-
     ".nojekyll": {
       "slots": [],
       "reviews": [
@@ -409,7 +537,35 @@
         }
       ]
     },
-
+    "404.html": {
+      "slots": [
+        {
+          "token": "REPLACE-SITE-ROOT",
+          "value_key": "site-root",
+          "what": "The path this site is served from, trailing slash included: \"/\" for a user or organization site, \"/<repository-name>/\" for a project site. The distinction matters here more than anywhere else on the site -- a bare \"/\" on a project site sends someone who already took a wrong turn out of the project entirely, onto the account's own page."
+        }
+      ],
+      "reviews": [
+        {
+          "section": "whether the project publishes a site at all",
+          "decision": "GitHub Pages is the only thing that reads this file. In a repository with Pages off it is an HTML file nobody serves, and its presence reads as a site that exists."
+        },
+        {
+          "section": "the styling and the wording",
+          "decision": "It ships generic and self-contained on purpose: every stylesheet, font, or script referenced from an error page is itself a path that can fail, and a broken 404 is the one failure nobody notices until it matters. Match it to the site's design by inlining, not by linking out. Add a search box or a link to the documentation index if the site is large enough that \"back to the start\" is not useful."
+        }
+      ],
+      "external": [
+        {
+          "step": "Place the file at the root of what Pages publishes -- the repository root for a branch source, the root of the uploaded artifact for a workflow source -- and keep the name 404.html exactly.",
+          "consequence": "Anywhere else, Pages never finds it and serves GitHub's own 404 instead, which is indistinguishable from having no custom page because that is what it is."
+        },
+        {
+          "step": "After the site deploys, request a path that does not exist and confirm this page is what comes back.",
+          "consequence": "It is the one page on the site no link points at, so it is the one page that stays broken unnoticed."
+        }
+      ]
+    },
     ".devcontainer/devcontainer.json": {
       "slots": [
         {
@@ -421,7 +577,7 @@
       "reviews": [
         {
           "section": "the image, and the features added to it",
-          "decision": "It ships as the generic Debian base image with no features, which builds and gives a shell and nothing else -- deliberately, because the toolchains a repository needs are exactly what the template cannot know. Add the language features this repository's manifests require, or replace the image outright. An unchanged image is not broken, it is empty, and the failure shows up as a missing compiler at the first build rather than at container creation."
+          "decision": "It ships as the generic Debian base image with no features, which builds and gives a shell and nothing else -- deliberately, because the toolchains a repository needs are exactly what the template cannot know. Add the language features this repository's manifests require, or replace the image outright. An unchanged image is not broken, it is empty, and the failure shows up as a missing compiler at the first build rather than at container creation. Every feature added here is version-pinned and nothing bumps it: add `package-ecosystem: devcontainers` to .github/dependabot.yml in the same edit. The file ships without it because an ecosystem entry naming a manifest the repository does not have fails with dependency_file_not_found rather than being skipped, so the entry is wrong until the first feature exists and required from then on."
         },
         {
           "section": "the image tag",
@@ -430,6 +586,24 @@
         {
           "section": "the absent lifecycle command",
           "decision": "No postCreateCommand ships. scripts/doctor is the natural candidate once the image carries the toolchains it checks, and the wrong one before that: it would report every missing toolchain at creation and make a working container look broken. Add it in the same edit that adds the features it verifies."
+        }
+      ],
+      "external": []
+    },
+    "tools/CLAUDE.md": {
+      "slots": [],
+      "reviews": [
+        {
+          "section": "the root manifest the first tool needs",
+          "decision": "The warning this file carries is the whole reason it is worth copying: scripts/check runs from the repository root and reads the manifests it finds there, so a tool with its own go.mod or pyproject.toml and no root counterpart is linted, tested, and built by nobody, with nothing reporting the gap. Add the root manifest in the same change that adds the first tool."
+        },
+        {
+          "section": "the Ownership list",
+          "decision": "It ships as a shape -- one `tools/<name>/` bullet standing for an entry -- because the template cannot know what this directory will hold. Replace it with the real directories as they arrive, one line each. Left as shipped, the file documents a boundary while leaving the directory itself unnavigable, which is worse than no file: a reader who finds this one stops looking."
+        },
+        {
+          "section": "registering it with the parent",
+          "decision": "The documentation contract is walked from the root downward through Child Index entries, so a child CLAUDE.md no parent lists is never read. Add tools/CLAUDE.md to the root CLAUDE.md's Child Index in the same change that adopts it."
         }
       ],
       "external": []
