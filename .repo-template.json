@@ -27,7 +27,6 @@
     {"path": ".claude/settings.json", "mode": "managed"},
     {"path": ".pre-commit-config.yaml", "mode": "managed"},
     {"path": ".commitlintrc.yaml", "mode": "managed"},
-    {"path": "zizmor.yml", "mode": "managed"},
     {"path": ".gitattributes", "mode": "managed"},
     {"path": ".gitignore", "mode": "managed"},
     {"path": ".worktreeinclude", "mode": "managed"},

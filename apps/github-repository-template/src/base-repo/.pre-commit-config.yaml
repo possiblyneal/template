@@ -132,11 +132,11 @@ repos:
   # unpinned third-party action, permissions wider than the job needs. Neither
   # reports the other's findings.
   #
-  # --min-severity medium, with the pinning policy in zizmor.yml, is what this
-  # repository passes at. Nothing is suppressed to reach it: the two medium
-  # findings it once left — workflow-level security-events: write in codeql.yml
-  # and an unpinned trivy binary in security.yml — were fixed rather than
-  # ignored. Keep it that way. A per-rule ignore is a claim the finding is
+  # --min-severity medium, with the pinning policy in .github/zizmor.yml, is
+  # what this repository passes at. Nothing is suppressed to reach it: the two
+  # medium findings it once left — workflow-level security-events: write in
+  # codeql.yml and an unpinned trivy binary in security.yml — were fixed rather
+  # than ignored. Keep it that way. A per-rule ignore is a claim the finding is
   # wrong, and neither of those was.
   #
   # The remaining low findings are artipacked, which wants persist-credentials:
@@ -145,7 +145,7 @@ repos:
     rev: v1.29.0
     hooks:
       - id: zizmor
-        args: ["--no-progress", "--config", "zizmor.yml", "--min-severity", "medium"]
+        args: ["--no-progress", "--config", ".github/zizmor.yml", "--min-severity", "medium"]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0

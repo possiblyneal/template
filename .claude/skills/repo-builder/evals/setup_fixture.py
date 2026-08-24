@@ -160,6 +160,10 @@ def addon_payload(repo: Path) -> None:
         "repository-addons/.all-contributorsrc",
         '{\n  "projectOwner": "REPO-OWNER",\n  "projectName": "REPO-NAME"\n}\n',
     )
+    # The GitHub Pages exclusive pair, here so preflight's rejection of the two
+    # together has something real to reject.
+    write(repo, "repository-addons/_config.yml", "theme: minima\n")
+    write(repo, "repository-addons/.nojekyll", "")
     index = {
         "_about": ["Fixture addon adoption index."],
         "files": {
@@ -192,6 +196,8 @@ def addon_payload(repo: Path) -> None:
                 "reviews": [],
                 "external": [],
             },
+            "_config.yml": {"slots": [], "reviews": [], "external": []},
+            ".nojekyll": {"slots": [], "reviews": [], "external": []},
         },
     }
     write(repo, "addon-adoption.json", json.dumps(index, indent=2) + "\n")

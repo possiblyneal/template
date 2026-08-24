@@ -1,0 +1,43 @@
+# Jekyll's configuration, read by GitHub Pages when the Pages source is "Deploy
+# from a branch". A site published by a GitHub Actions workflow is built however
+# that workflow says, and this file is inert there unless the workflow runs
+# Jekyll itself.
+#
+# Adopt this file or .nojekyll, never both: .nojekyll turns off the processor
+# this file configures, and the pair together is one of them doing nothing.
+
+title: REPLACE-PROJECT-TITLE
+description: REPLACE-PROJECT-DESCRIPTION
+theme: minima
+
+# Jekyll builds from the root of whatever it is pointed at and copies anything
+# it does not recognize straight into the published site, so every path that is
+# the project rather than the site has to be named here.
+#
+# The first block is Jekyll's own default exclusion list, repeated on purpose.
+# GitHub Pages pins Jekyll 3.10.0, and in Jekyll 3 an `exclude` key REPLACES the
+# defaults rather than adding to them -- omit them here and a repository with a
+# node_modules/ or a vendor/ starts publishing it. Repeating them is harmless
+# on any newer Jekyll a workflow-built site might use: the list is then the
+# defaults plus this repository's own paths either way.
+exclude:
+  - .sass-cache/
+  - .jekyll-cache/
+  - gemfiles/
+  - Gemfile
+  - Gemfile.lock
+  - node_modules/
+  - vendor/bundle/
+  - vendor/cache/
+  - vendor/gems/
+  - vendor/ruby/
+  # This repository's own directories. Delete the line for whichever one holds
+  # the site, if the site lives in the tree rather than beside it.
+  - apps/
+  - docs/
+  - libs/
+  - scripts/
+  - tests/
+  - tmp/
+  - tools/
+  - CLAUDE.md
