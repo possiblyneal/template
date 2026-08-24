@@ -305,7 +305,11 @@ EOF
 chmod +x bin/go
 PATH="$PWD/bin:$PATH" _capability_build_go
 status=$?
-if (( status == 0 )) && [[ "$(tr '\n' ' ' < "$marker")" == "$PWD/apps/one $PWD/apps/two " ]]; then
+# Two conditions, two messages: a status-only failure that printed the visited
+# list would send the next reader hunting for a visiting bug that is not there.
+if (( status != 0 )); then
+  fail "go_each returned $status though every stubbed module succeeded"
+elif [[ "$(tr '\n' ' ' < "$marker")" == "$PWD/apps/one $PWD/apps/two " ]]; then
   pass
 else
   fail "go_each visited $(tr '\n' ' ' < "$marker")rather than both workspace modules"
