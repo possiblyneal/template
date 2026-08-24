@@ -282,6 +282,67 @@ else
 fi
 cleanup
 
+# --- go checks must reach a module that is not at the repository root --------
+
+# `./...` matches only packages inside a module, and the root of a Go workspace
+# is not itself in one, so a single `go build ./...` from the root refuses the
+# pattern and checks nothing -- a green run over every package the repository
+# actually has. go_each enters each module instead. The stub consumes stdin, so
+# this also covers the module list being read on fd 3 rather than fd 0.
+fixture "go_each runs the command in every workspace module"
+marker="$PWD/visited"
+: > "$marker"
+mkdir -p bin apps/one apps/two
+cat > bin/go <<EOF
+#!/usr/bin/env bash
+if [[ "\$1" == list ]]; then
+  printf '%s\n' "$PWD/apps/one" "$PWD/apps/two"
+  exit 0
+fi
+cat >/dev/null
+pwd >> "$marker"
+EOF
+chmod +x bin/go
+PATH="$PWD/bin:$PATH" _capability_build_go
+if [[ "$(tr '\n' ' ' < "$marker")" == "$PWD/apps/one $PWD/apps/two " ]]; then
+  pass
+else
+  fail "go_each visited $(tr '\n' ' ' < "$marker")rather than both workspace modules"
+fi
+cleanup
+
+# A listing that fails means the module graph could not be read. Reporting that
+# as a pass is the silent green run this helper exists to prevent.
+fixture "a failed module listing is not read as a passing build"
+mkdir bin
+cat > bin/go <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+chmod +x bin/go
+if PATH="$PWD/bin:$PATH" _capability_build_go >/dev/null 2>&1; then
+  fail "a failed module listing was reported as a passing build"
+else
+  pass
+fi
+cleanup
+
+# An empty listing is the same failure wearing a zero exit status: no module was
+# entered, so nothing was built.
+fixture "an empty module listing is not read as a passing build"
+mkdir bin
+cat > bin/go <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod +x bin/go
+if PATH="$PWD/bin:$PATH" _capability_build_go >/dev/null 2>&1; then
+  fail "an empty module listing was reported as a passing build"
+else
+  pass
+fi
+cleanup
+
 # --- a format-check adapter must not swallow the tool's own failure ----------
 
 # gofmt exits nonzero with empty stdout on a file it cannot parse. Reading only
