@@ -15,7 +15,7 @@ type: Note
 
 `.github/actions/setup-toolchains/`: Installs a toolchain for each language manifest present in the repository.
 
-`zizmor.yml`: Configuration for zizmor, a GitHub Actions workflow security linter run through pre-commit.
+`.github/zizmor.yml`: Configuration for zizmor, a GitHub Actions workflow security linter run through pre-commit.
 
 `.github/dependabot.yml`: Opens one grouped weekly pull request updating pinned action versions in `.github/`.
 

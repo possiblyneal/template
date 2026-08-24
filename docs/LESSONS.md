@@ -127,11 +127,11 @@ Workflow registration and run dispatch are separate services. A workflow can reg
 
 `.pre-commit-config.yaml` runs zizmor at `--min-severity medium`, and this repository passes with nothing suppressed. Two medium findings were fixed rather than ignored to get there: `codeql.yml` set `security-events: write` at the workflow level where the detect job inherited it, and `security.yml` pinned `setup-trivy` by commit while its `version` input still defaulted to `latest`.
 
-**Do:** Fix the finding, or raise the threshold and say why. Reach for `rules.<id>.ignore` in `zizmor.yml` only when the finding is genuinely wrong about this repository.
+**Do:** Fix the finding, or raise the threshold and say why. Reach for `rules.<id>.ignore` in `.github/zizmor.yml` only when the finding is genuinely wrong about this repository.
 
-**Why:** A threshold is one visible line that reads as "known findings below this level". An ignore list is a set of individually plausible entries that nobody revisits, and it only grows. The pinning policy in `zizmor.yml` is the deliberate exception: it encodes a trust boundary — ref-pin first-party, hash-pin third-party — rather than dismissing a finding.
+**Why:** A threshold is one visible line that reads as "known findings below this level". An ignore list is a set of individually plausible entries that nobody revisits, and it only grows. The pinning policy in `.github/zizmor.yml` is the deliberate exception: it encodes a trust boundary — ref-pin first-party, hash-pin third-party — rather than dismissing a finding.
 
-**Source:** [.pre-commit-config.yaml](../.pre-commit-config.yaml), [zizmor.yml](../zizmor.yml)
+**Source:** [.pre-commit-config.yaml](../.pre-commit-config.yaml), [.github/zizmor.yml](../.github/zizmor.yml)
 
 ## A per-directory CLAUDE.md is what loads — don't split the contract into a separate file
 
