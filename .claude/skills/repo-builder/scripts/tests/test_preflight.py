@@ -173,6 +173,17 @@ class AdoptTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("must be adopted with its pair", result.stderr)
 
+    def test_adopt_rejects_both_halves_of_an_exclusive_choice(self) -> None:
+        """_config.yml and .nojekyll cancel each other, and nothing downstream
+        would say so: both files copy, both are valid, and the site builds with
+        its configuration never read."""
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._build_fixture(directory)
+            result = self._run_adopt(fixture, "_config.yml", ".nojekyll")
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("cannot be adopted with", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

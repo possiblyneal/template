@@ -23,6 +23,13 @@ ADDON_PAIRS = {
     "CHANGELOG.md": ".claude/rules/changelog.md",
     ".claude/rules/changelog.md": "CHANGELOG.md",
 }
+# The inverse: adopting both is the defect. `.nojekyll` turns off the Jekyll
+# processor `_config.yml` exists to configure, and neither file complains --
+# the site builds and its configuration is simply never read.
+ADDON_EXCLUSIVE = {
+    "_config.yml": ".nojekyll",
+    ".nojekyll": "_config.yml",
+}
 
 
 class PreflightError(Exception):
@@ -439,6 +446,9 @@ def adopt_preflight(arguments: argparse.Namespace) -> dict[str, object]:
         pair = ADDON_PAIRS.get(addon)
         if pair and pair not in seen:
             raise PreflightError(f"addon {addon} must be adopted with its pair {pair}")
+        exclusive = ADDON_EXCLUSIVE.get(addon)
+        if exclusive and exclusive in seen:
+            raise PreflightError(f"addon {addon} cannot be adopted with {exclusive}")
 
     addons: list[dict[str, object]] = []
     for addon in requested:

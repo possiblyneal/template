@@ -26,25 +26,35 @@ PAYLOAD = REPOSITORY_ROOT / "apps/github-repository-template/src/base-repo"
 MANIFEST = REPOSITORY_ROOT / "apps/github-repository-template/src/addon-adoption.json"
 
 # .gitkeep exists to make an empty directory survive Git, and is never adopted.
+# Ignoring it on the payload side too is harmless: a shadowed .gitkeep would
+# overwrite a placeholder with a placeholder.
 IGNORED = {".gitkeep"}
 
 
-def addon_paths():
-    """Every adoptable file, as a path relative to the addons directory."""
+def files_under(directory):
+    """Every file in a tree, as a path relative to that tree's root.
+
+    Raises rather than returning an empty set when the directory is missing: a
+    moved or renamed tree would otherwise turn every comparison below into a
+    comparison against nothing, and pass.
+    """
+    if not directory.is_dir():
+        raise AssertionError(f"expected a directory at {directory}")
     return {
-        str(path.relative_to(ADDONS))
-        for path in ADDONS.rglob("*")
+        str(path.relative_to(directory))
+        for path in directory.rglob("*")
         if path.is_file() and path.name not in IGNORED
     }
 
 
+def addon_paths():
+    """Every adoptable file, as a path relative to the addons directory."""
+    return files_under(ADDONS)
+
+
 def payload_paths():
     """Every file the payload ships, as a path relative to the subtree."""
-    return {
-        str(path.relative_to(PAYLOAD))
-        for path in PAYLOAD.rglob("*")
-        if path.is_file()
-    }
+    return files_under(PAYLOAD)
 
 
 def manifest_entries():
