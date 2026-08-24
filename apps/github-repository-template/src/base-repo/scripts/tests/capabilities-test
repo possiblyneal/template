@@ -314,10 +314,16 @@ cleanup
 # A listing that fails means the module graph could not be read. Reporting that
 # as a pass is the silent green run this helper exists to prevent.
 fixture "a failed module listing is not read as a passing build"
-mkdir bin
-cat > bin/go <<'EOF'
+mkdir -p bin apps/one
+cat > bin/go <<EOF
 #!/usr/bin/env bash
-exit 1
+# Fails the listing only. Every other invocation succeeds, so the case cannot
+# pass by the build itself failing.
+if [[ "\$1" == list ]]; then
+  printf '%s\n' "$PWD/apps/one"
+  exit 1
+fi
+exit 0
 EOF
 chmod +x bin/go
 if PATH="$PWD/bin:$PATH" _capability_build_go >/dev/null 2>&1; then

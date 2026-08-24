@@ -178,7 +178,10 @@ swift_each() {
 go_each() {
   local dir status=0 modules
   modules="$(go list -m -f '{{.Dir}}')" || return 1
-  [[ -n "$modules" ]] || return 1
+  if [[ -z "$modules" ]]; then
+    echo "go list -m named no module directories" >&2
+    return 1
+  fi
 
   while IFS= read -r dir <&3; do
     [[ -n "$dir" ]] || continue

@@ -52,7 +52,7 @@ Where a new file goes, and why the boundary exists:
 - `docs/specs/` — contracts spanning apps. Single-unit specs stay with their unit.
 - `docs/adrs/` — one repo-wide numbered sequence. See `docs/CLAUDE.md`.
 
-A package under `apps/` or `libs/` whose language has no root manifest fails the run rather than passing, because every check runs from the repository root and nothing would look at it. The failure names the root manifest to add.
+A package under `apps/` or `libs/` whose language has no root manifest fails the run rather than passing, because the root manifest is the only thing that names it: a check reaches a nested package by being told where it is, never by finding it. The failure names the root manifest to add.
 
 ## Repository settings
 
