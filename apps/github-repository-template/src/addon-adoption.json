@@ -269,7 +269,7 @@
       "reviews": [
         {
           "section": "how anyone reaches it",
-          "decision": "Nothing in GitHub's interface offers a named template. A pull request gets .github/PULL_REQUEST_TEMPLATE.md unless the URL asks for this file by name with ?expand=1&template=<name>.md, which means hand-editing a URL. The usual fix is to link the named templates from the default one -- the links are clickable from its Preview tab -- so decide whether this template is reachable by clicking or only by people who already know it exists. Left unlinked, it is a template nobody opens and nothing reports that."
+          "decision": "Nothing in GitHub's interface offers a named template. A pull request gets .github/PULL_REQUEST_TEMPLATE.md unless the URL asks for this file by name with ?expand=1&template=<name>.md, which means hand-editing a URL. The payload's .github/PULL_REQUEST_TEMPLATE.md ships the fix commented out at the top -- a line of links that become clickable from that description's Preview tab. Uncomment it, and keep only the templates actually adopted. Left commented, this is a template nobody opens, and nothing reports that."
         },
         {
           "section": "whether this repository releases this way",
@@ -287,7 +287,7 @@
       "reviews": [
         {
           "section": "how anyone reaches it",
-          "decision": "Nothing in GitHub's interface offers a named template. A pull request gets .github/PULL_REQUEST_TEMPLATE.md unless the URL asks for this file by name with ?expand=1&template=<name>.md, which means hand-editing a URL. The usual fix is to link the named templates from the default one -- the links are clickable from its Preview tab -- so decide whether this template is reachable by clicking or only by people who already know it exists. Left unlinked, it is a template nobody opens and nothing reports that."
+          "decision": "Nothing in GitHub's interface offers a named template. A pull request gets .github/PULL_REQUEST_TEMPLATE.md unless the URL asks for this file by name with ?expand=1&template=<name>.md, which means hand-editing a URL. The payload's .github/PULL_REQUEST_TEMPLATE.md ships the fix commented out at the top -- a line of links that become clickable from that description's Preview tab. Uncomment it, and keep only the templates actually adopted. Left commented, this is a template nobody opens, and nothing reports that."
         },
         {
           "section": "what counts as a hotfix here",
@@ -594,7 +594,7 @@
         },
         {
           "section": "the Ownership list",
-          "decision": "It ships empty because the template cannot know what this directory will hold. Add each tools/<name>/ to it as the tool arrives, or the file documents a boundary while leaving the directory itself unnavigable -- which is worse than no file, because a reader who finds this one stops looking."
+          "decision": "It ships as a shape -- one `tools/<name>/` bullet standing for an entry -- because the template cannot know what this directory will hold. Replace it with the real directories as they arrive, one line each. Left as shipped, the file documents a boundary while leaving the directory itself unnavigable, which is worse than no file: a reader who finds this one stops looking."
         },
         {
           "section": "registering it with the parent",

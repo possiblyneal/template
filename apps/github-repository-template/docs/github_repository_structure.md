@@ -21,7 +21,7 @@ type: Note
 
 `.github/ISSUE_TEMPLATE/`: Structured issue forms — `bug_report.yml`, `feature_request.yml`, and `config.yml`, which disables blank issues and carries a commented-out `contact_links` block to uncomment once a destination for questions exists.
 
-`.github/PULL_REQUEST_TEMPLATE.md`: Structures a pull request description for review. This is the one a pull request gets by default; the named templates under `.github/PULL_REQUEST_TEMPLATE/` are addons, reachable only by URL and only if this file links them.
+`.github/PULL_REQUEST_TEMPLATE.md`: Structures a pull request description for review. This is the one a pull request gets by default. It ships a commented-out line of links to the named templates under `.github/PULL_REQUEST_TEMPLATE/`, which are addons: nothing in GitHub's interface offers a named template, so uncommenting that line is what makes them reachable once the directory is adopted.
 
 ### AI Directives
 
@@ -129,7 +129,7 @@ These live in `src/repository-addons/` and are never copied during generation �
 
 `.github/PULL_REQUEST_TEMPLATE/release.md`: A pull request form for cutting a release — the version and range, what is shipping, breaking changes, migrations, and what publishing cannot undo.
 
-`.github/PULL_REQUEST_TEMPLATE/hotfix.md`: A pull request form for a production emergency. Shorter than the default on purpose, and the shortening is the point: it asks what is broken, why it cannot wait, and — the section the default does not have — which parts of the normal process were skipped. Both of these are reachable only through a `?expand=1&template=<name>.md` URL, so the payload's `.github/PULL_REQUEST_TEMPLATE.md` has to link them or nobody opens them.
+`.github/PULL_REQUEST_TEMPLATE/hotfix.md`: A pull request form for a production emergency. Shorter than the default on purpose, and the shortening is the point: it asks what is broken, why it cannot wait, and — the section the default does not have — which parts of the normal process were skipped. Both are reachable only through a `?expand=1&template=<name>.md` URL, so adopting either means uncommenting the line of links the payload's `.github/PULL_REQUEST_TEMPLATE.md` already carries.
 
 `CODE_OF_CONDUCT.md`: Baseline rules for community behavior. Ships as Contributor Covenant 3.0.
 

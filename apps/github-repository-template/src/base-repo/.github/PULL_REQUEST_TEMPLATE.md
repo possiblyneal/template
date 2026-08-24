@@ -1,3 +1,17 @@
+<!-- Named templates live in .github/PULL_REQUEST_TEMPLATE/, and nothing in
+     GitHub's interface offers them: a pull request gets this file unless the
+     URL asks for one by name. The links below are what make them reachable by
+     clicking -- from the Preview tab of this description, before it is
+     submitted.
+
+     Commented out because that directory is a repository addon and is not here
+     by default. A link to a template that does not exist opens a blank
+     description with nothing explaining why, which is worse than no link.
+     Uncomment the line below once the directory is adopted, keep only the
+     templates actually taken, and add any others to it. -->
+
+<!-- Not an ordinary change? [Release](?expand=1&template=release.md) · [Hotfix](?expand=1&template=hotfix.md) -->
+
 ## Summary
 
 <!-- What changed and why. Two or three sentences. -->
