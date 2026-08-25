@@ -354,6 +354,80 @@ else
 fi
 cleanup
 
+# --- the go dev adapter must find the main package, not assume it is here ----
+
+# `go run .` needs a main package in the current directory. The workspace root
+# has none, and an app whose entry point sits under src/ has none at its own
+# root either, so `scripts/dev` reported `no Go files` in both places.
+fixture "dev go runs the module's one main package wherever it sits"
+marker="$PWD/ran"
+mkdir -p bin apps/one
+cat > bin/go <<EOF
+#!/usr/bin/env bash
+case "\$1:\$2" in
+  list:-m) printf '%s\n' "$PWD/apps/one"; exit 0 ;;
+  list:*)  cat >/dev/null; printf '%s\n' example.com/app/src/app; exit 0 ;;
+  run:*)   printf '%s\n' "\$2" > "$marker"; exit 0 ;;
+esac
+EOF
+chmod +x bin/go
+PATH="$PWD/bin:$PATH" _capability_dev_go >/dev/null 2>&1
+status=$?
+if (( status != 0 )); then
+  fail "dev go returned $status though the stubbed run succeeded"
+elif [[ "$(cat "$marker")" == example.com/app/src/app ]]; then
+  pass
+else
+  fail "dev go ran $(cat "$marker") rather than the module's main package"
+fi
+cleanup
+
+# A dev server is one foreground process, so which of several to start has to be
+# said. Picking one would start the wrong program as often as the right one.
+fixture "dev go refuses several main packages rather than choosing one"
+mkdir -p bin apps/one
+cat > bin/go <<EOF
+#!/usr/bin/env bash
+case "\$1:\$2" in
+  list:-m) printf '%s\n' "$PWD/apps/one"; exit 0 ;;
+  list:*)  cat >/dev/null; printf '%s\n' example.com/a example.com/b; exit 0 ;;
+  run:*)   exit 0 ;;
+esac
+EOF
+chmod +x bin/go
+output="$(PATH="$PWD/bin:$PATH" _capability_dev_go 2>&1)"
+status=$?
+if (( status == 0 )); then
+  fail "dev go started something with two main packages to choose between"
+elif [[ "$output" == *example.com/a* && "$output" == *example.com/b* ]]; then
+  pass
+else
+  fail "dev go refused without naming the candidates: $output"
+fi
+cleanup
+
+# A module with no main package has no dev server, which is the no-runner
+# outcome rather than a failure -- a library is not broken for being a library.
+fixture "dev go reports no runner when the module has no main package"
+mkdir -p bin apps/one
+cat > bin/go <<EOF
+#!/usr/bin/env bash
+case "\$1:\$2" in
+  list:-m) printf '%s\n' "$PWD/apps/one"; exit 0 ;;
+  list:*)  cat >/dev/null; exit 0 ;;
+  run:*)   exit 0 ;;
+esac
+EOF
+chmod +x bin/go
+PATH="$PWD/bin:$PATH" _capability_dev_go >/dev/null 2>&1
+status=$?
+if (( status == NO_RUNNER )); then
+  pass
+else
+  fail "dev go returned $status rather than $NO_RUNNER for a module with no main package"
+fi
+cleanup
+
 # --- a format-check adapter must not swallow the tool's own failure ----------
 
 # gofmt exits nonzero with empty stdout on a file it cannot parse. Reading only

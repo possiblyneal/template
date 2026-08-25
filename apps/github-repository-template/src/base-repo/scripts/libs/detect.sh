@@ -403,7 +403,30 @@ _capability_format_write_kotlin() { gradle_has_task ktlintFormat || return "$NO_
 
 _capability_dev_node() { has_npm_script dev || return "$NO_RUNNER"; npm run dev; }
 _capability_dev_python() { return "$NO_RUNNER"; }
-_capability_dev_go() { go run .; }
+# `go run .` needs a main package in the directory it is called from, which
+# neither the root of a workspace nor an app whose entry point sits under src/
+# has -- both reported `no Go files`, and no arrangement of the code cleared it.
+# Ask the modules which packages are main instead. One is the dev server;
+# several is the ambiguity `scripts/dev` already refuses for stacks, named
+# rather than guessed at; none means there is nothing here to start.
+_capability_dev_go() {
+  local package packages mains=()
+  packages="$(go_each go list -f '{{if eq .Name "main"}}{{.ImportPath}}{{end}}' ./...)" || return 1
+  while IFS= read -r package; do
+    [[ -n "$package" ]] && mains+=("$package")
+  done <<<"$packages"
+
+  case "${#mains[@]}" in
+    0) return "$NO_RUNNER" ;;
+    1) go run "${mains[0]}" ;;
+    *)
+      echo "Several main packages here, and a dev server is one foreground process." >&2
+      echo "Start the one meant by name:" >&2
+      printf '  go run %s\n' "${mains[@]}" >&2
+      return 1
+      ;;
+  esac
+}
 _capability_dev_rust() { cargo run; }
 _capability_dev_swift() { return "$NO_RUNNER"; }
 _capability_dev_kotlin() { gradle_has_task run || return "$NO_RUNNER"; ./gradlew run; }
