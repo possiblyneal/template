@@ -12,4 +12,4 @@ Located at `./scripts` Use these instead of per-language tools; each detects the
 
 ## Child Index
 
-This project is not yet indexed. Before continuing you must read `~/.claude/rules/documentation.md`, `~/code/template/apps/github-repository-template/docs/github_repository_structure.md`, scan the project, build the `CLAUDE.md` tree and replace this message with the actual child index. Go deep and scan files recursively to properly evaluate complexity and create nested `CLAUDE.md` files where needed.
+This project is not yet indexed. Before continuing you must read `~/.claude/rules/documentation.md`, scan the project, build the `CLAUDE.md` tree and replace this message with the actual child index. Go deep and scan files recursively to properly evaluate complexity and create nested `CLAUDE.md` files where needed. Do not create `CLAUDE.md` files in dot folders.

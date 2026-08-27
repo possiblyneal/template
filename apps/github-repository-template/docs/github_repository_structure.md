@@ -13,7 +13,7 @@ type: Note
 
 `.github/workflows/codeql.yml`: Runs GitHub's CodeQL static analysis on pull requests, on `main`, and on a weekly schedule. Its `init` step carries a commented-out `config-file:` line — uncomment it, and add the file it names, to scope which paths are analyzed or run a broader query suite than the default.
 
-`.github/actions/setup-toolchains/`: Installs a toolchain for each language manifest present in the repository.
+`.github/actions/setup-toolchains/action.yml`: Installs a toolchain for each language manifest present in the repository.
 
 `.github/zizmor.yml`: Configuration for zizmor, a GitHub Actions workflow security linter run through pre-commit.
 
