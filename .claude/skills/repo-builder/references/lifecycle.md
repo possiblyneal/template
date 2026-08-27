@@ -217,14 +217,14 @@ Say in **Context** how the choke point was established: chosen from the short fo
    The repository existing this early is deliberate, and the two steps after it are the reason. `/setup-matt-pocock-skills` proposes an issue tracker by reading `git remote -v`, and `/wayfinder` charts its map wherever that answer sends it. Run either against a candidate with no remote and both get the wrong answer for a repository that is about to be on GitHub — and the map, which is the whole product of an escalated generate, ends up somewhere the repository does not track its work. The cost is that a generate abandoned after this point leaves an empty repository behind; say so at the gate.
 
    An invocation that forbids contacting GitHub does not skip this step, it stops at its gate: present the same lines, perform none of them, and record what would have run. Everything after then proceeds against a candidate with no remote — the one state the rest of this section does not otherwise produce. Step 5 has no repository to configure and no branch to probe, step 6 has no remote for `/setup-matt-pocock-skills` to propose from and will settle on a local tracker, step 7 charts wherever that sends it, and step 11 stops at its own gate the same way. Report the result as a plan, never as a generate that reached GitHub.
-5. Configure supported settings after the default branch exists: Dependabot alerts/security updates, push protection where available, squash merging disabled, and a branch ruleset appropriate to the repository. Confirm plan/visibility limitations instead of treating API success as proof a feature is active.
+5. Configure supported settings after the default branch exists: Dependabot alerts/security updates, push protection where available, squash and rebase merging disabled, and a branch ruleset appropriate to the repository. Confirm plan/visibility limitations instead of treating API success as proof a feature is active.
 
    Adopting `CODEOWNERS` changes what "appropriate" means here. It is the only addon finished by a repository setting rather than by an edit: without a rule requiring code owner review, the file requests a reviewer and nothing waits for the answer. Enabling it is not the safe default it looks like, for the reason its manifest entry gives — ask.
 
-   Squash merging is turned off unconditionally here, not collected as a preference in step 2. `CLAUDE.md` documents Conventional Commit messages checked by a `commit-msg` hook; a squashed merge takes its message from the pull request title instead, written in GitHub's web interface where no local hook can reach it, so leaving it on lets one click bypass every rule in `.commitlintrc.yaml`. Unlike push protection and rulesets, it is offered on every plan, so it needs no plan/visibility check before applying it.
+   Squash and rebase merging are turned off unconditionally here, not collected as a preference in step 2, leaving the merge commit as the only method. Both are offered on every plan, so neither needs a plan/visibility check first. `scripts/repo-settings` carries the reason.
 
    ```bash
-   gh api -X PATCH repos/<owner>/<name> -f allow_squash_merge=false
+   gh api -X PATCH repos/<owner>/<name> -f allow_squash_merge=false -f allow_rebase_merge=false
    ```
 
    Automatic head branch deletion is applied here from the answer step 2 already collected, not asked about here. Unlike everything else in this step it is a preference about branch hygiene rather than a guarantee the payload depends on, which is why it is the one setting a person chooses rather than one the payload requires. Left off, merged branches accumulate until someone prunes them by hand; nothing breaks and nothing reports it. Turned on, GitHub deletes the head ref at merge and the remote branch list stays the set of work in flight.
@@ -376,7 +376,7 @@ Repository creation, settings writes, pushes, and pull-request creation are sepa
 Remote execution
 - create: owner/repository (private, uninitialized)
 - push: empty root commit -> main
-- settings: Dependabot alerts/updates; push protection if available; squash merging disabled; main ruleset; automatic head branch deletion if chosen
+- settings: Dependabot alerts/updates; push protection if available; squash and rebase merging disabled; main ruleset; automatic head branch deletion if chosen
 - push: throwaway ruleset probe -> main, only where ruleset creation returned 201; rejection is what proves the ruleset binds, so a ruleset that was accepted without binding leaves that commit on the remote default branch
 - labels: triage labels from `/setup-matt-pocock-skills`, if step 6 records a hosted tracker and the `triage` skill is installed
 - issues: map and tickets from `/wayfinder`, if step 6 records a hosted tracker

@@ -105,6 +105,18 @@ check_github_settings() {
     echo "ok: squash merging off"
   fi
 
+  # Rebase keeps the messages but not the commits: the branch is replayed as
+  # new objects with new parents, so what lands is never what CI ran against
+  # and no merge commit records the pull request. Offered on every plan, like
+  # squash merging above.
+  if [[ "$(jq -r '.allow_rebase_merge // false' <<<"$json")" == "true" ]]; then
+    echo "optional missing: rebase merging disabled on $repo"
+    echo "  Turn it off in Settings, under Pull Requests."
+    echo "  A rebase replays the branch as new commits, so what lands is not what CI ran against."
+  else
+    echo "ok: rebase merging off"
+  fi
+
   # A merged branch left behind is only clutter, but it is clutter every
   # generated repository accumulates, and the fix is a checkbox rather than a
   # workflow: deleting the head branch from Actions costs `contents: write` on
