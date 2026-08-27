@@ -330,6 +330,14 @@ Ownership still governs what a later update may touch, and a hand-merged file is
    ```
 
    The command validates the manifest, repository identities, clean worktree, old and target subtrees, full commits, ancestry, and ownership classification. A non-descendant target is a hard stop.
+
+   It reads local state only, and hosted settings are not files — they never enter the delta, so no reconciliation in step 4 can reach them. A settings rule added to the template after a repository was generated arrives here as a changed `scripts/repo-settings`, which is a check nobody runs. Run the destination's copy in the same read-only pass:
+
+   ```bash
+   <destination>/scripts/repo-settings check
+   ```
+
+   Record every `optional missing:` line as drift and patch nothing — this sub-step reports, step 8 asks. Keep the script's outcomes distinct: a setting that is off, one not offered for the plan, and one that could not be read for want of admin or network are three findings and only the first is drift. Report the check itself as `unavailable` when it could not run, never as a pass.
 3. Inspect four sources of intent:
    - old payload at the recorded commit;
    - current destination;
@@ -344,7 +352,9 @@ Ownership still governs what a later update may touch, and a hand-merged file is
 6. Run the destination's documented checks. If they fail, keep the recorded commit unchanged and report the candidate diff for recovery. The `core.hooksPath` gotcha noted under Generate step 9 applies equally here if the destination's hook is not yet installed.
 7. After successful checks, update `template.commit` to the exact target, validate the manifest again, and rerun checks affected by that change.
 8. Create a feature branch from the current remote default branch. Commit only the bounded lifecycle diff, present the remote gate, push, and open a PR. Do not merge.
-9. Verify PR base/head, changed paths, the recorded target commit, check results, and preserved product paths.
+
+   Drift step 2 recorded is its own line on that gate and its own authorization: name each setting with its current value, its proposed value, and the exact `gh api` command, and do not fold them into the push line. Carrying a template delta is not consent to change how the repository merges. Drift the user declines is reported as declined and left alone, not carried forward and not re-raised as a defect next update.
+9. Verify PR base/head, changed paths, the recorded target commit, check results, and preserved product paths. Re-read any setting that was patched rather than inferring it from the call returning 200.
 
 ## Adopt
 
@@ -377,6 +387,7 @@ Remote execution
 - create: owner/repository (private, uninitialized)
 - push: empty root commit -> main
 - settings: Dependabot alerts/updates; push protection if available; squash and rebase merging disabled; main ruleset; automatic head branch deletion if chosen
+- settings drift: on an update, one line per setting `scripts/repo-settings check` reported missing — current value, proposed value, exact `gh api` command — authorized separately from the push below
 - push: throwaway ruleset probe -> main, only where ruleset creation returned 201; rejection is what proves the ruleset binds, so a ruleset that was accepted without binding leaves that commit on the remote default branch
 - labels: triage labels from `/setup-matt-pocock-skills`, if step 6 records a hosted tracker and the `triage` skill is installed
 - issues: map and tickets from `/wayfinder`, if step 6 records a hosted tracker
@@ -385,7 +396,9 @@ Remote execution
 - merge: repo-builder/<short-target> -> main (bootstrap generate only, see Generate step 12)
 ```
 
-A generate reaches this twice, and the two gates authorize different things. The first, at [Generate](#generate) step 4, covers the first six lines: an empty repository, its settings, the probe that proves those settings bind, and the tracker writes steps 6 and 7 make against it — with no diff and no check result to show, because nothing has been built yet. Present them together even though steps 5 through 7 perform them later, since returning for a second authorization between each is noise; what the gate may not do is perform a remote write it did not list. The labels and issues lines carry their condition in their own text rather than being dropped, because step 6 has not run yet and the gate cannot evaluate it; a local-markdown tracker makes neither write, and that authorization simply goes unused. The second, at step 11, covers the rest against a candidate that has been personalized, checked, and file-list reconciled. Show only the lines the gate is actually asking for. Presenting the whole block at step 4 takes authorization for a content push that does not exist yet.
+Read the block as a menu rather than a sequence — no gate shows every line. Settings drift is the one an update raises and a generate never does, since a generate applies the settings it just listed and nothing has drifted from anything.
+
+A generate reaches this twice, and the two gates authorize different things. The first, at [Generate](#generate) step 4, covers every line through `issues` except settings drift: an empty repository, its settings, the probe that proves those settings bind, and the tracker writes steps 6 and 7 make against it — with no diff and no check result to show, because nothing has been built yet. Present them together even though steps 5 through 7 perform them later, since returning for a second authorization between each is noise; what the gate may not do is perform a remote write it did not list. The labels and issues lines carry their condition in their own text rather than being dropped, because step 6 has not run yet and the gate cannot evaluate it; a local-markdown tracker makes neither write, and that authorization simply goes unused. The second, at step 11, covers the rest against a candidate that has been personalized, checked, and file-list reconciled. Show only the lines the gate is actually asking for. Presenting the whole block at step 4 takes authorization for a content push that does not exist yet.
 
 Ask for confirmation unless the invocation already authorizes these exact actions against this exact repository. Authorization for repository creation does not imply settings changes or a later merge. Never merge as part of this skill, except the bootstrap-generate case documented under Generate step 12: that PR may be merged, gated the same as every other remote action here.
 
@@ -437,6 +450,7 @@ Use this stable shape. On a generate the Reconciliation lines are empty or trivi
 
 ### Repository settings
 - <setting>: enabled | unavailable (<reason>) | not requested
+- Drift (update only): <setting>: <current> -> <proposed>: patched | declined by user | none found | not checked (<reason>)
 - Issue tracker: <GitHub | GitLab | local markdown | other>, recorded in `docs/agents/issue-tracker.md`; triage labels: default | overridden | not configured
 
 ### Verification
