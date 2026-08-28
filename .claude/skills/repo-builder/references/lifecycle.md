@@ -195,13 +195,11 @@ Say in **Context** how the choke point was established: chosen from the short fo
 
    `generate` validates the source only. It takes the destination as a name, never inspects it, and so cannot tell an empty repository from one with content. Establish that yourself before materializing.
 
-2. Collect only unresolved decisions: owner/name, visibility, public-repository files, release behavior, feature availability, and automatic head branch deletion. The application boundaries are not among them. They are derived rather than collected, and step 7 derives them once the candidate and the repository exist.
-
-   Automatic head branch deletion is collected here rather than at step 5, where it is applied, because the remote action gate at step 4 lists it among the settings it authorizes. A gate cannot name a choice that has not been made yet — asking after it would take authorization for one plan and then write a setting under another.
+2. Collect only unresolved decisions: owner/name, visibility, public-repository files, release behavior, and feature availability. The application boundaries are not among them. They are derived rather than collected, and step 7 derives them once the candidate and the repository exist. Neither are the merge settings: step 5 applies all four unconditionally, so there is no choice here for the step 4 gate to name.
 
    The public-repository files are the repository addons, held back rather than shipped and offered against the conditions the answers to this step have established. Adopt the ones taken as the [Addon adoption](#addon-adoption) section directs, from this same source commit.
 3. Materialize the subtree from that exact commit into an isolated local directory. Do not substitute the current working tree. Initialize Git in it with `git init -b <default-branch>` and leave the remote unset; step 4 creates the repository that remote points at. Pass `-b` rather than taking whatever `init.defaultBranch` happens to be: an unborn HEAD on `master` while step 4's `update-ref` writes `refs/heads/main` leaves HEAD pointing at neither, and step 5's probe then commits to the wrong branch, pushes nothing, and reports an unprotected branch as protected. A resumed generate re-running this step gets `warning: re-init: ignored --initial-branch` and exits zero, so the flag repairs nothing on that path; read `git symbolic-ref HEAD` rather than assuming it took, and point HEAD at the default branch before step 4's `update-ref` if it does not already.
-4. Create the destination repository, at the [remote action gate](#remote-action-gates). Present the gate first, and every line of it that applies: the repository name and visibility, the empty root commit, the settings plan step 2 collected, the ruleset probe step 5 pushes to prove those settings bind, and the triage labels and the map that steps 6 and 7 write. Those last two are the only lines not yet decided here — step 6 is what chooses the tracker — so present them against this repository, which is what `/setup-matt-pocock-skills` proposes from, and return to this gate if step 6 settles on a different hosted tracker. Settling on local markdown needs no return: it makes no remote write, so the authorization taken here simply goes unused. There is no diff and no check result to show yet, which is why this gate is separate from the one at step 11 — that one authorizes publishing content that has been reviewed, and this one authorizes an empty repository so that everything after it has somewhere to live.
+4. Create the destination repository, at the [remote action gate](#remote-action-gates). Present the gate first, and every line of it that applies: the repository name and visibility, the empty root commit, the settings step 5 applies, the ruleset probe step 5 pushes to prove those settings bind, and the triage labels and the map that steps 6 and 7 write. Those last two are the only lines not yet decided here — step 6 is what chooses the tracker — so present them against this repository, which is what `/setup-matt-pocock-skills` proposes from, and return to this gate if step 6 settles on a different hosted tracker. Settling on local markdown needs no return: it makes no remote write, so the authorization taken here simply goes unused. There is no diff and no check result to show yet, which is why this gate is separate from the one at step 11 — that one authorizes publishing content that has been reviewed, and this one authorizes an empty repository so that everything after it has somewhere to live.
 
    Create it without auto-initialization, set it as the candidate's remote, and push one empty root commit to the default branch, so the full generated payload is reviewable as a pull-request diff at step 11 rather than arriving as an initial commit nobody reads.
 
@@ -217,23 +215,23 @@ Say in **Context** how the choke point was established: chosen from the short fo
    The repository existing this early is deliberate, and the two steps after it are the reason. `/setup-matt-pocock-skills` proposes an issue tracker by reading `git remote -v`, and `/wayfinder` charts its map wherever that answer sends it. Run either against a candidate with no remote and both get the wrong answer for a repository that is about to be on GitHub — and the map, which is the whole product of an escalated generate, ends up somewhere the repository does not track its work. The cost is that a generate abandoned after this point leaves an empty repository behind; say so at the gate.
 
    An invocation that forbids contacting GitHub does not skip this step, it stops at its gate: present the same lines, perform none of them, and record what would have run. Everything after then proceeds against a candidate with no remote — the one state the rest of this section does not otherwise produce. Step 5 has no repository to configure and no branch to probe, step 6 has no remote for `/setup-matt-pocock-skills` to propose from and will settle on a local tracker, step 7 charts wherever that sends it, and step 11 stops at its own gate the same way. Report the result as a plan, never as a generate that reached GitHub.
-5. Configure supported settings after the default branch exists: Dependabot alerts/security updates, push protection where available, squash merging disabled, and a branch ruleset appropriate to the repository. Confirm plan/visibility limitations instead of treating API success as proof a feature is active.
+5. Configure supported settings after the default branch exists: Dependabot alerts/security updates, push protection where available, the merge commit as the only merge method, automatic head branch deletion, and a branch ruleset appropriate to the repository. Confirm plan/visibility limitations instead of treating API success as proof a feature is active.
 
    Adopting `CODEOWNERS` changes what "appropriate" means here. It is the only addon finished by a repository setting rather than by an edit: without a rule requiring code owner review, the file requests a reviewer and nothing waits for the answer. Enabling it is not the safe default it looks like, for the reason its manifest entry gives — ask.
 
-   Squash merging is turned off unconditionally here, not collected as a preference in step 2. `CLAUDE.md` documents Conventional Commit messages checked by a `commit-msg` hook; a squashed merge takes its message from the pull request title instead, written in GitHub's web interface where no local hook can reach it, so leaving it on lets one click bypass every rule in `.commitlintrc.yaml`. Unlike push protection and rulesets, it is offered on every plan, so it needs no plan/visibility check before applying it.
+   All four merge settings are applied unconditionally here, not collected as preferences in step 2, leaving the merge commit as the only method. Each is offered on every plan, so none needs a plan/visibility check first. `scripts/repo-settings` carries the reason for each.
 
    ```bash
-   gh api -X PATCH repos/<owner>/<name> -f allow_squash_merge=false
+   gh api -X PATCH repos/<owner>/<name> \
+     -f allow_merge_commit=true \
+     -f allow_squash_merge=false \
+     -f allow_rebase_merge=false \
+     -f delete_branch_on_merge=true
    ```
 
-   Automatic head branch deletion is applied here from the answer step 2 already collected, not asked about here. Unlike everything else in this step it is a preference about branch hygiene rather than a guarantee the payload depends on, which is why it is the one setting a person chooses rather than one the payload requires. Left off, merged branches accumulate until someone prunes them by hand; nothing breaks and nothing reports it. Turned on, GitHub deletes the head ref at merge and the remote branch list stays the set of work in flight.
+   One call, not four. GitHub refuses to leave a repository with no merge method enabled, so turning squash and rebase off against a destination that already has the merge commit off is rejected when the three are sent separately and accepted when they arrive together. `allow_merge_commit=true` is therefore not a no-op on a repository that looks fine — it is what makes the other two writable.
 
-   ```bash
-   gh api -X PATCH repos/<owner>/<name> -f delete_branch_on_merge=true
-   ```
-
-   It is a checkbox rather than a workflow on purpose — deleting the head ref from Actions means a `pull_request: closed` job holding `contents: write` to reimplement something GitHub already offers.
+   Automatic head branch deletion is a checkbox rather than a workflow on purpose — deleting the head ref from Actions means a `pull_request: closed` job holding `contents: write` to reimplement something GitHub already offers.
 
    Read the result back with the repository's own `scripts/repo-settings check` rather than hand-rolling `gh api` calls. It already separates the two ways a setting reads as absent: `security_and_analysis` is missing both for a non-admin and for a plan that does not offer the feature, and it checks `.permissions.admin` to tell those apart. A hand-rolled check that misses this reports a plan limitation as a disabled setting.
 
@@ -306,7 +304,11 @@ Having merged it, verify the default branch. This is the only merge in the lifec
 
 The steps above assume an empty destination. A destination with existing content is a generation whose collisions are decided by hand, and it needs its own rules:
 
-Steps 4 and 5 create nothing here — the repository is already there, and its settings are reconciled rather than applied, since a setting someone deliberately turned off is destination intent the same way a file is. Step 6 still runs, but `/setup-matt-pocock-skills` may find its own prior output; let it decide what to do with it rather than deleting `docs/agents/` first.
+Step 4 creates nothing here — the repository is already there. Step 5 splits, and the split is the rule for this whole path: the four merge settings are applied exactly as written, and everything else it configures is reconciled rather than applied, since a setting someone deliberately turned off is destination intent the same way a file is.
+
+The merge settings are not in that category. They are what the payload's commit-message rules and CI provenance rest on — a squash takes its message from the pull request title, which `commit-msg` never sees, and a rebase replays the branch as commits CI never ran — so a destination keeping them is a destination where the payload ships rules that do not bind. Name their current values at the gate rather than folding them into the settings line: this is the one place a generate overwrites a hosted setting someone chose, and the gate is where that gets said out loud. A destination whose owner declines them is not a failure to route around — record it in `generation.features` as the deliberate absence it is, the same as an omitted `codeql.yml`, and report which of the payload's guarantees do not hold there.
+
+Step 6 still runs, but `/setup-matt-pocock-skills` may find its own prior output; let it decide what to do with it rather than deleting `docs/agents/` first.
 
 1. Establish that the destination is a clean worktree, and enumerate every payload path that already exists there before writing anything.
 2. Apply non-colliding payload files as ordinary additions.
@@ -330,6 +332,8 @@ Ownership still governs what a later update may touch, and a hand-merged file is
    ```
 
    The command validates the manifest, repository identities, clean worktree, old and target subtrees, full commits, ancestry, and ownership classification. A non-descendant target is a hard stop.
+
+   It reads local state only, and hosted settings are not files — they never enter the delta, so no reconciliation in step 4 can reach them. A settings rule added to the template after a repository was generated arrives as a changed `scripts/repo-settings`, which is a check nobody runs. Step 6 runs it, once reconciliation has put that changed script in the destination. Do not run it here: the copy sitting in the destination during this read-only pass is the one this update is replacing, and it is the only copy that cannot know the rule the update carries.
 3. Inspect four sources of intent:
    - old payload at the recorded commit;
    - current destination;
@@ -342,9 +346,19 @@ Ownership still governs what a later update may touch, and a hand-merged file is
    - both changed the same behavior, a changed file was deleted/renamed, or a new template path collides with product content: report the conflict and request the specific policy decision.
 5. Classify every delta path as `applied`, `preserved`, `renamed/deleted`, or `conflicted`. Do not leave conflict markers.
 6. Run the destination's documented checks. If they fail, keep the recorded commit unchanged and report the candidate diff for recovery. The `core.hooksPath` gotcha noted under Generate step 9 applies equally here if the destination's hook is not yet installed.
+
+   Then run the reconciled settings check, which reports rather than gates:
+
+   ```bash
+   <destination>/scripts/repo-settings check
+   ```
+
+   It runs here rather than in step 2 because a settings rule this update delivers arrives as a changed `scripts/repo-settings`, so only the reconciled copy knows it. Record every `optional missing:` line as drift and patch nothing — this reports, step 8 asks. Keep the script's outcomes distinct: a setting that is off, one not offered for the plan, and one that could not be read for want of admin or network are three findings and only the first is drift. Report the check itself as `unavailable` when it could not run, never as a pass. An update whose checks failed above never reaches this, so its settings report is `not checked`, not a pass.
 7. After successful checks, update `template.commit` to the exact target, validate the manifest again, and rerun checks affected by that change.
 8. Create a feature branch from the current remote default branch. Commit only the bounded lifecycle diff, present the remote gate, push, and open a PR. Do not merge.
-9. Verify PR base/head, changed paths, the recorded target commit, check results, and preserved product paths.
+
+   Drift step 6 recorded is its own line on that gate and its own authorization: name each setting with its current value, its proposed value, and the exact `gh api` command, and do not fold them into the push line. Carrying a template delta is not consent to change how the repository merges. Drift the user declines is reported as declined and left alone, not carried forward and not re-raised as a defect next update.
+9. Verify PR base/head, changed paths, the recorded target commit, check results, and preserved product paths. Re-read any setting that was patched rather than inferring it from the call returning 200.
 
 ## Adopt
 
@@ -365,7 +379,17 @@ Adopt lands a held-back repository addon into a repository that already carries 
 4. Run the [Addon adoption](#addon-adoption) walkthrough for every addon taken: ask each distinct `value_key` once, fill every slot, surface each review judgement, and list each external step. Report each region as done or outstanding.
 5. Do not advance `template.commit` and do not record the addon in the manifest. Ownership already treats a later-seen adopted file as destination-added rather than a template deletion, so a subsequent update leaves it alone.
 6. Stage the candidate and run the destination's documented checks, keeping the four outcomes distinct: pass, nothing to do, runner unavailable, never ran. The `core.hooksPath` gotcha noted under Generate step 9 applies equally here if the destination's hook is not yet installed.
+
+   Then run the settings check, which reports rather than gates:
+
+   ```bash
+   <destination>/scripts/repo-settings check
+   ```
+
+   Adopt reconciles nothing, so this is the destination's own copy at whatever version the last generate or update left — it reports the rules that copy knows, which can be behind the template's current ones. Say so when reporting: an adopt that finds no drift has established less than an update that finds none. Record every `optional missing:` line as drift and patch nothing here; step 7 asks.
 7. Create a feature branch from the current remote default branch. Commit only the adopted addon paths, present the remote gate, push, and open a PR. Never merge.
+
+   Drift step 6 recorded is its own line on that gate and its own authorization, the same as on an update: current value, proposed value, exact `gh api` command, never folded into the push line. Adopting an addon is not consent to change how the repository merges. Drift the user declines is reported as declined and left alone.
 8. Verify PR base/head, that only addon paths changed, check results, and that product content is preserved.
 
 ## Remote action gates
@@ -376,7 +400,8 @@ Repository creation, settings writes, pushes, and pull-request creation are sepa
 Remote execution
 - create: owner/repository (private, uninitialized)
 - push: empty root commit -> main
-- settings: Dependabot alerts/updates; push protection if available; squash merging disabled; main ruleset; automatic head branch deletion if chosen
+- settings: Dependabot alerts/updates; push protection if available; the merge commit as the only merge method; automatic head branch deletion; main ruleset
+- settings drift: on an update or an adopt, one line per setting `scripts/repo-settings check` reported missing — current value, proposed value, exact `gh api` command — authorized separately from the push below
 - push: throwaway ruleset probe -> main, only where ruleset creation returned 201; rejection is what proves the ruleset binds, so a ruleset that was accepted without binding leaves that commit on the remote default branch
 - labels: triage labels from `/setup-matt-pocock-skills`, if step 6 records a hosted tracker and the `triage` skill is installed
 - issues: map and tickets from `/wayfinder`, if step 6 records a hosted tracker
@@ -385,7 +410,9 @@ Remote execution
 - merge: repo-builder/<short-target> -> main (bootstrap generate only, see Generate step 12)
 ```
 
-A generate reaches this twice, and the two gates authorize different things. The first, at [Generate](#generate) step 4, covers the first six lines: an empty repository, its settings, the probe that proves those settings bind, and the tracker writes steps 6 and 7 make against it — with no diff and no check result to show, because nothing has been built yet. Present them together even though steps 5 through 7 perform them later, since returning for a second authorization between each is noise; what the gate may not do is perform a remote write it did not list. The labels and issues lines carry their condition in their own text rather than being dropped, because step 6 has not run yet and the gate cannot evaluate it; a local-markdown tracker makes neither write, and that authorization simply goes unused. The second, at step 11, covers the rest against a candidate that has been personalized, checked, and file-list reconciled. Show only the lines the gate is actually asking for. Presenting the whole block at step 4 takes authorization for a content push that does not exist yet.
+Read the block as a menu rather than a sequence — no gate shows every line. Settings drift is raised by an update and an adopt and never by a generate, since a generate applies the settings it just listed and nothing has drifted from anything. A generate into a repository that already has content is still a generate here: it applies the merge settings rather than reporting them as drift, and states their current values on the gate, because it is the one flow that overwrites a hosted setting someone deliberately chose.
+
+A generate reaches this twice, and the two gates authorize different things. The first, at [Generate](#generate) step 4, covers every line through `issues` except settings drift: an empty repository, its settings, the probe that proves those settings bind, and the tracker writes steps 6 and 7 make against it — with no diff and no check result to show, because nothing has been built yet. Present them together even though steps 5 through 7 perform them later, since returning for a second authorization between each is noise; what the gate may not do is perform a remote write it did not list. The labels and issues lines carry their condition in their own text rather than being dropped, because step 6 has not run yet and the gate cannot evaluate it; a local-markdown tracker makes neither write, and that authorization simply goes unused. The second, at step 11, covers the rest against a candidate that has been personalized, checked, and file-list reconciled. Show only the lines the gate is actually asking for. Presenting the whole block at step 4 takes authorization for a content push that does not exist yet.
 
 Ask for confirmation unless the invocation already authorizes these exact actions against this exact repository. Authorization for repository creation does not imply settings changes or a later merge. Never merge as part of this skill, except the bootstrap-generate case documented under Generate step 12: that PR may be merged, gated the same as every other remote action here.
 
@@ -437,6 +464,8 @@ Use this stable shape. On a generate the Reconciliation lines are empty or trivi
 
 ### Repository settings
 - <setting>: enabled | unavailable (<reason>) | not requested
+- Drift (update and adopt): <setting>: <current> -> <proposed>: patched | declined by user | none found | not checked (<reason>)
+- Merge settings overwritten (generate into existing content only): <setting>: <prior value> -> <applied value> | declined by user, recorded in `generation.features`
 - Issue tracker: <GitHub | GitLab | local markdown | other>, recorded in `docs/agents/issue-tracker.md`; triage labels: default | overridden | not configured
 
 ### Verification

@@ -91,6 +91,19 @@ check_github_settings() {
     return
   fi
 
+  # The merge commit is the only method the two checks below leave, so it has to
+  # be on for a pull request to land at all. GitHub refuses to disable all three,
+  # which makes this the one to read first: a repository with this off is one
+  # where the two settings below could not have been applied. Offered on every
+  # plan, like them.
+  if [[ "$(jq -r '.allow_merge_commit // false' <<<"$json")" == "true" ]]; then
+    echo "ok: merge commits allowed"
+  else
+    echo "optional missing: merge commits enabled on $repo"
+    echo "  Turn it on in Settings, under Pull Requests."
+    echo "  With squash and rebase off, a repository that also has this off has no way left to merge a pull request."
+  fi
+
   # Squash merging has to stay off for the commit-message rules to mean
   # anything. A squashed commit takes its message from the pull request title,
   # written in GitHub's web interface where no local hook can reach it, so one
@@ -103,6 +116,18 @@ check_github_settings() {
     echo "  A squash takes its message from the pull request title, which the commit-msg hook never sees."
   else
     echo "ok: squash merging off"
+  fi
+
+  # Rebase keeps the messages but not the commits: the branch is replayed as
+  # new objects with new parents, so what lands is never what CI ran against
+  # and no merge commit records the pull request. Offered on every plan, like
+  # squash merging above.
+  if [[ "$(jq -r '.allow_rebase_merge // false' <<<"$json")" == "true" ]]; then
+    echo "optional missing: rebase merging disabled on $repo"
+    echo "  Turn it off in Settings, under Pull Requests."
+    echo "  A rebase replays the branch as new commits, so what lands is not what CI ran against."
+  else
+    echo "ok: rebase merging off"
   fi
 
   # A merged branch left behind is only clutter, but it is clutter every
