@@ -73,7 +73,15 @@ The specific operating parameters for the AI agent.
 
 `scripts/release`: Validates a version tag against the changelog and cuts a GitHub release.
 
+`scripts/structure`: Audits where files sit against the Layout rules in the root `CLAUDE.md` — the root folder and file allowlists, the `apps/` unit-and-domain shape, `src/` placement, the leaf rule, and the Markdown-only rule for `docs/`. Called by `scripts/check` and by pre-commit on every commit. It judges placement only; the three rules that turn on what a file contains are reported `not-applicable` rather than guessed.
+
+`.structure-allow`: Convention (not a shipped file) for the permission the Layout rules refer to — one path per line to allow a named exception, a trailing `/` to stop the audit descending into a vendored or fixture tree. Absent until a repository needs one.
+
 `tools/`: Convention (not a shipped directory) for helpers that must be built before they run, one directory per program.
+
+`deploy/`: Convention (not a shipped directory) for deployment definitions, holding only `compose/`, `containerfile/`, `env/`, `quadlet/`, and `systemd/`. Valid at the repository root and beside a unit's `src/`.
+
+`assets/`: Convention (not a shipped directory) for static assets — images, fonts, fixtures — at the root or scoped to the unit that uses them.
 
 `tmp/`: Git-ignored scratch space for temporary files, holding a `.gitkeep` so it survives being empty.
 

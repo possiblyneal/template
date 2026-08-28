@@ -49,6 +49,8 @@ When the structure doc and the payload disagree, one of them is wrong — fix bo
 
 The root `scripts/check` runs shellcheck and actionlint over these files through pre-commit, which is syntax-level only.
 
+The root `scripts/structure` audits these paths too, since they are tracked files of this repository like any other. `src/base-repo/` mirrors a whole repository and passes the Layout rules unaltered, which is a property worth keeping: a payload that needed a `.structure-allow` entry to survive its own audit would be shipping a shape it forbids. `src/repository-addons/` passes for a duller reason — the root allowlists apply only at the real repository root, and nothing there trips a rule that applies at depth.
+
 One check reads this directory semantically: the `addon-adoption` pre-commit hook runs `.claude/skills/repo-builder/scripts/tests/test_addon_adoption.py`, which fails when `src/addon-adoption.json` and `src/repository-addons/` disagree about which files exist, when an addon sits at a path `src/base-repo/` already ships, when an entry declares a slot token no longer present in its file, or when any addon ships as a zero-byte file. It runs on every commit rather than on a path filter, because `git rm` of an addon is the case a filter cannot see. It does not check that a described region is described *well* — only that it exists.
 
 The payload's behavior is verified where it lands: by `src/base-repo/scripts/tests/*-test` once a repository is generated, and by the `repo-builder` evals under `.claude/skills/repo-builder/evals/`.

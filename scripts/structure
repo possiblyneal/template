@@ -1,0 +1,317 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Audit the repository's shape against the structure rules in CLAUDE.md.
+#
+# This checks where a file sits, never what is in it. Three of the rules are
+# about content and are reported not-applicable rather than guessed at: whether
+# libs/ really holds code shared across apps, whether tests/ really spans them,
+# and whether a file sits at the scope it belongs to. A script that inferred
+# those from paths would be wrong quietly, which is worse than not asking.
+#
+# It does not source libs/detect.sh. Structure is language-independent -- the
+# same reasoning that keeps adr-index out of the capability dispatch. The one
+# language fact it needs is which root manifests are legal at the root, and
+# those are a fixed list of filenames rather than a detection.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+allow_file=".structure-allow"
+
+# Folders permitted at the repository root. Everything at root is repo-wide in
+# scope; anything scoped to a single app or domain belongs under that app.
+# .devcontainer and gradle are here because the payload's own additions require
+# them: .devcontainer is an addon, and gradle/ holds the wrapper Kotlin repos
+# must commit.
+root_folders=(
+  .claude .devcontainer .github apps assets deploy docs gradle
+  libs scripts tests tmp tools
+)
+
+# Files permitted at the repository root. The rule is that a root file needs
+# permission; this list is the permission already granted, and .structure-allow
+# is where a repository records the rest.
+root_files=(
+  # Shipped by the template payload.
+  CLAUDE.md .commitlintrc.yaml .env .gitattributes .gitignore .mcp.json
+  .pre-commit-config.yaml .worktreeinclude
+
+  # Written into a repository when it is generated from the template.
+  .repo-template.json
+
+  # The permission this script's own rules refer to.
+  .structure-allow
+
+  # The domain model.
+  CONTEXT.md CONTEXT-MAP.md
+
+  # Additions by occasion, held back in the template's repository-addons.
+  404.html AUTHORS CHANGELOG.md CITATION.cff CODEOWNERS CODE_OF_CONDUCT.md
+  CONTRIBUTING.md CONTRIBUTORS.md GOVERNANCE.md LICENSE README.md SECURITY.md
+  SUPPORT.md _config.yml .all-contributorsrc .env.example .nojekyll
+
+  # Root workspace manifests, and the lockfiles their tools write beside them.
+  # Swift is absent deliberately: it has no root manifest, so a Swift repository
+  # keeps its packages nested and there is nothing to permit here.
+  pyproject.toml uv.lock
+  go.work go.work.sum
+  package.json package-lock.json tsconfig.json
+  Cargo.toml Cargo.lock
+  build.gradle.kts gradle.properties gradlew gradlew.bat settings.gradle.kts
+)
+
+# Scoped folders: a scope holder -- the repository root, a unit, or a domain --
+# may contain any of these, and each is a leaf for its own kind at any depth.
+scoped_folders=(assets deploy docs libs scripts tests tools)
+
+# The deployment technologies deploy/ recognizes. Unlike the lists above this
+# one will go stale: deployment tooling turns over faster than anything else in
+# a repository, so a .structure-allow entry naming another is the expected case
+# here rather than the exceptional one.
+deploy_folders=(compose containerfile env quadlet systemd)
+
+in_list() {
+  local needle="$1" item
+  shift
+  for item in "$@"; do
+    [[ "$needle" == "$item" ]] && return 0
+  done
+  return 1
+}
+
+result() {
+  printf '%-18s %-16s %s\n' "$1" "$2" "$3"
+}
+
+# Violations for the check currently being run, printed under its result line.
+findings=()
+status=0
+
+record() {
+  findings+=("$1")
+}
+
+verdict() {
+  if (( ${#findings[@]} == 0 )); then
+    result "$1" pass "$2"
+  else
+    result "$1" FAIL "${#findings[@]} violation(s)"
+    printf '                     %s\n' "${findings[@]}"
+    status=1
+  fi
+  findings=()
+}
+
+if ! git rev-parse --git-dir > /dev/null 2>&1; then
+  result structure unavailable "not a Git repository; the audit enumerates with git ls-files"
+  exit 1
+fi
+
+# Enumerate through Git rather than the filesystem. Gitignored scratch --
+# .orca/, node_modules/, a virtualenv, whatever a machine leaves lying around --
+# is then invisible by construction rather than by a prune list that drifts out
+# of date the way this repository's clean script once did.
+tracked=()
+while IFS= read -r -d '' path; do
+  tracked+=("$path")
+done < <(git ls-files -z)
+
+if (( ${#tracked[@]} == 0 )); then
+  result structure not-applicable "no tracked files"
+  exit 0
+fi
+
+# .structure-allow records the permission the rules say a non-standard path
+# needs. A bare path allows exactly that file. A path ending in / names a
+# prefix the walk stops descending into, which is how a vendored dependency or
+# a tracked test fixture keeps its own shape without the rules growing an
+# "unless it is a fixture" clause that would hollow them out.
+allow_paths=()
+allow_prefixes=()
+if [[ -f "$allow_file" ]]; then
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%%#*}"
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [[ -n "$line" ]] || continue
+    if [[ "$line" == */ ]]; then
+      allow_prefixes+=("$line")
+    else
+      allow_paths+=("$line")
+    fi
+  done < "$allow_file"
+fi
+
+paths=()
+pruned=0
+for path in "${tracked[@]}"; do
+  skip=""
+  for prefix in ${allow_prefixes[@]+"${allow_prefixes[@]}"}; do
+    [[ "$path" == "$prefix"* ]] && { skip=1; break; }
+  done
+  if [[ -n "$skip" ]]; then
+    pruned=$((pruned + 1))
+    continue
+  fi
+  paths+=("$path")
+done
+
+echo "structure"
+echo
+
+# --- root -------------------------------------------------------------------
+
+for path in "${paths[@]}"; do
+  [[ "$path" == */* ]] && continue
+  in_list "$path" "${root_files[@]}" && continue
+  in_list "$path" ${allow_paths[@]+"${allow_paths[@]}"} && continue
+  record "$path: root file needs permission; move it, or add it to $allow_file"
+done
+verdict root-files "every root file is permitted"
+
+seen_roots=""
+for path in "${paths[@]}"; do
+  [[ "$path" == */* ]] || continue
+  top="${path%%/*}"
+  [[ " $seen_roots " == *" $top "* ]] && continue
+  seen_roots="$seen_roots $top"
+  in_list "$top" "${root_folders[@]}" && continue
+  in_list "$top" ${allow_paths[@]+"${allow_paths[@]}"} && continue
+  record "$top/: root folder needs permission; everything at root is repo-wide"
+done
+verdict root-folders "every root folder is permitted"
+
+# --- apps -------------------------------------------------------------------
+
+# A unit is a folder under apps/. A domain is a folder under a unit that is
+# neither src/ nor a scoped folder, so the two are told apart by what a folder
+# is not rather than by a marker file a repository would have to remember to
+# write.
+units=""
+domains=""
+unit_src=""
+apps_src=""
+for path in "${paths[@]}"; do
+  [[ "$path" == apps/* ]] || continue
+  IFS='/' read -r -a parts <<< "$path"
+
+  if [[ "${parts[1]}" == src ]]; then
+    if [[ -z "$apps_src" ]]; then
+      apps_src=1
+      record "apps/src/: source belongs to a unit, never directly under apps/"
+    fi
+    continue
+  fi
+
+  unit="${parts[1]}"
+  (( ${#parts[@]} >= 3 )) || continue
+  [[ " $units " == *" $unit "* ]] || units="$units $unit"
+
+  child="${parts[2]}"
+  # A file directly under the unit is not a domain and not a src placement.
+  (( ${#parts[@]} >= 4 )) || continue
+
+  if [[ "$child" == src ]]; then
+    [[ " $unit_src " == *" $unit "* ]] || unit_src="$unit_src $unit"
+  elif ! in_list "$child" "${scoped_folders[@]}"; then
+    [[ " $domains " == *" $unit/$child "* ]] || domains="$domains $unit/$child"
+  fi
+done
+
+for unit in $units; do
+  [[ " $unit_src " == *" $unit "* ]] || continue
+  for domain in $domains; do
+    if [[ "$domain" == "$unit/"* ]]; then
+      record "apps/$unit/: a unit split into domains has no src/ of its own; ${domain##*/}/ is a domain"
+      break
+    fi
+  done
+done
+verdict apps-layout "units and domains hold src/ where the rules place it"
+
+# --- src placement ----------------------------------------------------------
+
+for path in "${paths[@]}"; do
+  IFS='/' read -r -a parts <<< "$path"
+  scope=""
+  for (( i = 0; i < ${#parts[@]} - 1; i++ )); do
+    if [[ "${parts[i]}" == src && -n "$scope" ]]; then
+      prefix=""
+      for (( j = 0; j <= i; j++ )); do prefix="$prefix/${parts[j]}"; done
+      finding="${prefix#/}/: src belongs to a scope holder, not under $scope/"
+      [[ " ${findings[*]-} " == *" $finding "* ]] || record "$finding"
+      break
+    fi
+    in_list "${parts[i]}" "${scoped_folders[@]}" && scope="${parts[i]}"
+  done
+done
+verdict src-placement "no src/ sits under a scoped folder"
+
+# --- leaf rule --------------------------------------------------------------
+
+for path in "${paths[@]}"; do
+  IFS='/' read -r -a parts <<< "$path"
+  for kind in "${scoped_folders[@]}"; do
+    count=0
+    for (( i = 0; i < ${#parts[@]} - 1; i++ )); do
+      [[ "${parts[i]}" == "$kind" ]] && count=$((count + 1))
+    done
+    if (( count >= 2 )); then
+      finding="$path: $kind/ contains another $kind/; a scoped folder is a leaf for its own kind"
+      [[ " ${findings[*]-} " == *" $finding "* ]] || record "$finding"
+    fi
+  done
+done
+verdict leaf-rule "no scoped folder contains another of its own kind"
+
+# --- deploy vocabulary ------------------------------------------------------
+
+for path in "${paths[@]}"; do
+  IFS='/' read -r -a parts <<< "$path"
+  for (( i = 0; i < ${#parts[@]} - 2; i++ )); do
+    [[ "${parts[i]}" == deploy ]] || continue
+    child="${parts[i+1]}"
+    in_list "$child" "${deploy_folders[@]}" && continue
+    prefix=""
+    for (( j = 0; j <= i + 1; j++ )); do prefix="$prefix/${parts[j]}"; done
+    finding="${prefix#/}/: not a recognized deployment technology (${deploy_folders[*]})"
+    [[ " ${findings[*]-} " == *" $finding "* ]] || record "$finding"
+  done
+done
+verdict deploy-folders "every deploy/ subfolder is a recognized technology"
+
+# --- docs content -----------------------------------------------------------
+
+for path in "${paths[@]}"; do
+  IFS='/' read -r -a parts <<< "$path"
+  under_docs=""
+  for (( i = 0; i < ${#parts[@]} - 1; i++ )); do
+    [[ "${parts[i]}" == docs ]] && { under_docs=1; break; }
+  done
+  [[ -n "$under_docs" ]] || continue
+  name="${parts[-1]}"
+  [[ "$name" == *.md ]] && continue
+  [[ "$name" == .gitkeep ]] && continue
+  in_list "$path" ${allow_paths[@]+"${allow_paths[@]}"} && continue
+  record "$path: docs/ takes Markdown freely; anything else needs permission"
+done
+verdict docs-content "docs/ holds Markdown only"
+
+# --- what this cannot answer ------------------------------------------------
+
+echo
+result libs-are-shared not-applicable "whether libs/ is shared across apps is a judgment about content"
+result tests-are-crossapp not-applicable "whether tests/ spans apps is a judgment about content"
+result scope-matching not-applicable "whether a file sits at its own scope is a judgment about content"
+
+echo
+if (( pruned > 0 )); then
+  echo "$pruned path(s) not descended into, per $allow_file."
+fi
+if (( status == 0 )); then
+  echo "Structure matches the rules in CLAUDE.md."
+else
+  echo "Structure does not match the rules in CLAUDE.md."
+fi
+exit "$status"

@@ -1,0 +1,224 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+# Exercises where a file sits, which is all scripts/structure judges. The three
+# rules it reports not-applicable -- whether libs/ is shared, whether tests/
+# spans apps, whether a file sits at its own scope -- have no fixture here
+# because they have no mechanical answer to assert.
+#
+# Each fixture is a real Git repository with the script copied into it, rather
+# than the script run against a directory from outside. scripts/structure
+# resolves its own repository root from BASH_SOURCE and cds there, so running
+# the template's copy against a fixture would audit the template instead. The
+# copy is also what a generated repository actually has.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/harness.sh
+source "$repo_root/scripts/tests/libs/harness.sh"
+
+# A repository holding nothing but the script under test, staged so that
+# git ls-files can see it. No commit: the index is what the script enumerates,
+# and committing would need an identity the harness has deliberately isolated
+# the fixture from.
+fixture() {
+  current="$1"
+  work="$(mktemp -d)"
+  git -C "$work" init -q
+  mkdir -p "$work/scripts"
+  cp "$repo_root/scripts/structure" "$work/scripts/structure"
+}
+
+# Stages every path written since the fixture was created, then audits.
+audit() {
+  git -C "$work" add -A > /dev/null 2>&1
+  (cd "$work" && ./scripts/structure) > "$work/.audit-output" 2>&1
+}
+
+write() {
+  mkdir -p "$work/$(dirname "$1")"
+  printf '%s\n' "${2-x}" > "$work/$1"
+}
+
+assert_passes() {
+  if audit; then
+    pass
+  else
+    fail "compliant tree was rejected: $(grep -E '^ +' "$work/.audit-output" | head -1 | xargs)"
+  fi
+}
+
+# Asserts the audit fails and that the named check is the one reporting it, so
+# a fixture cannot pass this suite by tripping a different rule than it means to.
+assert_fails() {
+  if audit; then
+    fail "violation was accepted"
+  elif grep -qE "^$1 +FAIL" "$work/.audit-output"; then
+    pass
+  else
+    fail "expected $1 to fail; got: $(grep -E 'FAIL' "$work/.audit-output" | head -1 | xargs)"
+  fi
+}
+
+trap cleanup EXIT
+
+echo "structure-test"
+
+fixture "a minimal compliant repository passes"
+write CLAUDE.md
+write apps/billing/src/main.py
+write docs/adrs/0001-a-decision.md
+assert_passes
+
+fixture "a root manifest and its lockfile are permitted"
+write pyproject.toml
+write uv.lock
+write apps/billing/src/main.py
+assert_passes
+
+fixture "an unpermitted root file fails"
+write NOTES.txt
+assert_fails root-files
+
+fixture "an unpermitted root folder fails"
+write vendor/thing/x.go
+assert_fails root-folders
+
+fixture "an addon root file is permitted"
+write README.md
+write LICENSE
+write CHANGELOG.md
+assert_passes
+
+fixture "source directly under apps fails"
+write apps/src/main.py
+assert_fails apps-layout
+
+fixture "a unit with domains keeps no src of its own"
+write apps/billing/src/main.py
+write apps/billing/invoicing/src/main.py
+assert_fails apps-layout
+
+fixture "a unit with domains puts src under each domain"
+write apps/billing/invoicing/src/main.py
+write apps/billing/dunning/src/main.py
+write apps/billing/docs/specs/a-contract.md
+assert_passes
+
+fixture "a unit without domains puts src under itself"
+write apps/billing/src/main.py
+write apps/billing/tests/a-test.py
+write apps/billing/scripts/deploy
+assert_passes
+
+fixture "a scoped folder beside src is not a domain"
+write apps/billing/src/main.py
+write apps/billing/libs/shared.py
+write apps/billing/assets/logo.svg
+write apps/billing/deploy/quadlet/billing.container
+assert_passes
+
+fixture "src under a scoped folder fails"
+write tests/src/helper.py
+assert_fails src-placement
+
+fixture "a scoped folder inside its own kind fails"
+write libs/auth/libs/token.py
+assert_fails leaf-rule
+
+fixture "the leaf rule reaches any depth"
+write scripts/one/two/three/scripts/thing
+assert_fails leaf-rule
+
+fixture "different kinds nest freely"
+write scripts/tests/libs/harness.sh
+write tests/libs/fixtures.py
+assert_passes
+
+fixture "an unrecognized deploy technology fails"
+write deploy/nomad/job.hcl
+assert_fails deploy-folders
+
+fixture "every recognized deploy technology passes"
+write deploy/quadlet/app.container
+write deploy/containerfile/Containerfile
+write deploy/compose/compose.yaml
+write deploy/systemd/app.service
+write deploy/env/production.env
+assert_passes
+
+fixture "a file directly under deploy is not a technology folder"
+write deploy/README.md
+assert_passes
+
+fixture "a non-Markdown file under docs fails"
+write docs/specs/openapi.yaml
+assert_fails docs-content
+
+fixture "the docs rule reaches a scoped docs folder"
+write apps/billing/src/main.py
+write apps/billing/docs/specs/openapi.yaml
+assert_fails docs-content
+
+fixture "gitkeep is exempt under docs"
+write docs/plans/.gitkeep ""
+write docs/specs/.gitkeep ""
+assert_passes
+
+fixture "structure-allow permits a named root file"
+write NOTES.txt
+write .structure-allow 'NOTES.txt'
+assert_passes
+
+fixture "structure-allow permits a named docs file"
+write docs/specs/openapi.yaml
+write .structure-allow 'docs/specs/openapi.yaml'
+assert_passes
+
+fixture "a structure-allow prefix stops the walk descending"
+write tests/fixtures/mirror/tests/a-test.py
+write .structure-allow 'tests/fixtures/'
+assert_passes
+
+fixture "a structure-allow prefix reports what it skipped"
+write tests/fixtures/mirror/tests/a-test.py
+write .structure-allow 'tests/fixtures/'
+audit
+if grep -q 'not descended into' "$work/.audit-output"; then
+  pass
+else
+  fail "pruned paths were not reported"
+fi
+
+fixture "comments and blank lines in structure-allow are ignored"
+write NOTES.txt
+write .structure-allow '# a reason this file is here
+
+NOTES.txt
+'
+assert_passes
+
+fixture "every violation is reported, not just the first"
+write NOTES.txt
+write ALSO.txt
+audit
+if grep -q '2 violation(s)' "$work/.audit-output"; then
+  pass
+else
+  fail "expected both root files reported"
+fi
+
+current="a directory that is not a Git repository is unavailable"
+work="$(mktemp -d)"
+mkdir -p "$work/scripts"
+cp "$repo_root/scripts/structure" "$work/scripts/structure"
+output="$( (cd "$work" && ./scripts/structure) 2>&1 )"
+if [[ "$output" == *unavailable* ]]; then
+  pass
+else
+  fail "expected unavailable, got: $output"
+fi
+cleanup
+
+report

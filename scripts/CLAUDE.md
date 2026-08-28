@@ -12,6 +12,7 @@ One flat directory, not a `ci/` and a `scripts/` split. The boundary that split 
 - `ci`, `security`, `release`, `detect` — called by `.github/workflows/`
 - `repo-settings check` — hosted GitHub state, run explicitly
 - `adr-index` — called by pre-commit; regenerates `docs/adrs/index.md`
+- `structure` — called by `scripts/check` and by pre-commit; audits where files sit against the Layout rules in the root `CLAUDE.md`
 - `changelog-check` — called by pre-commit at `pre-push`, and by `ci.yml` over a pull-request range; validates `CHANGELOG.md` structure
 - `protect-branch` — called by pre-commit at `pre-push`; refuses a push whose destination ref is `main` or `master`
 - `worktree-cleanup` — called by pre-commit at `post-checkout` and `post-merge`, and by the SessionStart hook with `--report`; prunes Git's records for worktrees whose directories are gone
@@ -51,6 +52,14 @@ The config path is a parameter to both functions; the clone is the working direc
 **`adr-index` is a pre-commit hook, not a capability.** It does not source `libs/detect.sh` and is not dispatched by `language_capabilities`, because ADRs are prose present in every repository whatever it is written in — there is no language to detect.
 
 Two things about its wiring are load-bearing and were each a bug first. It self-reports the rewrite with a non-zero exit rather than relying on pre-commit's modified-files detection, which does not fire the first time the index is created: the file is untracked then, so pre-commit sees no change and the commit lands without it. And it runs with `always_run` and no `files:` filter, because that filter reads the staged paths, which exclude deletions — `git rm` of a record would skip the hook on the one commit that made the index stale. `tests/adr-index-test` drives a real repository through pre-commit for both.
+
+**`structure` judges where a file sits and never what is in it.** Like `adr-index` it does not source `libs/detect.sh` and is not dispatched by `language_capabilities` — a tree has a shape whatever it is written in. The one language fact it needs is which root workspace manifests and lockfiles are legal at the root, and that is a fixed list of filenames rather than a detection, so it keeps its own list rather than reaching into `detect_orphan_manifests`'s pairs.
+
+It enumerates with `git ls-files` rather than walking the filesystem. Gitignored scratch — `.orca/`, `node_modules/`, a virtualenv — is then invisible by construction, which is the same failure `DETECT_PRUNE_DIRS` exists to prevent, solved by not needing a prune list at all.
+
+Three of the rules it covers are about content and are reported `not-applicable`: whether `libs/` holds what several apps share, whether `tests/` spans them, and whether a file sits at its own scope. Inferring any of those from a path would be wrong quietly, which is worse than declining to answer. Do not "improve" them into a guess.
+
+Its pre-commit hook runs with `always_run` and no `files:` filter, for the reason `adr-index` does: structure breaks on a move or a delete, a filter reads the staged paths, and staged paths exclude deletions — so `git rm` emptying the last file out of a directory is exactly when the shape changes and exactly what a filter cannot see.
 
 **`changelog-check` validates only the paths it is given, and runs at `pre-push` rather than `pre-commit`.** It is a structural check on Keep a Changelog form — heading order, the six categories, a link reference per version — not a judgment about whether a change owed an entry. A repository with no `CHANGELOG.md` never invokes it, because pre-commit passes it the changed paths and there are none; that is what lets the same hook ship to a generated repository that has not adopted the addon yet. It sits at `pre-push` because a broken entry is worth catching before review and not worth failing every commit on a work-in-progress section, and CI re-runs it across the whole pull-request range so a fixup commit cannot hide a bad entry an earlier commit introduced.
 
@@ -95,7 +104,8 @@ Changes here almost always belong in `apps/github-repository-template/src/base-r
 - `scripts/tests/session-start-test` — exercises `~/.claude/hooks/session-start.sh`, the operator's global copy: the hook reports stale metadata without pruning it, and still prints the session context when `scripts/worktree-cleanup` is absent. Reports `unavailable` and passes trivially when the hook itself is absent, which it always is on a CI runner or a clone whose operator has not set it up — the wiring this suite covers has no local fallback, so there is nothing to exercise there
 - `scripts/tests/changelog-check-test` — each structural rule rejects what it is meant to reject and the shipped addon changelog passes. Needs neither `pre-commit` nor the network
 - `scripts/tests/precommit-hooks-test` — `libs/precommit.sh` reads the hook list out of each YAML list form, and reports exactly the hooks a clone lacks. Needs neither `pre-commit` nor the network, so it always runs — which is the point, since this is the half of the wiring that fails silently
+- `scripts/tests/structure-test` — each rule rejects what it is meant to reject and accepts what it is meant to accept, and `.structure-allow` both permits a named path and stops the walk at a prefix. Every fixture is a real Git repository with the script copied into it, because the script resolves its own repository root from `BASH_SOURCE` and cds there — running this tree's copy against a fixture would audit this tree instead. Needs `git` but not `pre-commit` and not the network
 - `scripts/tests/protect-branch-test` — `main` and `master` are refused whether the destination arrives bare or fully qualified, a branch merely containing or ending in `main` is let through, and an unset destination is silent. Reads one environment variable and writes no files, so it needs neither `git` nor the network
-- `scripts/check` runs all ten before the checks they guard; `ci.yml` runs them before toolchain setup
+- `scripts/check` runs all eleven before the checks they guard, then `scripts/structure` before `scripts/ci`; `ci.yml` runs the suites before toolchain setup
 - Both hook-wiring suites skip their cases when `pre-commit` is absent, so `ci.yml` installs `pre-commit` ahead of them. Without that install they report a smaller green run in CI than they do locally, and the assertions covering the wiring above are the ones lost
 - shellcheck via pre-commit, with `-x` so it follows `source` into `libs/detect.sh`
