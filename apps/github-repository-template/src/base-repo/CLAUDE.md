@@ -2,6 +2,35 @@
 
 Located at `./scripts` Use these instead of per-language tools; each detects the languages present and fails when an expected check cannot run.
 
+- `scripts/structure` — audit where files sit against the Layout rules below; called by `scripts/check` and by pre-commit on every commit
+
+## Layout
+
+Where a new file goes. `scripts/structure` enforces everything here that is a question about placement, and reports the three rules that are not. Its failure messages point back at this section.
+
+**Root holds only these, and everything at root is repo-wide in scope.** `libs/`, `tests/`, `scripts/`, `tools/`, `deploy/`, and `assets/` here hold only what is shared across apps or operates on the whole repository; anything scoped to one app belongs under that app.
+
+`.claude/`, `.devcontainer/`, `.github/`, `apps/`, `assets/`, `deploy/`, `docs/`, `gradle/`, `libs/`, `scripts/`, `tests/`, `tmp/`, `tools/`.
+
+Root *files* are permitted by name rather than by pattern: the eight this template ships, `.repo-template.json`, `.structure-allow`, `CONTEXT.md` and `CONTEXT-MAP.md`, every repository addon, and the root workspace manifests and lockfiles of the supported languages. `.gitkeep` is permitted anywhere. Anything else needs permission, recorded in `.structure-allow`.
+
+**`apps/` breaks the project into its smallest deployable units.** There may be only one.
+
+- Each unit is one folder under `apps/`, defined by deploying, scaling, and versioning independently — the Dockerfile test. A file sitting directly in `apps/` belongs to no unit.
+- Split a unit into domains only when it spans distinct business areas that benefit from isolation. Each domain is one folder under its unit.
+- `src/` sits under the unit when there are no domains, and under each domain when there are. Never both, and never `apps/src/`.
+- A unit or domain may hold its own `libs/`, `tests/`, `scripts/`, `docs/`, `tools/`, `deploy/`, or `assets/`, scoped strictly to it.
+
+**Scoped folders are leaves for their own kind.** `libs/`, `tests/`, `scripts/`, `tools/`, `assets/`, `docs/`, and `deploy/` may nest a different kind — `scripts/tests/libs/` is fine — but never another of the same kind at any depth, and never a `src/`.
+
+**`deploy/` holds one folder per technology** — `quadlet/`, `containerfile/`, `compose/`, `systemd/`, `env/` — and no loose files beside them. It sits at the root or beside a unit's `src/`.
+
+**`docs/` takes Markdown freely at every scope**; anything else needs permission.
+
+**`.structure-allow` is where permission is recorded.** A bare path allows that one file. A path ending in `/` names a prefix the audit stops descending into, which is how a vendored dependency or a tracked test fixture keeps a shape that is not this repository's to decide.
+
+Three rules are about content rather than placement and no script can settle them: whether `libs/` really holds what several apps share, whether `tests/` really spans them, and whether a file sits at the scope it belongs to. `scripts/structure` reports all three `not-applicable` rather than inferring them from paths.
+
 ## Git
 
 - Pre-commit blocks direct commits to `main` and `master`. Branch before making changes.

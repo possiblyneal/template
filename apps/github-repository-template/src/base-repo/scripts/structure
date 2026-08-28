@@ -103,6 +103,23 @@ verdict() {
   findings=()
 }
 
+# .gitkeep is how an otherwise empty directory exists in Git at all, so it is
+# exempt from every rule that judges a file by its name. It still counts as a
+# path for the rules that read the directories above it -- holding a folder
+# open is the entire reason the file is there.
+is_placeholder() {
+  [[ "${1##*/}" == .gitkeep ]]
+}
+
+# The path down to and including parts[$2], for naming the directory a finding
+# is about rather than the file that happened to reveal it.
+path_prefix() {
+  local -n _parts="$1"
+  local upto="$2" prefix="" i
+  for (( i = 0; i <= upto; i++ )); do prefix="$prefix/${_parts[i]}"; done
+  printf '%s' "${prefix#/}"
+}
+
 if ! git rev-parse --git-dir > /dev/null 2>&1; then
   result structure unavailable "not a Git repository; the audit enumerates with git ls-files"
   exit 1
@@ -164,6 +181,7 @@ echo
 
 for path in "${paths[@]}"; do
   [[ "$path" == */* ]] && continue
+  is_placeholder "$path" && continue
   in_list "$path" "${root_files[@]}" && continue
   in_list "$path" ${allow_paths[@]+"${allow_paths[@]}"} && continue
   record "$path: root file needs permission; move it, or add it to $allow_file"
@@ -205,7 +223,12 @@ for path in "${paths[@]}"; do
   fi
 
   unit="${parts[1]}"
-  (( ${#parts[@]} >= 3 )) || continue
+  # A unit is a folder under apps/, so a file sitting directly there belongs to
+  # no unit and is not deployable by itself.
+  if (( ${#parts[@]} < 3 )); then
+    is_placeholder "$path" || record "$path: apps/ holds units, which are folders; a file here belongs to none"
+    continue
+  fi
   [[ " $units " == *" $unit "* ]] || units="$units $unit"
 
   child="${parts[2]}"
@@ -237,9 +260,7 @@ for path in "${paths[@]}"; do
   scope=""
   for (( i = 0; i < ${#parts[@]} - 1; i++ )); do
     if [[ "${parts[i]}" == src && -n "$scope" ]]; then
-      prefix=""
-      for (( j = 0; j <= i; j++ )); do prefix="$prefix/${parts[j]}"; done
-      finding="${prefix#/}/: src belongs to a scope holder, not under $scope/"
+      finding="$(path_prefix parts "$i")/: src belongs to a scope holder, not under $scope/"
       [[ " ${findings[*]-} " == *" $finding "* ]] || record "$finding"
       break
     fi
@@ -269,13 +290,18 @@ verdict leaf-rule "no scoped folder contains another of its own kind"
 
 for path in "${paths[@]}"; do
   IFS='/' read -r -a parts <<< "$path"
-  for (( i = 0; i < ${#parts[@]} - 2; i++ )); do
+  for (( i = 0; i < ${#parts[@]} - 1; i++ )); do
     [[ "${parts[i]}" == deploy ]] || continue
     child="${parts[i+1]}"
     in_list "$child" "${deploy_folders[@]}" && continue
-    prefix=""
-    for (( j = 0; j <= i + 1; j++ )); do prefix="$prefix/${parts[j]}"; done
-    finding="${prefix#/}/: not a recognized deployment technology (${deploy_folders[*]})"
+    # The last segment is the filename, so deploy/ holding a loose file rather
+    # than a technology folder is reported as the file it is.
+    if (( i + 1 == ${#parts[@]} - 1 )); then
+      is_placeholder "$path" && continue
+      finding="$path: deploy/ holds one folder per technology (${deploy_folders[*]}), not loose files"
+    else
+      finding="$(path_prefix parts "$(( i + 1 ))")/: not a recognized deployment technology (${deploy_folders[*]})"
+    fi
     [[ " ${findings[*]-} " == *" $finding "* ]] || record "$finding"
   done
 done
@@ -292,7 +318,7 @@ for path in "${paths[@]}"; do
   [[ -n "$under_docs" ]] || continue
   name="${parts[-1]}"
   [[ "$name" == *.md ]] && continue
-  [[ "$name" == .gitkeep ]] && continue
+  is_placeholder "$path" && continue
   in_list "$path" ${allow_paths[@]+"${allow_paths[@]}"} && continue
   record "$path: docs/ takes Markdown freely; anything else needs permission"
 done

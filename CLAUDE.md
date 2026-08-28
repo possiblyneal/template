@@ -48,6 +48,7 @@ Where a new file goes. `scripts/structure` enforces everything in this section t
 **Root holds only these, and everything at root is repo-wide in scope.** `libs/`, `tests/`, `scripts/`, `tools/`, `deploy/`, and `assets/` here hold only what is shared across apps or operates on the whole repository; anything scoped to one app or domain belongs under that app.
 
 - `.claude/` — agent configuration for this repository
+- `.devcontainer/` — the dev container definition, an addition by occasion
 - `.github/` — CI/CD workflows and repository automation
 - `apps/` — deployable units, see below
 - `docs/` — repository-wide documentation
@@ -55,15 +56,16 @@ Where a new file goes. `scripts/structure` enforces everything in this section t
 - `scripts/` — every portable shell script, whether a person or a workflow runs it
 - `tests/` — cross-app and end-to-end tests only
 - `tools/` — helpers that must be built before they run, one directory per program with its own manifest. The split from `scripts/` is by artifact, not by caller; a script written for CI is the first thing someone runs locally to reproduce a failure
-- `deploy/` — infrastructure and deployment, in one folder per technology: `quadlet/`, `containerfile/`, `compose/`, `systemd/`, `env/`
+- `deploy/` — infrastructure and deployment, in one folder per technology: `quadlet/`, `containerfile/`, `compose/`, `systemd/`, `env/`. Only those five, and no loose files beside them
 - `assets/` — static non-code files shared across several apps
+- `gradle/` — the Gradle wrapper, which Gradle itself writes and locates by that name
 - `tmp/` — gitignored scratch space
 
-Root *files* are permitted by name rather than by pattern: the eight the template ships, `.repo-template.json`, `CONTEXT.md` and `CONTEXT-MAP.md`, every addition by occasion, and the root workspace manifests and lockfiles of the six supported languages. Anything else needs permission, recorded in `.structure-allow`.
+Root *files* are permitted by name rather than by pattern: the eight the template ships, `.repo-template.json`, `.structure-allow`, `CONTEXT.md` and `CONTEXT-MAP.md`, every addition by occasion, and the root workspace manifests and lockfiles of five of the six supported languages — Swift has no root manifest, for the reason the orphan-manifest rule below gives. `.gitkeep` is permitted anywhere, since holding an empty directory open is what it is for. Anything else needs permission, recorded in `.structure-allow`.
 
 **`apps/` breaks the project into its smallest deployable units.** There may be only one.
 
-- Each unit is one folder under `apps/`, defined by deploying, scaling, and versioning independently — the Dockerfile test.
+- Each unit is one folder under `apps/`, defined by deploying, scaling, and versioning independently — the Dockerfile test. A file sitting directly in `apps/` belongs to no unit.
 - Split a unit into domains only when it spans distinct business areas that benefit from isolation. Each domain is one folder under its unit.
 - `src/` sits under the unit when there are no domains, and under each domain when there are. Never both, and never `apps/src/`.
 - A unit or domain may hold its own `libs/`, `tests/`, `scripts/`, `docs/`, `tools/`, `deploy/`, or `assets/`, scoped strictly to it.

@@ -23,6 +23,7 @@ source "$repo_root/scripts/tests/libs/harness.sh"
 # and committing would need an identity the harness has deliberately isolated
 # the fixture from.
 fixture() {
+  cleanup
   current="$1"
   work="$(mktemp -d)"
   git -C "$work" init -q
@@ -148,8 +149,20 @@ write deploy/systemd/app.service
 write deploy/env/production.env
 assert_passes
 
-fixture "a file directly under deploy is not a technology folder"
+fixture "a loose file directly under deploy fails"
 write deploy/README.md
+assert_fails deploy-folders
+
+fixture "gitkeep holds an empty deploy open"
+write deploy/.gitkeep ""
+assert_passes
+
+fixture "a file directly under apps belongs to no unit"
+write apps/README.md
+assert_fails apps-layout
+
+fixture "gitkeep is exempt at the root"
+write .gitkeep ""
 assert_passes
 
 fixture "a non-Markdown file under docs fails"
@@ -209,6 +222,7 @@ else
   fail "expected both root files reported"
 fi
 
+cleanup
 current="a directory that is not a Git repository is unavailable"
 work="$(mktemp -d)"
 mkdir -p "$work/scripts"
