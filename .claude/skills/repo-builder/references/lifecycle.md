@@ -1,19 +1,19 @@
 # Repo Builder Lifecycle Contract
 
-## Contents
+This file holds what is true regardless of operation: the manifest, ownership, how checks are run and reported, the remote gates, failure behavior, and the report shape. Read it, then read the one flow being performed.
 
-- [Manifest](#manifest)
-- [Ownership](#ownership)
-- [Addon adoption](#addon-adoption)
-- [Wayfinding](#wayfinding)
-- [Generate](#generate)
-- [Update](#update)
-- [Adopt](#adopt)
-- [Remote action gates](#remote-action-gates)
-- [Failure and recovery](#failure-and-recovery)
-- [Final report](#final-report)
+- [`generate.md`](generate.md) — build a repository from the payload, including into a destination that already has content
+- [`update.md`](update.md) — carry a bounded template delta into a repository already generated from it
+- [`adopt.md`](adopt.md) — land a held-back repository addon whose condition has arrived
 
-Every `<placeholder>` in the commands below stands for a value the user supplied. Quote it when substituting — `git push origin "$branch"`, not a bare interpolation — and reject a repository or branch name outside `[A-Za-z0-9._/-]+` before it reaches a shell. These values come from someone naming their own repository, so the guard is against a stray metacharacter, not against an attacker.
+Two sub-contracts are read from inside a flow rather than on their own:
+
+- [`wayfinding.md`](wayfinding.md) — derive the application boundaries, at [`generate.md`](generate.md) step 7
+- [`addon-adoption.md`](addon-adoption.md) — finish an addon after copying it, at [`generate.md`](generate.md) step 2 and [`adopt.md`](adopt.md) step 4
+
+[`choosing_a_language.md`](choosing_a_language.md) is the method wayfinding is a short path through.
+
+Every `<placeholder>` in a command in these files stands for a value the user supplied. Quote it when substituting — `git push origin "$branch"`, not a bare interpolation — and reject a repository or branch name outside `[A-Za-z0-9._/-]+` before it reaches a shell. These values come from someone naming their own repository, so the guard is against a stray metacharacter, not against an attacker.
 
 ## Manifest
 
@@ -72,7 +72,7 @@ Record generation choices that change rendered files or repository settings. Do 
 
 Do not record what the filesystem already answers. Language and package manager are read from the manifests present, so a recorded copy is a second source of truth that only goes stale — `libs/detect.sh` answers the question at any moment and a manifest added later never updates a field. `visibility` is recorded despite being live-readable because it is an argument to repository creation, and `features` because it records which absences were deliberate: an omitted `codeql.yml` and a dropped one look identical on disk.
 
-`generation.applications` lists the deployable names [Wayfinding](#wayfinding) established, and nothing else about them. It is recorded because an update has to know that `apps/app-name` was renamed rather than deleted, which the destination tree can no longer say. The choke point and the language behind each name are not recorded here: the language is answered by the manifests present under the rule above, and the choke point is an argument rather than a fact, so it belongs in the ADR that makes it. A manifest still recording the earlier single `application_name` is left as it is — it records what that generation chose, and an update rewriting it would claim a decision the update did not make.
+`generation.applications` lists the deployable names [Wayfinding](wayfinding.md) established, and nothing else about them. It is recorded because an update has to know that `apps/app-name` was renamed rather than deleted, which the destination tree can no longer say. The choke point and the language behind each name are not recorded here: the language is answered by the manifests present under the rule above, and the choke point is an argument rather than a fact, so it belongs in the ADR that makes it. A manifest still recording the earlier single `application_name` is left as it is — it records what that generation chose, and an update rewriting it would claim a decision the update did not make.
 
 ## Ownership
 
@@ -84,313 +84,21 @@ Ownership answers whether a path participates in template updates:
 
 The longest matching path wins; equal patterns are invalid. The old-to-new template delta bounds update scope. Do not edit an unrelated destination path merely because a broad ownership rule matches it.
 
-Unmatched defaulting to product is the safe direction for a path the template does not ship, and the wrong one for a path it does. A file at the repository root matches no directory pattern, so `.pre-commit-config.yaml`, `.commitlintrc.yaml`, `.gitattributes`, and `.gitignore` fall through to product unless named individually — and those files carry the pinned hook revisions behind the secret scanner, the commit-message rules, and the merge policy keeping a lockfile from being line-merged. The list grows: every root file the payload adds needs a line here, and the omission is invisible until a payload fix silently fails to land. A payload fix to any of them would land nowhere while the update reported success. Every path the template ships needs an ownership rule that reaches it; verify with `classify_path` rather than assuming a directory pattern covers a file at the root.
+Unmatched defaulting to product is the safe direction for a path the template does not ship, and the wrong one for a path it does. A file at the repository root matches no directory pattern, so `.pre-commit-config.yaml`, `.commitlintrc.yaml`, `.gitattributes`, and `.gitignore` fall through to product unless named individually — and those files carry the pinned hook revisions behind the secret scanner, the commit-message rules, and the merge policy keeping a lockfile from being line-merged. The list grows: every root file the payload adds needs a line here, or a payload fix to it lands nowhere while the update reports success. Every path the template ships needs an ownership rule that reaches it; verify with `classify_path` rather than assuming a directory pattern covers a file at the root.
 
 A rename or delete of a destination-modified managed file needs semantic review. Product-created files under managed directories remain untouched unless the new template introduces the same path.
 
 An adopted addon is one of those files. `CHANGELOG.md` matches no pattern and defaults to product; `.claude/rules/changelog.md` falls under the product-owned `.claude/rules/**`. Neither is a deletion to reconcile. The template never having shipped a path is not the template having removed it, and an update that reads it that way deletes a record the destination chose to keep.
 
-## Addon adoption
+## Running the destination's checks
 
-The repository addons are the public-repository files a generation holds back: `README.md`, `LICENSE`, `CONTRIBUTING.md`, `CODEOWNERS`, `SECURITY.md`, `CHANGELOG.md`, and the rest. They sit in `apps/github-repository-template/src/repository-addons/`, a sibling of the subtree rather than inside it, so no flow materializes them by copying the subtree. Each answers a condition the template cannot know has arrived, which is why it is held back rather than shipped. Adopt one by copying it from the source commit and finishing the regions below; offer it only against a condition that has actually arrived.
+Every flow runs the candidate's or the destination's own documented checks before it publishes anything. Three rules hold across all of them.
 
-Four of them travel as two pairs. `CONTRIBUTORS.md` and `.all-contributorsrc` are one record split across two files: the contributor table is generated from the config's `contributors` array and never parsed back out of the Markdown, so taking the Markdown alone leaves a table nothing can update, and taking the config alone leaves it writing to a file that is not there.
+Stage the work first. A bare `pre-commit run --all-files` enumerates through the Git index, so unstaged work is checked as the empty set and reports a pass over nothing. The repository's own `scripts/check` sweeps untracked files by path after that command, but only if the payload it was built from carries that second pass — verify rather than assume it.
 
-The other pair is `CHANGELOG.md` and `.claude/rules/changelog.md`. The rule instructs an agent to maintain the file, so adopting the rule without the file states a contract that cannot be satisfied, and adopting the file without the rule leaves nothing keeping it current. `scripts/release` reads whichever world it lands in and says which one it took, so neither is required — but half of the pair is a defect rather than a lighter choice.
+Report a check by what it did, and keep the four outcomes distinct: a check that passed, one that reported nothing to do, one whose runner was missing, and one that never ran. Report a skipped or unavailable check as skipped or unavailable; do not call it a pass. The repository's own scripts make that distinction, and collapsing it in the report discards the thing they were built to preserve. A run reporting no project manifest checked nothing; a green pull request with no workflow runs verified nothing; a file that was never written cannot fail. Tools a script looks up on `PATH` may also run inside pre-commit's pinned environments, so a tool reported unavailable by a script and passing under pre-commit in the same run was not skipped; report what each surface actually did.
 
-One pair runs in one direction only: `AUTHORS` requires `LICENSE`, and `LICENSE` alone is the ordinary case. `AUTHORS` names the copyright holders that the notices in the source tree point at, and a copyright notice with no license beside it grants nobody anything. Because that pair is acquired in sequence rather than together — the occasion for `AUTHORS` is a second legal entity contributing, which arrives long after the license did — `preflight.py` accepts a pair satisfied by the destination as well as by the same run. A check reading only the requested set would make that second adopt unreachable by either route, since requesting `LICENSE` again is itself rejected as already present.
-
-One pair is exclusive, where adopting both is the defect: `_config.yml` and `.nojekyll`. `.nojekyll` turns off the Jekyll processor `_config.yml` exists to configure, so a repository holding both publishes a site whose configuration nothing reads. Nothing about that combination fails — both files are valid, the site builds, and the config that is never read looks exactly like the config that is. `preflight.py` rejects the two named together, and rejects either one against a destination already holding the other — the sequential path being how a repository really acquires both, since the occasion for the second arrives long after the first.
-
-`SUPPORT.md` pairs with a file that is not an addon at all. The payload's `.github/ISSUE_TEMPLATE/config.yml` ships a commented-out `contact_links` block; adopting `SUPPORT.md` means uncommenting it against the same destination, because the template chooser is one step earlier than the new-issue banner GitHub links `SUPPORT.md` from, and two different answers to "where do I ask?" reach the same person seconds apart.
-
-Two more pair with a payload file the same way. `.github/PULL_REQUEST_TEMPLATE/release.md` and `.github/PULL_REQUEST_TEMPLATE/hotfix.md` are reachable only through a `?expand=1&template=<name>.md` URL — nothing in GitHub's interface offers a named template — so adopting either means uncommenting the line of links the payload's `.github/PULL_REQUEST_TEMPLATE.md` ships at the top, which is where those links become clickable from a description's Preview tab. Left commented, they are templates that exist and are never opened, and no check sees the difference.
-
-No addon shares a path with a payload file, and that is an invariant rather than a coincidence — adoption copies into a tree that already holds the payload, so a shared path overwrites instead of adding, and reads as an addition everywhere the directory is described. `test_addon_adoption.py` fails on any addon at a path the payload ships. Guidance about such a path goes in the payload file, commented out, the way `.github/dependabot.yml` carries the ecosystem entry to copy when a real manifest arrives.
-
-Copying an addon is not adopting it. Most arrive with regions that are wrong until someone edits them, and the failure mode is silent — a Code of Conduct promising a reporting channel that does not exist, a funding button pointing at a stranger's donation page, a citation crediting `REPLACE-FAMILY-NAME`. None of these are errors to any tool; they render, validate, and publish. `apps/github-repository-template/src/addon-adoption.json` is the index of those regions, a sibling of the addons directory rather than a file inside it, and is read rather than copied — a generated repository has no `repository-addons/` for it to describe.
-
-Walk its entry for every addon taken, and for nothing else. It sorts each region by what the operator has to do:
-
-- `slots` — a literal token to replace with a value. Grep for the token; if it is absent the file was already edited or the manifest has drifted, and either is worth stopping over.
-- `reviews` — a section to read and a judgement to make, with no token to find. These are the ones a search cannot surface, which is the only reason they are written down.
-- `external` — a step outside the repository entirely, such as installing a GitHub App. Nothing in the tree reports these undone.
-
-Ask each distinct `value_key` once, not once per file. The repository owner is spelled `REPO-OWNER` in two addons, `<owner>` in a third, and `[REPLACE: owner]` in a fourth; asking in each file's own vocabulary asks the same question four times and invites four answers. No addon ships empty: each carries its own guidance in it, so a copy explains itself before a single region is filled, and `test_addon_adoption.py` fails on a zero-byte addon. An entry with no regions at all — `.claude/rules/changelog.md` is one — is a file to copy and read, not a file to write.
-
-Report every region as done or as outstanding. An addon left with an unfilled slot is worse than one not taken, because the repository now carries a document that reads as finished.
-
-## Wayfinding
-
-Generation has to know how many applications the repository holds, what each is called, and what each is written in. Those are not preferences to collect. They follow from the decomposition in [`choosing_a_language.md`](choosing_a_language.md), and wayfinding derives them with the user.
-
-It is short by default — two questions asked once — and hands the decomposition to `/wayfinder` only where the short form fails to settle something. That handoff ends the generate and turns a build into a planning effort, which is a real cost to put in front of someone who asked for a repository, and most repositories do not need it.
-
-Run it at [Generate](#generate) step 7 — after the candidate is materialized, the destination repository exists, and step 6 has configured where that repository tracks its issues, and before the candidate is personalized. Step 8 is the first thing that reads the result and nothing before it depends on the answer, so this is the last position where the question can still be asked. Asking it there means an escalation stops a generate that has already banked its deterministic work: the repository, its settings, its tracker, and the materialized candidate all survive the handoff, and the resumed session re-enters at personalization instead of rebuilding the tree. Skip wayfinding only when the invocation already names every deployable and its language, and say so in the final report — a supplied name and a derived one are identical on disk, and only the derived one has an ADR behind it.
-
-### The short form
-
-Do not open a full Event Storming workshop to create a directory. Ask the two questions that decide `apps/`, in one structured prompt, with your own reading of the request as the options:
-
-1. **What ships separately?** Offer the candidate decompositions the request supports — one service; a client and a server; an API and a worker — and name what each would be called. This answers how many `apps/<name>/` directories exist and what each is.
-2. **What binds first, for each of those?** Offer the five constraints from the reference — browser or device execution, deployment glue, an ecosystem only one language has, many long-lived connections with per-connection flow control, a hard memory or hardware limit — plus *none of these bind*. This answers the language.
-
-Propose, and let the user dispose. That is the reason for putting your reading into the options rather than asking open questions: a proposal the user can see and reject has been tested, and an assumption you made silently has not. But the options are a shortcut, not the answer — *Other* is the load-bearing choice here, and a split nobody picked off the list is the ordinary outcome for anything the request did not already spell out.
-
-Two answers close the session for most repositories. Take the names from the decomposition, confirm them as kebab-case, and go.
-
-### When to hand off
-
-The short form is a path through [`choosing_a_language.md`](choosing_a_language.md), not a replacement for it. It works when the user can already say what ships. When it does not, the remaining work is the full method — Steps 1 through 6, one step per exchange, applying each test as the reference gives it — and that is `/wayfinder`'s job rather than this skill's. Stop the generate and hand off when any of these holds:
-
-- the user rejects every offered split and describes one the request does not obviously support, which means the boundary is the open question rather than the naming;
-- more than one constraint is selected for a single deployable and which one is tightest is not settled by what that deployable promised at its seam;
-- two proposed deployables turn out to need the same concept under different meanings — the reference's Speaker case, where the boundary is what is actually in dispute;
-- the repository is being designed rather than described: the user can say what the software should do but not what ships.
-
-The value of that session is concentrated in the places where the first answer was wrong — a UI event mistaken for a domain event, a noun that turned out to be a field on an aggregate rather than an aggregate, two aggregates that looked like one until asked whether either could change alone. Only the user can produce those corrections, which is why the method is worth a separate effort rather than a longer prompt.
-
-### Handing off to `/wayfinder`
-
-`/wayfinder` charts the open decisions as a map of tickets and then works them one at a time, with the user answering each. Invoke it with the Skill tool to chart, supplying:
-
-- **Destination** — for every deployable a kebab-case name, its choke point, and the language that constraint selects. That is `/wayfinder`'s destination in its own sense: what reaching the end of the map looks like, and the edge past which further decomposition is out of scope for this generate rather than fog still ahead of it.
-- **Notes** — [`choosing_a_language.md`](choosing_a_language.md) as the method every ticket session runs on, one step per exchange; the short-form answers already given; and which of them came apart, since that is where the map starts.
-- **Nothing about where the map lives.** `/wayfinder` reads `docs/agents/issue-tracker.md` and charts against whatever that file records; [Generate](#generate) step 6 wrote it, against a destination repository that already exists. Do not name an effort directory and do not override the choice. A map charted somewhere other than where the repository tracks its issues is a map nobody finds again, and on the ordinary GitHub answer the map's native blocking edges are what render the frontier in GitHub's own UI — the thing `/wayfinder` calls essential and the thing a directory of markdown files cannot do. Ordering the repository and its tracker ahead of wayfinding is what buys this; a handoff before either has nowhere durable to chart to.
-
-Charting is where the generate ends. `/wayfinder` resolves nothing while charting and never works more than one ticket per session, and that rule is the whole reason to reach for it: the value of the full method is in the answers only the user can give, so a generate that pushed on through its own map would hand back the decomposition it had already guessed, wearing an ADR that claims it was deliberated. Do not work a ticket, and do not answer any of the six steps yourself.
-
-So report `stopped` with the pull request not created, leave the materialized candidate and the created repository in place, and hand back two things: the map, and the resume. The user works the map with `/wayfinder` across as many sessions as it takes, then re-invokes `/repo-builder` against the same candidate once the map has no open tickets, and not before. The destination handed to `/wayfinder` is the decomposition itself, so an open ticket is a piece of it still undecided; resuming with one open reads a partial answer out of Decisions so far and writes an ADR claiming it was settled. It re-enters at [Generate](#generate) step 8 and reads the decomposition out of that section.
-
-### What wayfinding must produce
-
-For every deployable, whether the short form settled it or a map did: a kebab-case name, the constraint identified as its choke point, and the language that constraint selects.
-
-A map additionally produces the context each deployable belongs to, and for every seam the two contexts and the contract between them. The short form does not, and must not invent them — a context named without the aggregates under it is a label, and a seam contract asserted without asking is the preference-justified-after-the-fact this section exists to prevent.
-
-The number of deployables is the number of `apps/<name>/` directories to create. It is not the number of contexts. The reference names collapsing context, deployable, and language choice as the most common way the method gets misapplied, and this is the step where that collapse would happen.
-
-### Recording the outcome
-
-Write one ADR per deployable under `docs/adrs/`, copied from `0000-template.md` and numbered from `0001`. Set `scope` to `apps/<name>` and the `lang:<language>` tag, state the choke point in **Context** — with the seam contract behind it when a map established one — and record in **Alternatives Considered** the constraints that were checked and did not bind.
-
-Set `status: accepted`, not the template's `status: proposed`. Generation acted on this decision: the directory exists and the language is chosen. Shipping it as a proposal describes a deliberation that already concluded, and leaves every generated repository with a decision log nobody appears to have agreed to.
-
-That last part is the reason for writing any of this down. A constraint checked and found not to bind and a constraint nobody looked at are indistinguishable a year later, and the ADR is the only thing that can tell them apart. The short form's *none of these bind* is exactly such a finding, and it reaches the ADR as one.
-
-Say in **Context** how the choke point was established: chosen from the short form's list, reasoned from the seam contract, or measured against it. The reference's one reversal turned on that difference, and the weaker the footing the sooner the decision is worth revisiting.
-
-## Generate
-
-1. Resolve the requested source to an exact commit and run:
-
-   ```bash
-   python3 .claude/skills/repo-builder/scripts/preflight.py generate \
-     --template-repo <template-repo> \
-     --target <ref-or-commit> \
-     --subtree apps/github-repository-template/src/base-repo \
-     --destination-repository <owner/name> \
-     --default-branch main
-   ```
-
-   `generate` validates the source only. It takes the destination as a name, never inspects it, and so cannot tell an empty repository from one with content. Establish that yourself before materializing.
-
-2. Collect only unresolved decisions: owner/name, visibility, public-repository files, release behavior, and feature availability. The application boundaries are not among them. They are derived rather than collected, and step 7 derives them once the candidate and the repository exist. Neither are the merge settings: step 5 applies all four unconditionally, so there is no choice here for the step 4 gate to name.
-
-   The public-repository files are the repository addons, held back rather than shipped and offered against the conditions the answers to this step have established. Adopt the ones taken as the [Addon adoption](#addon-adoption) section directs, from this same source commit.
-3. Materialize the subtree from that exact commit into an isolated local directory. Do not substitute the current working tree. Initialize Git in it with `git init -b <default-branch>` and leave the remote unset; step 4 creates the repository that remote points at. Pass `-b` rather than taking whatever `init.defaultBranch` happens to be: an unborn HEAD on `master` while step 4's `update-ref` writes `refs/heads/main` leaves HEAD pointing at neither, and step 5's probe then commits to the wrong branch, pushes nothing, and reports an unprotected branch as protected. A resumed generate re-running this step gets `warning: re-init: ignored --initial-branch` and exits zero, so the flag repairs nothing on that path; read `git symbolic-ref HEAD` rather than assuming it took, and point HEAD at the default branch before step 4's `update-ref` if it does not already.
-4. Create the destination repository, at the [remote action gate](#remote-action-gates). Present the gate first, and every line of it that applies: the repository name and visibility, the empty root commit, the settings step 5 applies, the ruleset probe step 5 pushes to prove those settings bind, and the triage labels and the map that steps 6 and 7 write. Those last two are the only lines not yet decided here — step 6 is what chooses the tracker — so present them against this repository, which is what `/setup-matt-pocock-skills` proposes from, and return to this gate if step 6 settles on a different hosted tracker. Settling on local markdown needs no return: it makes no remote write, so the authorization taken here simply goes unused. There is no diff and no check result to show yet, which is why this gate is separate from the one at step 11 — that one authorizes publishing content that has been reviewed, and this one authorizes an empty repository so that everything after it has somewhere to live.
-
-   Create it without auto-initialization, set it as the candidate's remote, and push one empty root commit to the default branch, so the full generated payload is reviewable as a pull-request diff at step 11 rather than arriving as an initial commit nobody reads.
-
-   ```bash
-   empty_tree=$(git hash-object -t tree /dev/null)
-   empty_commit=$(git commit-tree "$empty_tree" -m "chore: initialize empty repository")
-   git update-ref refs/heads/<default-branch> "$empty_commit"
-   git push origin <default-branch>
-   ```
-
-   Build the commit with `commit-tree` rather than by checking the default branch out and committing on it. The candidate's own `no-commit-to-branch` hook refuses such a commit and its `protect-branch` pre-push hook refuses the push, both correctly — neither can distinguish this one-time structural bootstrap from an ordinary disallowed one. Neither hook is installed this early, since step 9 is what installs them, but do not lean on that ordering: a resumed generate reaches this step with them already in place, and the push then needs `--no-verify`, because `protect-branch` blocks by destination ref rather than by commit content and so cannot recognize its one exception. Get explicit confirmation for that specific bypass before running it — it defeats the only branch protection this plan has, and every other push and commit in this lifecycle goes through hooks normally.
-
-   The repository existing this early is deliberate, and the two steps after it are the reason. `/setup-matt-pocock-skills` proposes an issue tracker by reading `git remote -v`, and `/wayfinder` charts its map wherever that answer sends it. Run either against a candidate with no remote and both get the wrong answer for a repository that is about to be on GitHub — and the map, which is the whole product of an escalated generate, ends up somewhere the repository does not track its work. The cost is that a generate abandoned after this point leaves an empty repository behind; say so at the gate.
-
-   An invocation that forbids contacting GitHub does not skip this step, it stops at its gate: present the same lines, perform none of them, and record what would have run. Everything after then proceeds against a candidate with no remote — the one state the rest of this section does not otherwise produce. Step 5 has no repository to configure and no branch to probe, step 6 has no remote for `/setup-matt-pocock-skills` to propose from and will settle on a local tracker, step 7 charts wherever that sends it, and step 11 stops at its own gate the same way. Report the result as a plan, never as a generate that reached GitHub.
-5. Configure supported settings after the default branch exists: Dependabot alerts/security updates, push protection where available, the merge commit as the only merge method, automatic head branch deletion, and a branch ruleset appropriate to the repository. Confirm plan/visibility limitations instead of treating API success as proof a feature is active.
-
-   Adopting `CODEOWNERS` changes what "appropriate" means here. It is the only addon finished by a repository setting rather than by an edit: without a rule requiring code owner review, the file requests a reviewer and nothing waits for the answer. Enabling it is not the safe default it looks like, for the reason its manifest entry gives — ask.
-
-   All four merge settings are applied unconditionally here, not collected as preferences in step 2, leaving the merge commit as the only method. Each is offered on every plan, so none needs a plan/visibility check first. `scripts/repo-settings` carries the reason for each.
-
-   ```bash
-   gh api -X PATCH repos/<owner>/<name> \
-     -f allow_merge_commit=true \
-     -f allow_squash_merge=false \
-     -f allow_rebase_merge=false \
-     -f delete_branch_on_merge=true
-   ```
-
-   One call, not four. GitHub refuses to leave a repository with no merge method enabled, so turning squash and rebase off against a destination that already has the merge commit off is rejected when the three are sent separately and accepted when they arrive together. `allow_merge_commit=true` is therefore not a no-op on a repository that looks fine — it is what makes the other two writable.
-
-   Automatic head branch deletion is a checkbox rather than a workflow on purpose — deleting the head ref from Actions means a `pull_request: closed` job holding `contents: write` to reimplement something GitHub already offers.
-
-   Read the result back with the repository's own `scripts/repo-settings check` rather than hand-rolling `gh api` calls. It already separates the two ways a setting reads as absent: `security_and_analysis` is missing both for a non-admin and for a plan that does not offer the feature, and it checks `.permissions.admin` to tell those apart. A hand-rolled check that misses this reports a plan limitation as a disabled setting.
-
-   Its output is the evidence for the settings section of the report, and `not offered for the plan` is a distinct outcome from disabled — do not collapse them.
-
-   Ruleset creation can also be refused outright, and that is a different outcome from a ruleset that does not bind. A repository on a plan that does not offer rulesets returns 403, so there is no 201 to be suspicious of and the refusal is itself the measurement: record `not offered for the plan` and do not probe. Pushing anyway learns nothing the 403 has not already said, and an unprotected branch does not reject it — the probe commit lands on top of step 4's empty root and becomes the default-branch tip, with nothing verified and a commit that only a force-push removes. Probe only where creation returned 201.
-
-   A ruleset that was accepted is not a ruleset that binds. Creation returns 201 either way, so prove enforcement rather than inferring it: put a throwaway commit on the default branch, push it directly, and require the `GH013` rejection. An unprotected branch accepts that push, which is the finding.
-
-   ```bash
-   git commit --allow-empty -m "chore: ruleset probe"
-   git push origin <default-branch>
-   git update-ref refs/heads/<default-branch> origin/<default-branch>
-   ```
-
-   The probe is a commit on the default branch and a direct push to it, which is exactly what `no-commit-to-branch` and `protect-branch` exist to refuse. Step 4's note above applies to it unchanged, including the explicit confirmation that bypass needs: a resumed generate reaches this step with both hooks installed. Do not resolve a refusal by skipping the probe, which reports an unverified ruleset as verified.
-
-   Make the probe empty and rewind it with `update-ref` rather than `git reset --hard`. The materialized payload is sitting untracked in this worktree, and a hard reset against an empty base takes the working tree with the probe.
-
-   That rewind is local, and it removes the probe only where the push was rejected. Where the push was accepted, `origin/<default-branch>` is the probe commit, so the rewind syncs to it rather than undoing it and the commit stays on the remote default branch. That is the finding, and it is a failed verification: stop under [Failure and recovery](#failure-and-recovery), name the repository and say it carries the probe commit, and leave removing it to a decision at a gate. Removing it means force-pushing the default branch, which is not an operation to perform on the way past.
-
-6. Configure the repository for the engineering skills — invoke `/setup-matt-pocock-skills` with the Skill tool. Invoke it; do not answer for the user and do not reproduce what it does by hand. It is the source of truth for its own questions, and a copy of them here goes stale the first time it changes.
-
-   Do not predict what it will ask. It explores first and asks only what exploration leaves open, and what that leaves open depends on the candidate's contents and on which sibling skills are installed on the machine — neither of which this contract can know, and the second of which is not a fact about the repository at all. Answer from the candidate's actual state; the issue-tracker question is the one it reaches on a fresh candidate, and step 4 has already given it a remote to propose from — unless step 4 stopped at its gate, in which case there is none and it will settle on a local tracker.
-
-   It always writes `docs/agents/issue-tracker.md`, `docs/agents/domain.md`, and an `## Agent skills` block in the root `CLAUDE.md`. It writes `docs/agents/triage-labels.md` and that block's `### Triage labels` sub-block only where the `triage` skill is installed beside it, so those two appear together or not at all — do not treat either as guaranteed. Step 8 rewrites that same file's Child Index and must leave the block intact; step 10 accounts for whichever paths it wrote.
-
-   Run it here rather than after generation, because step 7 depends on its output: `/wayfinder` reads `docs/agents/issue-tracker.md` to decide where a map lives, and a handoff reached before this step has nowhere to chart to.
-7. Derive the application boundaries — run [Wayfinding](#wayfinding) here. Two questions settle it for most repositories; against the triggers that section names, hand the decomposition to `/wayfinder` as that section directs and stop once the map is charted, leaving this candidate and this repository in place for the resumed session.
-   Do not render a root manifest, even for a language wayfinding selected. Wayfinding establishes which constraint binds; it does not establish a package manager, a version, or a project layout, and none of those follow from a choke point. It also reasons rather than measures — the reference is explicit that an unmeasured constraint and an absent one are indistinguishable until something measures — so a rendered manifest asserts more confidence than wayfinding produced. A wrong guess is worse than an absent file, the same reasoning `.github/dependabot.yml` follows in listing only the two manifests the template itself ships. A generated repository with no manifest is reported honestly by `scripts/ci` as nothing to check yet, with every check becoming required the moment one is added. The first real commit brings the manifest.
-
-   Say so in the handover: the root manifest is what makes a package visible to the checks, and a manifest nested under `apps/` instead is invisible to all of them. `scripts/doctor` fails on that shape rather than passing over it.
-8. Personalize the candidate:
-   - create one `apps/<name>/` per deployable wayfinding established. Move `apps/app-name` to the first (do not copy it) and replicate its skeleton — `src/`, `tests/`, `docs/specs/` — for each one after that. Verify `apps/app-name` is absent afterwards and update every reference. One deployable is the ordinary case and needs no replication;
-   - write one ADR per deployable recording its choke point and language, as [Wayfinding](#wayfinding) directs;
-   - replace the root `CLAUDE.md` bootstrap Child Index with repository-specific content, carrying the wayfinding result into it: each deployable, what it is for, and the language it is written in. The ADRs record why that language was chosen; `CLAUDE.md` is where an agent reads what the repository is before touching anything, and a Child Index naming the apps without saying what each one is leaves the boundaries derivable only from a directory listing. Then read the file back and confirm step 6's `## Agent skills` block is still in it. Nothing else verifies that: step 10 compares paths rather than content, and the file exists either way. Clobbering the block silently stops the engineering skills finding the tracker in a repository that otherwise looks correct;
-   - initialize `docs/LESSONS.md` metadata and remove generation placeholders while retaining its durable writing guidance. Set `generated.by` to the actual author — the repo-builder agent, not the operator on whose behalf it ran — and capture `generated.at` from the real clock (e.g. `date -u +%Y-%m-%dT%H:%M:%SZ`) at the moment of writing rather than composing a plausible-looking value; a rounded time such as midnight is a placeholder wearing a valid format, not a captured one;
-   - keep `docs/adrs/0000-template.md` as the reusable ADR template;
-   - create `.repo-template.json`;
-   - render visibility and feature choices honestly. Keep `codeql.yml` for a private repository rather than omitting it. Its `scanning` job fails in seconds naming the reason, which is accurate — the repository has no static analysis coverage — and it turns green by itself when the repository goes public, where omitting the file leaves nothing to restore and nothing to say so. Report that red check as an expected initial state when handing the repository over; do not describe it as a passing build. Record an omission under `features` only when deliberately stripping the workflow, which is now a choice rather than the private-repository default.
-9. Install the candidate's local pre-commit hook if it requires one, and run its documented checks. Git is already initialized and its remote already set, from steps 3 and 4. Report skipped or unavailable checks; do not call them passes.
-
-   Stage the candidate before running the checks. Step 10 compares tracked paths, and a bare `pre-commit run --all-files` enumerates through the Git index, so an unstaged candidate is checked as the empty set and reports a pass over nothing. The candidate's own `scripts/check` sweeps untracked files by path after that command, but only if the payload it was built from carries that second pass — verify rather than assume it.
-
-   Tools the candidate's scripts look up on `PATH` may also run inside pre-commit's pinned environments. A tool reported unavailable by a script and passing under pre-commit in the same run was not skipped; report what each surface actually did.
-
-   A machine-wide `core.hooksPath` set for an unrelated purpose (an editor's own git integration, another agent's attribution hook) makes `pre-commit install` refuse outright, and breaks it again inside any throwaway fixture repository the candidate's own tests spin up to exercise hook installation — fixtures inherit the same global config. Check `git config --global core.hooksPath` before treating either failure as a candidate defect; a control run of the same checks against the template repository's own current HEAD reproduces an identical failure when this is the cause.
-
-10. Verify the file list, not only the content. Compare the payload's tracked paths at the source commit against the candidate's, and account for every difference as intended or as a defect. A file the payload ships and the candidate lacks is invisible to every check, because a check reads content and absence has no runner. Compare against the working tree as well as the index: a path the destination ignores is present and untracked rather than missing, and `.env` is the one the payload ships that way. Use `git ls-files` for the tracked comparison and `git ls-files -o -i --exclude-standard` for the untracked one; the flags are the whole point, since an ignored path appears in neither the plain form nor `-o --exclude-standard`, and the two disagree about `.env` in the direction that reads as missing. Do not build either list with the file-discovery tools — `.env` matches a `permissions.deny` rule, so Glob and Grep omit it and a listing built from them reports it missing when it is there.
-
-   The candidate also carries paths the payload does not ship, and each is an intended addition rather than a stray: `docs/agents/issue-tracker.md` and `docs/agents/domain.md` from step 6, `docs/agents/triage-labels.md` from that step too where it was written at all, `.repo-template.json` and the ADR at `docs/adrs/NNNN-<slug>.md` from step 8, `docs/adrs/index.md` regenerated from that ADR by the payload's own `adr-index` hook, and every `apps/<name>/` past the first from step 8. None of them is ignored, so they appear in the tracked comparison as candidate-only paths — the same shape a stray file has, which is why the account names them rather than counting them. `docs/adrs/index.md` is the one no step decides to write: the hook is `always_run`, so step 9's checks regenerate it from whatever ADRs step 8 wrote and fail until it is staged. It appears because a hook produced it, not because a step chose it. A repository whose step 6 answer was local markdown carries its `/wayfinder` map under `.scratch/` too, and that also ships: tracking issues as files in the repository is what that answer chose.
-11. Publish the candidate, at the [remote action gate](#remote-action-gates). Present the local diff, the file-list reconciliation, the check results, the settings state, and the exact pending commands. Then branch from the empty base, add the entire candidate and manifest, commit, push, and open a PR. Supply an explicit PR body, because the empty base does not yet contain the repository's PR template.
-12. Verify the remote default branch, PR base/head, URL, settings state, and available checks. Do not merge.
-
-    A pull request with no checks means the workflows are unverified, never that they passed. Establish which one it is before reporting:
-
-    ```bash
-    gh api repos/<owner>/<name>/commits/<head-sha>/check-suites --jq '[.check_suites[].app.slug]'
-    ```
-
-    No GitHub Actions suite means no run was ever dispatched. Check [githubstatus.com](https://www.githubstatus.com/) before treating that as a defect in the generated repository — dispatch and registration are separate services, and an outage suppresses runs while every permissions and workflow API still reports healthy.
-
-    Note that `/actions/workflows` lists the default branch only, so it reads zero on a first-generation PR whose default branch has no `.github/` yet. That is expected, not evidence.
-
-    A bootstrap generate is the one case where "do not merge" inverts. The destination's default branch is still the empty root commit, so no worktree can be created against it to review the PR before it merges — `git worktree add` against an empty tree checks out nothing, and a hook that expects the repository's own files (a missing `.pre-commit-config.yaml`, for instance) then fails on an empty checkout that was never the defect. Once checks pass, repo-builder may merge this one pull request itself, gated the same as any other remote action: present it as an explicit action against this exact repository and obtain confirmation before running it. The exception is scoped to this bootstrap PR alone — update, adopt, and a generate into an already-populated destination all have a destination worktree available for ordinary review, so their pull requests are never merged by repo-builder.
-
-Having merged it, verify the default branch. This is the only merge in the lifecycle, and it is the first time the repository's workflows run against `main` with content in it — a green pull request does not carry over, because the PR ran against a merge of an empty base and `main` afterwards is a different commit with a different trigger. Read that commit's check-suites the same way step 12 reads the PR's, keep the same distinction between a failing run and no run dispatched, and report the result. A red default branch immediately after generation is a finding to hand over, not a state to leave unmentioned because the pull request was green.
-
-## Generate into a repository that already has content
-
-The steps above assume an empty destination. A destination with existing content is a generation whose collisions are decided by hand, and it needs its own rules:
-
-Step 4 creates nothing here — the repository is already there. Step 5 splits, and the split is the rule for this whole path: the four merge settings are applied exactly as written, and everything else it configures is reconciled rather than applied, since a setting someone deliberately turned off is destination intent the same way a file is.
-
-The merge settings are not in that category. They are what the payload's commit-message rules and CI provenance rest on — a squash takes its message from the pull request title, which `commit-msg` never sees, and a rebase replays the branch as commits CI never ran — so a destination keeping them is a destination where the payload ships rules that do not bind. Name their current values at the gate rather than folding them into the settings line: this is the one place a generate overwrites a hosted setting someone chose, and the gate is where that gets said out loud. A destination whose owner declines them is not a failure to route around — record it in `generation.features` as the deliberate absence it is, the same as an omitted `codeql.yml`, and report which of the payload's guarantees do not hold there.
-
-Step 6 still runs, but `/setup-matt-pocock-skills` may find its own prior output; let it decide what to do with it rather than deleting `docs/agents/` first.
-
-1. Establish that the destination is a clean worktree, and enumerate every payload path that already exists there before writing anything.
-2. Apply non-colliding payload files as ordinary additions.
-3. For each collision, decide between the payload version, the destination version, and a merge — then state the decision and the reason per file. Verify afterwards that no destination-only content was dropped, naming what was preserved.
-4. Never delete destination content to resolve a collision. A payload path that cannot be reconciled is a conflict to report, not a file to overwrite.
-5. Record the collision decisions in `generation`, since they are choices a later update has to respect rather than re-litigate.
-6. Do not create the placeholder application when the destination already has its own application boundaries. Record the real ones in `generation.applications`. Wayfinding still runs, but against what is there: it names the choke point each existing deployable already answers to rather than proposing a new decomposition, and it writes an ADR only where the repository has none for that deployable. A generation is not the occasion to re-cut boundaries someone is already shipping against.
-
-Ownership still governs what a later update may touch, and a hand-merged file is managed content whose destination edits are real intent. Classify deliberately: marking a whole tree product to protect it also freezes it.
-
-## Update
-
-1. Require a clean destination clone and identify its origin/default branch. Do not stash or discard the user's work.
-2. Run the read-only preflight before editing:
-
-   ```bash
-   python3 <template-repo>/.claude/skills/repo-builder/scripts/preflight.py update \
-     --template-repo <template-repo> \
-     --target <ref-or-commit> \
-     --destination <destination>
-   ```
-
-   The command validates the manifest, repository identities, clean worktree, old and target subtrees, full commits, ancestry, and ownership classification. A non-descendant target is a hard stop.
-
-   It reads local state only, and hosted settings are not files — they never enter the delta, so no reconciliation in step 4 can reach them. A settings rule added to the template after a repository was generated arrives as a changed `scripts/repo-settings`, which is a check nobody runs. Step 6 runs it, once reconciliation has put that changed script in the destination. Do not run it here: the copy sitting in the destination during this read-only pass is the one this update is replacing, and it is the only copy that cannot know the rule the update carries.
-3. Inspect four sources of intent:
-   - old payload at the recorded commit;
-   - current destination;
-   - new payload at the target commit;
-   - recorded generation decisions.
-4. Reconcile only paths in the preflight delta:
-   - template changed, destination matches old: apply the new template version;
-   - destination changed, template did not: preserve the destination;
-   - both changed in non-overlapping ways: combine both intents and verify;
-   - both changed the same behavior, a changed file was deleted/renamed, or a new template path collides with product content: report the conflict and request the specific policy decision.
-5. Classify every delta path as `applied`, `preserved`, `renamed/deleted`, or `conflicted`. Do not leave conflict markers.
-6. Run the destination's documented checks. If they fail, keep the recorded commit unchanged and report the candidate diff for recovery. The `core.hooksPath` gotcha noted under Generate step 9 applies equally here if the destination's hook is not yet installed.
-
-   Then run the reconciled settings check, which reports rather than gates:
-
-   ```bash
-   <destination>/scripts/repo-settings check
-   ```
-
-   It runs here rather than in step 2 because a settings rule this update delivers arrives as a changed `scripts/repo-settings`, so only the reconciled copy knows it. Record every `optional missing:` line as drift and patch nothing — this reports, step 8 asks. Keep the script's outcomes distinct: a setting that is off, one not offered for the plan, and one that could not be read for want of admin or network are three findings and only the first is drift. Report the check itself as `unavailable` when it could not run, never as a pass. An update whose checks failed above never reaches this, so its settings report is `not checked`, not a pass.
-7. After successful checks, update `template.commit` to the exact target, validate the manifest again, and rerun checks affected by that change.
-8. Create a feature branch from the current remote default branch. Commit only the bounded lifecycle diff, present the remote gate, push, and open a PR. Do not merge.
-
-   Drift step 6 recorded is its own line on that gate and its own authorization: name each setting with its current value, its proposed value, and the exact `gh api` command, and do not fold them into the push line. Carrying a template delta is not consent to change how the repository merges. Drift the user declines is reported as declined and left alone, not carried forward and not re-raised as a defect next update.
-9. Verify PR base/head, changed paths, the recorded target commit, check results, and preserved product paths. Re-read any setting that was patched rather than inferring it from the call returning 200.
-
-## Adopt
-
-Adopt lands a held-back repository addon into a repository that already carries `.repo-template.json`, once its condition has arrived. It reads the addon from the **recorded** commit and never advances the pin: a newer addon is an update first, then an adopt. Use it instead of update when the request adds an addon rather than carrying a template delta.
-
-1. Confirm `.repo-template.json` is present — its absence makes this a generate, not an adopt. Require a clean destination worktree and identify its origin/default branch. Do not stash or discard the user's work.
-2. Run the read-only preflight before editing:
-
-   ```bash
-   python3 <template-repo>/.claude/skills/repo-builder/scripts/preflight.py adopt \
-     --template-repo <template-repo> \
-     --destination <destination> \
-     --addon <destination-relative path> [--addon ...]
-   ```
-
-   It validates the manifest, both repository identities, a clean worktree, and the recorded commit, then for each addon confirms the blob exists in `repository-addons/` at that commit, carries an `addon-adoption.json` entry, completes its pair, and is absent from the destination. A half pair or an already-present addon is a hard stop. Retain the JSON.
-3. Copy each addon from the recorded commit out of `repository-addons/` — a sibling of the subtree, not inside it — into the candidate at its destination-relative path. Every pair is satisfied the same way, alongside the addon or already in the destination: `CONTRIBUTORS.md` with `.all-contributorsrc`, `CHANGELOG.md` with `.claude/rules/changelog.md`, and `AUTHORS` with `LICENSE`. The first two are two-way, so either half asks for the other; `AUTHORS` asks for `LICENSE` and not the reverse.
-4. Run the [Addon adoption](#addon-adoption) walkthrough for every addon taken: ask each distinct `value_key` once, fill every slot, surface each review judgement, and list each external step. Report each region as done or outstanding.
-5. Do not advance `template.commit` and do not record the addon in the manifest. Ownership already treats a later-seen adopted file as destination-added rather than a template deletion, so a subsequent update leaves it alone.
-6. Stage the candidate and run the destination's documented checks, keeping the four outcomes distinct: pass, nothing to do, runner unavailable, never ran. The `core.hooksPath` gotcha noted under Generate step 9 applies equally here if the destination's hook is not yet installed.
-
-   Then run the settings check, which reports rather than gates:
-
-   ```bash
-   <destination>/scripts/repo-settings check
-   ```
-
-   Adopt reconciles nothing, so this is the destination's own copy at whatever version the last generate or update left — it reports the rules that copy knows, which can be behind the template's current ones. Say so when reporting: an adopt that finds no drift has established less than an update that finds none. Record every `optional missing:` line as drift and patch nothing here; step 7 asks.
-7. Create a feature branch from the current remote default branch. Commit only the adopted addon paths, present the remote gate, push, and open a PR. Never merge.
-
-   Drift step 6 recorded is its own line on that gate and its own authorization, the same as on an update: current value, proposed value, exact `gh api` command, never folded into the push line. Adopting an addon is not consent to change how the repository merges. Drift the user declines is reported as declined and left alone.
-8. Verify PR base/head, that only addon paths changed, check results, and that product content is preserved.
+A machine-wide `core.hooksPath` set for an unrelated purpose (an editor's own git integration, another agent's attribution hook) makes `pre-commit install` refuse outright, and breaks it again inside any throwaway fixture repository the repository's own tests spin up to exercise hook installation — fixtures inherit the same global config. Check `git config --global core.hooksPath` before treating either failure as a defect in the repository under test; a control run of the same checks against the template repository's own current HEAD reproduces an identical failure when this is the cause.
 
 ## Remote action gates
 
@@ -412,9 +120,9 @@ Remote execution
 
 Read the block as a menu rather than a sequence — no gate shows every line. Settings drift is raised by an update and an adopt and never by a generate, since a generate applies the settings it just listed and nothing has drifted from anything. A generate into a repository that already has content is still a generate here: it applies the merge settings rather than reporting them as drift, and states their current values on the gate, because it is the one flow that overwrites a hosted setting someone deliberately chose.
 
-A generate reaches this twice, and the two gates authorize different things. The first, at [Generate](#generate) step 4, covers every line through `issues` except settings drift: an empty repository, its settings, the probe that proves those settings bind, and the tracker writes steps 6 and 7 make against it — with no diff and no check result to show, because nothing has been built yet. Present them together even though steps 5 through 7 perform them later, since returning for a second authorization between each is noise; what the gate may not do is perform a remote write it did not list. The labels and issues lines carry their condition in their own text rather than being dropped, because step 6 has not run yet and the gate cannot evaluate it; a local-markdown tracker makes neither write, and that authorization simply goes unused. The second, at step 11, covers the rest against a candidate that has been personalized, checked, and file-list reconciled. Show only the lines the gate is actually asking for. Presenting the whole block at step 4 takes authorization for a content push that does not exist yet.
+A generate reaches this twice, and the two gates authorize different things. The first, at [Generate](generate.md) step 4, covers every line through `issues` except settings drift: an empty repository, its settings, the probe that proves those settings bind, and the tracker writes steps 6 and 7 make against it — with no diff and no check result to show, because nothing has been built yet. Present them together even though steps 5 through 7 perform them later, since returning for a second authorization between each is noise; what the gate may not do is perform a remote write it did not list. The labels and issues lines carry their condition in their own text rather than being dropped, because step 6 has not run yet and the gate cannot evaluate it; a local-markdown tracker makes neither write, and that authorization simply goes unused. The second, at step 11, covers the rest against a candidate that has been personalized, checked, and file-list reconciled. Show only the lines the gate is actually asking for. Presenting the whole block at step 4 takes authorization for a content push that does not exist yet.
 
-Ask for confirmation unless the invocation already authorizes these exact actions against this exact repository. Authorization for repository creation does not imply settings changes or a later merge. Never merge as part of this skill, except the bootstrap-generate case documented under Generate step 12: that PR may be merged, gated the same as every other remote action here.
+Ask for confirmation unless the invocation already authorizes these exact actions against this exact repository. Authorization for repository creation does not imply settings changes or a later merge. Never merge as part of this skill, except the bootstrap-generate case documented under [Generate](generate.md) step 12: that PR may be merged, gated the same as every other remote action here.
 
 ## Failure and recovery
 
@@ -426,11 +134,9 @@ Stop before editing when:
 - the recorded commit is not an ancestor of the target;
 - ownership is ambiguous.
 
-The [Wayfinding](#wayfinding) handoff is also a stop, and the one that is not a failure: nothing is wrong, the decomposition is simply not this skill's to settle. Report it as `stopped` like any other, but do not report it as a defect in the candidate or the request, and do not discard the materialized candidate — it is what the resumed session re-enters at. By this point the destination repository exists, configured, with its default branch still the empty root commit and its map on its tracker. That is the state to leave and to describe, not a half-finished generate to roll back; the repository is where the map lives, so deleting it discards the only thing the stop produced.
+The [Wayfinding](wayfinding.md) handoff is also a stop, and the one that is not a failure: nothing is wrong, the decomposition is simply not this skill's to settle. Report it as `stopped` like any other, but do not report it as a defect in the candidate or the request, and do not discard the materialized candidate — it is what the resumed session re-enters at. By this point the destination repository exists, configured, with its default branch still the empty root commit and its map on its tracker. That is the state to leave and to describe, not a half-finished generate to roll back; the repository is where the map lives, so deleting it discards the only thing the stop produced.
 
-Stop before further remote actions when semantic intent conflicts or verification fails. On a generate that no longer means before any remote action at all: steps 4 and 5 have already created the repository and applied its settings, so a failure at any step from 5 to 10 leaves a real repository whose content was never published. Its default branch is the empty root commit, except after a failure at step 5 where the probe ran and was not rejected: its commit stays there. Name it, say what it already carries, and say whether resuming against it or deleting it is the next action — a stop reported as though nothing was created sends the user looking for a repository they already own. Keep `template.commit` at the previous version. Report exact paths, Git evidence, checks, and a recoverable next action. Do not approximate a missing old version, rebase unrelated template histories, reset/clean the destination, or claim a partial update succeeded.
-
-Report a check by what it did, and keep the four outcomes distinct: a check that passed, one that reported nothing to do, one whose runner was missing, and one that never ran. The candidate's own scripts make that distinction, and collapsing it in the report discards the thing they were built to preserve. A run reporting no project manifest checked nothing; a green pull request with no workflow runs verified nothing; a file that was never written cannot fail.
+Stop before further remote actions when semantic intent conflicts or verification fails. On a [generate](generate.md) that no longer means before any remote action at all: steps 4 and 5 have already created the repository and applied its settings, so a failure at any step from 5 to 10 leaves a real repository whose content was never published. Its default branch is the empty root commit, except after a failure at step 5 where the probe ran and was not rejected: its commit stays there. Name it, say what it already carries, and say whether resuming against it or deleting it is the next action — a stop reported as though nothing was created sends the user looking for a repository they already own. Keep `template.commit` at the previous version. Report exact paths, Git evidence, checks, and a recoverable next action. Do not approximate a missing old version, rebase unrelated template histories, reset/clean the destination, or claim a partial update succeeded.
 
 ## Final report
 

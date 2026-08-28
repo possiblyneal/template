@@ -91,7 +91,7 @@ The root `.gitignore` pattern does not reach `apps/.../src/base-repo/.env`, so i
 
 **Why:** Every check in this repository is a check on content. Absence has no runner, so a missing file produces a green run.
 
-**Source:** [Lifecycle contract](../.claude/skills/repo-builder/references/lifecycle.md)
+**Source:** [Generate flow](../.claude/skills/repo-builder/references/generate.md)
 
 ## pre-commit --all-files reads the index, not the working tree
 
