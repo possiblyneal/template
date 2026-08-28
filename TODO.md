@@ -5,7 +5,7 @@ not for a project cloned from it.
 
 ## Backlog
 
-- Name the candidate build directory in `repo-builder`. `references/lifecycle.md`
+- Name the candidate build directory in `repo-builder`. `references/generate.md`
   says "an isolated local directory" and leaves the choice to the agent, which
   picks somewhere outside the repository and trips `ask-outside-repo.sh`. The
   repository already ships the answer: `tmp/` is inside `CLAUDE_PROJECT_DIR` and
