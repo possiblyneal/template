@@ -50,15 +50,20 @@ assert_passes() {
   fi
 }
 
-# Asserts the audit fails and that the named check is the one reporting it, so
-# a fixture cannot pass this suite by tripping a different rule than it means to.
+# Asserts the audit fails and that the named check is the only one reporting
+# it, so a fixture cannot pass this suite by tripping a rule other than the one
+# it means to, nor by tripping that rule alongside an unnoticed second.
 assert_fails() {
+  local failing
   if audit; then
     fail "violation was accepted"
-  elif grep -qE "^$1 +FAIL" "$work/.audit-output"; then
-    pass
-  else
+  elif ! grep -qE "^$1 +FAIL" "$work/.audit-output"; then
     fail "expected $1 to fail; got: $(grep -E 'FAIL' "$work/.audit-output" | head -1 | xargs)"
+  elif (( $(grep -cE '^[a-z-]+ +FAIL' "$work/.audit-output") != 1 )); then
+    failing="$(grep -oE '^[a-z-]+ +FAIL' "$work/.audit-output" | awk '{print $1}' | paste -sd,)"
+    fail "expected only $1 to fail; also failing: $failing"
+  else
+    pass
   fi
 }
 
@@ -157,6 +162,38 @@ fixture "gitkeep holds an empty deploy open"
 write deploy/.gitkeep ""
 assert_passes
 
+# A file is judged a file before its name is looked at, so one named after a
+# technology is still a loose file rather than the folder it is imitating.
+fixture "a loose deploy file named after a technology still fails"
+write deploy/env
+write deploy/quadlet
+assert_fails deploy-folders
+
+# The sets the apps check accumulates are arrays, not space-joined strings: a
+# directory named * would otherwise glob and one holding a space would split,
+# and either way the violation is lost rather than reported.
+fixture "a unit whose name would glob is still checked"
+write 'apps/*/src/main.py'
+write 'apps/*/billing/src/main.py'
+assert_fails apps-layout
+
+# assert_fails alone would pass here against the pre-fix script too, which
+# reported the same violation under the garbled name apps/app/. The name is
+# what the fix is about, so the name is what this asserts.
+fixture "a unit whose name holds a space is reported under that name"
+write 'apps/my app/src/main.py'
+write 'apps/my app/billing/src/main.py'
+audit || true
+if grep -q 'apps/my app/' "$work/.audit-output"; then
+  pass
+else
+  fail "expected the unit name to survive: $(grep -E 'FAIL' "$work/.audit-output" | head -1 | xargs)"
+fi
+
+fixture "a submodule keeps its .gitmodules at the root"
+write .gitmodules
+assert_passes
+
 fixture "a file directly under apps belongs to no unit"
 write apps/README.md
 assert_fails apps-layout
@@ -164,6 +201,57 @@ assert_fails apps-layout
 fixture "gitkeep is exempt at the root"
 write .gitkeep ""
 assert_passes
+
+# Everything below a src/ is the language's arrangement, not this repository's.
+fixture "a docs folder inside src is the source tree's own"
+write apps/api/src/internal/docs/swagger.json
+assert_passes
+
+fixture "the leaf rule stops at src"
+write apps/api/src/gen/scripts/inner/scripts/run.py
+assert_passes
+
+fixture "a deploy folder inside src is not a deployment folder"
+write apps/api/src/deploy/nomad/job.hcl
+assert_passes
+
+fixture "a src nested inside src is not a placement violation"
+write apps/api/src/vendor/tests/src/x.py
+assert_passes
+
+fixture "the rules still apply to the tree around the source"
+write apps/api/docs/swagger.json
+assert_fails docs-content
+
+# apps/ is not a scope holder, so the segment under it is a unit name and can
+# never be a scoped folder however it is spelled.
+fixture "a unit may be named docs"
+write apps/docs/src/main.py
+assert_passes
+
+fixture "a unit may be named tests"
+write apps/tests/tests/a.py
+assert_passes
+
+fixture "a unit may be named scripts"
+write apps/scripts/scripts/build.sh
+assert_passes
+
+fixture "a unit may be named deploy"
+write apps/deploy/src/main.py
+assert_passes
+
+fixture "a unit named docs still holds its own docs to the docs rule"
+write apps/docs/docs/notes.yaml
+assert_fails docs-content
+
+fixture "a unit named tests still holds its own tests to the leaf rule"
+write apps/tests/tests/inner/tests/a.py
+assert_fails leaf-rule
+
+fixture "a docs folder under a unit is still a scope holder"
+write apps/api/docs/src/notes.md
+assert_fails src-placement
 
 fixture "a non-Markdown file under docs fails"
 write docs/specs/openapi.yaml
@@ -177,6 +265,18 @@ assert_fails docs-content
 fixture "gitkeep is exempt under docs"
 write docs/plans/.gitkeep ""
 write docs/specs/.gitkeep ""
+assert_passes
+
+# A path is not a comment. Stripping from a bare # would void the permission
+# this very line grants.
+fixture "structure-allow permits a path containing a hash"
+write 'C#Notes.txt'
+write .structure-allow 'C#Notes.txt'
+assert_passes
+
+fixture "structure-allow still honors a trailing comment"
+write NOTES.txt
+write .structure-allow 'NOTES.txt  # explained in docs/'
 assert_passes
 
 fixture "structure-allow permits a named root file"

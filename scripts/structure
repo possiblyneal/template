@@ -40,6 +40,9 @@ root_files=(
   # Written into a repository when it is generated from the template.
   .repo-template.json
 
+  # Git's own, and not relocatable: git reads it from the root by that name.
+  .gitmodules
+
   # The permission this script's own rules refer to.
   .structure-allow
 
@@ -111,6 +114,46 @@ is_placeholder() {
   [[ "${1##*/}" == .gitkeep ]]
 }
 
+# Splits a path into the global `parts` array. Not a read into an array with
+# IFS set to a slash, which stops at the first newline: a newline is legal in a
+# path, and read would silently drop every segment after it rather than
+# misreporting one.
+#
+# It also sets `src_limit`, the index of the first src segment, or the segment
+# count when there is none. Everything below a src/ is the language's business
+# rather than this repository's layout -- a Go package named docs/, a Python
+# scripts/ module, a generated tree with a shape nobody chose -- so the rules
+# that apply at depth apply to the tree around the source and stop there.
+split_path() {
+  local rest="$1" i
+  parts=()
+  while [[ "$rest" == */* ]]; do
+    parts+=("${rest%%/*}")
+    rest="${rest#*/}"
+  done
+  parts+=("$rest")
+
+  src_limit=${#parts[@]}
+  for (( i = 0; i < ${#parts[@]}; i++ )); do
+    if [[ "${parts[i]}" == src ]]; then
+      src_limit=$i
+      break
+    fi
+  done
+
+  # And `scope_start`, the first segment a depth rule may judge. The scope
+  # holders are the root, a unit, and a domain; `apps/` is none of them, so the
+  # segment under it is a unit name and cannot be a scoped folder however it is
+  # spelled. Without this a unit named docs, tests, scripts, or deploy collects
+  # findings for its name -- including `apps/docs/src/: src belongs to a scope
+  # holder, not under docs/`, which is wrong twice over, since apps/docs/ is
+  # exactly the scope holder that src belongs to.
+  scope_start=0
+  if [[ "${parts[0]}" == apps ]]; then
+    scope_start=2
+  fi
+}
+
 # The path down to and including parts[$2], for naming the directory a finding
 # is about rather than the file that happened to reveal it.
 path_prefix() {
@@ -129,8 +172,14 @@ fi
 # .orca/, node_modules/, a virtualenv, whatever a machine leaves lying around --
 # is then invisible by construction rather than by a prune list that drifts out
 # of date the way this repository's clean script once did.
+# A path in conflict is listed once per merge stage, and git orders the index
+# by path so those entries are adjacent. Without this, every finding about a
+# conflicted file is reported three times.
 tracked=()
+previous=""
 while IFS= read -r -d '' path; do
+  [[ "$path" == "$previous" ]] && continue
+  previous="$path"
   tracked+=("$path")
 done < <(git ls-files -z)
 
@@ -148,8 +197,12 @@ allow_paths=()
 allow_prefixes=()
 if [[ -f "$allow_file" ]]; then
   while IFS= read -r line || [[ -n "$line" ]]; do
-    line="${line%%#*}"
     line="${line#"${line%%[![:space:]]*}"}"
+    # A whole-line comment, then a trailing one -- which must be preceded by
+    # whitespace, since # is a legal character in a filename and stripping it
+    # unconditionally voids the permission the line was written to grant.
+    [[ "$line" == \#* ]] && continue
+    line="${line%%[[:space:]]#*}"
     line="${line%"${line##*[![:space:]]}"}"
     [[ -n "$line" ]] || continue
     if [[ "$line" == */ ]]; then
@@ -206,13 +259,13 @@ verdict root-folders "every root folder is permitted"
 # neither src/ nor a scoped folder, so the two are told apart by what a folder
 # is not rather than by a marker file a repository would have to remember to
 # write.
-units=""
-domains=""
-unit_src=""
+units=()
+domains=()
+unit_src=()
 apps_src=""
 for path in "${paths[@]}"; do
   [[ "$path" == apps/* ]] || continue
-  IFS='/' read -r -a parts <<< "$path"
+  split_path "$path"
 
   if [[ "${parts[1]}" == src ]]; then
     if [[ -z "$apps_src" ]]; then
@@ -229,22 +282,22 @@ for path in "${paths[@]}"; do
     is_placeholder "$path" || record "$path: apps/ holds units, which are folders; a file here belongs to none"
     continue
   fi
-  [[ " $units " == *" $unit "* ]] || units="$units $unit"
+  in_list "$unit" ${units[@]+"${units[@]}"} || units+=("$unit")
 
   child="${parts[2]}"
   # A file directly under the unit is not a domain and not a src placement.
   (( ${#parts[@]} >= 4 )) || continue
 
   if [[ "$child" == src ]]; then
-    [[ " $unit_src " == *" $unit "* ]] || unit_src="$unit_src $unit"
+    in_list "$unit" ${unit_src[@]+"${unit_src[@]}"} || unit_src+=("$unit")
   elif ! in_list "$child" "${scoped_folders[@]}"; then
-    [[ " $domains " == *" $unit/$child "* ]] || domains="$domains $unit/$child"
+    in_list "$unit/$child" ${domains[@]+"${domains[@]}"} || domains+=("$unit/$child")
   fi
 done
 
-for unit in $units; do
-  [[ " $unit_src " == *" $unit "* ]] || continue
-  for domain in $domains; do
+for unit in ${units[@]+"${units[@]}"}; do
+  in_list "$unit" ${unit_src[@]+"${unit_src[@]}"} || continue
+  for domain in ${domains[@]+"${domains[@]}"}; do
     if [[ "$domain" == "$unit/"* ]]; then
       record "apps/$unit/: a unit split into domains has no src/ of its own; ${domain##*/}/ is a domain"
       break
@@ -256,12 +309,16 @@ verdict apps-layout "units and domains hold src/ where the rules place it"
 # --- src placement ----------------------------------------------------------
 
 for path in "${paths[@]}"; do
-  IFS='/' read -r -a parts <<< "$path"
+  split_path "$path"
   scope=""
-  for (( i = 0; i < ${#parts[@]} - 1; i++ )); do
-    if [[ "${parts[i]}" == src && -n "$scope" ]]; then
-      finding="$(path_prefix parts "$i")/: src belongs to a scope holder, not under $scope/"
-      [[ " ${findings[*]-} " == *" $finding "* ]] || record "$finding"
+  for (( i = scope_start; i < ${#parts[@]} - 1; i++ )); do
+    # The first src ends the walk either way: a src nested inside another src
+    # is the source tree's own arrangement, not a placement this rule judges.
+    if [[ "${parts[i]}" == src ]]; then
+      if [[ -n "$scope" ]]; then
+        finding="$(path_prefix parts "$i")/: src belongs to a scope holder, not under $scope/"
+        [[ " ${findings[*]-} " == *" $finding "* ]] || record "$finding"
+      fi
       break
     fi
     in_list "${parts[i]}" "${scoped_folders[@]}" && scope="${parts[i]}"
@@ -272,10 +329,10 @@ verdict src-placement "no src/ sits under a scoped folder"
 # --- leaf rule --------------------------------------------------------------
 
 for path in "${paths[@]}"; do
-  IFS='/' read -r -a parts <<< "$path"
+  split_path "$path"
   for kind in "${scoped_folders[@]}"; do
     count=0
-    for (( i = 0; i < ${#parts[@]} - 1; i++ )); do
+    for (( i = scope_start; i < ${#parts[@]} - 1 && i < src_limit; i++ )); do
       [[ "${parts[i]}" == "$kind" ]] && count=$((count + 1))
     done
     if (( count >= 2 )); then
@@ -289,17 +346,17 @@ verdict leaf-rule "no scoped folder contains another of its own kind"
 # --- deploy vocabulary ------------------------------------------------------
 
 for path in "${paths[@]}"; do
-  IFS='/' read -r -a parts <<< "$path"
-  for (( i = 0; i < ${#parts[@]} - 1; i++ )); do
+  split_path "$path"
+  for (( i = scope_start; i < ${#parts[@]} - 1 && i < src_limit; i++ )); do
     [[ "${parts[i]}" == deploy ]] || continue
     child="${parts[i+1]}"
-    in_list "$child" "${deploy_folders[@]}" && continue
-    # The last segment is the filename, so deploy/ holding a loose file rather
-    # than a technology folder is reported as the file it is.
+    # Whether the child is a folder at all is decided before its name is, so a
+    # file that happens to be called env or quadlet is still a loose file.
     if (( i + 1 == ${#parts[@]} - 1 )); then
       is_placeholder "$path" && continue
       finding="$path: deploy/ holds one folder per technology (${deploy_folders[*]}), not loose files"
     else
+      in_list "$child" "${deploy_folders[@]}" && continue
       finding="$(path_prefix parts "$(( i + 1 ))")/: not a recognized deployment technology (${deploy_folders[*]})"
     fi
     [[ " ${findings[*]-} " == *" $finding "* ]] || record "$finding"
@@ -310,9 +367,9 @@ verdict deploy-folders "every deploy/ subfolder is a recognized technology"
 # --- docs content -----------------------------------------------------------
 
 for path in "${paths[@]}"; do
-  IFS='/' read -r -a parts <<< "$path"
+  split_path "$path"
   under_docs=""
-  for (( i = 0; i < ${#parts[@]} - 1; i++ )); do
+  for (( i = scope_start; i < ${#parts[@]} - 1 && i < src_limit; i++ )); do
     [[ "${parts[i]}" == docs ]] && { under_docs=1; break; }
   done
   [[ -n "$under_docs" ]] || continue

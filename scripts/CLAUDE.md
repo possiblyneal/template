@@ -55,6 +55,10 @@ Two things about its wiring are load-bearing and were each a bug first. It self-
 
 **`structure` judges where a file sits and never what is in it.** Like `adr-index` it does not source `libs/detect.sh` and is not dispatched by `language_capabilities` — a tree has a shape whatever it is written in. The one language fact it needs is which root workspace manifests and lockfiles are legal at the root, and that is a fixed list of filenames rather than a detection, so it keeps its own list rather than reaching into `detect_orphan_manifests`'s pairs.
 
+Every rule that reads depth stops at the first `src/` segment, which `split_path` records as `src_limit` alongside the segments themselves. Below a `src/` the arrangement is the language's — a Go package named `docs/`, a Python `scripts/` module — and judging it would fail ordinary source trees on their own idiom. Do not lift that bound to "cover more".
+
+`scope_start` is the mirror of it — a lower bound where `src_limit` is an upper one, set by the same `split_path` call. It is `2` under `apps/` and `0` everywhere else, because the scope holders are the root, a unit, and a domain, and `apps/` is none of them: the segment directly under it is a unit name. Without the bound a unit named `docs`, `tests`, `scripts`, or `deploy` collects findings for its name across four checks, and `.structure-allow` cannot clear them — only root-files, root-folders, and docs-content consult it, so the sole escape is a prefix entry leaving the whole unit unaudited.
+
 It enumerates with `git ls-files` rather than walking the filesystem. Gitignored scratch — `.orca/`, `node_modules/`, a virtualenv — is then invisible by construction, which is the same failure `DETECT_PRUNE_DIRS` exists to prevent, solved by not needing a prune list at all.
 
 Three of the rules it covers are about content and are reported `not-applicable`: whether `libs/` holds what several apps share, whether `tests/` spans them, and whether a file sits at its own scope. Inferring any of those from a path would be wrong quietly, which is worse than declining to answer. Do not "improve" them into a guess.

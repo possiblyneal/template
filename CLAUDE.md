@@ -72,6 +72,10 @@ Root *files* are permitted by name rather than by pattern: the eight the templat
 
 **Scoped folders are leaves for their own kind.** `libs/`, `tests/`, `scripts/`, `tools/`, `assets/`, `docs/`, and `deploy/` may nest a different kind — `scripts/tests/libs/` is fine — but never another of the same kind at any depth, and never a `src/`. Choose the folder whose scope matches the file's scope.
 
+**`apps/` is not a scope holder.** The scope holders are the root, a unit, and a domain, so the segment directly under `apps/` is a unit name and is never read as a scoped folder however it is spelled. `apps/docs/`, `apps/tests/`, `apps/scripts/`, and `apps/deploy/` are ordinary units. The rules resume at the unit: `apps/docs/docs/notes.yaml` still needs permission and `apps/api/docs/src/` is still a `src/` under a scope holder.
+
+**Every rule that reads depth stops at the first `src/`.** Below one, the arrangement belongs to the language rather than to this repository: a Go package named `docs/`, a Python `scripts/` module, a generated or vendored tree whose shape nobody here chose. So `apps/api/src/internal/docs/swagger.json` is fine and `apps/api/docs/swagger.json` is not, and a `src/` nested inside a `src/` is the source tree's own business. The rules govern the tree around the source, and the source is where they stop.
+
 **`docs/` takes Markdown freely at every scope**; anything else needs permission. `.gitkeep` is exempt everywhere.
 
 **`.structure-allow` is where permission is recorded.** A bare path allows that one file. A path ending in `/` names a prefix the audit stops descending into, which is how a vendored dependency or a tracked test fixture keeps a shape that is not this repository's to decide, without the rules growing an exception clause that would hollow them out.

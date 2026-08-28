@@ -23,6 +23,10 @@ Root *files* are permitted by name rather than by pattern: the eight this templa
 
 **Scoped folders are leaves for their own kind.** `libs/`, `tests/`, `scripts/`, `tools/`, `assets/`, `docs/`, and `deploy/` may nest a different kind — `scripts/tests/libs/` is fine — but never another of the same kind at any depth, and never a `src/`.
 
+**`apps/` is not a scope holder.** The scope holders are the root, a unit, and a domain, so the segment directly under `apps/` is a unit name and is never read as a scoped folder however it is spelled. `apps/docs/`, `apps/tests/`, `apps/scripts/`, and `apps/deploy/` are ordinary units. The rules resume at the unit: `apps/docs/docs/notes.yaml` still needs permission and `apps/api/docs/src/` is still a `src/` under a scope holder.
+
+**Every rule that reads depth stops at the first `src/`.** Below one, the arrangement belongs to the language rather than to this repository: a Go package named `docs/`, a Python `scripts/` module, a generated or vendored tree whose shape nobody here chose. `apps/api/src/internal/docs/swagger.json` is fine; `apps/api/docs/swagger.json` is not.
+
 **`deploy/` holds one folder per technology** — `quadlet/`, `containerfile/`, `compose/`, `systemd/`, `env/` — and no loose files beside them. It sits at the root or beside a unit's `src/`.
 
 **`docs/` takes Markdown freely at every scope**; anything else needs permission.
