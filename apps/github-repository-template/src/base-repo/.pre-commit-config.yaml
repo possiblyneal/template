@@ -63,6 +63,20 @@ repos:
         always_run: true
         pass_filenames: false
 
+      # always_run with no files filter, for the same reason as adr-index above.
+      # Structure breaks on a move or a delete, and a path filter reads the
+      # staged paths, which exclude deletions -- so `git rm` emptying the last
+      # file out of a directory is exactly when the tree changes shape and
+      # exactly what a filter cannot see. The script reads the Git index rather
+      # than any argument, so it costs one enumeration on a commit touching
+      # nothing structural.
+      - id: structure
+        name: audit the repository structure
+        entry: scripts/structure
+        language: script
+        always_run: true
+        pass_filenames: false
+
       # Changelog content is judged in the pull request, but once an entry is
       # chosen its Keep a Changelog structure is deterministic. Running only
       # when the file changed preserves that division rather than inventing a

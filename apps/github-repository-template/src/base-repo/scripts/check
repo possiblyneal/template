@@ -31,6 +31,16 @@ for test_script in "${test_scripts[@]}"; do
   "$test_script"
 done
 
+# Where a file sits, checked before what is in it. A misplaced file passes every
+# language check in this repository, because each one reads the manifests and
+# never asks whether the tree around them matches the rules.
+if [[ ! -x scripts/structure ]]; then
+  echo "scripts/structure is missing or not executable."
+  exit 1
+fi
+
+scripts/structure
+
 if [[ ! -x scripts/ci ]]; then
   echo "scripts/ci is missing or not executable."
   exit 1
