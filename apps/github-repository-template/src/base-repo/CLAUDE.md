@@ -3,6 +3,8 @@
 Located at `./scripts` Use these instead of per-language tools; each detects the languages present and fails when an expected check cannot run.
 
 - `scripts/structure` — audit where files sit against the Layout rules below; called by `scripts/check` and by pre-commit on every commit
+- `scripts/run [unit] [-- args…]` — start the unit, dispatching on the `run` fact it declared; name the unit when `apps/` holds several, since a run is one foreground process. Everything after `--` reaches the program unchanged
+- `scripts/package [unit]` — build an executable per declared target into the unit's `dist/`, for a unit whose `ships.kind` is `executable`. Not part of the gate: packaging is not a check
 
 ## Layout
 
@@ -31,7 +33,7 @@ Root *files* are permitted by name rather than by pattern: the eight this templa
 - `ships.kind` — `executable`, `quadlet`, or `none`.
 - `ships.targets` — required exactly when the kind is `executable`, rejected on every other kind: `linux-amd64`, `macos-arm64`.
 
-The two facts vary independently, so every pairing is legal and the audit checks values alone. A scheduled job runs `oneshot` and ships a `quadlet`; a library runs `none` and still ships.
+`scripts/run` dispatches on the first fact and `scripts/package` on the second, so a wrong value starts the wrong program rather than none. The two facts vary independently, so every pairing is legal and the audit checks values alone. A scheduled job runs `oneshot` and ships a `quadlet`; a library runs `none` and still ships.
 
 Reading the file needs `jq`, which is why `scripts/doctor` requires it once a unit declares. Without it the audit reports `unavailable` and fails rather than passing over a file it never opened.
 

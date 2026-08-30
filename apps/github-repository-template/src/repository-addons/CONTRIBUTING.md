@@ -68,7 +68,10 @@ This repository drives every language-specific tool through wrappers in
 
 - `scripts/doctor` — check that your local toolchains, dependencies, and hooks
   are present and correctly configured. Run this first.
-- `scripts/dev` — start the development server.
+- `scripts/run` — start the unit, dispatching on what it declared in
+  `.unit.json`. Name the unit when there is more than one.
+- `scripts/package` — build the unit's executable for every target it
+  declares, into its `dist/`.
 - `scripts/fix` — apply formatting.
 - `scripts/check` — run the full local gate: format, lint, type check, tests,
   build, and the security audit, across every language present.

@@ -73,6 +73,10 @@ The specific operating parameters for the AI agent.
 
 `scripts/tests/`: Tests for the scripts themselves.
 
+`scripts/run`: Starts a unit, dispatching on the `run` fact its `.unit.json` declares — a one-shot runs the program's own entry point, a long-lived one runs the dev server, `none` exits saying there is nothing to run. Names the unit when `apps/` holds several, since a run is one foreground process; everything after `--` reaches the program unchanged.
+
+`scripts/package`: Builds an executable for every target a unit declares, into that unit's `dist/`. Skips a unit whose `ships.kind` is not `executable` rather than failing it, and reports a target the toolchain cannot reach as `not-applicable` with the reason named. Nothing in the gate calls it — packaging is not a check.
+
 `scripts/release`: Validates a version tag against the changelog and cuts a GitHub release.
 
 `scripts/structure`: Audits where files sit against the Layout rules in the root `CLAUDE.md` — the root folder and file allowlists, the `apps/` unit-and-domain shape, `src/` placement, the leaf rule, and the Markdown-only rule for `docs/`. Called by `scripts/check` and by pre-commit on every commit. It reads the contents of exactly one file, a unit's `.unit.json`, whose whole purpose is to state what a tree cannot show; the three rules that turn on what any other file contains are reported `not-applicable` rather than guessed. Reading a declaration needs `jq`, and its absence is reported `unavailable` rather than passed over.

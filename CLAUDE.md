@@ -20,7 +20,8 @@ Use these instead of per-language tools; each detects the languages present and 
 - `scripts/check` — full local gate: `doctor`, the script tests, then lint, format, type check, test, build, then the security audit and pre-commit across every file, tracked and untracked, not just staged ones. Local means it reads no hosted GitHub state, not that it stays offline: `commitlint-test` and pre-commit's own hook environments fetch on first use
 - `scripts/fix` — rewrite formatting for every detected stack; the write half of `check`'s format check, no lint autofixes
 - `scripts/clean` — recursively delete build output and tool caches (`dist`, `build`, `coverage`, `__pycache__`, `.*_cache`, `*.pyc`)
-- `scripts/dev [app-name]` — start the dev server; requires the app name when several stacks are present, since only one process can run
+- `scripts/run [unit] [-- args…]` — start the unit, dispatching on the `run` fact it declared; requires the unit name when `apps/` holds several, since a run is one foreground process. Everything after `--` reaches the program unchanged
+- `scripts/package [unit]` — build an executable per declared target into the unit's `dist/`, for a unit whose `ships.kind` is `executable`. Not part of the gate: packaging is not a check
 - `scripts/structure` — audit where files sit against the Layout rules below; called by `scripts/check` and by pre-commit on every commit
 
 Every check runs for every language present, not the first one detected. Results distinguish `pass`, `not-applicable`, `unavailable`, and `FAIL`, so an intentional no-op cannot look like a runner that executed. See `scripts/CLAUDE.md` before adding a language or a check.

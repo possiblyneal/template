@@ -1,0 +1,197 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+# The two commands that act on one unit: scripts/run and scripts/package. What
+# is under test here is the command line rather than the dispatch -- which unit
+# an invocation resolves to, what the declared facts make it do, and what
+# reaches the program -- because that is where a wrong answer is silent. A
+# command that picked a unit rather than refusing would start the wrong program
+# as often as the right one, and nothing in the output would say so.
+#
+# Every case sets CI_DRY_RUN, which is the seam scripts/ci already uses: the
+# commands report what they would dispatch and run nothing, so the result comes
+# from the resolution alone and is the same on a machine with no toolchains.
+#
+# Not `set -e`: a failing assertion is recorded and the remaining cases still
+# run, so one break does not hide the rest.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/harness.sh
+source "$repo_root/scripts/tests/libs/harness.sh"
+
+fixture() {
+  current="$1"
+  work="$(mktemp -d)"
+  cp -r "$repo_root/scripts" "$work/"
+}
+
+# Writes a unit: a declaration, and a manifest so a language is present to
+# dispatch to.
+unit() {
+  local name="$1" run="$2" ships="$3"
+  mkdir -p "$work/apps/$name"
+  printf '{"schema_version": 1, "run": "%s", "ships": %s}\n' "$run" "$ships" \
+    > "$work/apps/$name/.unit.json"
+  printf 'module example.com/%s\n\ngo 1.22\n' "$name" > "$work/apps/$name/go.mod"
+}
+
+run_in() {
+  (cd "$work" && CI_DRY_RUN=1 "$@" 2>&1)
+}
+
+trap cleanup EXIT
+
+echo "unit-commands-test"
+
+# jq reads the declaration, and scripts/doctor requires it once a unit has one.
+# Without it every case here would fail on the tool rather than on the command,
+# so the suite says it skipped rather than reporting the gap as a defect.
+if ! command -v jq > /dev/null 2>&1; then
+  echo "  skip  unit-commands-test: jq is not installed"
+  report
+  exit
+fi
+
+# --- resolving which unit ----------------------------------------------------
+
+# One unit needs no naming. Requiring it would make the common repository --
+# one deployable, one command -- the awkward case.
+fixture "one unit needs no name"
+unit only oneshot '{"kind": "none"}'
+out="$(run_in scripts/run)"
+if grep -qE '^would-run +run go$' <<< "$out"; then
+  pass
+else
+  fail "a lone unit was not resolved without being named: $out"
+fi
+cleanup
+
+# Several units and no name is the ambiguity the command must not resolve on
+# its own, so it lists what it could have meant as lines to copy.
+fixture "several units must be named"
+unit alpha oneshot '{"kind": "none"}'
+unit beta oneshot '{"kind": "none"}'
+out="$(run_in scripts/run)"
+status=$?
+if (( status == 0 )); then
+  fail "a run with two units to choose between started something"
+elif grep -q 'scripts/run alpha' <<< "$out" && grep -q 'scripts/run beta' <<< "$out"; then
+  pass
+else
+  fail "the refusal did not list the candidates: $out"
+fi
+cleanup
+
+fixture "a name that is not a unit is refused"
+unit alpha oneshot '{"kind": "none"}'
+out="$(run_in scripts/run beta)"
+status=$?
+if (( status != 0 )) && grep -q 'No apps/beta directory' <<< "$out"; then
+  pass
+else
+  fail "a name matching no unit was not refused: $out"
+fi
+cleanup
+
+# --- what the declaration decides --------------------------------------------
+
+# A library is not broken for being a library. Failing here would make
+# `run: none` a state a repository has to route around rather than declare.
+fixture "run: none has nothing to run and says so"
+unit lib none '{"kind": "none"}'
+out="$(run_in scripts/run lib)"
+status=$?
+if (( status == 0 )) && grep -q 'run: none' <<< "$out"; then
+  pass
+else
+  fail "a unit that runs as nothing did not exit 0 saying so (exit $status): $out"
+fi
+cleanup
+
+fixture "a unit with no declaration is named rather than assumed"
+mkdir -p "$work/apps/undeclared"
+printf 'module example.com/u\n\ngo 1.22\n' > "$work/apps/undeclared/go.mod"
+out="$(run_in scripts/run undeclared)"
+status=$?
+if (( status != 0 )) && grep -q '.unit.json' <<< "$out"; then
+  pass
+else
+  fail "a unit with no declaration was not named (exit $status): $out"
+fi
+cleanup
+
+fixture "ships: none has nothing to package"
+unit lib none '{"kind": "none"}'
+out="$(run_in scripts/package lib)"
+status=$?
+if (( status == 0 )) && grep -q 'ships: none' <<< "$out"; then
+  pass
+else
+  fail "a unit that ships nothing did not exit 0 saying so (exit $status): $out"
+fi
+cleanup
+
+fixture "a declared executable reaches the package adapter"
+unit tool oneshot '{"kind": "executable", "targets": ["linux-amd64"]}'
+out="$(run_in scripts/package tool)"
+if grep -qE '^would-run +package go$' <<< "$out"; then
+  pass
+else
+  fail "a unit shipping an executable did not dispatch package: $out"
+fi
+cleanup
+
+# --- what reaches the program ------------------------------------------------
+
+# The program's flags and this script's own must not compete for the same
+# argument. Everything after `--` is the program's, whatever it spells them.
+fixture "arguments after -- reach the program unchanged"
+unit cli oneshot '{"kind": "none"}'
+mkdir -p "$work/apps/cli/src/hello"
+cat > "$work/apps/cli/src/hello/main.go" <<'GO'
+package main
+
+import (
+	"fmt"
+	"os"
+	"strings"
+)
+
+func main() { fmt.Println("args:" + strings.Join(os.Args[1:], "|")) }
+GO
+printf 'go 1.22\n\nuse ./apps/cli\n' > "$work/go.work"
+if command -v go > /dev/null 2>&1; then
+  out="$( (cd "$work" && scripts/run cli -- --verbose 'two words') 2>&1 )"
+  if grep -q 'args:--verbose|two words' <<< "$out"; then
+    pass
+  else
+    fail "the arguments did not reach the program unchanged: $out"
+  fi
+else
+  # The only case here that runs a real program, because argument passing is
+  # the one thing a dry run cannot show.
+  echo "  skip  $current: go is not installed"
+fi
+cleanup
+
+# --- refusals that survived the rename ---------------------------------------
+
+# A run is one foreground process, so a unit holding two stacks is an ambiguity
+# to name rather than resolve.
+fixture "a unit holding several stacks is refused with the stacks named"
+unit both oneshot '{"kind": "none"}'
+printf '{"name":"b","version":"1.0.0"}\n' > "$work/apps/both/package.json"
+out="$(run_in scripts/run both)"
+status=$?
+if (( status == 0 )); then
+  fail "a unit with two stacks started one of them"
+elif grep -q 'node' <<< "$out" && grep -q 'go' <<< "$out"; then
+  pass
+else
+  fail "the refusal did not name both stacks: $out"
+fi
+cleanup
+
+report

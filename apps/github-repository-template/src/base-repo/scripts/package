@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/detect.sh
+source "$repo_root/scripts/libs/detect.sh"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/unit.sh
+source "$repo_root/scripts/libs/unit.sh"
+
+# Packaging is not a check, so nothing in the gate calls this. It exists as a
+# command because a developer building and trying a binary should not have to
+# cut a release to do it.
+unit="$(unit_resolve "${1:-}" package)" || exit 1
+
+if [[ -z "$unit" ]]; then
+  echo "apps/ has no units, so there is nothing to package."
+  exit 0
+fi
+
+cd "apps/$unit"
+unit_read
+
+if [[ "$unit_ships" != executable ]]; then
+  echo "apps/$unit declares ships: $unit_ships, so there is no executable to build."
+  exit 0
+fi
+
+mapfile -t languages < <(language_capabilities present)
+if (( ${#languages[@]} == 0 )); then
+  echo "No project manifest found in apps/$unit, so there is nothing to package."
+  exit 0
+fi
+
+# Every present language, unlike scripts/run: a build is not one foreground
+# process, so a unit written in two of them has two artifacts rather than an
+# ambiguity to refuse.
+args=(package)
+[[ -z "${CI_DRY_RUN:-}" ]] || args=(--dry-run package)
+
+status=0
+language_capabilities run "${args[@]}" || status=$?
+case "$status" in
+  0) ;;
+  "$NO_RUNNER") echo "No package command configured for: ${languages[*]}. Add the private adapter to scripts/libs/detect.sh." ;;
+  *) exit "$status" ;;
+esac

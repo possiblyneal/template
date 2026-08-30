@@ -401,35 +401,217 @@ _capability_format_write_rust() { cargo fmt; }
 _capability_format_write_swift() { command -v swift >/dev/null 2>&1 || return "$NO_RUNNER"; swift_each swift format --in-place --recursive .; }
 _capability_format_write_kotlin() { gradle_has_task ktlintFormat || return "$NO_RUNNER"; ./gradlew ktlintFormat; }
 
-_capability_dev_node() { has_npm_script dev || return "$NO_RUNNER"; npm run dev; }
-_capability_dev_python() { return "$NO_RUNNER"; }
-# `go run .` needs a main package in the directory it is called from, which
-# neither the root of a workspace nor an app whose entry point sits under src/
-# has -- both reported `no Go files`, and no arrangement of the code cleared it.
-# Ask the modules which packages are main instead. One is the dev server;
-# several is the ambiguity `scripts/dev` already refuses for stacks, named
-# rather than guessed at; none means there is nothing here to start.
-_capability_dev_go() {
-  local package packages mains=()
+# scripts/run resolves the unit's declared run fact into $unit_run and the
+# arguments after `--` into $unit_args; scripts/package resolves the declared
+# targets into $unit_targets. An adapter takes no parameters -- every other one
+# in this file reads the working directory alone -- so this context arrives the
+# same way, already resolved by the caller.
+#
+# The run dispatch is unevenly load-bearing, and that is the trap. In Go, Rust
+# and Kotlin the command is identical whichever value is declared, so anyone
+# auditing those three concludes correctly that the branch changes nothing and
+# can be deleted. It cannot: in Node and Python it chooses between the
+# program's own entry point and a dev server, which are different programs.
+# Delete the branch and a CLI starts a web server, or fails looking for one.
+#
+# Each is expanded with the `+` form so an adapter called with none of it set --
+# from a test, or from a caller that has no unit -- reads an absent array as
+# empty rather than tripping `set -u`.
+# Declared, never assigned, so this file names the context it depends on rather
+# than reading it out of nowhere. `declare -g` without a value creates nothing
+# and overwrites nothing, so it does not matter whether the caller fills them
+# before or after sourcing this file.
+declare -g unit_run unit_args unit_targets
+
+_capability_run_node() {
+  case "${unit_run:-}" in
+    oneshot) has_npm_script start || return "$NO_RUNNER"; npm start -- ${unit_args[@]+"${unit_args[@]}"} ;;
+    *) has_npm_script dev || return "$NO_RUNNER"; npm run dev -- ${unit_args[@]+"${unit_args[@]}"} ;;
+  esac
+}
+# A Python service has no conventional start command -- uvicorn, gunicorn,
+# manage.py runserver and a bare module are all ordinary -- so the long-lived
+# form has nothing to dispatch to rather than a wrong guess to make. A one-shot
+# does: [project.scripts] is where a Python CLI names its entry point, and it is
+# read with the interpreter the project already requires rather than by a shell
+# pattern over TOML.
+_capability_run_python() {
+  local name names_out
+  local -a names=()
+
+  [[ "${unit_run:-}" == oneshot ]] || return "$NO_RUNNER"
+  command -v uv > /dev/null 2>&1 || return "$NO_RUNNER"
+
+  names_out="$(uv run --quiet python -c 'import pathlib, tomllib
+project = tomllib.loads(pathlib.Path("pyproject.toml").read_text()).get("project") or {}
+print("\n".join(project.get("scripts") or {}))' 2> /dev/null)" || return "$NO_RUNNER"
+
+  while IFS= read -r name; do
+    if [[ -n "$name" ]]; then names+=("$name"); fi
+  done <<< "$names_out"
+
+  case "${#names[@]}" in
+    0) return "$NO_RUNNER" ;;
+    1) uv run "${names[0]}" ${unit_args[@]+"${unit_args[@]}"} ;;
+    *)
+      echo "Several console scripts here, and a run is one foreground process." >&2
+      echo "Start the one meant by name:" >&2
+      printf '  uv run %s\n' "${names[@]}" >&2
+      return 1
+      ;;
+  esac
+}
+# `go run .` and `go build .` need a main package in the directory they are
+# called from, which neither the root of a workspace nor an app whose entry
+# point sits under src/ has -- both reported `no Go files`, and no arrangement
+# of the code cleared it. Ask the modules which packages are main instead.
+#
+# Fills the array named by $1. A listing that fails is a failure rather than an
+# empty result -- it means the module graph could not be read at all -- and a
+# command substitution inside mapfile would have swallowed that status.
+_go_main_packages() {
+  local -n _mains_out="$1"
+  local package packages
   packages="$(go_each go list -f '{{if eq .Name "main"}}{{.ImportPath}}{{end}}' ./...)" || return 1
+  _mains_out=()
+  # An `if` rather than a `&&`: this loop is the function's last statement, and
+  # a `&&` whose test fails on the trailing empty line would make an empty
+  # listing return 1 -- a failure where the answer is "no main package here".
   while IFS= read -r package; do
-    [[ -n "$package" ]] && mains+=("$package")
-  done <<<"$packages"
+    if [[ -n "$package" ]]; then _mains_out+=("$package"); fi
+  done <<< "$packages"
+}
+# One main package is the program; several is the ambiguity scripts/run already
+# refuses for stacks, named rather than guessed at; none means there is nothing
+# here to start, which is no runner rather than a failure -- a library is not
+# broken for being a library.
+_capability_run_go() {
+  local -a mains=()
+  _go_main_packages mains || return 1
 
   case "${#mains[@]}" in
     0) return "$NO_RUNNER" ;;
-    1) go run "${mains[0]}" ;;
+    1) go run "${mains[0]}" ${unit_args[@]+"${unit_args[@]}"} ;;
     *)
-      echo "Several main packages here, and a dev server is one foreground process." >&2
+      echo "Several main packages here, and a run is one foreground process." >&2
       echo "Start the one meant by name:" >&2
       printf '  go run %s\n' "${mains[@]}" >&2
       return 1
       ;;
   esac
 }
-_capability_dev_rust() { cargo run; }
-_capability_dev_swift() { return "$NO_RUNNER"; }
-_capability_dev_kotlin() { gradle_has_task run || return "$NO_RUNNER"; ./gradlew run; }
+_capability_run_rust() { cargo run -- ${unit_args[@]+"${unit_args[@]}"}; }
+_capability_run_swift() { return "$NO_RUNNER"; }
+# Gradle takes program arguments as one string rather than a list, so this is
+# the one adapter that cannot pass them through unchanged: an argument
+# containing a space arrives as two.
+_capability_run_kotlin() {
+  gradle_has_task run || return "$NO_RUNNER"
+  ./gradlew run ${unit_args[@]+--args="${unit_args[*]}"}
+}
+
+# Targets are the template's own vocabulary, so a declaration reads the same
+# whatever the unit is written in and the translation is the adapter's
+# business. A target this adapter has no translation for is not a failure: the
+# vocabulary may outgrow one language before another.
+_package_go_target() {
+  case "$1" in
+    linux-amd64) echo "linux amd64" ;;
+    macos-arm64) echo "darwin arm64" ;;
+    *) return 1 ;;
+  esac
+}
+_package_rust_target() {
+  case "$1" in
+    linux-amd64) echo x86_64-unknown-linux-gnu ;;
+    macos-arm64) echo aarch64-apple-darwin ;;
+    *) return 1 ;;
+  esac
+}
+
+# One line per target, because a single per-language result cannot say that one
+# target built and another could not be reached from here. A target the
+# toolchain genuinely cannot reach is not-applicable with the reason named; an
+# unwired language is unavailable. They look alike and are different facts, and
+# reporting the first as the second makes an impossible build read as a broken
+# install.
+_package_target_result() {
+  printf '  %-14s %s: %s\n' "$1" "$2" "$3"
+}
+
+_capability_package_go() {
+  local target pair goos goarch package status=0
+  local -a mains=()
+
+  command -v go > /dev/null 2>&1 || return "$NO_RUNNER"
+  _go_main_packages mains || return 1
+  if (( ${#mains[@]} == 0 )); then
+    echo "No main package here, so there is no executable to build." >&2
+    return "$NO_RUNNER"
+  fi
+
+  mkdir -p dist
+  for target in ${unit_targets[@]+"${unit_targets[@]}"}; do
+    if ! pair="$(_package_go_target "$target")"; then
+      _package_target_result not-applicable "$target" "no Go GOOS/GOARCH is named for it"
+      continue
+    fi
+    read -r goos goarch <<< "$pair"
+    for package in "${mains[@]}"; do
+      GOOS="$goos" GOARCH="$goarch" go build -o "dist/$(basename "$package")-$target" "$package" || status=1
+    done
+  done
+  return "$status"
+}
+
+# cargo names the binaries; reading them out of the metadata beats guessing the
+# crate name, which is not always the binary's.
+_cargo_bin_names() {
+  cargo metadata --no-deps --format-version 1 2> /dev/null |
+    jq -r '.packages[].targets[] | select(.kind[] == "bin") | .name'
+}
+_capability_package_rust() {
+  local target triple name status=0
+
+  command -v cargo > /dev/null 2>&1 || return "$NO_RUNNER"
+  command -v jq > /dev/null 2>&1 || return "$NO_RUNNER"
+
+  mkdir -p dist
+  for target in ${unit_targets[@]+"${unit_targets[@]}"}; do
+    if ! triple="$(_package_rust_target "$target")"; then
+      _package_target_result not-applicable "$target" "no Rust target triple is named for it"
+      continue
+    fi
+    # rustup is how a cross target is installed, so its list is the honest
+    # answer to whether this host can reach the target at all. Without rustup
+    # there is no list to consult and cargo decides, which is a real failure
+    # rather than a skip.
+    if command -v rustup > /dev/null 2>&1 &&
+      ! rustup target list --installed 2> /dev/null | grep -qx "$triple"; then
+      _package_target_result not-applicable "$target" "the Rust target $triple is not installed (rustup target add $triple)"
+      continue
+    fi
+
+    if ! cargo build --release --locked --target "$triple"; then
+      status=1
+      continue
+    fi
+    while IFS= read -r name; do
+      [[ -n "$name" && -f "target/$triple/release/$name" ]] || continue
+      cp "target/$triple/release/$name" "dist/$name-$target"
+    done < <(_cargo_bin_names)
+  done
+  return "$status"
+}
+
+# No adapter yet, and the gap is a signpost rather than a mystery: a Node or
+# Python executable means bundling an interpreter, and a Swift or Kotlin one
+# means a toolchain decision this template has not made. Each is where that
+# adapter goes when the need arrives.
+_capability_package_node() { return "$NO_RUNNER"; }
+_capability_package_python() { return "$NO_RUNNER"; }
+_capability_package_swift() { return "$NO_RUNNER"; }
+_capability_package_kotlin() { return "$NO_RUNNER"; }
 
 _capability_is_not_applicable() {
   case "$1:$2" in
@@ -446,7 +628,7 @@ _capability_is_not_applicable() {
 
 _capability_is_supported() {
   case "$1" in
-    lint|format-check|typecheck|test|build|audit|toolchain|format-write|dev) return 0 ;;
+    lint|format-check|typecheck|test|build|audit|toolchain|format-write|run|package) return 0 ;;
     *) return 1 ;;
   esac
 }

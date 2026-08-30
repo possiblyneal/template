@@ -39,13 +39,23 @@ else
 fi
 cleanup
 
-fixture "dev stays offline"
-out="$(cd "$work" && GH_TRACE="$work/gh-called" PATH="$work/bin:$PATH" scripts/dev 2>&1)"
+fixture "run stays offline"
+out="$(cd "$work" && GH_TRACE="$work/gh-called" PATH="$work/bin:$PATH" scripts/run 2>&1)"
 status=$?
 if (( status == 0 )) && [[ ! -e "$work/gh-called" ]]; then
   pass
 else
-  fail "scripts/dev contacted GitHub or failed in an empty local fixture"
+  fail "scripts/run contacted GitHub or failed in an empty local fixture"
+fi
+cleanup
+
+fixture "package stays offline"
+out="$(cd "$work" && GH_TRACE="$work/gh-called" PATH="$work/bin:$PATH" scripts/package 2>&1)"
+status=$?
+if (( status == 0 )) && [[ ! -e "$work/gh-called" ]]; then
+  pass
+else
+  fail "scripts/package contacted GitHub or failed in an empty local fixture"
 fi
 cleanup
 
