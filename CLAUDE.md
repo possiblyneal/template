@@ -97,6 +97,20 @@ Some guarantees these files make are only half-kept by the files themselves. Cur
 
 A generated repository is where a guarantee unavailable on this plan can actually be observed. Push protection, branch rulesets, and code scanning are all free on a public repository and unavailable on a private one here, so `scripts/repo-settings check` reports `not offered for the plan` against this repository whether or not the check works. Build a public repository from the payload to tell those apart.
 
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `possiblyneal/template`, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical labels, unrenamed. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` at the root, ADRs in `docs/adrs/`. See `docs/agents/domain.md`.
+
 ## Child Index
 
 - `apps/github-repository-template/CLAUDE.md` — the template payload and the reference docs explaining it
