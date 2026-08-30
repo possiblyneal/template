@@ -53,6 +53,8 @@ The specific operating parameters for the AI agent.
 
 `apps/<name>/`: One deployable service or durable domain boundary, owning its own dependencies, tests, and specs.
 
+`apps/<name>/.unit.json`: How that unit runs and what it ships, as two independent facts — `run` (`oneshot`, `longlived`, `none`) and `ships` (`kind` of `executable`, `quadlet`, or `none`, carrying `targets` exactly when the kind is `executable`). Neither fact is detectable from the source, and `scripts/structure` requires the file on every unit and checks each value against a fixed enum. The skeleton ships `run: none, ships: none`, so adopting it is a value to change rather than a file to discover.
+
 `apps/<name>/src/`: Source code for that unit.
 
 `apps/<name>/tests/`: Tests for that unit that don't touch other units.
@@ -73,7 +75,7 @@ The specific operating parameters for the AI agent.
 
 `scripts/release`: Validates a version tag against the changelog and cuts a GitHub release.
 
-`scripts/structure`: Audits where files sit against the Layout rules in the root `CLAUDE.md` — the root folder and file allowlists, the `apps/` unit-and-domain shape, `src/` placement, the leaf rule, and the Markdown-only rule for `docs/`. Called by `scripts/check` and by pre-commit on every commit. It judges placement only; the three rules that turn on what a file contains are reported `not-applicable` rather than guessed.
+`scripts/structure`: Audits where files sit against the Layout rules in the root `CLAUDE.md` — the root folder and file allowlists, the `apps/` unit-and-domain shape, `src/` placement, the leaf rule, and the Markdown-only rule for `docs/`. Called by `scripts/check` and by pre-commit on every commit. It reads the contents of exactly one file, a unit's `.unit.json`, whose whole purpose is to state what a tree cannot show; the three rules that turn on what any other file contains are reported `not-applicable` rather than guessed. Reading a declaration needs `jq`, and its absence is reported `unavailable` rather than passed over.
 
 `.structure-allow`: Convention (not a shipped file) for the permission the Layout rules refer to — one path per line to allow a named exception, a trailing `/` to stop the audit descending into a vendored or fixture tree. Absent until a repository needs one.
 

@@ -43,7 +43,7 @@ This repository has no root language manifest, so `scripts/check` reports there 
 
 ## Layout
 
-Where a new file goes. `scripts/structure` enforces everything in this section that is a question about placement, and reports the three that are not.
+Where a new file goes. `scripts/structure` enforces everything in this section that is a question about placement, plus the values in a unit's declaration, and reports the three rules that are neither.
 
 **Root holds only these, and everything at root is repo-wide in scope.** `libs/`, `tests/`, `scripts/`, `tools/`, `deploy/`, and `assets/` here hold only what is shared across apps or operates on the whole repository; anything scoped to one app or domain belongs under that app.
 
@@ -69,6 +69,20 @@ Root *files* are permitted by name rather than by pattern: the eight the templat
 - Split a unit into domains only when it spans distinct business areas that benefit from isolation. Each domain is one folder under its unit.
 - `src/` sits under the unit when there are no domains, and under each domain when there are. Never both, and never `apps/src/`.
 - A unit or domain may hold its own `libs/`, `tests/`, `scripts/`, `docs/`, `tools/`, `deploy/`, or `assets/`, scoped strictly to it.
+
+**Every unit declares how it runs and what it ships**, in a `.unit.json` at the unit's root — never at a domain's. Neither fact is on disk: a Go module with one `main` package is a CLI, a TUI, or a service, and the compiler cannot tell them apart. `docs/adrs/0001-declare-unit-delivery-as-two-facts.md` has the reasoning; read it before changing the shape.
+
+```json
+{ "schema_version": 1, "run": "oneshot", "ships": { "kind": "executable", "targets": ["linux-amd64"] } }
+```
+
+- `run` — `oneshot` for a process that exits on its own, `longlived` for one that runs until stopped, `none` for a unit with nothing to run.
+- `ships.kind` — `executable`, `quadlet`, or `none`.
+- `ships.targets` — required exactly when the kind is `executable`, rejected on every other kind. The vocabulary is the template's own and each language adapter translates it: `linux-amd64`, `macos-arm64`.
+
+The two facts vary independently, so every pairing is legal and the audit checks values alone. A scheduled job runs `oneshot` and ships a `quadlet`; a library runs `none` and still ships. A rule forbidding a combination is a rule nobody revisits when the exception arrives.
+
+Reading the file needs `jq`, which is why `scripts/doctor` requires it once a unit declares. Without it the audit reports `unavailable` and fails rather than passing over a file it never opened.
 
 **Scoped folders are leaves for their own kind.** `libs/`, `tests/`, `scripts/`, `tools/`, `assets/`, `docs/`, and `deploy/` may nest a different kind — `scripts/tests/libs/` is fine — but never another of the same kind at any depth, and never a `src/`. Choose the folder whose scope matches the file's scope.
 

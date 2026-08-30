@@ -42,6 +42,16 @@ write() {
   printf '%s\n' "${2-x}" > "$work/$1"
 }
 
+# Every unit owes a declaration, so a fixture exercising some other rule writes
+# a legal one rather than tripping that one too.
+unit() {
+  write "apps/$1/.unit.json" '{"schema_version": 1, "run": "none", "ships": {"kind": "none"}}'
+}
+
+declaration() {
+  printf '{"schema_version": 1, "run": "%s", "ships": %s}' "$1" "$2"
+}
+
 assert_passes() {
   if audit; then
     pass
@@ -72,12 +82,14 @@ trap cleanup EXIT
 echo "structure-test"
 
 fixture "a minimal compliant repository passes"
+unit billing
 write CLAUDE.md
 write apps/billing/src/main.py
 write docs/adrs/0001-a-decision.md
 assert_passes
 
 fixture "a root manifest and its lockfile are permitted"
+unit billing
 write pyproject.toml
 write uv.lock
 write apps/billing/src/main.py
@@ -102,23 +114,27 @@ write apps/src/main.py
 assert_fails apps-layout
 
 fixture "a unit with domains keeps no src of its own"
+unit billing
 write apps/billing/src/main.py
 write apps/billing/invoicing/src/main.py
 assert_fails apps-layout
 
 fixture "a unit with domains puts src under each domain"
+unit billing
 write apps/billing/invoicing/src/main.py
 write apps/billing/dunning/src/main.py
 write apps/billing/docs/specs/a-contract.md
 assert_passes
 
 fixture "a unit without domains puts src under itself"
+unit billing
 write apps/billing/src/main.py
 write apps/billing/tests/a-test.py
 write apps/billing/scripts/deploy
 assert_passes
 
 fixture "a scoped folder beside src is not a domain"
+unit billing
 write apps/billing/src/main.py
 write apps/billing/libs/shared.py
 write apps/billing/assets/logo.svg
@@ -173,6 +189,7 @@ assert_fails deploy-folders
 # directory named * would otherwise glob and one holding a space would split,
 # and either way the violation is lost rather than reported.
 fixture "a unit whose name would glob is still checked"
+unit '*'
 write 'apps/*/src/main.py'
 write 'apps/*/billing/src/main.py'
 assert_fails apps-layout
@@ -181,6 +198,7 @@ assert_fails apps-layout
 # reported the same violation under the garbled name apps/app/. The name is
 # what the fix is about, so the name is what this asserts.
 fixture "a unit whose name holds a space is reported under that name"
+unit 'my app'
 write 'apps/my app/src/main.py'
 write 'apps/my app/billing/src/main.py'
 audit || true
@@ -204,60 +222,173 @@ assert_passes
 
 # Everything below a src/ is the language's arrangement, not this repository's.
 fixture "a docs folder inside src is the source tree's own"
+unit api
 write apps/api/src/internal/docs/swagger.json
 assert_passes
 
 fixture "the leaf rule stops at src"
+unit api
 write apps/api/src/gen/scripts/inner/scripts/run.py
 assert_passes
 
 fixture "a deploy folder inside src is not a deployment folder"
+unit api
 write apps/api/src/deploy/nomad/job.hcl
 assert_passes
 
 fixture "a src nested inside src is not a placement violation"
+unit api
 write apps/api/src/vendor/tests/src/x.py
 assert_passes
 
 fixture "the rules still apply to the tree around the source"
+unit api
 write apps/api/docs/swagger.json
 assert_fails docs-content
 
 # apps/ is not a scope holder, so the segment under it is a unit name and can
 # never be a scoped folder however it is spelled.
 fixture "a unit may be named docs"
+unit docs
 write apps/docs/src/main.py
 assert_passes
 
 fixture "a unit may be named tests"
+unit tests
 write apps/tests/tests/a.py
 assert_passes
 
 fixture "a unit may be named scripts"
+unit scripts
 write apps/scripts/scripts/build.sh
 assert_passes
 
 fixture "a unit may be named deploy"
+unit deploy
 write apps/deploy/src/main.py
 assert_passes
 
 fixture "a unit named docs still holds its own docs to the docs rule"
+unit docs
 write apps/docs/docs/notes.yaml
 assert_fails docs-content
 
 fixture "a unit named tests still holds its own tests to the leaf rule"
+unit tests
 write apps/tests/tests/inner/tests/a.py
 assert_fails leaf-rule
 
 fixture "a docs folder under a unit is still a scope holder"
+unit api
 write apps/api/docs/src/notes.md
 assert_fails src-placement
+
+# --- unit declarations ------------------------------------------------------
+#
+# The audit reads this one file's contents, so these cases assert values rather
+# than placement. Every run-and-ship pairing is legal by design; what is
+# checked is that each value is one the template recognizes.
+
+fixture "a unit without a declaration fails"
+write apps/billing/src/main.py
+assert_fails unit-declaration
+
+fixture "a declaration under a domain does not stand in for the unit's"
+write apps/billing/invoicing/.unit.json "$(declaration none '{"kind": "none"}')"
+write apps/billing/invoicing/src/main.py
+assert_fails unit-declaration
+
+fixture "a repository with no units has no declaration to require"
+write CLAUDE.md
+write docs/adrs/0001-a-decision.md
+assert_passes
+
+fixture "a file directly under apps needs no declaration"
+write apps/README.md
+audit || true
+if grep -qE '^unit-declaration +not-applicable' "$work/.audit-output"; then
+  pass
+else
+  fail "expected no unit to be found: $(grep -E 'unit-declaration' "$work/.audit-output" | xargs)"
+fi
+
+fixture "an unrecognized run value fails"
+write apps/billing/.unit.json "$(declaration server '{"kind": "none"}')"
+assert_fails unit-facts
+
+fixture "an unrecognized ship kind fails"
+write apps/billing/.unit.json "$(declaration none '{"kind": "image"}')"
+assert_fails unit-facts
+
+fixture "a wrong schema version fails"
+write apps/billing/.unit.json '{"schema_version": 2, "run": "none", "ships": {"kind": "none"}}'
+assert_fails unit-facts
+
+fixture "a declaration that is not JSON fails"
+write apps/billing/.unit.json 'run: none'
+assert_fails unit-facts
+
+fixture "a missing ships object fails"
+write apps/billing/.unit.json '{"schema_version": 1, "run": "none"}'
+assert_fails unit-facts
+
+fixture "executable without targets fails"
+write apps/billing/.unit.json "$(declaration oneshot '{"kind": "executable"}')"
+assert_fails unit-facts
+
+fixture "executable with an empty target list fails"
+write apps/billing/.unit.json "$(declaration oneshot '{"kind": "executable", "targets": []}')"
+assert_fails unit-facts
+
+fixture "targets on a kind that is not executable fails"
+write apps/billing/.unit.json "$(declaration longlived '{"kind": "quadlet", "targets": ["linux-amd64"]}')"
+assert_fails unit-facts
+
+fixture "an unrecognized target fails"
+write apps/billing/.unit.json "$(declaration oneshot '{"kind": "executable", "targets": ["win32"]}')"
+assert_fails unit-facts
+
+# The two facts vary independently, so the audit checks values and never the
+# pairing. A scheduled job runs oneshot and ships a quadlet; a library runs
+# nothing and still ships. Both look odd and both are legal.
+fixture "every run and ship pairing is accepted"
+i=0
+for run in oneshot longlived none; do
+  for ships in '{"kind": "none"}' '{"kind": "quadlet"}' '{"kind": "executable", "targets": ["linux-amd64", "macos-arm64"]}'; do
+    i=$((i + 1))
+    write "apps/unit$i/.unit.json" "$(declaration "$run" "$ships")"
+    write "apps/unit$i/src/main.py"
+  done
+done
+assert_passes
+
+# A check that did not run is not a check that passed. The fixture's PATH holds
+# only what the audit itself needs -- its interpreter, dirname for resolving its
+# own root, and git for the enumeration -- so jq is absent and the audit must
+# say so rather than report a pass over a file it never opened. If the script
+# grows another dependency this case fails loudly with the output, which is the
+# point: a silently shortened run is what the four states exist to prevent.
+fixture "a missing jq makes the fact check unavailable rather than passing"
+unit billing
+write apps/billing/src/main.py
+git -C "$work" add -A > /dev/null 2>&1
+mkdir -p "$work/.bin"
+for tool in bash dirname git; do
+  ln -s "$(command -v "$tool")" "$work/.bin/$tool"
+done
+output="$( (cd "$work" && PATH="$work/.bin" ./scripts/structure) 2>&1 )"
+if grep -qE '^unit-facts +unavailable' <<< "$output"; then
+  pass
+else
+  fail "expected unit-facts unavailable, got: $output"
+fi
 
 fixture "a non-Markdown file under docs fails"
 write docs/specs/openapi.yaml
 assert_fails docs-content
 
 fixture "the docs rule reaches a scoped docs folder"
+unit billing
 write apps/billing/src/main.py
 write apps/billing/docs/specs/openapi.yaml
 assert_fails docs-content

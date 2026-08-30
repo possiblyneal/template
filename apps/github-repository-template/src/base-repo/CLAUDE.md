@@ -6,7 +6,7 @@ Located at `./scripts` Use these instead of per-language tools; each detects the
 
 ## Layout
 
-Where a new file goes. `scripts/structure` enforces everything here that is a question about placement, and reports the three rules that are not. Its failure messages point back at this section.
+Where a new file goes. `scripts/structure` enforces everything here that is a question about placement, plus the values in a unit's declaration, and reports the three rules that are neither. Its failure messages point back at this section.
 
 **Root holds only these, and everything at root is repo-wide in scope.** `libs/`, `tests/`, `scripts/`, `tools/`, `deploy/`, and `assets/` here hold only what is shared across apps or operates on the whole repository; anything scoped to one app belongs under that app.
 
@@ -20,6 +20,20 @@ Root *files* are permitted by name rather than by pattern: the eight this templa
 - Split a unit into domains only when it spans distinct business areas that benefit from isolation. Each domain is one folder under its unit.
 - `src/` sits under the unit when there are no domains, and under each domain when there are. Never both, and never `apps/src/`.
 - A unit or domain may hold its own `libs/`, `tests/`, `scripts/`, `docs/`, `tools/`, `deploy/`, or `assets/`, scoped strictly to it.
+
+**Every unit declares how it runs and what it ships**, in a `.unit.json` at the unit's root — never at a domain's. Neither fact is on disk: a Go module with one `main` package is a CLI, a TUI, or a service, and the compiler cannot tell them apart.
+
+```json
+{ "schema_version": 1, "run": "oneshot", "ships": { "kind": "executable", "targets": ["linux-amd64"] } }
+```
+
+- `run` — `oneshot` for a process that exits on its own, `longlived` for one that runs until stopped, `none` for a unit with nothing to run.
+- `ships.kind` — `executable`, `quadlet`, or `none`.
+- `ships.targets` — required exactly when the kind is `executable`, rejected on every other kind: `linux-amd64`, `macos-arm64`.
+
+The two facts vary independently, so every pairing is legal and the audit checks values alone. A scheduled job runs `oneshot` and ships a `quadlet`; a library runs `none` and still ships.
+
+Reading the file needs `jq`, which is why `scripts/doctor` requires it once a unit declares. Without it the audit reports `unavailable` and fails rather than passing over a file it never opened.
 
 **Scoped folders are leaves for their own kind.** `libs/`, `tests/`, `scripts/`, `tools/`, `assets/`, `docs/`, and `deploy/` may nest a different kind — `scripts/tests/libs/` is fine — but never another of the same kind at any depth, and never a `src/`.
 

@@ -3,8 +3,10 @@ set -euo pipefail
 
 # Audit the repository's shape against the structure rules in CLAUDE.md.
 #
-# This checks where a file sits, never what is in it. Three of the rules are
-# about content and are reported not-applicable rather than guessed at: whether
+# This checks where a file sits, and reads the contents of exactly one file --
+# a unit's .unit.json, which exists because how a unit runs and what it ships
+# are the two facts a tree cannot show. Three of the rules are about content
+# and are reported not-applicable rather than guessed at: whether
 # libs/ really holds code shared across apps, whether tests/ really spans them,
 # and whether a file sits at the scope it belongs to. A script that inferred
 # those from paths would be wrong quietly, which is worse than not asking.
@@ -73,6 +75,49 @@ scoped_folders=(assets deploy docs libs scripts tests tools)
 # a repository, so a .structure-allow entry naming another is the expected case
 # here rather than the exceptional one.
 deploy_folders=(compose containerfile env quadlet systemd)
+
+# The values a unit declaration may carry. Values only: every run-and-ship
+# pairing is legal, including the ones that look odd, because a rule forbidding
+# a combination is a rule nobody revisits when the exception arrives. ADR 0001
+# has the two cases -- a scheduled job and a library -- that broke the design
+# where one word named both facts.
+unit_runs='["oneshot","longlived","none"]'
+unit_kinds='["executable","quadlet","none"]'
+unit_targets='["linux-amd64","macos-arm64"]'
+
+# Reads one declaration and prints one line per illegal value. In jq rather
+# than in shell because hand-parsing a structured format is how
+# libs/precommit.sh came to exist: a pattern that read one of three valid forms
+# and reported the other two correct when they were not.
+#
+# Single-quoted deliberately: every \(...) below is jq's own interpolation and
+# every $name is a jq argument, so shell expansion here would corrupt the
+# program rather than fill it in.
+# shellcheck disable=SC2016
+unit_facts_program='
+  [
+    (if .schema_version != 1 then "schema_version \(.schema_version|tojson) is not 1" else empty end),
+
+    (.run as $r | if ($runs | index($r)) then empty
+     else "run \($r|tojson) is not one of \($runs|join(", "))" end),
+
+    (if (.ships|type) != "object" then "ships \(.ships|tojson) is not an object naming a kind"
+     else
+       (.ships.kind as $k | if ($kinds | index($k)) then empty
+        else "ships.kind \($k|tojson) is not one of \($kinds|join(", "))" end),
+
+       (if .ships.kind == "executable" then
+          (if (.ships.targets|type) != "array" or (.ships.targets|length) == 0
+           then "ships.targets is required and non-empty when kind is executable"
+           else (.ships.targets[] | . as $t | select(($targets | index($t)) | not)
+                 | "ships.targets \($t|tojson) is not one of \($targets|join(", "))")
+           end)
+        elif (.ships|has("targets")) then
+          "ships.targets is set but kind is \(.ships.kind|tojson); targets belong to executable alone"
+        else empty end)
+     end)
+  ] | .[]
+'
 
 in_list() {
   local needle="$1" item
@@ -260,6 +305,7 @@ verdict root-folders "every root folder is permitted"
 # is not rather than by a marker file a repository would have to remember to
 # write.
 units=()
+declared=()
 domains=()
 unit_src=()
 apps_src=""
@@ -285,6 +331,11 @@ for path in "${paths[@]}"; do
   in_list "$unit" ${units[@]+"${units[@]}"} || units+=("$unit")
 
   child="${parts[2]}"
+  # A unit declares at its own root. One deeper is a domain's or a scoped
+  # folder's file, and domains do not declare -- the unit is what ships.
+  if (( ${#parts[@]} == 3 )) && [[ "$child" == .unit.json ]]; then
+    declared+=("$unit")
+  fi
   # A file directly under the unit is not a domain and not a src placement.
   (( ${#parts[@]} >= 4 )) || continue
 
@@ -305,6 +356,48 @@ for unit in ${units[@]+"${units[@]}"}; do
   done
 done
 verdict apps-layout "units and domains hold src/ where the rules place it"
+
+# --- unit declarations ------------------------------------------------------
+
+# How a unit runs and what it ships are not on disk: a Go module with one main
+# package is a CLI, a TUI, or a service, and the compiler cannot tell them
+# apart. So a unit declares, and this is where the declaration is required --
+# at commit time with the unit named, rather than at release time with an
+# empty asset list.
+if (( ${#units[@]} == 0 )); then
+  result unit-declaration not-applicable "no units under apps/"
+else
+  for unit in "${units[@]}"; do
+    in_list "$unit" ${declared[@]+"${declared[@]}"} && continue
+    record "apps/$unit/: no .unit.json; a unit declares how it runs and what it ships"
+  done
+  verdict unit-declaration "every unit carries a declaration"
+fi
+
+if (( ${#declared[@]} == 0 )); then
+  result unit-facts not-applicable "no declaration to read"
+elif ! command -v jq > /dev/null 2>&1; then
+  # A check that did not run is not a check that passed, so this is unavailable
+  # and fails the run rather than reporting a silent pass over unread files.
+  result unit-facts unavailable "jq is needed to read a unit declaration"
+  status=1
+else
+  for unit in "${declared[@]}"; do
+    file="apps/$unit/.unit.json"
+    if ! problems="$(jq -r \
+      --argjson runs "$unit_runs" \
+      --argjson kinds "$unit_kinds" \
+      --argjson targets "$unit_targets" \
+      "$unit_facts_program" "$file" 2> /dev/null)"; then
+      record "$file: not readable as JSON"
+      continue
+    fi
+    while IFS= read -r problem; do
+      [[ -n "$problem" ]] && record "$file: $problem"
+    done <<< "$problems"
+  done
+  verdict unit-facts "every declared fact is a value the template recognizes"
+fi
 
 # --- src placement ----------------------------------------------------------
 
