@@ -39,15 +39,17 @@ The root config files and `apps/github-repository-template/src/base-repo/` hold 
 
 **Source:** [Template payload contract](../apps/github-repository-template/CLAUDE.md)
 
-## CodeQL fails fast here, and that failure is the finding
+## CodeQL is deleted here, and the record is the finding
 
-Code scanning accepts uploaded results from a public repository, or from a private one with GitHub Advanced Security. This repository is private on a free plan, so the `scanning` job in `.github/workflows/codeql.yml` fails in seconds with the reason in the run summary, instead of analyzing for an hour and dying at the upload step.
+Code scanning accepts uploaded results from a public repository, or from a private one with GitHub Advanced Security. This repository is neither, so `.github/workflows/codeql.yml` could never upload. It is deleted here, and `generation.features.codeql` in `.repo-template.json` reads `omitted-by-choice` — one of the three resolutions the workflow's own error named, alongside going public and enabling Advanced Security.
 
-**Do:** Read a red `Code scanning enabled` check as accurate — this repository genuinely has no static analysis coverage. Fix it by making the repository public or enabling Advanced Security. Never quiet it with `continue-on-error`, a removed upload step, or an `if:` that skips the job.
+**Do:** Restore the workflow from the payload at `apps/github-repository-template/src/base-repo/.github/workflows/codeql.yml` and clear the `features` entry the moment this repository goes public or gains Advanced Security. Until then, read `omitted-by-choice` as the statement that this repository has no static analysis coverage. Never fake coverage instead — `continue-on-error`, a removed upload step, or an `if:` that skips the job all render the workflow green, so a repository with no coverage looks exactly like one that scanned clean. A recorded omission is visible; a green check over nothing is not.
 
-**Why not skip it:** A skipped job renders the workflow green, so a repository with no coverage looks on the checks list exactly like one that scanned clean and found nothing. That is the same false green `continue-on-error` produces, reached by a different route, and it is worth being precise about which problem the fail-fast solves: not that the check was red, but that it burned an hour and then reported `Code scanning is not enabled` underneath a misleading note about pull requests from forks. Red was always the honest answer. Slow and misdescribed was the defect.
+**Why a record rather than a permanently red check:** The workflow shipped for a while precisely so the red check would say the coverage gap out loud, which it did on every pull request, every push to `main`, and every Tuesday at 07:41. It could not turn green without a plan change, so it charged about 440 Actions minutes a month — measured at 337 over the 23 days it ran in August, against a 2000-minute free allowance — to restate a fact that cannot change while this repository is private on a free plan. Recorded versus silent is the distinction that matters, and `features` is the recorded form at no monthly cost.
 
-**Why the API and not the event:** Visibility is read through `gh api` because `github.event.repository` is documented as "Not applicable" for `schedule`. Read from the event, the weekly run would compare a null against `public` and fail a public repository every Tuesday. A failed lookup fails the job for the same reason, rather than defaulting either way.
+**The deletion survives a template update, and not by luck:** `.github/**` is `managed`, but `update.md` reconciles only paths in the preflight delta. An unchanged payload `codeql.yml` never enters that delta, so nothing re-applies it; a changed one meets "a changed file was deleted" and stops at the conflict gate for a policy decision. Neither path restores it quietly.
+
+**Why the payload keeps it:** The fail-fast fixed a real defect and should keep shipping. Before it, the job burned an hour and then reported `Code scanning is not enabled` underneath a misleading note about pull requests from forks — slow and misdescribed, not merely red. In the payload it also reads visibility through `gh api` rather than `github.event.repository`, which GitHub documents as "Not applicable" for `schedule`; read from the event, the weekly run would compare a null against `public` and fail a public repository every Tuesday.
 
 **Source:** [Payload structure](../apps/github-repository-template/docs/github_repository_structure.md)
 

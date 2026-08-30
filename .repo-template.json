@@ -16,7 +16,7 @@
     "visibility": "private",
     "self_hosted": true,
     "features": {
-      "codeql": "shipped-unmodified-fails-upload-without-ghas",
+      "codeql": "omitted-by-choice",
       "python_manifest": "omitted-by-choice"
     }
   },
