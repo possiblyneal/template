@@ -16,7 +16,7 @@ Root *files* are permitted by name rather than by pattern: the eight this templa
 
 **`apps/` breaks the project into its smallest deployable units.** There may be only one.
 
-- Each unit is one folder under `apps/`, defined by deploying, scaling, and versioning independently — the Dockerfile test. A file sitting directly in `apps/` belongs to no unit.
+- Each unit is one folder under `apps/`: the smallest piece of this repository delivered on its own — deployed, installed, published, or copied. A file sitting directly in `apps/` belongs to no unit.
 - Split a unit into domains only when it spans distinct business areas that benefit from isolation. Each domain is one folder under its unit.
 - `src/` sits under the unit when there are no domains, and under each domain when there are. Never both, and never `apps/src/`.
 - A unit or domain may hold its own `libs/`, `tests/`, `scripts/`, `docs/`, `tools/`, `deploy/`, or `assets/`, scoped strictly to it.

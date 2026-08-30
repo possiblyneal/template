@@ -30,28 +30,27 @@ _Avoid_: shared folder, common folder
 ### Delivery
 
 **Unit declaration**:
-The file at a unit's root stating how that unit runs and what it ships.
-Required of every unit; its absence is a structure failure, not a default.
+`.unit.json` at a unit's root, stating how that unit runs and what it ships.
 _Avoid_: unit config, manifest, metadata
 
 **Run fact**:
-How a unit is invoked locally — as a process that exits on its own, as one that
-runs until stopped, or not at all.
+How a unit is invoked locally: `oneshot` for a process that exits on its own,
+`longlived` for one that runs until stopped, `none` for a unit with nothing to run.
 _Avoid_: shape, type, mode, dev command
 
 **Ship fact**:
-What a unit delivers, named as intent rather than as a file format, so the
-language adapter decides the concrete form.
+What a unit delivers, named as intent so the language adapter decides the
+concrete form: `executable`, `quadlet`, or `none`.
 _Avoid_: artifact type, output, build target
 
 **Target**:
-A platform an executable is built for, written in a neutral vocabulary the
-template owns and each language adapter translates.
+A platform an executable is built for, in a vocabulary the template owns and
+each language adapter translates: `linux-amd64`, `macos-arm64`.
 _Avoid_: platform, arch, triple, GOOS
 
 **Shape**:
-Deliberately not a term here. A single word naming what a unit "is" collapses
-two independent facts — how it runs and what it ships — that vary separately.
+Deliberately not a term here: one word naming what a unit "is" collapses the run
+fact and the ship fact, which vary separately. ADR 0001 has the argument.
 _Avoid_: shape, kind, app type
 
 ### Checks
@@ -66,8 +65,8 @@ The per-language implementation of one capability.
 _Avoid_: handler, driver, backend
 
 **Result state**:
-The outcome of a capability: `pass`, `not-applicable`, `unavailable`, or `FAIL`.
-A check that did not run is never one that passed.
+The outcome of one capability against one language: `pass`, `not-applicable`,
+`unavailable`, or `FAIL`.
 _Avoid_: status, skipped, n/a
 
 ### Template

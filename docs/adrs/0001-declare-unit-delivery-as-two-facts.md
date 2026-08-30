@@ -18,7 +18,8 @@ Every unit under `apps/` carries a `.unit.json` at its root declaring
 
 - `run` — `oneshot` | `longlived` | `none`: how the unit is invoked locally.
 - `ships` — an object with `kind` (`executable` | `quadlet` | `none`) plus
-  kind-specific parameters; `executable` carries `targets`.
+  kind-specific parameters. `targets` is present exactly when `kind` is
+  `executable`: required there, rejected on every other kind.
 
 The facts are independent: any `run` value may pair with any `ships` value, and
 nothing validates the combination. `scripts/structure` requires the file on every
@@ -63,6 +64,19 @@ and a Python wheel are both `executable`. The one break from that principle is
 `quadlet`, which names a file format because the alternative names nothing usable:
 "container" would suggest the template builds an image, which it deliberately does not.
 
+**YAML for the declaration.** Rejected on two counts. `jq` is already a hard
+dependency of `scripts/doctor`, so JSON needs no new tool, and this repository has
+a documented history of hand-parsing YAML wrongly — `libs/precommit.sh` exists
+because a single-line pattern read one of three valid list forms and reported a
+clone correctly configured when it was not. The declaration is data read by
+scripts, not prose read by people. Do not migrate this to `.unit.yaml`.
+
+**Naming the file for its content.** `.shape.json` was rejected because there is
+no shape — that is the whole decision above. `.build.json` was rejected because
+`build` already means "does it compile" in this codebase, and the run fact is not
+a build fact. Heterogeneous content has no accurate content name, so the file is
+named for its subject: the unit.
+
 **A `site` kind and a TTY flag.** Both dropped for having no consumer. Nothing in the
 capability layer reads either, and `interactive` is orthogonal to lifecycle anyway —
 `k9s` and `htop` are long-lived *and* interactive, so a third `run` value would be a
@@ -75,9 +89,18 @@ one shape's version of the fact. `run` is lifecycle-neutral and idiomatic in all
 supported languages. Argument passthrough uses a `--` separator; the unit name stays
 optional when only one unit exists and required when several do.
 
-**`package` is a new capability, invoked at release only.** `scripts/release` walks
-`apps/`, packages every shippable unit, and skips `ships: none`. One tag releases
-everything.
+**`package` is a new capability, reachable as `scripts/package`.** Nothing invokes
+it from the gate — it is not a check — but a developer runs it directly to build a
+binary without cutting a release, which is why it is a command and not logic inside
+`scripts/release`. At release time `scripts/release` walks `apps/`, packages every
+shippable unit, and skips `ships: none`. One tag releases everything.
+
+**The four result states carry the packaging outcomes, and two of them are easy to
+confuse.** A target the toolchain cannot reach — Swift cross-compiling to macOS
+from Linux — is `not-applicable` with the reason named. A language with no adapter
+wired yet is `unavailable`. A missing capability and a missing tool are different
+facts, and collapsing them would make an impossible build look like a broken
+install.
 
 **`ships: quadlet` produces no release asset.** The unit ships
 `deploy/quadlet/<name>.build` and `<name>.container`; systemd and podman build on the
@@ -106,5 +129,6 @@ file to discover.
 adopting the template means `apps/kb/src/`.
 
 **Deferred:** worker, scheduled job, desktop GUI, serverless function, plugin, and
-library are all expressible in the two facts but have no adapter wired. Python and
-Node report no runner for `ships: executable` until someone needs them.
+library are all expressible in the two facts but have no adapter wired. Go and Rust
+are the only languages that build an `executable`; Python, Node, Swift, and Kotlin
+report no runner for it until someone needs them.
