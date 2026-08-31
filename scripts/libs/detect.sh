@@ -423,10 +423,45 @@ _capability_format_write_kotlin() { gradle_has_task ktlintFormat || return "$NO_
 # before or after sourcing this file.
 declare -g unit_run unit_args unit_targets
 
+# The paths `bin` names, one per line. A string names one and an object names
+# several; either way the field is the package's own declaration of what it is
+# when run, which is what [project.scripts] declares in Python.
+npm_bin_entries() {
+  has_node &&
+    command -v node > /dev/null 2>&1 &&
+    node -e 'const b = require("./package.json").bin || {};
+for (const p of typeof b === "string" ? [b] : Object.values(b)) console.log(p);' 2> /dev/null
+}
+
+# A one-shot runs the entry point `bin` names, because naming one is how a
+# package says it is a CLI. A one-shot that is not a CLI -- a script, a job --
+# names none, and `npm start` is how it is started instead. A long-lived unit
+# runs the dev server whether or not the package also ships a CLI.
 _capability_run_node() {
-  case "${unit_run:-}" in
-    oneshot) has_npm_script start || return "$NO_RUNNER"; npm start -- ${unit_args[@]+"${unit_args[@]}"} ;;
-    *) has_npm_script dev || return "$NO_RUNNER"; npm run dev -- ${unit_args[@]+"${unit_args[@]}"} ;;
+  local path paths_out
+  local -a paths=()
+
+  if [[ "${unit_run:-}" != oneshot ]]; then
+    has_npm_script dev || return "$NO_RUNNER"
+    npm run dev -- ${unit_args[@]+"${unit_args[@]}"}
+    return
+  fi
+
+  paths_out="$(npm_bin_entries)" || return "$NO_RUNNER"
+
+  while IFS= read -r path; do
+    if [[ -n "$path" ]]; then paths+=("$path"); fi
+  done <<< "$paths_out"
+
+  case "${#paths[@]}" in
+    0) has_npm_script start || return "$NO_RUNNER"; npm start -- ${unit_args[@]+"${unit_args[@]}"} ;;
+    1) node "${paths[0]}" ${unit_args[@]+"${unit_args[@]}"} ;;
+    *)
+      echo "Several bin entries here, and a run is one foreground process." >&2
+      echo "Start the one meant by path:" >&2
+      printf '  node %s\n' "${paths[@]}" >&2
+      return 1
+      ;;
   esac
 }
 # A Python service has no conventional start command -- uvicorn, gunicorn,

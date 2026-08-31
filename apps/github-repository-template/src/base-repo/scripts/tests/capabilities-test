@@ -588,6 +588,76 @@ else
 fi
 cleanup
 
+# --- the Node run adapter chooses between two programs ------------------------
+
+# The run dispatch is a no-op in Go, Rust and Kotlin, so these are the cases
+# that show it is not dead weight: the same unit, the same directory, and a
+# different program depending on the declared fact. The adapter is called
+# directly rather than through scripts/run, because what is under test is which
+# program it picks, and scripts/tests/unit-commands-test already covers how a
+# unit is resolved and how CI_DRY_RUN reports the pairing.
+if command -v node > /dev/null 2>&1 && command -v npm > /dev/null 2>&1; then
+  fixture "a one-shot runs the entry point bin names"
+  printf '{"name":"n","version":"1.0.0","bin":{"n":"./cli.js"}}\n' > package.json
+  printf 'console.log("cli:" + process.argv.slice(2).join(","));\n' > cli.js
+  unit_run=oneshot unit_args=(--flag value)
+  out="$(_capability_run_node 2>&1)"
+  status=$?
+  unset unit_run unit_args
+  if (( status == 0 )) && grep -qx 'cli:--flag,value' <<<"$out"; then
+    pass
+  else
+    fail "a one-shot did not run its bin entry with the arguments after --: $out"
+  fi
+  cleanup
+
+  fixture "several bin entries are refused by name"
+  printf '{"name":"n","version":"1.0.0","bin":{"a":"./a.js","b":"./b.js"}}\n' > package.json
+  unit_run=oneshot
+  out="$(_capability_run_node 2>&1)"
+  status=$?
+  unset unit_run
+  if (( status == 1 )) && grep -q 'node ./a.js' <<<"$out" && grep -q 'node ./b.js' <<<"$out"; then
+    pass
+  else
+    fail "several bin entries did not refuse and name each one: $out"
+  fi
+  cleanup
+
+  # A one-shot that is not a CLI -- a script, a scheduled job -- names no bin,
+  # and npm start is the only thing left that says how it starts.
+  fixture "a one-shot with no bin falls back to npm start"
+  printf '{"name":"n","version":"1.0.0","scripts":{"start":"echo started"}}\n' > package.json
+  unit_run=oneshot
+  out="$(_capability_run_node 2>&1)"
+  status=$?
+  unset unit_run
+  if (( status == 0 )) && grep -q 'started' <<<"$out"; then
+    pass
+  else
+    fail "a one-shot with no bin did not fall back to npm start: $out"
+  fi
+  cleanup
+
+  # The bug the dispatch prevents, from the other side: a package that ships a
+  # CLI and also serves is started as the service it declared itself to be.
+  fixture "a long-lived unit runs the dev server even with a bin"
+  printf '{"name":"n","version":"1.0.0","bin":{"n":"./cli.js"},"scripts":{"dev":"echo serving"}}\n' > package.json
+  printf 'console.log("cli");\n' > cli.js
+  unit_run=longlived
+  out="$(_capability_run_node 2>&1)"
+  status=$?
+  unset unit_run
+  if (( status == 0 )) && grep -q 'serving' <<<"$out" && ! grep -qx 'cli' <<<"$out"; then
+    pass
+  else
+    fail "a long-lived unit ran the CLI entry instead of the dev server: $out"
+  fi
+  cleanup
+else
+  echo "  skip  the Node run adapter: node or npm is not installed"
+fi
+
 # --- aggregate outcomes ------------------------------------------------------
 
 fixture "unavailable capability"
