@@ -23,18 +23,21 @@ package = false
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.14", "ty>=0.0.1a21"]
 
-[tool.ruff]
-# ruff formats Python fenced in Markdown, which is 44 of the 49 files it counts
-# here. Declining that is a boundary, not a preference: `scripts/fix` runs
-# `ruff format .`, and Markdown is where this repository keeps two trees it must
-# not rewrite by tool -- the payload under
+[tool.ruff.format]
+# `*.md` is in ruff's own default include list, and `ruff format` rewrites the
+# Python fenced inside one -- 44 of the 49 files it counted here were Markdown.
+# Declining that is a boundary, not a preference: `scripts/fix` runs
+# `ruff format .`, and Markdown is where this repository keeps two trees no tool
+# may rewrite unasked -- the payload under
 # apps/github-repository-template/src/base-repo/, which is data rather than this
-# repository's configuration, and docs/plans/, where an approved plan is frozen.
-# Nothing breaks today because all 49 are already formatted; the first fence
-# ruff disagrees with would fail the gate on a Markdown file and be rewritten by
-# `scripts/fix`. This excludes a file type, not a path -- it takes no Python
-# out of scope, which is the mistake the include here used to make.
-extend-exclude = ["*.md"]
+# repository's configuration and whose edits are supposed to prompt, and
+# docs/plans/, where an approved plan is frozen. Nothing diffs today because all
+# 49 are already formatted, which is why it would land on someone later.
+#
+# Scoped to the formatter, and by file type rather than by path, so it neither
+# takes Python out of scope -- the mistake the `include` here used to make --
+# nor forecloses `ruff check` reaching a Markdown fence if it ever does.
+exclude = ["*.md"]
 
 [tool.pytest.ini_options]
 # pytest is the only one of the three that needs telling where the code is: its

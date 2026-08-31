@@ -120,6 +120,10 @@ class PreflightUnitTests(unittest.TestCase):
 
 
 class AdoptTests(unittest.TestCase):
+    # The values are all `str` because the scenario below is the literal
+    # "adopt", and setup_fixture.build_adopt returns six flat strings. The
+    # nested path-to-digest map belongs to build_update, which no caller here
+    # can reach. Parameterising the scenario would make this annotation a lie.
     def _build_fixture(self, directory: str) -> dict[str, str]:
         fixture_setup = MODULE_PATH.parents[1] / "evals" / "setup_fixture.py"
         fixture_root = Path(directory) / "fixture"
