@@ -79,18 +79,24 @@ scripts/ci
 # what packaging means to scripts/package.
 shopt -s nullglob
 
+mapfile -t units < <(unit_names)
+
 artifacts=()
-for unit_dir in apps/*/; do
-  [[ -d "$unit_dir" ]] || continue
-  unit="$(basename "$unit_dir")"
+for unit in ${units[@]+"${units[@]}"}; do
   scripts/package "$unit"
 
   # Files, not glob entries: a dist/ holding only a directory would otherwise
   # pass the count below while contributing nothing to the release.
   produced=()
-  for artifact in "$unit_dir"dist/*; do
+  for artifact in "apps/$unit"/dist/*; do
     [[ -f "$artifact" ]] && produced+=("$artifact")
   done
+
+  # Read into a variable rather than called inside the condition below. A
+  # command substitution in an `if` test is exempt from `set -e`, so a failed
+  # read there would expand to nothing, compare unequal, and let the walk pass
+  # the very unit the guard exists to catch.
+  ships="$(unit_ships_of "apps/$unit")"
 
   # Packaging exits 0 in cases that produce nothing and are not failures on
   # their own: every declared target unreachable from this host, or a language
@@ -98,8 +104,7 @@ for unit_dir in apps/*/; do
   # are a failure of the release, which is the one place the declaration has to
   # be honoured -- the tag would otherwise be cut with the asset list silently
   # short, which is the thing this walk exists to prevent.
-  if (( ${#produced[@]} == 0 )) &&
-    [[ "$(unit_ships_of "$unit_dir")" == executable ]]; then
+  if (( ${#produced[@]} == 0 )) && [[ "$ships" == executable ]]; then
     echo "apps/$unit declares ships: executable and packaging produced no file." >&2
     echo "The lines scripts/package printed say which target could not be reached." >&2
     exit 1
