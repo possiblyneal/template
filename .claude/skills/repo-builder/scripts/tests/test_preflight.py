@@ -15,6 +15,19 @@ preflight = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = preflight
 SPEC.loader.exec_module(preflight)
 
+# The two adopt tests below commit by hand, standing in for the repository
+# owner taking an addon months after the first. They are the only commits here
+# not made through evals/setup_fixture.py, which carries its own GIT_ENV, so
+# they are also the only ones that would fall back to ambient git config. A CI
+# runner has none and cannot derive one -- its gecos field is empty, so git
+# fails with "empty ident name" where a developer machine silently succeeds.
+GIT_IDENTITY = (
+    "-c",
+    "user.name=Repo Builder Test",
+    "-c",
+    "user.email=repo-builder-test@example.invalid",
+)
+
 
 class PreflightUnitTests(unittest.TestCase):
     def test_longest_ownership_path_wins(self) -> None:
@@ -205,6 +218,15 @@ class AdoptTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("cannot be adopted with", result.stderr)
 
+    def _commit(self, destination: Path, path: str, message: str) -> None:
+        subprocess.run(["git", "add", path], cwd=destination, check=True)
+        subprocess.run(
+            ["git", *GIT_IDENTITY, "commit", "--no-verify", "-m", message],
+            cwd=destination,
+            check=True,
+            stdout=subprocess.DEVNULL,
+        )
+
     def test_adopt_rejects_the_second_half_adopted_later(self) -> None:
         """One at a time is how a repository really ends up holding both: the
         occasion for the second addon arrives months after the first."""
@@ -214,13 +236,7 @@ class AdoptTests(unittest.TestCase):
             (destination / "_config.yml").write_text(
                 "theme: minima\n", encoding="utf-8"
             )
-            subprocess.run(["git", "add", "_config.yml"], cwd=destination, check=True)
-            subprocess.run(
-                ["git", "commit", "--no-verify", "-m", "chore: adopt _config.yml"],
-                cwd=destination,
-                check=True,
-                stdout=subprocess.DEVNULL,
-            )
+            self._commit(destination, "_config.yml", "chore: adopt _config.yml")
 
             result = self._run_adopt(fixture, ".nojekyll")
 
@@ -251,13 +267,7 @@ class AdoptTests(unittest.TestCase):
             (destination / "LICENSE").write_text(
                 "License text, verbatim.\n", encoding="utf-8"
             )
-            subprocess.run(["git", "add", "LICENSE"], cwd=destination, check=True)
-            subprocess.run(
-                ["git", "commit", "--no-verify", "-m", "chore: adopt LICENSE"],
-                cwd=destination,
-                check=True,
-                stdout=subprocess.DEVNULL,
-            )
+            self._commit(destination, "LICENSE", "chore: adopt LICENSE")
 
             result = self._run_adopt(fixture, "AUTHORS")
 
