@@ -6,10 +6,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from pathlib import Path
 import subprocess
 import sys
-from typing import Callable
+from collections.abc import Callable
+from pathlib import Path
+from typing import cast
 
 Check = tuple[str, bool, str]
 
@@ -20,8 +21,7 @@ def git(repo: Path, *args: str) -> str:
         cwd=repo,
         check=True,
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     ).stdout.strip()
 
 
@@ -36,7 +36,9 @@ def contains_none(path: Path, needles: tuple[str, ...]) -> bool:
     return not any(needle in text for needle in needles)
 
 
-def report_check(report: Path, name: str, predicate: Callable[[str], bool], expected: str) -> Check:
+def report_check(
+    report: Path, name: str, predicate: Callable[[str], bool], expected: str
+) -> Check:
     if not report.is_file():
         return name, False, f"missing {report}"
     text = report.read_text(encoding="utf-8")
@@ -64,7 +66,9 @@ def setup_skill_checks(candidate: Path) -> list[Check]:
     return [
         (
             "engineering-skill config written",
-            all((agents / name).is_file() for name in ("issue-tracker.md", "domain.md")),
+            all(
+                (agents / name).is_file() for name in ("issue-tracker.md", "domain.md")
+            ),
             "docs/agents holds issue-tracker.md and domain.md",
         ),
         (
@@ -95,36 +99,57 @@ def generation(root: Path, fixture: dict[str, object]) -> list[Check]:
             and template.get("subtree") == fixture["subtree"],
             "manifest template fields match fixture",
         ),
-        ("application renamed", (candidate / "apps/billing-api").is_dir(), "apps/billing-api exists"),
-        ("placeholder app removed", not (candidate / "apps/app-name").exists(), "apps/app-name absent"),
+        (
+            "application renamed",
+            (candidate / "apps/billing-api").is_dir(),
+            "apps/billing-api exists",
+        ),
+        (
+            "placeholder app removed",
+            not (candidate / "apps/app-name").exists(),
+            "apps/app-name absent",
+        ),
         (
             "CLAUDE bootstrap resolved",
-            contains_none(candidate / "CLAUDE.md", ("apps/app-name", "not yet indexed")),
+            contains_none(
+                candidate / "CLAUDE.md", ("apps/app-name", "not yet indexed")
+            ),
             "root CLAUDE.md has no generation placeholders",
         ),
         (
             "lessons initialized",
-            contains_none(candidate / "docs/LESSONS.md", ("<actor>", "<ISO 8601", "<Replace", "<Add repository")),
+            contains_none(
+                candidate / "docs/LESSONS.md",
+                ("<actor>", "<ISO 8601", "<Replace", "<Add repository"),
+            ),
             "lessons metadata and placeholders resolved",
         ),
         (
             "ADR template retained",
             (candidate / "docs/adrs/0000-template.md").is_file()
-            and "type: Template" in (candidate / "docs/adrs/0000-template.md").read_text(encoding="utf-8"),
+            and "type: Template"
+            in (candidate / "docs/adrs/0000-template.md").read_text(encoding="utf-8"),
             "docs/adrs/0000-template.md remains a template",
         ),
         report_check(
             report,
             "boundaries reported as supplied",
-            lambda text: "billing-api" in text and any(
-                term in text.lower() for term in ("supplied", "not derived", "skipped")
+            lambda text: (
+                "billing-api" in text
+                and any(
+                    term in text.lower()
+                    for term in ("supplied", "not derived", "skipped")
+                )
             ),
             "report names the deployable and says it was supplied rather than derived",
         ),
         report_check(
             report,
             "PR bootstrap described",
-            lambda text: all(term in text.lower() for term in ("empty", "main", "branch", "pull request")),
+            lambda text: all(
+                term in text.lower()
+                for term in ("empty", "main", "branch", "pull request")
+            ),
             "report describes empty main base and content PR",
         ),
         no_remote_check(candidate),
@@ -137,7 +162,11 @@ def adr_records(candidate: Path) -> list[Path]:
     adrs = candidate / "docs/adrs"
     if not adrs.is_dir():
         return []
-    return sorted(p for p in adrs.glob("[0-9][0-9][0-9][0-9]-*.md") if p.name != "0000-template.md")
+    return sorted(
+        p
+        for p in adrs.glob("[0-9][0-9][0-9][0-9]-*.md")
+        if p.name != "0000-template.md"
+    )
 
 
 def generation_multi(root: Path, fixture: dict[str, object]) -> list[Check]:
@@ -146,7 +175,11 @@ def generation_multi(root: Path, fixture: dict[str, object]) -> list[Check]:
     report = root.parent / "report.md"
     manifest_path = candidate / ".repo-template.json"
     manifest = json.loads(manifest_path.read_text()) if manifest_path.is_file() else {}
-    applications = manifest.get("generation", {}).get("applications", []) if isinstance(manifest, dict) else []
+    applications = (
+        manifest.get("generation", {}).get("applications", [])
+        if isinstance(manifest, dict)
+        else []
+    )
     expected = ("recorder", "ingest-api")
     records = adr_records(candidate)
     adr_text = "\n".join(p.read_text(encoding="utf-8") for p in records)
@@ -165,7 +198,11 @@ def generation_multi(root: Path, fixture: dict[str, object]) -> list[Check]:
             ),
             "each app carries src, tests, and docs/specs",
         ),
-        ("placeholder app removed", not (candidate / "apps/app-name").exists(), "apps/app-name absent"),
+        (
+            "placeholder app removed",
+            not (candidate / "apps/app-name").exists(),
+            "apps/app-name absent",
+        ),
         (
             "manifest lists both",
             sorted(applications) == sorted(expected),
@@ -179,34 +216,47 @@ def generation_multi(root: Path, fixture: dict[str, object]) -> list[Check]:
             ),
             "generation records names only; language lives in the ADRs",
         ),
-        ("one ADR per deployable", len(records) == 2, f"two numbered ADRs, found {len(records)}"),
+        (
+            "one ADR per deployable",
+            len(records) == 2,
+            f"two numbered ADRs, found {len(records)}",
+        ),
         (
             "ADRs scoped to their app and language",
-            all(f"apps/{name}" in adr_text for name in expected) and adr_text.count("lang:") >= 2,
+            all(f"apps/{name}" in adr_text for name in expected)
+            and adr_text.count("lang:") >= 2,
             "each ADR scopes to apps/<name> and a lang: tag",
         ),
         (
             "ADRs accepted, not proposed",
-            bool(records) and all("status: accepted" in p.read_text(encoding="utf-8") for p in records),
+            bool(records)
+            and all(
+                "status: accepted" in p.read_text(encoding="utf-8") for p in records
+            ),
             "every written ADR records status: accepted",
         ),
         (
             "ADR template retained",
             (candidate / "docs/adrs/0000-template.md").is_file()
-            and "type: Template" in (candidate / "docs/adrs/0000-template.md").read_text(encoding="utf-8"),
+            and "type: Template"
+            in (candidate / "docs/adrs/0000-template.md").read_text(encoding="utf-8"),
             "docs/adrs/0000-template.md remains a template",
         ),
         (
             "boundaries carried into CLAUDE.md",
             contains_none(candidate / "CLAUDE.md", ("apps/app-name", "not yet indexed"))
-            and all(name in (candidate / "CLAUDE.md").read_text(encoding="utf-8") for name in expected),
+            and all(
+                name in (candidate / "CLAUDE.md").read_text(encoding="utf-8")
+                for name in expected
+            ),
             "root CLAUDE.md names both deployables and keeps no placeholders",
         ),
         report_check(
             report,
             "choke points reported",
-            lambda text: all(name in text for name in expected)
-            and "choke point" in text.lower(),
+            lambda text: (
+                all(name in text for name in expected) and "choke point" in text.lower()
+            ),
             "report names each deployable with the constraint that selected its language",
         ),
         no_remote_check(candidate),
@@ -226,7 +276,8 @@ def generation_handoff(root: Path, fixture: dict[str, object]) -> list[Check]:
     return [
         (
             "candidate materialized",
-            (candidate / "scripts").is_dir() and (candidate / "docs/adrs/0000-template.md").is_file(),
+            (candidate / "scripts").is_dir()
+            and (candidate / "docs/adrs/0000-template.md").is_file(),
             "the subtree was copied before the stop, so a resume need not rebuild it",
         ),
         (
@@ -241,7 +292,8 @@ def generation_handoff(root: Path, fixture: dict[str, object]) -> list[Check]:
         ),
         (
             "tracker recorded before charting",
-            tracker.is_file() and "markdown" in tracker.read_text(encoding="utf-8").lower(),
+            tracker.is_file()
+            and "markdown" in tracker.read_text(encoding="utf-8").lower(),
             "docs/agents/issue-tracker.md records the local-markdown tracker",
         ),
         (
@@ -257,7 +309,10 @@ def generation_handoff(root: Path, fixture: dict[str, object]) -> list[Check]:
         (
             "no ticket resolved",
             bool(map_files)
-            and not any("status: resolved" in p.read_text(encoding="utf-8").lower() for p in map_files),
+            and not any(
+                "status: resolved" in p.read_text(encoding="utf-8").lower()
+                for p in map_files
+            ),
             "charting hand-resolves nothing; every ticket is still open",
         ),
         report_check(
@@ -292,37 +347,63 @@ def update(root: Path, fixture: dict[str, object], scenario: str) -> list[Check]
     remote = Path(str(fixture["destination_remote"]))
     remote_head = git(remote, "rev-parse", "refs/heads/main")
     local_head = git(destination, "rev-parse", "HEAD")
-    product_hashes = fixture["product_hashes"]
+    # The fixture is parsed JSON, so every value arrives as `object`. This one
+    # is the path-to-digest map setup_fixture.py wrote; the cast states that
+    # shape rather than re-deriving it at runtime.
+    product_hashes = cast("dict[str, str]", fixture["product_hashes"])
 
     checks: list[Check] = [
         (
             "product files preserved",
-            all(digest(destination / path) == expected for path, expected in product_hashes.items()),
+            all(
+                digest(destination / path) == expected
+                for path, expected in product_hashes.items()
+            ),
             "recorded product hashes remain equal",
         ),
-        ("remote unchanged", remote_head == local_head, "bare remote main still equals local HEAD"),
+        (
+            "remote unchanged",
+            remote_head == local_head,
+            "bare remote main still equals local HEAD",
+        ),
     ]
 
     if scenario == "clean-update":
         check_path = destination / "scripts/check"
         checks.extend(
             [
-                ("manifest advanced", current_commit == fixture["target_commit"], "manifest records target commit"),
+                (
+                    "manifest advanced",
+                    current_commit == fixture["target_commit"],
+                    "manifest records target commit",
+                ),
                 (
                     "managed change applied",
-                    check_path.is_file() and "scripts/preflight" in check_path.read_text(encoding="utf-8") and "check v2" in check_path.read_text(encoding="utf-8"),
+                    check_path.is_file()
+                    and "scripts/preflight" in check_path.read_text(encoding="utf-8")
+                    and "check v2" in check_path.read_text(encoding="utf-8"),
                     "scripts/check runs preflight and check v2",
                 ),
                 (
                     "destination note preserved",
-                    check_path.is_file() and "run this before every deployment" in check_path.read_text(encoding="utf-8"),
+                    check_path.is_file()
+                    and "run this before every deployment"
+                    in check_path.read_text(encoding="utf-8"),
                     "non-overlapping operational note remains",
                 ),
-                ("rename applied", (destination / "scripts/preflight").is_file() and not (destination / "scripts/legacy").exists(), "legacy renamed to preflight"),
+                (
+                    "rename applied",
+                    (destination / "scripts/preflight").is_file()
+                    and not (destination / "scripts/legacy").exists(),
+                    "legacy renamed to preflight",
+                ),
                 report_check(
                     report,
                     "classification reported",
-                    lambda text: all(term in text.lower() for term in ("applied", "preserved", "renamed", "conflict")),
+                    lambda text: all(
+                        term in text.lower()
+                        for term in ("applied", "preserved", "renamed", "conflict")
+                    ),
                     "report classifies lifecycle paths",
                 ),
             ]
@@ -330,9 +411,21 @@ def update(root: Path, fixture: dict[str, object], scenario: str) -> list[Check]
     else:
         checks.extend(
             [
-                ("manifest unchanged", current_commit == fixture["old_commit"], "manifest remains at recorded commit"),
-                ("worktree unchanged", not git(destination, "status", "--porcelain"), "destination has no tracked or untracked changes"),
-                ("no local commit", local_head == remote_head, "local HEAD remains at remote main"),
+                (
+                    "manifest unchanged",
+                    current_commit == fixture["old_commit"],
+                    "manifest remains at recorded commit",
+                ),
+                (
+                    "worktree unchanged",
+                    not git(destination, "status", "--porcelain"),
+                    "destination has no tracked or untracked changes",
+                ),
+                (
+                    "no local commit",
+                    local_head == remote_head,
+                    "local HEAD remains at remote main",
+                ),
             ]
         )
         if scenario == "unrelated":
@@ -350,7 +443,12 @@ def update(root: Path, fixture: dict[str, object], scenario: str) -> list[Check]
                     report_check(
                         report,
                         "semantic conflict reported",
-                        lambda text: "scripts/check" in text and "conflict" in text.lower() and "template" in text.lower() and "product" in text.lower(),
+                        lambda text: (
+                            "scripts/check" in text
+                            and "conflict" in text.lower()
+                            and "template" in text.lower()
+                            and "product" in text.lower()
+                        ),
                         "report explains both intents for scripts/check",
                     ),
                     (
@@ -399,6 +497,11 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except (OSError, KeyError, json.JSONDecodeError, subprocess.CalledProcessError) as error:
+    except (
+        OSError,
+        KeyError,
+        json.JSONDecodeError,
+        subprocess.CalledProcessError,
+    ) as error:
         print(f"verification failed: {error}", file=sys.stderr)
         raise SystemExit(2) from error

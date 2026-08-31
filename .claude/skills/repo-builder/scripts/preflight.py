@@ -4,13 +4,13 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
 import fnmatch
 import json
-from pathlib import Path
 import re
 import subprocess
 import sys
+from dataclasses import dataclass
+from pathlib import Path
 from typing import NoReturn
 from urllib.parse import urlparse
 
@@ -48,15 +48,16 @@ class OwnershipRule:
     index: int
 
 
-def run_git(repository: Path, *arguments: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+def run_git(
+    repository: Path, *arguments: str, check: bool = True
+) -> subprocess.CompletedProcess[str]:
     try:
         return subprocess.run(
             ["git", *arguments],
             cwd=repository,
             check=check,
             text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
         )
     except FileNotFoundError as error:
         raise PreflightError("git is required but was not found") from error
@@ -72,7 +73,9 @@ def git_output(repository: Path, *arguments: str) -> str:
 def require_git_repository(path: Path, label: str) -> Path:
     resolved = path.resolve()
     if not resolved.is_dir():
-        raise PreflightError(f"{label} does not exist or is not a directory: {resolved}")
+        raise PreflightError(
+            f"{label} does not exist or is not a directory: {resolved}"
+        )
     result = run_git(resolved, "rev-parse", "--git-dir", check=False)
     if result.returncode != 0:
         raise PreflightError(f"{label} is not a Git repository: {resolved}")
@@ -88,12 +91,18 @@ def resolve_commit(repository: Path, reference: str) -> str:
 
 def require_subtree(repository: Path, commit: str, subtree: str) -> None:
     normalized = normalize_relative_path(subtree, "template subtree")
-    result = run_git(repository, "cat-file", "-e", f"{commit}:{normalized}", check=False)
+    result = run_git(
+        repository, "cat-file", "-e", f"{commit}:{normalized}", check=False
+    )
     if result.returncode != 0:
-        raise PreflightError(f"template subtree does not exist at {commit}: {normalized}")
+        raise PreflightError(
+            f"template subtree does not exist at {commit}: {normalized}"
+        )
     kind = git_output(repository, "cat-file", "-t", f"{commit}:{normalized}")
     if kind != "tree":
-        raise PreflightError(f"template subtree is not a directory at {commit}: {normalized}")
+        raise PreflightError(
+            f"template subtree is not a directory at {commit}: {normalized}"
+        )
 
 
 def sibling_of_subtree(subtree: str, name: str) -> str:
@@ -102,7 +111,9 @@ def sibling_of_subtree(subtree: str, name: str) -> str:
     return f"{parent}/{name}" if parent else name
 
 
-def require_addon(repository: Path, commit: str, subtree: str, addon: str) -> dict[str, object]:
+def require_addon(
+    repository: Path, commit: str, subtree: str, addon: str
+) -> dict[str, object]:
     addons_root = sibling_of_subtree(subtree, "repository-addons")
     blob = f"{addons_root}/{addon}"
     existence = run_git(repository, "cat-file", "-e", f"{commit}:{blob}", check=False)
@@ -112,14 +123,20 @@ def require_addon(repository: Path, commit: str, subtree: str, addon: str) -> di
     if kind != "blob":
         raise PreflightError(f"addon is not a file at {commit}: {blob}")
     manifest_rel = sibling_of_subtree(subtree, "addon-adoption.json")
-    manifest_existence = run_git(repository, "cat-file", "-e", f"{commit}:{manifest_rel}", check=False)
+    manifest_existence = run_git(
+        repository, "cat-file", "-e", f"{commit}:{manifest_rel}", check=False
+    )
     if manifest_existence.returncode != 0:
-        raise PreflightError(f"addon manifest does not exist at {commit}: {manifest_rel}")
+        raise PreflightError(
+            f"addon manifest does not exist at {commit}: {manifest_rel}"
+        )
     raw = git_output(repository, "show", f"{commit}:{manifest_rel}")
     try:
         index = json.loads(raw)
     except json.JSONDecodeError as error:
-        raise PreflightError(f"addon manifest is invalid JSON at {commit}: {error.msg}") from error
+        raise PreflightError(
+            f"addon manifest is invalid JSON at {commit}: {error.msg}"
+        ) from error
     files = index.get("files") if isinstance(index, dict) else None
     if not isinstance(files, dict) or addon not in files:
         raise PreflightError(f"addon has no addon-adoption.json entry: {addon}")
@@ -133,7 +150,11 @@ def normalize_relative_path(value: object, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise PreflightError(f"{label} must be a non-empty string")
     path = value.strip().replace("\\", "/").strip("/")
-    if not path or path == "." or any(part in {"", ".", ".."} for part in path.split("/")):
+    if (
+        not path
+        or path == "."
+        or any(part in {"", ".", ".."} for part in path.split("/"))
+    ):
         raise PreflightError(f"{label} must be a normalized repository-relative path")
     return path
 
@@ -145,7 +166,9 @@ def require_string(mapping: dict[str, object], key: str, label: str) -> str:
     return value.strip()
 
 
-def require_mapping(mapping: dict[str, object], key: str, label: str) -> dict[str, object]:
+def require_mapping(
+    mapping: dict[str, object], key: str, label: str
+) -> dict[str, object]:
     value = mapping.get(key)
     if not isinstance(value, dict):
         raise PreflightError(f"{label}.{key} must be an object")
@@ -158,7 +181,9 @@ def validate_manifest(path: Path) -> tuple[dict[str, object], list[OwnershipRule
     except FileNotFoundError as error:
         raise PreflightError(f"manifest does not exist: {path}") from error
     except json.JSONDecodeError as error:
-        raise PreflightError(f"manifest is invalid JSON at line {error.lineno}: {error.msg}") from error
+        raise PreflightError(
+            f"manifest is invalid JSON at line {error.lineno}: {error.msg}"
+        ) from error
 
     if not isinstance(manifest, dict):
         raise PreflightError("manifest root must be an object")
@@ -168,10 +193,14 @@ def validate_manifest(path: Path) -> tuple[dict[str, object], list[OwnershipRule
     template = require_mapping(manifest, "template", "manifest")
     destination = require_mapping(manifest, "destination", "manifest")
     require_string(template, "repository", "manifest.template")
-    template["subtree"] = normalize_relative_path(template.get("subtree"), "manifest.template.subtree")
+    template["subtree"] = normalize_relative_path(
+        template.get("subtree"), "manifest.template.subtree"
+    )
     commit = require_string(template, "commit", "manifest.template")
     if not FULL_COMMIT.fullmatch(commit):
-        raise PreflightError("manifest.template.commit must be a full lowercase 40-character Git commit")
+        raise PreflightError(
+            "manifest.template.commit must be a full lowercase 40-character Git commit"
+        )
     require_string(destination, "repository", "manifest.destination")
     require_string(destination, "default_branch", "manifest.destination")
     if not isinstance(manifest.get("generation"), dict):
@@ -185,14 +214,18 @@ def validate_manifest(path: Path) -> tuple[dict[str, object], list[OwnershipRule
     for index, raw_rule in enumerate(raw_rules):
         if not isinstance(raw_rule, dict):
             raise PreflightError(f"manifest.ownership[{index}] must be an object")
-        pattern = normalize_relative_path(raw_rule.get("path"), f"manifest.ownership[{index}].path")
+        pattern = normalize_relative_path(
+            raw_rule.get("path"), f"manifest.ownership[{index}].path"
+        )
         mode = raw_rule.get("mode")
         if mode not in VALID_MODES:
             raise PreflightError(
                 f"manifest.ownership[{index}].mode must be one of: {', '.join(sorted(VALID_MODES))}"
             )
         if pattern in seen:
-            raise PreflightError(f"manifest.ownership contains duplicate path: {pattern}")
+            raise PreflightError(
+                f"manifest.ownership contains duplicate path: {pattern}"
+            )
         seen.add(pattern)
         rules.append(OwnershipRule(pattern, str(mode), index))
     return manifest, rules
@@ -207,8 +240,7 @@ def host_repository_identity(host: str, path: str) -> str:
 
 def normalize_repository_identity(value: str) -> str:
     candidate = value.strip().rstrip("/")
-    if candidate.endswith(".git"):
-        candidate = candidate[:-4]
+    candidate = candidate.removesuffix(".git")
     if candidate.startswith("git@") and ":" in candidate:
         host, path = candidate[4:].split(":", 1)
         return host_repository_identity(host, path)
@@ -243,7 +275,9 @@ def classify_path(path: str, rules: list[OwnershipRule]) -> tuple[str, str | Non
     return selected.mode, selected.path
 
 
-def parse_name_status(output: str, subtree: str, rules: list[OwnershipRule]) -> list[dict[str, object]]:
+def parse_name_status(
+    output: str, subtree: str, rules: list[OwnershipRule]
+) -> list[dict[str, object]]:
     fields = output.split("\0") if output else []
     changes: list[dict[str, object]] = []
     index = 0
@@ -258,8 +292,8 @@ def parse_name_status(output: str, subtree: str, rules: list[OwnershipRule]) -> 
             old_source = fields[index]
             new_source = old_source
             index += 1
-        old_path = old_source[len(prefix):] if old_source.startswith(prefix) else old_source
-        new_path = new_source[len(prefix):] if new_source.startswith(prefix) else new_source
+        old_path = old_source.removeprefix(prefix)
+        new_path = new_source.removeprefix(prefix)
         candidate_path = old_path if status.startswith("D") else new_path
         mode, rule = classify_path(candidate_path, rules)
         change: dict[str, object] = {
@@ -279,7 +313,9 @@ def ensure_clean(repository: Path) -> None:
     dirty = git_output(repository, "status", "--porcelain=v1", "--untracked-files=all")
     if dirty:
         first = dirty.splitlines()[0]
-        raise PreflightError(f"destination worktree must be clean; first change: {first}")
+        raise PreflightError(
+            f"destination worktree must be clean; first change: {first}"
+        )
 
 
 def origin_identity(destination: Path) -> str:
@@ -314,9 +350,15 @@ def load_provenance(arguments: argparse.Namespace) -> Provenance:
     template = require_mapping(manifest, "template", "manifest")
     destination_config = require_mapping(manifest, "destination", "manifest")
 
-    template_repo = require_git_repository(arguments.template_repo, "template repository")
-    recorded = resolve_commit(template_repo, require_string(template, "commit", "manifest.template"))
-    subtree = normalize_relative_path(template.get("subtree"), "manifest.template.subtree")
+    template_repo = require_git_repository(
+        arguments.template_repo, "template repository"
+    )
+    recorded = resolve_commit(
+        template_repo, require_string(template, "commit", "manifest.template")
+    )
+    subtree = normalize_relative_path(
+        template.get("subtree"), "manifest.template.subtree"
+    )
     require_subtree(template_repo, recorded, subtree)
 
     recorded_template_identity = normalize_repository_identity(
@@ -352,7 +394,9 @@ def load_provenance(arguments: argparse.Namespace) -> Provenance:
 
 
 def generation_preflight(arguments: argparse.Namespace) -> dict[str, object]:
-    template_repo = require_git_repository(arguments.template_repo, "template repository")
+    template_repo = require_git_repository(
+        arguments.template_repo, "template repository"
+    )
     target = resolve_commit(template_repo, arguments.target)
     subtree = normalize_relative_path(arguments.subtree, "template subtree")
     require_subtree(template_repo, target, subtree)
@@ -383,7 +427,9 @@ def update_preflight(arguments: argparse.Namespace) -> dict[str, object]:
     target = resolve_commit(template_repo, arguments.target)
     require_subtree(template_repo, target, subtree)
 
-    ancestry = run_git(template_repo, "merge-base", "--is-ancestor", recorded, target, check=False)
+    ancestry = run_git(
+        template_repo, "merge-base", "--is-ancestor", recorded, target, check=False
+    )
     if ancestry.returncode == 1:
         raise PreflightError(
             f"recorded template commit {recorded} is not an ancestor of target {target}; "
@@ -417,7 +463,9 @@ def update_preflight(arguments: argparse.Namespace) -> dict[str, object]:
         "destination": {
             "path": str(destination),
             "repository": provenance.destination_identity,
-            "default_branch": require_string(destination_config, "default_branch", "manifest.destination"),
+            "default_branch": require_string(
+                destination_config, "default_branch", "manifest.destination"
+            ),
             "clean": True,
         },
         "changes": changes,
@@ -495,7 +543,9 @@ def adopt_preflight(arguments: argparse.Namespace) -> dict[str, object]:
         "destination": {
             "path": str(destination),
             "repository": provenance.destination_identity,
-            "default_branch": require_string(destination_config, "default_branch", "manifest.destination"),
+            "default_branch": require_string(
+                destination_config, "default_branch", "manifest.destination"
+            ),
             "clean": True,
         },
         "addons": addons,
@@ -512,7 +562,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    generate = subparsers.add_parser("generate", help="validate a generation source and destination plan")
+    generate = subparsers.add_parser(
+        "generate", help="validate a generation source and destination plan"
+    )
     generate.add_argument("--template-repo", type=Path, required=True)
     generate.add_argument("--target", required=True, help="template ref or commit")
     generate.add_argument("--subtree", required=True)
@@ -520,22 +572,34 @@ def build_parser() -> argparse.ArgumentParser:
     generate.add_argument("--default-branch", default="main")
     generate.set_defaults(handler=generation_preflight)
 
-    update = subparsers.add_parser("update", help="validate an update and classify its template delta")
+    update = subparsers.add_parser(
+        "update", help="validate an update and classify its template delta"
+    )
     update.add_argument("--template-repo", type=Path, required=True)
-    update.add_argument("--target", required=True, help="descendant template ref or commit")
+    update.add_argument(
+        "--target", required=True, help="descendant template ref or commit"
+    )
     update.add_argument("--destination", type=Path, required=True)
-    update.add_argument("--manifest", default=".repo-template.json", help="path relative to destination")
+    update.add_argument(
+        "--manifest", default=".repo-template.json", help="path relative to destination"
+    )
     update.set_defaults(handler=update_preflight)
 
     adopt = subparsers.add_parser(
-        "adopt", help="validate adopting a held-back repository addon at the recorded commit"
+        "adopt",
+        help="validate adopting a held-back repository addon at the recorded commit",
     )
     adopt.add_argument("--template-repo", type=Path, required=True)
     adopt.add_argument("--destination", type=Path, required=True)
     adopt.add_argument(
-        "--addon", action="append", required=True, help="destination-relative addon path; repeat for each"
+        "--addon",
+        action="append",
+        required=True,
+        help="destination-relative addon path; repeat for each",
     )
-    adopt.add_argument("--manifest", default=".repo-template.json", help="path relative to destination")
+    adopt.add_argument(
+        "--manifest", default=".repo-template.json", help="path relative to destination"
+    )
     adopt.set_defaults(handler=adopt_preflight)
     return parser
 

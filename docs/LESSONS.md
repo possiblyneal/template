@@ -55,15 +55,15 @@ Code scanning accepts uploaded results from a public repository, or from a priva
 
 **Source:** [`.repo-template.json`](../.repo-template.json)
 
-## The repo-builder tests are not covered by scripts/check
+## Code in a dot-directory hides from detection and from the tools twice over
 
-`.claude/skills/repo-builder/` holds Python with a pytest suite, but this repository has no root `pyproject.toml`, so language detection finds no Python and `scripts/check` reports there is nothing to check.
+`.claude/skills/repo-builder/` holds the only Python this repository runs. It went unchecked for two independent reasons, and fixing either alone still leaves a silent green: `libs/detect.sh` reads a root manifest to decide a language is present, and ruff, ty, and pytest all skip dot-directories in their own default discovery. The root `pyproject.toml` answers both — it declares the language, and it names the paths.
 
-**Do:** Run `python3 -m pytest .claude/skills/repo-builder/scripts/tests/` directly after changing `preflight.py`.
+**Do:** When code lands somewhere the default discovery of a tool would not look, run that tool and count what it reported. Fourteen lint findings, five type errors, and four unformatted files were sitting in a repository whose gate had been green for months.
 
-**Why:** A green `scripts/check` is not evidence the skill's tests ran. It is evidence they were never looked for.
+**Why:** A green `scripts/check` is not evidence the checks ran. Until the manifest existed it was evidence they were never looked for.
 
-**Source:** [Preflight tests](../.claude/skills/repo-builder/scripts/tests/test_preflight.py)
+**Source:** [Root manifest](../pyproject.toml)
 
 ## Root dotfiles are unowned, so updates never reach them
 

@@ -7,10 +7,10 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 GIT_ENV = {
     **os.environ,
@@ -200,8 +200,16 @@ def addon_payload(repo: Path) -> None:
             },
             ".all-contributorsrc": {
                 "slots": [
-                    {"token": "REPO-OWNER", "value_key": "repo-owner", "what": "projectOwner."},
-                    {"token": "REPO-NAME", "value_key": "repo-name", "what": "projectName."},
+                    {
+                        "token": "REPO-OWNER",
+                        "value_key": "repo-owner",
+                        "what": "projectOwner.",
+                    },
+                    {
+                        "token": "REPO-NAME",
+                        "value_key": "repo-name",
+                        "what": "projectName.",
+                    },
                 ],
                 "reviews": [],
                 "external": [],
@@ -262,7 +270,9 @@ def manifest(template: Path, remote: Path, old_commit: str) -> dict[str, object]
     }
 
 
-def create_destination(root: Path, template: Path, old_commit: str, conflict: bool) -> tuple[Path, Path]:
+def create_destination(
+    root: Path, template: Path, old_commit: str, conflict: bool
+) -> tuple[Path, Path]:
     remote = root / "destination.git"
     destination = root / "destination"
     init_repo(remote, bare=True)
@@ -294,8 +304,16 @@ echo "preflight ok"
 """,
         executable=True,
     )
-    write(destination, "apps/billing-api/src/service.py", "PRODUCT_BEHAVIOR = 'invoice customers'\n")
-    write(destination, "docs/product-runbook.md", "# Product runbook\n\nPage the billing team for invoice failures.\n")
+    write(
+        destination,
+        "apps/billing-api/src/service.py",
+        "PRODUCT_BEHAVIOR = 'invoice customers'\n",
+    )
+    write(
+        destination,
+        "docs/product-runbook.md",
+        "# Product runbook\n\nPage the billing team for invoice failures.\n",
+    )
     write(
         destination,
         ".repo-template.json",
@@ -338,7 +356,7 @@ def build_update(root: Path, scenario: str) -> dict[str, object]:
         write(
             template,
             "base-repo/scripts/check",
-            "#!/usr/bin/env bash\nset -euo pipefail\n\necho \"unrelated template\"\n",
+            '#!/usr/bin/env bash\nset -euo pipefail\n\necho "unrelated template"\n',
             executable=True,
         )
         target_commit = commit(template, "Start unrelated template history")
@@ -369,7 +387,9 @@ echo "check v2"
         )
         target_commit = commit(template, "Run preflight before repository checks")
 
-    destination, remote = create_destination(root, template, old_commit, scenario == "conflict")
+    destination, remote = create_destination(
+        root, template, old_commit, scenario == "conflict"
+    )
     return {
         "scenario": scenario,
         "template_repo": str(template),
@@ -379,7 +399,9 @@ echo "check v2"
         "destination": str(destination),
         "destination_remote": str(remote),
         "product_hashes": {
-            "apps/billing-api/src/service.py": sha256(destination / "apps/billing-api/src/service.py"),
+            "apps/billing-api/src/service.py": sha256(
+                destination / "apps/billing-api/src/service.py"
+            ),
             "docs/product-runbook.md": sha256(destination / "docs/product-runbook.md"),
         },
     }
@@ -418,7 +440,9 @@ def main() -> int:
         ),
     )
     parser.add_argument("output", type=Path)
-    parser.add_argument("--force", action="store_true", help="replace an existing output directory")
+    parser.add_argument(
+        "--force", action="store_true", help="replace an existing output directory"
+    )
     args = parser.parse_args()
 
     output = args.output.resolve()

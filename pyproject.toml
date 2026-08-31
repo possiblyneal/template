@@ -1,0 +1,37 @@
+# This repository builds other repositories; it is not a Python package and
+# ships no Python. The file exists because `.claude/skills/repo-builder/` holds
+# Python that scripts/check could not see: language detection reads a root
+# manifest (libs/detect.sh has_python), and without one the gate reported there
+# was nothing to check while a pytest suite sat untested. Declaring the language
+# is what puts ruff, ty, and pytest over that code.
+#
+# Root-only, deliberately. A generated repository has no repo-builder skill, so
+# the payload at apps/github-repository-template/src/base-repo/ must not carry
+# this file -- it would declare Python in every repository that has none.
+
+[project]
+name = "template"
+version = "0"
+requires-python = ">=3.11"
+
+[tool.uv]
+# Nothing here is installable, so uv resolves the dev group into a virtualenv
+# and stops. Without this uv looks for a build backend and fails on a repository
+# that has no package to build.
+package = false
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.14", "ty>=0.0.1a21"]
+
+[tool.pytest.ini_options]
+# pytest skips dot-directories by default, which is every test this repository
+# has. Naming the path is what makes them collectable.
+testpaths = [".claude/skills/repo-builder/scripts/tests"]
+
+[tool.ruff]
+# Both tools take the same explicit list for the same reason ruff needs one at
+# all: a dot-directory is invisible to their default discovery.
+include = [".claude/skills/repo-builder/**/*.py"]
+
+[tool.ty.src]
+include = [".claude/skills/repo-builder"]
