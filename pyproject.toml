@@ -24,14 +24,9 @@ package = false
 dev = ["pytest>=8", "ruff>=0.14", "ty>=0.0.1a21"]
 
 [tool.pytest.ini_options]
-# pytest skips dot-directories by default, which is every test this repository
-# has. Naming the path is what makes them collectable.
+# pytest is the only one of the three that needs telling where the code is: its
+# default norecursedirs skips `.*`, which is every test this repository has.
+# ruff and ty both walk into a dot-directory unasked, so neither gets an
+# `include` here -- one would not widen what they see, it would narrow it to
+# this path and silently drop any Python later added under apps/ or libs/.
 testpaths = [".claude/skills/repo-builder/scripts/tests"]
-
-[tool.ruff]
-# Both tools take the same explicit list for the same reason ruff needs one at
-# all: a dot-directory is invisible to their default discovery.
-include = [".claude/skills/repo-builder/**/*.py"]
-
-[tool.ty.src]
-include = [".claude/skills/repo-builder"]

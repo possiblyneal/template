@@ -56,6 +56,28 @@ updates:
   # single revision and offers no floating form, so nothing here updates
   # without a bump. The scanners are the reason it matters: a stale gitleaks
   # reports a clean tree by knowing about fewer secret formats.
+  # Root-only. The payload ships no pyproject.toml, so its copy of this file
+  # must not carry this entry -- an ecosystem naming a manifest that is not
+  # there fails the run, which is the rule at the top of this file. .github/**
+  # is managed in .repo-template.json, so a template update overwrites this
+  # file and drops the entry; re-add it when reconciling, the same as the
+  # deleted codeql.yml.
+  #
+  # The dependencies are the dev group in the root pyproject.toml: ruff, ty,
+  # and pytest. Nothing here ships, so this is not about a CVE reaching a user
+  # -- it is that ruff and ty are the gate, and a checker held a year back
+  # passes code its current release would refuse.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      pip:
+        patterns:
+          - "*"
+
   - package-ecosystem: pre-commit
     directory: /
     schedule:

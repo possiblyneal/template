@@ -55,13 +55,13 @@ Code scanning accepts uploaded results from a public repository, or from a priva
 
 **Source:** [`.repo-template.json`](../.repo-template.json)
 
-## Code in a dot-directory hides from detection and from the tools twice over
+## Never give ruff or ty an `include` to reach `.claude/`
 
-`.claude/skills/repo-builder/` holds the only Python this repository runs. It went unchecked for two independent reasons, and fixing either alone still leaves a silent green: `libs/detect.sh` reads a root manifest to decide a language is present, and ruff, ty, and pytest all skip dot-directories in their own default discovery. The root `pyproject.toml` answers both — it declares the language, and it names the paths.
+Both walk into a dot-directory unasked; only pytest needs telling, through `testpaths`, because its `norecursedirs` default skips `.*`. An `include` naming `.claude/skills/repo-builder` therefore narrows rather than widens: it silently drops `apps/` and `libs/`, where the Layout rules put product code.
 
-**Do:** When code lands somewhere the default discovery of a tool would not look, run that tool and count what it reported. Fourteen lint findings, five type errors, and four unformatted files were sitting in a repository whose gate had been green for months.
+**Do:** Confirm what a tool sees with `uv run ruff check . --show-files` before adding a path to `pyproject.toml`. Add nothing that the isolated run (`--isolated`) already reaches.
 
-**Why:** A green `scripts/check` is not evidence the checks ran. Until the manifest existed it was evidence they were never looked for.
+**Why:** The narrowed run still exits 0, so the gate reports `pass lint python` over a subset nobody chose.
 
 **Source:** [Root manifest](../pyproject.toml)
 
