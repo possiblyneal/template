@@ -152,4 +152,21 @@ else
 fi
 cleanup
 
+# A dist/ is not an artifact list. The release attaches files, so counting what
+# the glob matched rather than what it can attach would let a unit that produced
+# only a directory pass the guard above and contribute nothing.
+fixture "a dist/ holding no file does not satisfy an executable declaration"
+unit tool '{"kind": "executable", "targets": ["linux-amd64"]}'
+mkdir -p "$work/apps/tool/dist/staging"
+out="$(release)"
+status=$?
+if (( status == 0 )); then
+  fail "a release survived a unit whose dist/ held no file: $out"
+elif grep -q 'produced no file' <<< "$out"; then
+  pass
+else
+  fail "the release stopped without naming why: $out"
+fi
+cleanup
+
 report

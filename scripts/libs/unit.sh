@@ -1,10 +1,12 @@
 # shellcheck shell=bash
 # Which unit a command acts on, and what that unit declared.
 #
-# Source this after libs/detect.sh; do not execute it. Two commands take an
-# optional unit name, cd into that unit, and dispatch on a fact the unit stated
-# about itself -- scripts/run on how it runs, scripts/package on what it ships.
-# Resolving and reading live here once rather than in two scripts that would
+# Source this, do not execute it; after libs/detect.sh where that is sourced
+# too. Two commands take an optional unit name, cd into that unit, and dispatch
+# on a fact the unit stated about itself -- scripts/run on how it runs,
+# scripts/package on what it ships. scripts/release reads the same fact for
+# every unit at once, which is why one accessor below takes a path instead.
+# Resolving and reading live here once rather than in three scripts that would
 # drift, which is the failure libs/detect.sh already exists to prevent.
 #
 # The values are not validated here. scripts/structure checks every declared
@@ -84,14 +86,14 @@ unit_run=""
 unit_ships=""
 unit_targets=()
 
-# The three are read by the run and package adapters in libs/detect.sh, which is
-# a separate file, so nothing in this one uses them.
-# shellcheck disable=SC2034
-unit_read() {
-  local file=.unit.json
+# The path of the declaration for the unit at $1, on stdout, once it is known to
+# be readable. Both readers below go through it, so a missing file and a missing
+# jq are named the same way whichever one asked.
+unit_declaration() {
+  local file="${1%/}/.unit.json"
 
   if [[ ! -s "$file" ]]; then
-    echo "No $PWD/$file. A unit declares how it runs and what it ships, and" >&2
+    echo "No $file. A unit declares how it runs and what it ships, and" >&2
     echo "scripts/structure requires the file on every unit." >&2
     return 1
   fi
@@ -101,7 +103,29 @@ unit_read() {
     return 1
   fi
 
+  echo "$file"
+}
+
+# The three are read by the run and package adapters in libs/detect.sh, which is
+# a separate file, so nothing in this one uses them.
+# shellcheck disable=SC2034
+unit_read() {
+  local file
+  file="$(unit_declaration "$PWD")" || return 1
+
   unit_run="$(jq -r '.run' "$file")"
   unit_ships="$(jq -r '.ships.kind' "$file")"
   mapfile -t unit_targets < <(jq -r '.ships.targets // [] | .[]' "$file")
+}
+
+# What the unit at $1 ships, on stdout. The path form of the read above, for the
+# one caller that walks every unit in a single process and so cannot cd into
+# each: scripts/release, deciding whether a unit that produced no file broke its
+# own declaration. A second hand-written path expression and jq query in that
+# script is the drift this file exists to prevent.
+unit_ships_of() {
+  local file
+  file="$(unit_declaration "$1")" || return 1
+
+  jq -r '.ships.kind' "$file"
 }

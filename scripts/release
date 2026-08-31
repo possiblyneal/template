@@ -4,6 +4,10 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/unit.sh
+source "$repo_root/scripts/libs/unit.sh"
+
 # An explicit argument wins over GITHUB_REF_NAME so a workflow_dispatch run,
 # where the ref is a branch rather than the tag being released, can pass the
 # tag directly.
@@ -70,8 +74,9 @@ scripts/ci
 # fails the release with nothing published rather than leaving a tag pointing at
 # a release with no assets. Each unit decides what packaging means from its own
 # declaration: a unit shipping nothing prints that and produces no file, and a
-# unit shipping a quadlet is validated and produces no file either, so the walk
-# needs to know nothing about the kinds.
+# unit shipping a quadlet is validated and produces no file either. So the walk
+# reads one fact of its own -- whether the unit promised a file -- and leaves
+# what packaging means to scripts/package.
 shopt -s nullglob
 
 artifacts=()
@@ -80,7 +85,13 @@ for unit_dir in apps/*/; do
   unit="$(basename "$unit_dir")"
   scripts/package "$unit"
 
-  produced=("$unit_dir"dist/*)
+  # Files, not glob entries: a dist/ holding only a directory would otherwise
+  # pass the count below while contributing nothing to the release.
+  produced=()
+  for artifact in "$unit_dir"dist/*; do
+    [[ -f "$artifact" ]] && produced+=("$artifact")
+  done
+
   # Packaging exits 0 in cases that produce nothing and are not failures on
   # their own: every declared target unreachable from this host, or a language
   # with no packaging adapter wired. Neither is a failure of the unit, but both
@@ -88,15 +99,13 @@ for unit_dir in apps/*/; do
   # be honoured -- the tag would otherwise be cut with the asset list silently
   # short, which is the thing this walk exists to prevent.
   if (( ${#produced[@]} == 0 )) &&
-    [[ "$(jq -r '.ships.kind' "$unit_dir.unit.json")" == executable ]]; then
+    [[ "$(unit_ships_of "$unit_dir")" == executable ]]; then
     echo "apps/$unit declares ships: executable and packaging produced no file." >&2
     echo "The lines scripts/package printed say which target could not be reached." >&2
     exit 1
   fi
 
-  for artifact in "${produced[@]}"; do
-    [[ -f "$artifact" ]] && artifacts+=("$artifact")
-  done
+  artifacts+=(${produced[@]+"${produced[@]}"})
 done
 
 if (( ${#artifacts[@]} > 0 )); then
