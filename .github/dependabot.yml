@@ -56,6 +56,17 @@ updates:
   # single revision and offers no floating form, so nothing here updates
   # without a bump. The scanners are the reason it matters: a stale gitleaks
   # reports a clean tree by knowing about fewer secret formats.
+  - package-ecosystem: pre-commit
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      pre-commit:
+        patterns:
+          - "*"
+
   # Root-only. The payload ships no pyproject.toml, so its copy of this file
   # must not carry this entry -- an ecosystem naming a manifest that is not
   # there fails the run, which is the rule at the top of this file. .github/**
@@ -75,16 +86,5 @@ updates:
       default-days: 7
     groups:
       pip:
-        patterns:
-          - "*"
-
-  - package-ecosystem: pre-commit
-    directory: /
-    schedule:
-      interval: weekly
-    cooldown:
-      default-days: 7
-    groups:
-      pre-commit:
         patterns:
           - "*"
