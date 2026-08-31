@@ -266,6 +266,11 @@ cleanup
 # manifest may itself read stdin. If it read fd 0 instead, a command that
 # drains stdin would consume the remaining manifest list and silently skip
 # every package after the first.
+#
+# Each helper is invoked with `</dev/null` so the stub drains an empty stdin
+# rather than the suite's own, which it would otherwise block on until the
+# caller closed it. scripts/CLAUDE.md carries the rule and why the redirect
+# leaves the assertion above intact.
 fixture "swift_each visits every package even when the command reads stdin"
 mkdir -p apps/a apps/b bin
 printf '// swift-tools-version:5.9\n' > apps/a/Package.swift
@@ -278,7 +283,7 @@ cat >/dev/null
 echo ok >> "$marker"
 EOF
 chmod +x bin/swift
-PATH="$PWD/bin:$PATH" swift_each swift test
+PATH="$PWD/bin:$PATH" swift_each swift test </dev/null
 if (( $(wc -l < "$marker") == 2 )); then
   pass
 else
@@ -298,7 +303,7 @@ cat >/dev/null
 echo ok >> "$marker"
 EOF
 chmod +x bin/trivy
-PATH="$PWD/bin:$PATH" trivy_each gradle.lockfile
+PATH="$PWD/bin:$PATH" trivy_each gradle.lockfile </dev/null
 if (( $(wc -l < "$marker") == 2 )); then
   pass
 else
@@ -312,7 +317,8 @@ cleanup
 # is not itself in one, so a single `go build ./...` from the root refuses the
 # pattern and exits 1 -- every Go check failing on the invocation rather than on
 # the code. go_each enters each module instead. The stub consumes stdin, so
-# this also covers the module list being read on fd 3 rather than fd 0.
+# this also covers the module list being read on fd 3 rather than fd 0, and is
+# invoked with `</dev/null` for the reason given above it.
 fixture "go_each runs the command in every workspace module"
 marker="$PWD/visited"
 : > "$marker"
@@ -327,7 +333,7 @@ cat >/dev/null
 pwd >> "$marker"
 EOF
 chmod +x bin/go
-PATH="$PWD/bin:$PATH" _capability_build_go
+PATH="$PWD/bin:$PATH" _capability_build_go </dev/null
 status=$?
 # Two conditions, two messages: a status-only failure that printed the visited
 # list would send the next reader hunting for a visiting bug that is not there.
@@ -383,6 +389,9 @@ cleanup
 # `go run .` needs a main package in the current directory. The workspace root
 # has none, and a unit whose entry point sits under src/ has none at its own
 # root either, so the command reported `no Go files` in both places.
+#
+# The `go list` stub here drains stdin as well, so these three are invoked with
+# `</dev/null` for the reason given at swift_each above.
 fixture "run go runs the module's one main package wherever it sits"
 marker="$PWD/ran"
 mkdir -p bin apps/one
@@ -395,7 +404,7 @@ case "\$1:\$2" in
 esac
 EOF
 chmod +x bin/go
-PATH="$PWD/bin:$PATH" _capability_run_go >/dev/null 2>&1
+PATH="$PWD/bin:$PATH" _capability_run_go </dev/null >/dev/null 2>&1
 status=$?
 if (( status != 0 )); then
   fail "run go returned $status though the stubbed run succeeded"
@@ -419,7 +428,7 @@ case "\$1:\$2" in
 esac
 EOF
 chmod +x bin/go
-output="$(PATH="$PWD/bin:$PATH" _capability_run_go 2>&1)"
+output="$(PATH="$PWD/bin:$PATH" _capability_run_go </dev/null 2>&1)"
 status=$?
 if (( status == 0 )); then
   fail "run go started something with two main packages to choose between"
@@ -443,7 +452,7 @@ case "\$1:\$2" in
 esac
 EOF
 chmod +x bin/go
-PATH="$PWD/bin:$PATH" _capability_run_go >/dev/null 2>&1
+PATH="$PWD/bin:$PATH" _capability_run_go </dev/null >/dev/null 2>&1
 status=$?
 if (( status == NO_RUNNER )); then
   pass
