@@ -268,12 +268,9 @@ cleanup
 # every package after the first.
 #
 # Each helper is invoked with `</dev/null` so the stub drains an empty stdin
-# rather than the suite's own. Without it the stub blocks until whatever is on
-# the suite's stdin closes -- immediately in CI, where stdin is not a terminal,
-# and never for the local `scripts/check` this suite is meant to guard. The
-# redirect does not weaken the assertion: a helper reading its list on fd 0
-# would hand the loop's own pipe to the stub, and the drain would still cost
-# every entry after the first.
+# rather than the suite's own, which it would otherwise block on until the
+# caller closed it. scripts/CLAUDE.md carries the rule and why the redirect
+# leaves the assertion above intact.
 fixture "swift_each visits every package even when the command reads stdin"
 mkdir -p apps/a apps/b bin
 printf '// swift-tools-version:5.9\n' > apps/a/Package.swift
