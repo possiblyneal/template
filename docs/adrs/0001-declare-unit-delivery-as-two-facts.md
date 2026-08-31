@@ -6,7 +6,7 @@ scope: [global]
 tags: [repository-structure, build-and-release, language-capabilities]
 generated: { by: "agent/claude-opus-5", at: "2026-08-30T18:14:33Z" }
 superseded_by:
-status: proposed
+status: accepted
 ---
 
 # Declare Unit Delivery as Two Independent Facts Rather Than One Shape Name

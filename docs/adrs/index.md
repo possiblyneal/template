@@ -4,4 +4,4 @@
 
 | # | Decision | Status |
 | --- | --- | --- |
-| [0001](0001-declare-unit-delivery-as-two-facts.md) | Declare Unit Delivery as Two Independent Facts Rather Than One Shape Name | proposed |
+| [0001](0001-declare-unit-delivery-as-two-facts.md) | Declare Unit Delivery as Two Independent Facts Rather Than One Shape Name | accepted |
