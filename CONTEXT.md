@@ -48,6 +48,12 @@ A platform an executable is built for, in a vocabulary the template owns and
 each language adapter translates: `linux-amd64`, `macos-arm64`.
 _Avoid_: platform, arch, triple, GOOS
 
+**Web language**:
+Node, the language this template reaches for when a unit serves or renders. A
+Node unit that runs and exits is a script or a job; a CLI here is written in Go,
+Rust, or Python.
+_Avoid_: frontend stack, JS, TS, JavaScript
+
 **Shape**:
 Deliberately not a term here: one word naming what a unit "is" collapses the run
 fact and the ship fact, which vary separately. ADR 0001 has the argument.
