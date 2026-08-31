@@ -55,6 +55,22 @@ assert_dispatches() {
   pass
 }
 
+# scripts/ci dispatches the gate alone, and neither run nor package is in it:
+# starting a program is not a check and neither is building one. Both still go
+# through the same mechanism, so they are asked for directly and the dry run
+# reports the pairing without invoking an adapter.
+assert_dispatches_delivery() {
+  local lang="$1" check out
+  out="$(language_capabilities run --dry-run run package)"
+  for check in run package; do
+    if ! grep -qE "^would-run +$check $lang$" <<<"$out"; then
+      fail "$check does not dispatch for $lang"
+      return
+    fi
+  done
+  pass
+}
+
 assert_absent() {
   local lang="$1" out="$2"
   if grep -q " $lang\$" <<<"$out"; then
@@ -98,6 +114,7 @@ fixture "python only"
 printf '[project]\nname = "p"\nversion = "0.1.0"\n' > pyproject.toml
 out="$(CI_DRY_RUN=1 scripts/ci)"
 assert_dispatches python "$out"
+assert_dispatches_delivery python
 assert_absent node "$out"
 cleanup
 
@@ -105,6 +122,7 @@ fixture "node only"
 printf '{"name":"n","version":"1.0.0"}\n' > package.json
 out="$(CI_DRY_RUN=1 scripts/ci)"
 assert_dispatches node "$out"
+assert_dispatches_delivery node
 assert_absent python "$out"
 cleanup
 
@@ -119,6 +137,8 @@ printf '{"name":"n","version":"1.0.0","scripts":{"test":"exit 0"}}\n' > package.
 out="$(CI_DRY_RUN=1 scripts/ci)"
 assert_dispatches python "$out"
 assert_dispatches node "$out"
+assert_dispatches_delivery python
+assert_dispatches_delivery node
 cleanup
 
 fixture "go + rust + kotlin"
@@ -129,6 +149,9 @@ out="$(CI_DRY_RUN=1 scripts/ci)"
 assert_dispatches go "$out"
 assert_dispatches rust "$out"
 assert_dispatches kotlin "$out"
+assert_dispatches_delivery go
+assert_dispatches_delivery rust
+assert_dispatches_delivery kotlin
 cleanup
 
 # Swift is the one language with no root manifest, so it is detected by search
@@ -138,6 +161,7 @@ mkdir -p apps/ios
 printf '// swift-tools-version:5.9\n' > apps/ios/Package.swift
 out="$(CI_DRY_RUN=1 scripts/ci)"
 assert_dispatches swift "$out"
+assert_dispatches_delivery swift
 if scripts/detect check-orphans >/dev/null 2>&1; then
   pass
 else
@@ -354,12 +378,12 @@ else
 fi
 cleanup
 
-# --- the go dev adapter must find the main package, not assume it is here ----
+# --- the go run adapter must find the main package, not assume it is here ----
 
 # `go run .` needs a main package in the current directory. The workspace root
-# has none, and an app whose entry point sits under src/ has none at its own
-# root either, so `scripts/dev` reported `no Go files` in both places.
-fixture "dev go runs the module's one main package wherever it sits"
+# has none, and a unit whose entry point sits under src/ has none at its own
+# root either, so the command reported `no Go files` in both places.
+fixture "run go runs the module's one main package wherever it sits"
 marker="$PWD/ran"
 mkdir -p bin apps/one
 cat > bin/go <<EOF
@@ -371,20 +395,20 @@ case "\$1:\$2" in
 esac
 EOF
 chmod +x bin/go
-PATH="$PWD/bin:$PATH" _capability_dev_go >/dev/null 2>&1
+PATH="$PWD/bin:$PATH" _capability_run_go >/dev/null 2>&1
 status=$?
 if (( status != 0 )); then
-  fail "dev go returned $status though the stubbed run succeeded"
+  fail "run go returned $status though the stubbed run succeeded"
 elif [[ "$(cat "$marker")" == example.com/app/src/app ]]; then
   pass
 else
-  fail "dev go ran $(cat "$marker") rather than the module's main package"
+  fail "run go ran $(cat "$marker") rather than the module's main package"
 fi
 cleanup
 
-# A dev server is one foreground process, so which of several to start has to be
-# said. Picking one would start the wrong program as often as the right one.
-fixture "dev go refuses several main packages rather than choosing one"
+# A run is one foreground process, so which of several to start has to be said.
+# Picking one would start the wrong program as often as the right one.
+fixture "run go refuses several main packages rather than choosing one"
 mkdir -p bin apps/one
 cat > bin/go <<EOF
 #!/usr/bin/env bash
@@ -395,20 +419,20 @@ case "\$1:\$2" in
 esac
 EOF
 chmod +x bin/go
-output="$(PATH="$PWD/bin:$PATH" _capability_dev_go 2>&1)"
+output="$(PATH="$PWD/bin:$PATH" _capability_run_go 2>&1)"
 status=$?
 if (( status == 0 )); then
-  fail "dev go started something with two main packages to choose between"
+  fail "run go started something with two main packages to choose between"
 elif [[ "$output" == *example.com/a* && "$output" == *example.com/b* ]]; then
   pass
 else
-  fail "dev go refused without naming the candidates: $output"
+  fail "run go refused without naming the candidates: $output"
 fi
 cleanup
 
-# A module with no main package has no dev server, which is the no-runner
+# A module with no main package has nothing to start, which is the no-runner
 # outcome rather than a failure -- a library is not broken for being a library.
-fixture "dev go reports no runner when the module has no main package"
+fixture "run go reports no runner when the module has no main package"
 mkdir -p bin apps/one
 cat > bin/go <<EOF
 #!/usr/bin/env bash
@@ -419,12 +443,52 @@ case "\$1:\$2" in
 esac
 EOF
 chmod +x bin/go
-PATH="$PWD/bin:$PATH" _capability_dev_go >/dev/null 2>&1
+PATH="$PWD/bin:$PATH" _capability_run_go >/dev/null 2>&1
 status=$?
 if (( status == NO_RUNNER )); then
   pass
 else
-  fail "dev go returned $status rather than $NO_RUNNER for a module with no main package"
+  fail "run go returned $status rather than $NO_RUNNER for a module with no main package"
+fi
+cleanup
+
+# --- the rename left nothing behind ------------------------------------------
+
+# `dev` promised a dev server, which is one of the three things a unit can do.
+# A leftover adapter or a leftover name in the supported set would keep the old
+# promise alive next to the new one, and the two would answer differently.
+current="no dev capability survives"
+leftover="$(declare -F | grep -o '_capability_dev_[a-z]*' | tr '\n' ' ')"
+if _capability_is_supported dev; then
+  fail "dev is still in the supported capability set"
+elif [[ -n "$leftover" ]]; then
+  fail "a dev adapter is still defined: $leftover"
+else
+  pass
+fi
+
+# --- a unit that ships nothing is skipped, not failed ------------------------
+
+# Packaging a library is not an error to report, it is work that does not
+# exist. Failing here would make `ships: none` a state a repository has to
+# route around rather than one it can simply declare.
+fixture "package skips a unit that ships nothing"
+if command -v jq >/dev/null 2>&1; then
+  mkdir -p apps/lib
+  printf '{"schema_version":1,"run":"none","ships":{"kind":"none"}}\n' > apps/lib/.unit.json
+  printf '[project]\nname = "p"\nversion = "0.1.0"\n' > apps/lib/pyproject.toml
+  out="$(scripts/package lib 2>&1)"
+  status=$?
+  if (( status == 0 )) && grep -q "ships: none" <<<"$out"; then
+    pass
+  else
+    fail "a unit that ships nothing was not skipped cleanly (exit $status): $out"
+  fi
+else
+  # The declaration is JSON, so reading it needs jq. scripts/doctor requires it
+  # once a unit declares; a machine without it skips the case rather than
+  # reporting the missing tool as a defect here.
+  echo "  skip  $current: jq is not installed"
 fi
 cleanup
 
@@ -523,6 +587,107 @@ else
   echo "  skip  $current: jq is not installed"
 fi
 cleanup
+
+# --- the Node run adapter chooses between two programs ------------------------
+
+# The run dispatch is a no-op in Go, Rust and Kotlin, so these are the cases
+# that show it is not dead weight: the same unit, the same directory, and a
+# different program depending on the declared fact. The adapter is called
+# directly rather than through scripts/run, because what is under test is which
+# program it picks, and scripts/tests/unit-commands-test already covers how a
+# unit is resolved and how CI_DRY_RUN reports the pairing.
+if command -v node > /dev/null 2>&1 && command -v npm > /dev/null 2>&1; then
+  fixture "a one-shot runs the entry point bin names"
+  printf '{"name":"n","version":"1.0.0","bin":{"n":"./cli.js"}}\n' > package.json
+  printf 'console.log("cli:" + process.argv.slice(2).join(","));\n' > cli.js
+  unit_run=oneshot unit_args=(--flag value)
+  out="$(_capability_run_node 2>&1)"
+  status=$?
+  unset unit_run unit_args
+  if (( status == 0 )) && grep -qx 'cli:--flag,value' <<<"$out"; then
+    pass
+  else
+    fail "a one-shot did not run its bin entry with the arguments after --: $out"
+  fi
+  cleanup
+
+  fixture "several bin entries are refused by name"
+  printf '{"name":"n","version":"1.0.0","bin":{"a":"./a.js","b":"./b.js"}}\n' > package.json
+  unit_run=oneshot
+  out="$(_capability_run_node 2>&1)"
+  status=$?
+  unset unit_run
+  if (( status == 1 )) && grep -q 'node ./a.js' <<<"$out" && grep -q 'node ./b.js' <<<"$out"; then
+    pass
+  else
+    fail "several bin entries did not refuse and name each one: $out"
+  fi
+  cleanup
+
+  # A one-shot that is not a CLI -- a script, a scheduled job -- names no bin,
+  # and npm start is the only thing left that says how it starts.
+  fixture "a one-shot with no bin falls back to npm start"
+  printf '{"name":"n","version":"1.0.0","scripts":{"start":"echo started"}}\n' > package.json
+  unit_run=oneshot
+  out="$(_capability_run_node 2>&1)"
+  status=$?
+  unset unit_run
+  if (( status == 0 )) && grep -q 'started' <<<"$out"; then
+    pass
+  else
+    fail "a one-shot with no bin did not fall back to npm start: $out"
+  fi
+  cleanup
+
+  # The bug the dispatch prevents, from the other side: a package that ships a
+  # CLI and also serves is started as the service it declared itself to be.
+  fixture "a long-lived unit runs the dev server even with a bin"
+  printf '{"name":"n","version":"1.0.0","bin":{"n":"./cli.js"},"scripts":{"dev":"echo serving"}}\n' > package.json
+  printf 'console.log("cli");\n' > cli.js
+  unit_run=longlived
+  out="$(_capability_run_node 2>&1)"
+  status=$?
+  unset unit_run
+  if (( status == 0 )) && grep -q 'serving' <<<"$out" && ! grep -qx 'cli' <<<"$out"; then
+    pass
+  else
+    fail "a long-lived unit ran the CLI entry instead of the dev server: $out"
+  fi
+  cleanup
+else
+  echo "  skip  the Node run adapter: node or npm is not installed"
+fi
+
+# --- an impossible build is not a broken install -----------------------------
+
+# The distinction the package capability exists to keep: a target this host
+# cannot reach is not-applicable with the reason named, and a language with no
+# adapter wired is unavailable. Both produce no file, which is why collapsing
+# them is easy and wrong -- one is a fact about the host, the other a gap in
+# this repository.
+if command -v go > /dev/null 2>&1; then
+  fixture "an unreachable target is not-applicable, an unwired language is unavailable"
+  printf 'module example.com/t\n\ngo 1.22\n' > go.mod
+  printf 'package main\n\nfunc main() {}\n' > main.go
+  unit_targets=(windows-arm64)
+  out="$(_capability_package_go 2>&1)"
+  status=$?
+  _capability_package_python
+  python_status=$?
+  unset unit_targets
+  if (( status != 0 )); then
+    fail "an unreachable target failed the build instead of being skipped: $out"
+  elif ! grep -q 'not-applicable' <<<"$out" || ! grep -q 'windows-arm64' <<<"$out"; then
+    fail "an unreachable target was not reported not-applicable by name: $out"
+  elif (( python_status != NO_RUNNER )); then
+    fail "an unwired language did not report the no-runner sentinel (exit $python_status)"
+  else
+    pass
+  fi
+  cleanup
+else
+  echo "  skip  the package target outcomes: go is not installed"
+fi
 
 # --- aggregate outcomes ------------------------------------------------------
 

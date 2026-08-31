@@ -4,6 +4,10 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/unit.sh
+source "$repo_root/scripts/libs/unit.sh"
+
 # An explicit argument wins over GITHUB_REF_NAME so a workflow_dispatch run,
 # where the ref is a branch rather than the tag being released, can pass the
 # tag directly.
@@ -66,8 +70,56 @@ fi
 
 scripts/ci
 
-# Artifacts are project-specific, so the template builds none. Build them above
-# this line and pass the files as trailing arguments here; the tag and the notes
-# are already right without them, so a release with no artifact is still a real
-# release rather than a half-finished one.
-gh release create "$tag" --title "$tag" "${notes_args[@]}"
+# Every unit is packaged before the tag is cut, so a build that cannot be made
+# fails the release with nothing published rather than leaving a tag pointing at
+# a release with no assets. Each unit decides what packaging means from its own
+# declaration: a unit shipping nothing prints that and produces no file, and a
+# unit shipping a quadlet is validated and produces no file either. So the walk
+# reads one fact of its own -- whether the unit promised a file -- and leaves
+# what packaging means to scripts/package.
+shopt -s nullglob
+
+mapfile -t units < <(unit_names)
+
+artifacts=()
+for unit in ${units[@]+"${units[@]}"}; do
+  scripts/package "$unit"
+
+  # Files, not glob entries: a dist/ holding only a directory would otherwise
+  # pass the count below while contributing nothing to the release.
+  produced=()
+  for artifact in "apps/$unit"/dist/*; do
+    [[ -f "$artifact" ]] && produced+=("$artifact")
+  done
+
+  # Read into a variable rather than called inside the condition below. A
+  # command substitution in an `if` test is exempt from `set -e`, so a failed
+  # read there would expand to nothing, compare unequal, and let the walk pass
+  # the very unit the guard exists to catch.
+  ships="$(unit_ships_of "apps/$unit")"
+
+  # Packaging exits 0 in cases that produce nothing and are not failures on
+  # their own: every declared target unreachable from this host, or a language
+  # with no packaging adapter wired. Neither is a failure of the unit, but both
+  # are a failure of the release, which is the one place the declaration has to
+  # be honoured -- the tag would otherwise be cut with the asset list silently
+  # short, which is the thing this walk exists to prevent.
+  if (( ${#produced[@]} == 0 )) && [[ "$ships" == executable ]]; then
+    echo "apps/$unit declares ships: executable and packaging produced no file." >&2
+    echo "The lines scripts/package printed say which target could not be reached." >&2
+    exit 1
+  fi
+
+  artifacts+=(${produced[@]+"${produced[@]}"})
+done
+
+if (( ${#artifacts[@]} > 0 )); then
+  echo "Artifacts: ${artifacts[*]}"
+else
+  # A repository where nothing ships an artifact still cuts a release: the tag
+  # and the notes are the release, and an empty asset list is an outcome rather
+  # than a half-finished job.
+  echo "Artifacts: none, since no unit here ships one."
+fi
+
+gh release create "$tag" --title "$tag" "${notes_args[@]}" "${artifacts[@]}"

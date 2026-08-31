@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/detect.sh
+source "$repo_root/scripts/libs/detect.sh"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/unit.sh
+source "$repo_root/scripts/libs/unit.sh"
+
+# Unmatched globs below stand for "no such file" rather than for themselves.
+shopt -s nullglob
+
+# Every assignment of one key in a systemd unit file, one per line. systemd
+# takes the last assignment of most keys, but `ImageTag` repeats where the
+# option does -- `podman build` takes several `--tag` -- so all of them are
+# returned and each caller decides which it means.
+quadlet_values() {
+  sed -n -E "s/^[[:space:]]*$2[[:space:]]*=[[:space:]]*(.*[^[:space:]])[[:space:]]*\$/\\1/p" "$1"
+}
+
+# A quadlet unit ships unit files, not an image. systemd and podman build it on
+# the deploy host when the unit starts, so packaging one validates the pair and
+# produces nothing. Nothing here shells out to a container runtime, which is why
+# the full gate still passes on a machine with no podman installed and why
+# scripts/doctor requires none.
+#
+# What it catches is the mismatch that would otherwise surface as a service that
+# fails to start on the deploy host: a Containerfile that is not where the build
+# says it is, or a container asking for an image the build never produces.
+quadlet_validate() {
+  local dir=deploy/quadlet file value status=0
+  local -a builds=() containers=() produced=()
+
+  builds=("$dir"/*.build)
+  containers=("$dir"/*.container)
+
+  if (( ${#builds[@]} == 0 )); then
+    echo "apps/$unit declares ships: quadlet but $dir/ holds no .build unit." >&2
+    status=1
+  fi
+  if (( ${#containers[@]} == 0 )); then
+    echo "apps/$unit declares ships: quadlet but $dir/ holds no .container unit." >&2
+    status=1
+  fi
+  (( status == 0 )) || return "$status"
+
+  for file in "${builds[@]}"; do
+    # The image names this build produces, plus the build unit's own file name:
+    # a .container may ask for either, and quadlet resolves the second to the
+    # first itself.
+    mapfile -t -O "${#produced[@]}" produced < <(quadlet_values "$file" ImageTag)
+    produced+=("$(basename "$file")")
+
+    if [[ -z "$(quadlet_values "$file" ImageTag)" ]]; then
+      echo "$file names no ImageTag, so nothing can depend on what it builds." >&2
+      status=1
+    fi
+
+    value="$(quadlet_values "$file" File | tail -n 1)"
+    if [[ -z "$value" ]]; then
+      # podman reads the Containerfile out of the working directory when the
+      # build names no File, so this is a legal unit rather than a broken one.
+      if [[ -z "$(quadlet_values "$file" SetWorkingDirectory | tail -n 1)" ]]; then
+        echo "$file names neither File nor SetWorkingDirectory, so podman has no Containerfile to build." >&2
+        status=1
+      fi
+    elif [[ "$value" != - && "$value" != http://* && "$value" != https://* ]]; then
+      # A relative File is relative to the unit file, which is what podman
+      # resolves it against.
+      [[ "$value" == /* ]] || value="$dir/$value"
+      if [[ ! -e "$value" ]]; then
+        echo "$file names File=$value, which does not exist." >&2
+        status=1
+      fi
+    fi
+  done
+
+  for file in "${containers[@]}"; do
+    value="$(quadlet_values "$file" Image | tail -n 1)"
+    if [[ -z "$value" ]]; then
+      echo "$file names no Image, so there is nothing for it to run." >&2
+      status=1
+      continue
+    fi
+    if ! grep -qxF -- "$value" <<< "$(printf '%s\n' "${produced[@]}")"; then
+      echo "$file asks for Image=$value, which no .build unit here produces." >&2
+      echo "Built here: ${produced[*]}" >&2
+      status=1
+    fi
+  done
+
+  (( status == 0 )) && echo "apps/$unit ships a quadlet: validated $dir/, nothing built."
+  return "$status"
+}
+
+# Packaging is not a check, so nothing in the gate calls this. It exists as a
+# command because a developer building and trying a binary should not have to
+# cut a release to do it.
+unit="$(unit_resolve "${1:-}" package)" || exit 1
+
+if [[ -z "$unit" ]]; then
+  echo "apps/ has no units, so there is nothing to package."
+  exit 0
+fi
+
+cd "apps/$unit"
+unit_read
+
+case "$unit_ships" in
+  none)
+    echo "apps/$unit declares ships: none, so there is nothing to package."
+    exit 0
+    ;;
+  quadlet)
+    quadlet_validate
+    exit
+    ;;
+esac
+
+mapfile -t languages < <(language_capabilities present)
+if (( ${#languages[@]} == 0 )); then
+  echo "No project manifest found in apps/$unit, so there is nothing to package."
+  exit 0
+fi
+
+# Every present language, unlike scripts/run: a build is not one foreground
+# process, so a unit written in two of them has two artifacts rather than an
+# ambiguity to refuse.
+args=(package)
+[[ -z "${CI_DRY_RUN:-}" ]] || args=(--dry-run package)
+
+status=0
+language_capabilities run "${args[@]}" || status=$?
+case "$status" in
+  0) ;;
+  "$NO_RUNNER") echo "No package command configured for: ${languages[*]}. Add the private adapter to scripts/libs/detect.sh." ;;
+  *) exit "$status" ;;
+esac

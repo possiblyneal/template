@@ -109,11 +109,25 @@ if [[ -s .pre-commit-config.yaml ]]; then
   fi
 fi
 
-# The PreToolUse and ConfigChange hooks parse their input with jq. A hook that
+# Two unrelated things need jq, and either one makes it required here.
+#
+# The PreToolUse and ConfigChange hooks parse their input with it. A hook that
 # exits non-zero for any reason other than a deliberate block is a non-blocking
 # error, so a missing jq lets writes outside the repository and mid-session
 # settings reloads through without a prompt or a block.
+#
+# And scripts/structure reads every unit's .unit.json with it. That runs from
+# pre-commit on every commit, so without jq the audit reports unavailable and
+# refuses the commit -- which is correct, and worth naming here rather than
+# leaving someone to read it off a blocked commit.
+needs_jq=""
 if [[ -x .claude/hooks/ask-outside-repo.sh || -x .claude/hooks/block-config-change.sh ]]; then
+  needs_jq=1
+fi
+if compgen -G 'apps/*/.unit.json' > /dev/null; then
+  needs_jq=1
+fi
+if [[ -n "$needs_jq" ]]; then
   check_required jq
 fi
 

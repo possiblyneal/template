@@ -77,6 +77,11 @@ An `apps/` entry is one deployable service.
 This project is not yet indexed. Replace this message with the actual index.
 """,
     )
+    write(
+        repo,
+        "base-repo/apps/app-name/.unit.json",
+        '{"schema_version": 1, "run": "none", "ships": {"kind": "none"}}\n',
+    )
     write(repo, "base-repo/apps/app-name/src/.gitkeep", "")
     write(repo, "base-repo/apps/app-name/tests/.gitkeep", "")
     write(repo, "base-repo/apps/app-name/docs/specs/.gitkeep", "")

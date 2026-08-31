@@ -70,6 +70,12 @@ coverage/
 .nuxt/
 .svelte-kit/
 
+# scripts/package writes one artifact per declared target here, under the unit
+# it packaged. /dist/ above is anchored to the repository root, so it does not
+# reach these; without the line a packaged binary is untracked and unignored,
+# and scripts/check hands every untracked file to pre-commit.
+apps/*/dist/
+
 # Go and Rust. /bin/ is anchored: src/bin/ and cmd/*/bin/ hold real source.
 /bin/
 target/

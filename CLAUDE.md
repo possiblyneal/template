@@ -20,7 +20,8 @@ Use these instead of per-language tools; each detects the languages present and 
 - `scripts/check` — full local gate: `doctor`, the script tests, then lint, format, type check, test, build, then the security audit and pre-commit across every file, tracked and untracked, not just staged ones. Local means it reads no hosted GitHub state, not that it stays offline: `commitlint-test` and pre-commit's own hook environments fetch on first use
 - `scripts/fix` — rewrite formatting for every detected stack; the write half of `check`'s format check, no lint autofixes
 - `scripts/clean` — recursively delete build output and tool caches (`dist`, `build`, `coverage`, `__pycache__`, `.*_cache`, `*.pyc`)
-- `scripts/dev [app-name]` — start the dev server; requires the app name when several stacks are present, since only one process can run
+- `scripts/run [unit] [-- args…]` — start the unit, dispatching on the `run` fact it declared; requires the unit name when `apps/` holds several, since a run is one foreground process. Everything after `--` reaches the program unchanged
+- `scripts/package [unit]` — deliver what the unit declared it ships: an executable per declared target into the unit's `dist/`, or a `deploy/quadlet/` pair validated and nothing built. Not part of the gate: packaging is not a check
 - `scripts/structure` — audit where files sit against the Layout rules below; called by `scripts/check` and by pre-commit on every commit
 
 Every check runs for every language present, not the first one detected. Results distinguish `pass`, `not-applicable`, `unavailable`, and `FAIL`, so an intentional no-op cannot look like a runner that executed. See `scripts/CLAUDE.md` before adding a language or a check.
@@ -43,7 +44,7 @@ This repository has no root language manifest, so `scripts/check` reports there 
 
 ## Layout
 
-Where a new file goes. `scripts/structure` enforces everything in this section that is a question about placement, and reports the three that are not.
+Where a new file goes. `scripts/structure` enforces everything in this section that is a question about placement, plus the values in a unit's declaration, and reports the three rules that are neither.
 
 **Root holds only these, and everything at root is repo-wide in scope.** `libs/`, `tests/`, `scripts/`, `tools/`, `deploy/`, and `assets/` here hold only what is shared across apps or operates on the whole repository; anything scoped to one app or domain belongs under that app.
 
@@ -65,10 +66,24 @@ Root *files* are permitted by name rather than by pattern: the eight the templat
 
 **`apps/` breaks the project into its smallest deployable units.** There may be only one.
 
-- Each unit is one folder under `apps/`, defined by deploying, scaling, and versioning independently — the Dockerfile test. A file sitting directly in `apps/` belongs to no unit.
+- Each unit is one folder under `apps/`: the smallest piece of this repository delivered on its own — deployed, installed, published, or copied. A file sitting directly in `apps/` belongs to no unit.
 - Split a unit into domains only when it spans distinct business areas that benefit from isolation. Each domain is one folder under its unit.
 - `src/` sits under the unit when there are no domains, and under each domain when there are. Never both, and never `apps/src/`.
 - A unit or domain may hold its own `libs/`, `tests/`, `scripts/`, `docs/`, `tools/`, `deploy/`, or `assets/`, scoped strictly to it.
+
+**Every unit declares how it runs and what it ships**, in a `.unit.json` at the unit's root — never at a domain's. Neither fact is on disk: a Go module with one `main` package is a CLI, a TUI, or a service, and the compiler cannot tell them apart. `docs/adrs/0001-declare-unit-delivery-as-two-facts.md` has the reasoning; read it before changing the shape.
+
+```json
+{ "schema_version": 1, "run": "oneshot", "ships": { "kind": "executable", "targets": ["linux-amd64"] } }
+```
+
+- `run` — `oneshot` for a process that exits on its own, `longlived` for one that runs until stopped, `none` for a unit with nothing to run.
+- `ships.kind` — `executable`, `quadlet`, or `none`.
+- `ships.targets` — required exactly when the kind is `executable`, rejected on every other kind. The vocabulary is the template's own and each language adapter translates it: `linux-amd64`, `macos-arm64`.
+
+The two facts vary independently, so every pairing is legal and the audit checks values alone. A scheduled job runs `oneshot` and ships a `quadlet`; a library runs `none` and still ships. A rule forbidding a combination is a rule nobody revisits when the exception arrives.
+
+Reading the file needs `jq`, which is why `scripts/doctor` requires it once a unit declares. Without it the audit reports `unavailable` and fails rather than passing over a file it never opened.
 
 **Scoped folders are leaves for their own kind.** `libs/`, `tests/`, `scripts/`, `tools/`, `assets/`, `docs/`, and `deploy/` may nest a different kind — `scripts/tests/libs/` is fine — but never another of the same kind at any depth, and never a `src/`. Choose the folder whose scope matches the file's scope.
 
@@ -96,6 +111,20 @@ Some guarantees these files make are only half-kept by the files themselves. Cur
 - GitHub Actions: **verified**. `ci.yml` and `security.yml` pass on `main`. `codeql.yml` is red at `Code scanning enabled`, by design, until this repository is public.
 
 A generated repository is where a guarantee unavailable on this plan can actually be observed. Push protection, branch rulesets, and code scanning are all free on a public repository and unavailable on a private one here, so `scripts/repo-settings check` reports `not offered for the plan` against this repository whether or not the check works. Build a public repository from the payload to tell those apart.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `possiblyneal/template`, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical labels, unrenamed. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` at the root, ADRs in `docs/adrs/`. See `docs/agents/domain.md`.
 
 ## Child Index
 
