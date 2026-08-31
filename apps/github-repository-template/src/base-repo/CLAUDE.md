@@ -4,7 +4,7 @@ Located at `./scripts` Use these instead of per-language tools; each detects the
 
 - `scripts/structure` — audit where files sit against the Layout rules below; called by `scripts/check` and by pre-commit on every commit
 - `scripts/run [unit] [-- args…]` — start the unit, dispatching on the `run` fact it declared; name the unit when `apps/` holds several, since a run is one foreground process. Everything after `--` reaches the program unchanged
-- `scripts/package [unit]` — build an executable per declared target into the unit's `dist/`, for a unit whose `ships.kind` is `executable`. Not part of the gate: packaging is not a check
+- `scripts/package [unit]` — deliver what the unit declared it ships: an executable per declared target into the unit's `dist/`, or a `deploy/quadlet/` pair validated and nothing built. Not part of the gate: packaging is not a check
 
 ## Layout
 
@@ -30,7 +30,7 @@ Root *files* are permitted by name rather than by pattern: the eight this templa
 ```
 
 - `run` — `oneshot` for a process that exits on its own, `longlived` for one that runs until stopped, `none` for a unit with nothing to run.
-- `ships.kind` — `executable`, `quadlet`, or `none`.
+- `ships.kind` — `executable`, `quadlet`, or `none`. A `quadlet` unit keeps its `.build` and `.container` files under the unit's `deploy/quadlet/`; `scripts/package` validates that pair rather than building an image, since systemd and podman build on the deploy host.
 - `ships.targets` — required exactly when the kind is `executable`, rejected on every other kind: `linux-amd64`, `macos-arm64`.
 
 `scripts/run` dispatches on the first fact and `scripts/package` on the second, so a wrong value starts the wrong program rather than none. The two facts vary independently, so every pairing is legal and the audit checks values alone. A scheduled job runs `oneshot` and ships a `quadlet`; a library runs `none` and still ships.

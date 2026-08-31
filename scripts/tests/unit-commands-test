@@ -37,6 +37,16 @@ unit() {
   printf 'module example.com/%s\n\ngo 1.22\n' "$name" > "$work/apps/$name/go.mod"
 }
 
+# Writes a well-formed quadlet pair under a unit, which each case below then
+# breaks in exactly one way.
+quadlet() {
+  local name="$1" dir="$work/apps/$1/deploy/quadlet"
+  mkdir -p "$dir"
+  printf '[Build]\nImageTag=localhost/%s:latest\nFile=./Containerfile\n' "$name" > "$dir/$name.build"
+  printf '[Container]\nImage=localhost/%s:latest\n' "$name" > "$dir/$name.container"
+  printf 'FROM scratch\n' > "$dir/Containerfile"
+}
+
 run_in() {
   (cd "$work" && CI_DRY_RUN=1 "$@" 2>&1)
 }
@@ -140,6 +150,111 @@ if grep -qE '^would-run +package go$' <<< "$out"; then
   pass
 else
   fail "a unit shipping an executable did not dispatch package: $out"
+fi
+cleanup
+
+# --- a quadlet unit is validated, not built ----------------------------------
+
+# systemd and podman build the image on the deploy host when the unit starts, so
+# packaging one checks the pair rather than producing anything. Every case here
+# runs on a machine with no container runtime, which is the property being kept:
+# a repository shipping a service must not need podman to pass its own gate.
+fixture "a well-formed quadlet pair validates and builds nothing"
+unit svc longlived '{"kind": "quadlet"}'
+quadlet svc
+out="$(run_in scripts/package svc)"
+status=$?
+if (( status != 0 )); then
+  fail "a well-formed pair did not validate (exit $status): $out"
+elif [[ -e "$work/apps/svc/dist" ]]; then
+  fail "validating a quadlet unit produced a dist/"
+else
+  pass
+fi
+cleanup
+
+# quadlet resolves an Image naming a .build file to what that build produces, so
+# both spellings are the same reference and both have to be accepted.
+fixture "an Image naming the .build unit is accepted"
+unit svc longlived '{"kind": "quadlet"}'
+quadlet svc
+printf '[Container]\nImage=svc.build\n' > "$work/apps/svc/deploy/quadlet/svc.container"
+out="$(run_in scripts/package svc)"
+status=$?
+if (( status == 0 )); then
+  pass
+else
+  fail "an Image naming the build unit was rejected (exit $status): $out"
+fi
+cleanup
+
+# The failure this catches is a service that will not start on the deploy host,
+# where the build runs and the Containerfile is not where the unit said.
+fixture "a .build naming a Containerfile that does not exist is refused"
+unit svc longlived '{"kind": "quadlet"}'
+quadlet svc
+rm "$work/apps/svc/deploy/quadlet/Containerfile"
+out="$(run_in scripts/package svc)"
+status=$?
+if (( status != 0 )) && grep -q 'Containerfile' <<< "$out"; then
+  pass
+else
+  fail "a missing Containerfile was not refused (exit $status): $out"
+fi
+cleanup
+
+fixture "a .container asking for an image no .build produces is refused"
+unit svc longlived '{"kind": "quadlet"}'
+quadlet svc
+printf '[Container]\nImage=localhost/other:latest\n' > "$work/apps/svc/deploy/quadlet/svc.container"
+out="$(run_in scripts/package svc)"
+status=$?
+if (( status != 0 )) && grep -q 'localhost/other:latest' <<< "$out"; then
+  pass
+else
+  fail "an image no build produces was not refused (exit $status): $out"
+fi
+cleanup
+
+fixture "a missing .build unit is refused"
+unit svc longlived '{"kind": "quadlet"}'
+quadlet svc
+rm "$work/apps/svc/deploy/quadlet/svc.build"
+out="$(run_in scripts/package svc)"
+status=$?
+if (( status != 0 )) && grep -q '.build' <<< "$out"; then
+  pass
+else
+  fail "a missing .build unit was not refused (exit $status): $out"
+fi
+cleanup
+
+fixture "a missing .container unit is refused"
+unit svc longlived '{"kind": "quadlet"}'
+quadlet svc
+rm "$work/apps/svc/deploy/quadlet/svc.container"
+out="$(run_in scripts/package svc)"
+status=$?
+if (( status != 0 )) && grep -q '.container' <<< "$out"; then
+  pass
+else
+  fail "a missing .container unit was not refused (exit $status): $out"
+fi
+cleanup
+
+# podman reads the Containerfile out of the working directory when the build
+# names no File, so requiring File would reject a unit podman accepts.
+fixture "a .build with SetWorkingDirectory and no File is accepted"
+unit svc longlived '{"kind": "quadlet"}'
+quadlet svc
+printf '[Build]\nImageTag=localhost/svc:latest\nSetWorkingDirectory=unit\n' \
+  > "$work/apps/svc/deploy/quadlet/svc.build"
+out="$(run_in scripts/package svc)"
+status=$?
+if (( status == 0 )); then
+  pass
+else
+  fail "a build using the working directory was rejected (exit $status): $out"
 fi
 cleanup
 

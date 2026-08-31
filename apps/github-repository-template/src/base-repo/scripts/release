@@ -66,8 +66,30 @@ fi
 
 scripts/ci
 
-# Artifacts are project-specific, so the template builds none. Build them above
-# this line and pass the files as trailing arguments here; the tag and the notes
-# are already right without them, so a release with no artifact is still a real
-# release rather than a half-finished one.
-gh release create "$tag" --title "$tag" "${notes_args[@]}"
+# Every unit is packaged before the tag is cut, so a build that cannot be made
+# fails the release with nothing published rather than leaving a tag pointing at
+# a release with no assets. Each unit decides what packaging means from its own
+# declaration: a unit shipping nothing prints that and produces no file, and a
+# unit shipping a quadlet is validated and produces no file either, so the walk
+# needs to know nothing about the kinds.
+shopt -s nullglob
+
+artifacts=()
+for unit_dir in apps/*/; do
+  [[ -d "$unit_dir" ]] || continue
+  scripts/package "$(basename "$unit_dir")"
+  for artifact in "$unit_dir"dist/*; do
+    [[ -f "$artifact" ]] && artifacts+=("$artifact")
+  done
+done
+
+if (( ${#artifacts[@]} > 0 )); then
+  echo "Artifacts: ${artifacts[*]}"
+else
+  # A repository where nothing ships an artifact still cuts a release: the tag
+  # and the notes are the release, and an empty asset list is an outcome rather
+  # than a half-finished job.
+  echo "Artifacts: none, since no unit here ships one."
+fi
+
+gh release create "$tag" --title "$tag" "${notes_args[@]}" "${artifacts[@]}"
