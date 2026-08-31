@@ -609,7 +609,15 @@ _capability_package_rust() {
   local target triple name status=0
 
   command -v cargo > /dev/null 2>&1 || return "$NO_RUNNER"
-  command -v jq > /dev/null 2>&1 || return "$NO_RUNNER"
+  # Both absences are no runner, but they read differently to whoever is
+  # holding the failure: cargo missing is the language not installed, and jq
+  # missing is a Rust unit that would package if one more tool were here. The
+  # caller prints "no package command configured" for either, so this one says
+  # what is actually missing before it goes quiet.
+  if ! command -v jq > /dev/null 2>&1; then
+    echo "cargo is here but jq is not, and the binary names are read out of cargo metadata." >&2
+    return "$NO_RUNNER"
+  fi
 
   mkdir -p dist
   for target in ${unit_targets[@]+"${unit_targets[@]}"}; do
@@ -622,7 +630,7 @@ _capability_package_rust() {
     # there is no list to consult and cargo decides, which is a real failure
     # rather than a skip.
     if command -v rustup > /dev/null 2>&1 &&
-      ! rustup target list --installed 2> /dev/null | grep -qx "$triple"; then
+      ! grep -qx "$triple" <<< "$(rustup target list --installed 2> /dev/null)"; then
       _package_target_result not-applicable "$target" "the Rust target $triple is not installed (rustup target add $triple)"
       continue
     fi

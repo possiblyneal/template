@@ -86,7 +86,7 @@ quadlet_validate() {
       status=1
       continue
     fi
-    if ! printf '%s\n' "${produced[@]}" | grep -qxF "$value"; then
+    if ! grep -qxF -- "$value" <<< "$(printf '%s\n' "${produced[@]}")"; then
       echo "$file asks for Image=$value, which no .build unit here produces." >&2
       echo "Built here: ${produced[*]}" >&2
       status=1

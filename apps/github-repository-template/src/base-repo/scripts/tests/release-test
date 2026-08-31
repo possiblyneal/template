@@ -133,4 +133,23 @@ else
 fi
 cleanup
 
+# Packaging that produced nothing is not a packaging failure -- an unreachable
+# target and an unwired language both exit 0 by design -- so the walk has to
+# catch it separately or the tag is cut with the asset list silently short.
+# There is no unit here that could produce a file: no manifest, so no adapter.
+fixture "an executable unit that produced nothing aborts before the tag is cut"
+unit tool '{"kind": "executable", "targets": ["linux-amd64"]}'
+out="$(release)"
+status=$?
+if (( status == 0 )); then
+  fail "a release survived a unit that shipped nothing it declared: $out"
+elif [[ -e "$work/gh-called" ]]; then
+  fail "gh was called despite a unit producing no declared artifact: $(cat "$work/gh-called")"
+elif grep -q 'produced no file' <<< "$out"; then
+  pass
+else
+  fail "the release stopped without naming why: $out"
+fi
+cleanup
+
 report

@@ -658,6 +658,37 @@ else
   echo "  skip  the Node run adapter: node or npm is not installed"
 fi
 
+# --- an impossible build is not a broken install -----------------------------
+
+# The distinction the package capability exists to keep: a target this host
+# cannot reach is not-applicable with the reason named, and a language with no
+# adapter wired is unavailable. Both produce no file, which is why collapsing
+# them is easy and wrong -- one is a fact about the host, the other a gap in
+# this repository.
+if command -v go > /dev/null 2>&1; then
+  fixture "an unreachable target is not-applicable, an unwired language is unavailable"
+  printf 'module example.com/t\n\ngo 1.22\n' > go.mod
+  printf 'package main\n\nfunc main() {}\n' > main.go
+  unit_targets=(windows-arm64)
+  out="$(_capability_package_go 2>&1)"
+  status=$?
+  _capability_package_python
+  python_status=$?
+  unset unit_targets
+  if (( status != 0 )); then
+    fail "an unreachable target failed the build instead of being skipped: $out"
+  elif ! grep -q 'not-applicable' <<<"$out" || ! grep -q 'windows-arm64' <<<"$out"; then
+    fail "an unreachable target was not reported not-applicable by name: $out"
+  elif (( python_status != NO_RUNNER )); then
+    fail "an unwired language did not report the no-runner sentinel (exit $python_status)"
+  else
+    pass
+  fi
+  cleanup
+else
+  echo "  skip  the package target outcomes: go is not installed"
+fi
+
 # --- aggregate outcomes ------------------------------------------------------
 
 fixture "unavailable capability"

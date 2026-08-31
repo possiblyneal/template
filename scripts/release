@@ -77,8 +77,24 @@ shopt -s nullglob
 artifacts=()
 for unit_dir in apps/*/; do
   [[ -d "$unit_dir" ]] || continue
-  scripts/package "$(basename "$unit_dir")"
-  for artifact in "$unit_dir"dist/*; do
+  unit="$(basename "$unit_dir")"
+  scripts/package "$unit"
+
+  produced=("$unit_dir"dist/*)
+  # Packaging exits 0 in cases that produce nothing and are not failures on
+  # their own: every declared target unreachable from this host, or a language
+  # with no packaging adapter wired. Neither is a failure of the unit, but both
+  # are a failure of the release, which is the one place the declaration has to
+  # be honoured -- the tag would otherwise be cut with the asset list silently
+  # short, which is the thing this walk exists to prevent.
+  if (( ${#produced[@]} == 0 )) &&
+    [[ "$(jq -r '.ships.kind' "$unit_dir.unit.json")" == executable ]]; then
+    echo "apps/$unit declares ships: executable and packaging produced no file." >&2
+    echo "The lines scripts/package printed say which target could not be reached." >&2
+    exit 1
+  fi
+
+  for artifact in "${produced[@]}"; do
     [[ -f "$artifact" ]] && artifacts+=("$artifact")
   done
 done
