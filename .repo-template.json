@@ -11,13 +11,12 @@
   },
   "generation": {
     "application_name": "github-repository-template",
-    "languages": [],
-    "package_manager": null,
+    "languages": ["python"],
+    "package_manager": "uv",
     "visibility": "private",
     "self_hosted": true,
     "features": {
-      "codeql": "omitted-by-choice",
-      "python_manifest": "omitted-by-choice"
+      "codeql": "omitted-by-choice"
     }
   },
   "ownership": [

@@ -55,15 +55,15 @@ Code scanning accepts uploaded results from a public repository, or from a priva
 
 **Source:** [`.repo-template.json`](../.repo-template.json)
 
-## The repo-builder tests are not covered by scripts/check
+## Never give ruff or ty an `include` to reach `.claude/`
 
-`.claude/skills/repo-builder/` holds Python with a pytest suite, but this repository has no root `pyproject.toml`, so language detection finds no Python and `scripts/check` reports there is nothing to check.
+Both walk into a dot-directory unasked; only pytest needs telling, through `testpaths`, because its `norecursedirs` default skips `.*`. An `include` naming `.claude/skills/repo-builder` therefore narrows rather than widens: it silently drops `apps/` and `libs/`, where the Layout rules put product code.
 
-**Do:** Run `python3 -m pytest .claude/skills/repo-builder/scripts/tests/` directly after changing `preflight.py`.
+**Do:** Confirm what a tool sees with `uv run ruff check . --show-files` before adding a path to `pyproject.toml`. Add nothing that the isolated run (`--isolated`) already reaches.
 
-**Why:** A green `scripts/check` is not evidence the skill's tests ran. It is evidence they were never looked for.
+**Why:** The narrowed run still exits 0, so the gate reports `pass lint python` over a subset nobody chose.
 
-**Source:** [Preflight tests](../.claude/skills/repo-builder/scripts/tests/test_preflight.py)
+**Source:** [Root manifest](../pyproject.toml)
 
 ## Root dotfiles are unowned, so updates never reach them
 

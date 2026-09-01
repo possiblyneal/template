@@ -26,7 +26,7 @@ Use these instead of per-language tools; each detects the languages present and 
 
 Every check runs for every language present, not the first one detected. Results distinguish `pass`, `not-applicable`, `unavailable`, and `FAIL`, so an intentional no-op cannot look like a runner that executed. See `scripts/CLAUDE.md` before adding a language or a check.
 
-This repository has no root language manifest, so `scripts/check` reports there is nothing to check and never reaches the Python under `.claude/skills/repo-builder/`. Run those tests directly: `uv run --with pytest python -m pytest .claude/skills/repo-builder/scripts/tests/`.
+The only code this repository runs beyond shell is the Python under `.claude/skills/repo-builder/`, and detection reads a root manifest, so the root `pyproject.toml` exists to declare it — that is what puts ruff, ty, and pytest over the skill, and what makes `scripts/doctor` require `uv`. It configures two things. `testpaths`, because pytest's default `norecursedirs` skips `.*`; ruff and ty walk into a dot-directory unasked, so an `include` naming the skill would not widen what they see — it would narrow them to that path and drop any Python later added under `apps/` or `libs/`. And the formatter's `exclude = ["*.md"]`, because `*.md` is in ruff's own default include list and `ruff format` rewrites the Python fenced inside one, which would put `scripts/fix` in the business of editing the payload under `src/base-repo/` and the frozen plans in `docs/plans/`. The file is root-only and must never be mirrored into the payload: a generated repository has no repo-builder skill and would be declaring a language it does not have.
 
 ## Git
 

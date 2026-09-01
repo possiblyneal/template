@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import importlib.util
 import json
-from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 MODULE_PATH = Path(__file__).parents[1] / "preflight.py"
 SPEC = importlib.util.spec_from_file_location("repo_builder_preflight", MODULE_PATH)
@@ -14,6 +14,19 @@ assert SPEC and SPEC.loader
 preflight = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = preflight
 SPEC.loader.exec_module(preflight)
+
+# The two adopt tests below commit by hand, standing in for the repository
+# owner taking an addon months after the first. They are the only commits here
+# not made through evals/setup_fixture.py, which carries its own GIT_ENV, so
+# they are also the only ones that would fall back to ambient git config. A CI
+# runner has none and cannot derive one -- its gecos field is empty, so git
+# fails with "empty ident name" where a developer machine silently succeeds.
+GIT_IDENTITY = (
+    "-c",
+    "user.name=Repo Builder Test",
+    "-c",
+    "user.email=repo-builder-test@example.invalid",
+)
 
 
 class PreflightUnitTests(unittest.TestCase):
@@ -29,7 +42,9 @@ class PreflightUnitTests(unittest.TestCase):
         )
 
     def test_unmatched_path_is_product_owned(self) -> None:
-        self.assertEqual(preflight.classify_path("apps/api/main.py", []), ("product", None))
+        self.assertEqual(
+            preflight.classify_path("apps/api/main.py", []), ("product", None)
+        )
 
     def test_parse_rename_classifies_destination_path(self) -> None:
         rules = [preflight.OwnershipRule("scripts/**", "managed", 0)]
@@ -56,15 +71,24 @@ class PreflightUnitTests(unittest.TestCase):
                 json.dumps(
                     {
                         "schema_version": 1,
-                        "template": {"repository": "owner/template", "subtree": "base-repo", "commit": "main"},
-                        "destination": {"repository": "owner/product", "default_branch": "main"},
+                        "template": {
+                            "repository": "owner/template",
+                            "subtree": "base-repo",
+                            "commit": "main",
+                        },
+                        "destination": {
+                            "repository": "owner/product",
+                            "default_branch": "main",
+                        },
                         "generation": {},
                         "ownership": [{"path": "scripts/**", "mode": "managed"}],
                     }
                 )
             )
 
-            with self.assertRaisesRegex(preflight.PreflightError, "full lowercase 40-character"):
+            with self.assertRaisesRegex(
+                preflight.PreflightError, "full lowercase 40-character"
+            ):
                 preflight.validate_manifest(path)
 
     def test_update_rejects_unrelated_history_before_diff(self) -> None:
@@ -90,8 +114,8 @@ class PreflightUnitTests(unittest.TestCase):
                     fixture["destination"],
                 ],
                 text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
+                check=False,
             )
 
             self.assertEqual(result.returncode, 2)
@@ -109,7 +133,11 @@ class PreflightUnitTests(unittest.TestCase):
 
 
 class AdoptTests(unittest.TestCase):
-    def _build_fixture(self, directory: str) -> dict[str, object]:
+    # The values are all `str` because the scenario below is the literal
+    # "adopt", and setup_fixture.build_adopt returns six flat strings. The
+    # nested path-to-digest map belongs to build_update, which no caller here
+    # can reach. Parameterising the scenario would make this annotation a lie.
+    def _build_fixture(self, directory: str) -> dict[str, str]:
         fixture_setup = MODULE_PATH.parents[1] / "evals" / "setup_fixture.py"
         fixture_root = Path(directory) / "fixture"
         subprocess.run(
@@ -119,7 +147,9 @@ class AdoptTests(unittest.TestCase):
         )
         return json.loads((fixture_root / "fixture.json").read_text())
 
-    def _run_adopt(self, fixture: dict[str, object], *addons: str) -> subprocess.CompletedProcess[str]:
+    def _run_adopt(
+        self, fixture: dict[str, str], *addons: str
+    ) -> subprocess.CompletedProcess[str]:
         addon_args: list[str] = []
         for addon in addons:
             addon_args.extend(["--addon", addon])
@@ -135,8 +165,8 @@ class AdoptTests(unittest.TestCase):
                 *addon_args,
             ],
             text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
+            check=False,
         )
 
     def test_adopt_reports_addon_entry_and_leaves_destination_clean(self) -> None:
@@ -147,11 +177,15 @@ class AdoptTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             report = json.loads(result.stdout)
             self.assertEqual(report["operation"], "adopt")
-            self.assertEqual(report["template"]["recorded_commit"], fixture["recorded_commit"])
+            self.assertEqual(
+                report["template"]["recorded_commit"], fixture["recorded_commit"]
+            )
             self.assertEqual(len(report["addons"]), 1)
             addon = report["addons"][0]
             self.assertEqual(addon["path"], "README.md")
-            self.assertEqual(addon["adoption"]["slots"][0]["value_key"], "project-title")
+            self.assertEqual(
+                addon["adoption"]["slots"][0]["value_key"], "project-title"
+            )
 
             destination = Path(fixture["destination"])
             self.assertFalse(
@@ -184,27 +218,34 @@ class AdoptTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("cannot be adopted with", result.stderr)
 
+    def _commit(self, destination: Path, path: str, message: str) -> None:
+        subprocess.run(["git", "add", path], cwd=destination, check=True)
+        subprocess.run(
+            ["git", *GIT_IDENTITY, "commit", "--no-verify", "-m", message],
+            cwd=destination,
+            check=True,
+            stdout=subprocess.DEVNULL,
+        )
+
     def test_adopt_rejects_the_second_half_adopted_later(self) -> None:
         """One at a time is how a repository really ends up holding both: the
         occasion for the second addon arrives months after the first."""
         with tempfile.TemporaryDirectory() as directory:
             fixture = self._build_fixture(directory)
             destination = Path(fixture["destination"])
-            (destination / "_config.yml").write_text("theme: minima\n", encoding="utf-8")
-            subprocess.run(["git", "add", "_config.yml"], cwd=destination, check=True)
-            subprocess.run(
-                ["git", "commit", "--no-verify", "-m", "chore: adopt _config.yml"],
-                cwd=destination,
-                check=True,
-                stdout=subprocess.DEVNULL,
+            (destination / "_config.yml").write_text(
+                "theme: minima\n", encoding="utf-8"
             )
+            self._commit(destination, "_config.yml", "chore: adopt _config.yml")
 
             result = self._run_adopt(fixture, ".nojekyll")
 
             self.assertEqual(result.returncode, 2)
             self.assertIn("destination holding _config.yml", result.stderr)
 
-    def test_adopt_rejects_a_one_directional_pair_with_neither_half_present(self) -> None:
+    def test_adopt_rejects_a_one_directional_pair_with_neither_half_present(
+        self,
+    ) -> None:
         """AUTHORS names the copyright holders that the notices in the source
         tree point at, and those notices grant nothing without a license."""
         with tempfile.TemporaryDirectory() as directory:
@@ -214,21 +255,19 @@ class AdoptTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("must be adopted with its pair LICENSE", result.stderr)
 
-    def test_adopt_accepts_a_one_directional_pair_already_in_the_destination(self) -> None:
+    def test_adopt_accepts_a_one_directional_pair_already_in_the_destination(
+        self,
+    ) -> None:
         """The realistic sequence, and the one a seen-only check makes
         impossible: LICENSE was adopted long ago, so it can be neither
         requested again -- that is rejected as already present -- nor found."""
         with tempfile.TemporaryDirectory() as directory:
             fixture = self._build_fixture(directory)
             destination = Path(fixture["destination"])
-            (destination / "LICENSE").write_text("License text, verbatim.\n", encoding="utf-8")
-            subprocess.run(["git", "add", "LICENSE"], cwd=destination, check=True)
-            subprocess.run(
-                ["git", "commit", "--no-verify", "-m", "chore: adopt LICENSE"],
-                cwd=destination,
-                check=True,
-                stdout=subprocess.DEVNULL,
+            (destination / "LICENSE").write_text(
+                "License text, verbatim.\n", encoding="utf-8"
             )
+            self._commit(destination, "LICENSE", "chore: adopt LICENSE")
 
             result = self._run_adopt(fixture, "AUTHORS")
 

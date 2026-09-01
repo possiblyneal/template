@@ -1,0 +1,48 @@
+# This repository builds other repositories; it is not a Python package and
+# ships no Python. The file exists because `.claude/skills/repo-builder/` holds
+# Python that scripts/check could not see: language detection reads a root
+# manifest (libs/detect.sh has_python), and without one the gate reported there
+# was nothing to check while a pytest suite sat untested. Declaring the language
+# is what puts ruff, ty, and pytest over that code.
+#
+# Root-only, deliberately. A generated repository has no repo-builder skill, so
+# the payload at apps/github-repository-template/src/base-repo/ must not carry
+# this file -- it would declare Python in every repository that has none.
+
+[project]
+name = "template"
+version = "0"
+requires-python = ">=3.11"
+
+[tool.uv]
+# Nothing here is installable, so uv resolves the dev group into a virtualenv
+# and stops. Without this uv looks for a build backend and fails on a repository
+# that has no package to build.
+package = false
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.14", "ty>=0.0.1a21"]
+
+[tool.ruff.format]
+# `*.md` is in ruff's own default include list, and `ruff format` rewrites the
+# Python fenced inside one -- 44 of the 49 files it counted here were Markdown.
+# Declining that is a boundary, not a preference: `scripts/fix` runs
+# `ruff format .`, and Markdown is where this repository keeps two trees no tool
+# may rewrite unasked -- the payload under
+# apps/github-repository-template/src/base-repo/, which is data rather than this
+# repository's configuration and whose edits are supposed to prompt, and
+# docs/plans/, where an approved plan is frozen. Nothing diffs today because all
+# 49 are already formatted, which is why it would land on someone later.
+#
+# Scoped to the formatter, and by file type rather than by path, so it neither
+# takes Python out of scope -- the mistake the `include` here used to make --
+# nor forecloses `ruff check` reaching a Markdown fence if it ever does.
+exclude = ["*.md"]
+
+[tool.pytest.ini_options]
+# pytest is the only one of the three that needs telling where the code is: its
+# default norecursedirs skips `.*`, which is every test this repository has.
+# ruff and ty both walk into a dot-directory unasked, so neither gets an
+# `include` here -- one would not widen what they see, it would narrow it to
+# this path and silently drop any Python later added under apps/ or libs/.
+testpaths = [".claude/skills/repo-builder/scripts/tests"]
