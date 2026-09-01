@@ -111,8 +111,8 @@ Remote execution
 - settings: Dependabot alerts/updates; push protection if available; the merge commit as the only merge method; automatic head branch deletion; main ruleset
 - settings drift: on an update or an adopt, one line per setting `scripts/repo-settings check` reported missing — current value, proposed value, exact `gh api` command — authorized separately from the push below
 - push: throwaway ruleset probe -> main, only where ruleset creation returned 201; rejection is what proves the ruleset binds, so a ruleset that was accepted without binding leaves that commit on the remote default branch
-- labels: triage labels from `/setup-matt-pocock-skills`, if step 6 records a hosted tracker and the `triage` skill is installed
-- issues: map and tickets from `/wayfinder`, if step 6 records a hosted tracker
+- labels: the triage labels `docs/agents/triage-labels.md` records, created where the repository does not already carry them
+- issues: map and tickets from `/wayfinder`, if the tracker doc records a hosted tracker
 - push: repo-builder/<short-target> -> generated content or template update
 - open PR: repo-builder/<short-target> -> main
 - merge: repo-builder/<short-target> -> main (bootstrap generate only, see Generate step 12)
@@ -172,7 +172,7 @@ Use this stable shape. On a generate the Reconciliation lines are empty or trivi
 - <setting>: enabled | unavailable (<reason>) | not requested
 - Drift (update and adopt): <setting>: <current> -> <proposed>: patched | declined by user | none found | not checked (<reason>)
 - Merge settings overwritten (generate into existing content only): <setting>: <prior value> -> <applied value> | declined by user, recorded in `generation.features`
-- Issue tracker: <GitHub | GitLab | local markdown | other>, recorded in `docs/agents/issue-tracker.md`; triage labels: default | overridden | not configured
+- Issue tracker: <GitHub | GitLab | local markdown | other>, recorded in `docs/agents/issue-tracker.md`, shipped by the payload | written by `/setup-matt-pocock-skills` | kept from the destination; triage labels: default | overridden | not configured
 
 ### Verification
 - `<exact command>`: pass | fail | unavailable (<reason>)
