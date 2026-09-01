@@ -468,7 +468,10 @@ _capability_run_node() {
         if has_npm_script build; then
           echo "In TypeScript that path is build output rather than source. Build it first:" >&2
           echo "  npm run build" >&2
-        else
+        elif command -v npm > /dev/null 2>&1; then
+          # Only with npm present is the absence of a build script a fact about
+          # the package. Without it has_npm_script is false for the tool rather
+          # than for package.json, and the line above is all this knows.
           echo "This package names no build script either, so nothing here produces it." >&2
         fi
         return 1
@@ -674,6 +677,23 @@ _capability_package_node() { return "$NO_RUNNER"; }
 _capability_package_python() { return "$NO_RUNNER"; }
 _capability_package_swift() { return "$NO_RUNNER"; }
 _capability_package_kotlin() { return "$NO_RUNNER"; }
+
+# Whether any of the languages named packages into the unit's dist/. Only the
+# adapters above that produce a file write there; the NO_RUNNER stubs write
+# nothing, so for a unit in one of those languages dist/ is not the packaging
+# command's output but whatever the unit's own build left -- which is what
+# scripts/ci produces before the release walk reads it. scripts/package empties
+# dist/ before dispatching, and asks this first so it empties only a directory
+# it is about to refill. Kept beside the adapters so the two move together.
+packaging_writes_dist() {
+  local lang
+  for lang in "$@"; do
+    case "$lang" in
+      go|rust) return 0 ;;
+    esac
+  done
+  return 1
+}
 
 _capability_is_not_applicable() {
   case "$1:$2" in

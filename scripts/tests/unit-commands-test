@@ -158,26 +158,51 @@ cleanup
 # scripts/release aborts when a unit declaring an executable produced no file,
 # and a binary left by an earlier build satisfies that guard without having been
 # built from the tagged commit -- the outcome the guard exists to prevent,
-# arriving by a route it cannot see. So packaging an executable unit produces
-# the whole of dist/ rather than adding to it.
+# arriving by a route it cannot see. So for a language that packages, dist/ is
+# the command's whole output rather than a directory it adds to.
 #
-# The unit here has no manifest, so nothing dispatches and the clearing is all
-# the case can see. That is deliberate: the clearing is keyed on the declaration
-# rather than on whether an adapter exists, which is what closes the hole for a
-# unit whose language has no packaging adapter wired.
+# Go is present here by its manifest alone, and the clearing runs before the
+# dispatch, so this case sees the clearing whether or not a Go toolchain is
+# installed: without one the adapter reports no runner and packaging still
+# exits 0.
 fixture "packaging clears a file an earlier build left"
+unit tool oneshot '{"kind": "executable", "targets": ["linux-amd64"]}'
 mkdir -p "$work/apps/tool/dist"
-printf '{"schema_version": 1, "run": "oneshot", "ships": {"kind": "executable", "targets": ["linux-amd64"]}}\n' \
-  > "$work/apps/tool/.unit.json"
 printf 'stale\n' > "$work/apps/tool/dist/tool-linux-amd64"
 out="$( (cd "$work" && scripts/package tool) 2>&1 )"
 status=$?
 if (( status != 0 )); then
-  fail "packaging a unit with no manifest failed (exit $status): $out"
+  fail "packaging a unit that ships an executable failed (exit $status): $out"
 elif [[ -e "$work/apps/tool/dist/tool-linux-amd64" ]]; then
   fail "a file from an earlier build survived packaging: $out"
 else
   pass
+fi
+cleanup
+
+# The other side of the same rule. Four of the six languages have no packaging
+# adapter, and for a unit in one of those dist/ is not this command's output --
+# it holds whatever the unit's own build wrote, which scripts/ci produces before
+# the release walk reads it. Emptying it there would leave the unit with less
+# than it started with and abort the release the clearing exists to protect.
+#
+# Node needs no toolchain to reach this: package.json alone makes the language
+# present, and its packaging adapter is dispatched and reports no runner.
+fixture "a language that packages nothing keeps its dist/"
+mkdir -p "$work/apps/tscli/dist"
+printf '{"schema_version": 1, "run": "oneshot", "ships": {"kind": "executable", "targets": ["linux-amd64"]}}\n' \
+  > "$work/apps/tscli/.unit.json"
+printf '{"name": "tscli", "version": "1.0.0", "bin": "./dist/cli.js"}\n' \
+  > "$work/apps/tscli/package.json"
+printf 'built\n' > "$work/apps/tscli/dist/cli.js"
+out="$( (cd "$work" && scripts/package tscli) 2>&1 )"
+status=$?
+if (( status != 0 )); then
+  fail "packaging a unit whose language has no adapter failed (exit $status): $out"
+elif [[ -f "$work/apps/tscli/dist/cli.js" ]]; then
+  pass
+else
+  fail "packaging deleted a build it cannot replace: $out"
 fi
 cleanup
 
