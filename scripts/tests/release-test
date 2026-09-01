@@ -12,6 +12,10 @@ set -uo pipefail
 # binary is capabilities-test's question, and whether release attaches what it
 # finds is this one's.
 #
+# The last case is the exception, and runs the walk for real. CI_DRY_RUN is what
+# makes scripts/package skip the clearing, so a case about the clearing cannot
+# set it, and release_real holds back the gate on its own instead.
+#
 # Not `set -e`: a failing assertion is recorded and the remaining cases still
 # run, so one break does not hide the rest.
 
@@ -51,6 +55,20 @@ quadlet() {
 
 release() {
   (cd "$work" && CI_DRY_RUN=1 GH_TRACE="$work/gh-called" PATH="$work/bin:$PATH" \
+    scripts/release v1.2.3 2>&1)
+}
+
+# The same walk with nothing held back but the gate. CI_DRY_RUN was standing in
+# for two things above, and only one of them still has to be held back here:
+# scripts/release cuts no tag of its own -- `gh release create` is its whole
+# remote surface, and the stub already answers that -- so scripts/ci is all that
+# a real run would otherwise start, and a stub answers it in the copy of scripts
+# the fixture already made. Unset rather than left alone, so a case asserting
+# that a file was deleted cannot pass on a suite invoked from scripts/ci.
+release_real() {
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$work/scripts/ci"
+  chmod +x "$work/scripts/ci"
+  (cd "$work" && env -u CI_DRY_RUN GH_TRACE="$work/gh-called" PATH="$work/bin:$PATH" \
     scripts/release v1.2.3 2>&1)
 }
 
@@ -166,6 +184,39 @@ elif grep -q 'produced no file' <<< "$out"; then
   pass
 else
   fail "the release stopped without naming why: $out"
+fi
+cleanup
+
+# scripts/package empties a unit's dist/ before dispatching, and the release is
+# the reason: a binary left by an earlier build satisfies the guard above --
+# that a unit declaring an executable produced a file -- without having been
+# built from the tagged commit. Every case above runs under CI_DRY_RUN, which is
+# the flag that skips the clearing, so until here the walk was only ever read
+# where the thing it depends on does not happen.
+#
+# Drop the clearing and this case says so: packaging leaves the stale file, the
+# walk counts it, the release succeeds, and gh is handed a binary from another
+# commit.
+#
+# No toolchain either way. go.mod alone makes Go present, which is what puts
+# this dist/ under the clearing, and the clearing runs before the dispatch -- a
+# module with no main package reports no runner and packages nothing whether or
+# not go is installed.
+fixture "a binary from an earlier build does not reach the release"
+unit tool '{"kind": "executable", "targets": ["linux-amd64"]}'
+printf 'module example.com/tool\n\ngo 1.22\n' > "$work/apps/tool/go.mod"
+mkdir -p "$work/apps/tool/dist"
+printf 'stale\n' > "$work/apps/tool/dist/tool-linux-amd64"
+out="$(release_real)"
+status=$?
+if [[ -e "$work/apps/tool/dist/tool-linux-amd64" ]]; then
+  fail "a file from an earlier build survived the release's packaging step: $out"
+elif (( status == 0 )); then
+  fail "a release survived a unit whose only file was from an earlier build: $out"
+elif [[ -e "$work/gh-called" ]]; then
+  fail "gh was called with a binary from an earlier build: $(cat "$work/gh-called")"
+else
+  pass
 fi
 cleanup
 
