@@ -12,10 +12,6 @@ set -uo pipefail
 # binary is capabilities-test's question, and whether release attaches what it
 # finds is this one's.
 #
-# The last case is the exception, and runs the walk for real. CI_DRY_RUN is what
-# makes scripts/package skip the clearing, so a case about the clearing cannot
-# set it, and release_real holds back the gate on its own instead.
-#
 # Not `set -e`: a failing assertion is recorded and the remaining cases still
 # run, so one break does not hide the rest.
 
@@ -60,15 +56,22 @@ release() {
 
 # The same walk with nothing held back but the gate. CI_DRY_RUN was standing in
 # for two things above, and only one of them still has to be held back here:
-# scripts/release cuts no tag of its own -- `gh release create` is its whole
-# remote surface, and the stub already answers that -- so scripts/ci is all that
-# a real run would otherwise start, and a stub answers it in the copy of scripts
-# the fixture already made. Unset rather than left alone, so a case asserting
-# that a file was deleted cannot pass on a suite invoked from scripts/ci.
+# scripts/release runs no git command of its own -- `gh release create` is its
+# whole remote surface, and the stub answers it, tag included -- so scripts/ci is
+# all that a real run would otherwise start, and a stub answers that in the copy
+# of scripts the fixture already made. CI_DRY_RUN is unset rather than left
+# alone, so a case asserting that a file was deleted cannot pass on a suite
+# invoked from scripts/ci.
+#
+# GOWORK is turned off for the reason harness.sh neutralises the git config
+# variables: a real run reads the ambient environment, and an exported GOWORK
+# points go_each at the modules of whatever workspace the developer is in. Their
+# mains then build into the fixture's dist/, and the case fails naming a stale
+# binary that is neither stale nor from this fixture.
 release_real() {
   printf '#!/usr/bin/env bash\nexit 0\n' > "$work/scripts/ci"
   chmod +x "$work/scripts/ci"
-  (cd "$work" && env -u CI_DRY_RUN GH_TRACE="$work/gh-called" PATH="$work/bin:$PATH" \
+  (cd "$work" && env -u CI_DRY_RUN GOWORK=off GH_TRACE="$work/gh-called" PATH="$work/bin:$PATH" \
     scripts/release v1.2.3 2>&1)
 }
 
@@ -187,21 +190,18 @@ else
 fi
 cleanup
 
-# scripts/package empties a unit's dist/ before dispatching, and the release is
-# the reason: a binary left by an earlier build satisfies the guard above --
-# that a unit declaring an executable produced a file -- without having been
-# built from the tagged commit. Every case above runs under CI_DRY_RUN, which is
-# the flag that skips the clearing, so until here the walk was only ever read
-# where the thing it depends on does not happen.
-#
-# Drop the clearing and this case says so: packaging leaves the stale file, the
-# walk counts it, the release succeeds, and gh is handed a binary from another
-# commit.
+# The release is the reason scripts/package empties a unit's dist/, and the
+# comment on that `rm -rf dist` says why. What is this suite's to say is that
+# every case above runs under CI_DRY_RUN, which is the flag that skips the
+# clearing -- so until here the walk was only ever read where the thing it
+# depends on does not happen. Drop the clearing and this case says so: packaging
+# leaves the stale file, the walk counts it, and gh is handed a binary built
+# from another commit.
 #
 # No toolchain either way. go.mod alone makes Go present, which is what puts
-# this dist/ under the clearing, and the clearing runs before the dispatch -- a
-# module with no main package reports no runner and packages nothing whether or
-# not go is installed.
+# this dist/ under the clearing, and the clearing runs before the dispatch -- so
+# a module with no main package produces no file whether or not go is installed,
+# and the first assertion below decides the case before the rest can differ.
 fixture "a binary from an earlier build does not reach the release"
 unit tool '{"kind": "executable", "targets": ["linux-amd64"]}'
 printf 'module example.com/tool\n\ngo 1.22\n' > "$work/apps/tool/go.mod"
@@ -213,6 +213,8 @@ if [[ -e "$work/apps/tool/dist/tool-linux-amd64" ]]; then
   fail "a file from an earlier build survived the release's packaging step: $out"
 elif (( status == 0 )); then
   fail "a release survived a unit whose only file was from an earlier build: $out"
+elif ! grep -q 'produced no file' <<< "$out"; then
+  fail "the release stopped somewhere other than the walk's guard: $out"
 elif [[ -e "$work/gh-called" ]]; then
   fail "gh was called with a binary from an earlier build: $(cat "$work/gh-called")"
 else

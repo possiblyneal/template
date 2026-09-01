@@ -54,9 +54,12 @@ run_in() {
 # The cases that need the real thing. CI_DRY_RUN is unset rather than left
 # alone, so a case asserting that a file was deleted cannot pass on a suite run
 # from a shell that already exported it -- which is every invocation from
-# scripts/ci.
+# scripts/ci. GOWORK is turned off for the other half of the same reason: a real
+# run reads the ambient environment, and an exported GOWORK points go_each at
+# the modules of whatever workspace the developer is in, whose mains then build
+# into the fixture's dist/ and fail a case over a file that never came from it.
 run_real() {
-  (cd "$work" && env -u CI_DRY_RUN "$@" 2>&1)
+  (cd "$work" && env -u CI_DRY_RUN GOWORK=off "$@" 2>&1)
 }
 
 trap cleanup EXIT
