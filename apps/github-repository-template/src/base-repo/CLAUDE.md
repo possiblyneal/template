@@ -59,6 +59,22 @@ Three rules are about content rather than placement and no script can settle the
 - This repo adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Pull requests merge; they are neither squashed nor rebased.
 
+## Agent skills
+
+Where the engineering skills read their configuration. Most of them — `/wayfinder`, `/triage`, `/to-spec`, `/to-tickets` — never name `docs/agents/` by path: each says the tracker "should have been provided to you" and falls back to a local-markdown tracker when nothing was. This section is the provision, which is why it stays even though every fact in it is recorded in a file it points at.
+
+### Issue tracker
+
+GitHub Issues on this repository, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The seven canonical roles, unrenamed. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` at the root once a glossary exists, ADRs in `docs/adrs/`. See `docs/agents/domain.md`.
+
 ## Child Index
 
 This project is not yet indexed. Before continuing you must read `~/.claude/rules/documentation.md`, scan the project, build the `CLAUDE.md` tree and replace this message with the actual child index. Go deep and scan files recursively to properly evaluate complexity and create nested `CLAUDE.md` files where needed. Do not create `CLAUDE.md` files in dot folders.

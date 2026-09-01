@@ -45,7 +45,7 @@ The specific operating parameters for the AI agent.
 
 `.mcp.json`: Configures Model Context Protocol servers for this project. Ships empty.
 
-`CLAUDE.md`: The project's system prompt — conventions, commands, and context the AI needs to operate. Ships with the Layout rules `scripts/structure` enforces, since its failure messages point back at that section.
+`CLAUDE.md`: The project's system prompt — conventions, commands, and context the AI needs to operate. Ships with the Layout rules `scripts/structure` enforces, since its failure messages point back at that section, and with an `## Agent skills` block pointing at `docs/agents/`: most engineering skills never name those files by path and fall back to a local-markdown tracker when nothing provides them, so the auto-loaded block is the provision rather than a summary.
 
 `CLAUDE.local.md`: Personal, per-machine instructions loaded alongside `CLAUDE.md`, excluded by `.gitignore`. Not shipped.
 
@@ -100,6 +100,8 @@ The specific operating parameters for the AI agent.
 `docs/LESSONS.md`: Repository-specific knowledge that prevents recurring mistakes.
 
 `docs/plans/`: Plans written in plan mode, tracked so they land in the diff with the code they describe.
+
+`docs/agents/`: How the engineering skills read the repository — `issue-tracker.md` names where issues live and how to work them, `triage-labels.md` the label vocabulary, `domain.md` the glossary and ADR layout. Shipped rather than collected, for the reasons `docs/adrs/0002-ship-agent-skill-configuration-in-the-payload.md` records; `.claude/skills/repo-builder/references/generate.md` step 6 confirms these files instead of running `/setup-matt-pocock-skills`, and creates the labels they name. Editable by hand afterwards. Reached through `CLAUDE.md`'s `## Agent skills` block rather than by path, which is why deleting that block silently disables all three.
 
 ### Root Configuration Files
 
@@ -192,12 +194,6 @@ These live in `src/repository-addons/` and are never copied during generation �
 #### When a helper needs to be built before it runs
 
 `tools/CLAUDE.md`: Creates `tools/` and owns it as a documented boundary — each helper gets its own `tools/<name>/` with its own manifest and source, and a helper that's just a shell script belongs in `scripts/` instead. Copied in only when the project needs a helper that must be built before it runs: a linter, a code generator, a protobuf plugin. Its sections ship seeded with what the template can know, including the trap: `scripts/check` reads the manifests at the repository root, so a tool whose language has no root manifest is built and tested by nobody. Being a child document, it has to be added to the root `CLAUDE.md`'s Child Index when adopted, or nothing walking the tree reaches it.
-
-### Written During Generation
-
-Not part of the payload. `/repo-builder` writes these into the generated repository, so they appear in a generated tree and never in this inventory.
-
-`docs/agents/`: Written by invoking `/setup-matt-pocock-skills`, which records where the repository tracks its issues, its triage label vocabulary, and its domain-doc layout. The engineering skills read it; `/wayfinder` reads `issue-tracker.md` to decide where a map lives.
 
 ### Program Language Metadata
 

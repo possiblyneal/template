@@ -20,7 +20,7 @@ A repository starts single-context, with one `CONTEXT.md` at the root, and that 
 ├── apps/<unit>/src/
 └── docs/adrs/
     ├── 0000-template.md
-    └── 0001-declare-unit-delivery-as-two-facts.md
+    └── 0001-<slug>.md
 ```
 
 `0000-template.md` is the template to copy, not a record; `scripts/adr-index`
@@ -36,4 +36,4 @@ If the concept you need isn't in the glossary yet, that's a signal — either yo
 
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
 
-> *Contradicts ADR-0001 (unit delivery as two facts) — but worth reopening because…*
+> *Contradicts ADR-0007 (the decision it records) — but worth reopening because…*

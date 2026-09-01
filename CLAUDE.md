@@ -114,13 +114,15 @@ A generated repository is where a guarantee unavailable on this plan can actuall
 
 ## Agent skills
 
+Where the engineering skills read their configuration. Most of them — `/wayfinder`, `/triage`, `/to-spec`, `/to-tickets` — never name `docs/agents/` by path: each says the tracker "should have been provided to you" and falls back to a local-markdown tracker when nothing was. This section is the provision, which is why it stays even though every fact in it is recorded in a file it points at.
+
 ### Issue tracker
 
 GitHub Issues on `possiblyneal/template`, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
-The five canonical labels, unrenamed. See `docs/agents/triage-labels.md`.
+The seven canonical roles, unrenamed. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 

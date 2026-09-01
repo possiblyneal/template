@@ -11,7 +11,7 @@ Durable knowledge about this repository: why decisions were made, what contracts
 - `plans/` — plans written in plan mode, pointed here by `plansDirectory` in `.claude/settings.json`
 - `LESSONS.md` — repository-specific knowledge that prevents recurring mistakes
 - `TODO.md` — backlogged informal tasks for this repository, not for a project generated from it
-- `agents/` — how the engineering skills read this repo: issue tracker, triage labels, domain doc layout; seeded by `/setup-matt-pocock-skills` and editable by hand
+- `agents/` — how the engineering skills read this repo: issue tracker, triage labels, domain doc layout. Shipped by the payload, so a generated repository carries it from birth, and reached through the root `CLAUDE.md`'s `## Agent skills` block, which is what provides these files to the skills that never name them by path. Edit them by hand. Re-running `/setup-matt-pocock-skills` is for switching trackers and costs two triage roles: it rewrites `triage-labels.md` with five canonical roles where this repository records seven
 
 Specs for a single unit belong to that unit, under `apps/<name>/docs/specs/`, and change in the same commit as the code they describe.
 
