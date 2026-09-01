@@ -51,6 +51,14 @@ run_in() {
   (cd "$work" && CI_DRY_RUN=1 "$@" 2>&1)
 }
 
+# The cases that need the real thing. CI_DRY_RUN is unset rather than left
+# alone, so a case asserting that a file was deleted cannot pass on a suite run
+# from a shell that already exported it -- which is every invocation from
+# scripts/ci.
+run_real() {
+  (cd "$work" && env -u CI_DRY_RUN "$@" 2>&1)
+}
+
 trap cleanup EXIT
 
 echo "unit-commands-test"
@@ -169,7 +177,7 @@ fixture "packaging clears a file an earlier build left"
 unit tool oneshot '{"kind": "executable", "targets": ["linux-amd64"]}'
 mkdir -p "$work/apps/tool/dist"
 printf 'stale\n' > "$work/apps/tool/dist/tool-linux-amd64"
-out="$( (cd "$work" && scripts/package tool) 2>&1 )"
+out="$(run_real scripts/package tool)"
 status=$?
 if (( status != 0 )); then
   fail "packaging a unit that ships an executable failed (exit $status): $out"
@@ -195,7 +203,7 @@ printf '{"schema_version": 1, "run": "oneshot", "ships": {"kind": "executable", 
 printf '{"name": "tscli", "version": "1.0.0", "bin": "./dist/cli.js"}\n' \
   > "$work/apps/tscli/package.json"
 printf 'built\n' > "$work/apps/tscli/dist/cli.js"
-out="$( (cd "$work" && scripts/package tscli) 2>&1 )"
+out="$(run_real scripts/package tscli)"
 status=$?
 if (( status != 0 )); then
   fail "packaging a unit whose language has no adapter failed (exit $status): $out"
@@ -234,7 +242,7 @@ printf 'go 1.22\n\nuse ./apps/cli\n' > "$work/go.work"
 # cleared.
 printf 'stale\n' > "$work/apps/cli/dist/hello-windows-arm64"
 if command -v go > /dev/null 2>&1; then
-  out="$( (cd "$work" && scripts/package cli) 2>&1 )"
+  out="$(run_real scripts/package cli)"
   status=$?
   if (( status != 0 )); then
     fail "packaging two targets failed (exit $status): $out"
@@ -375,7 +383,7 @@ func main() { fmt.Println("args:" + strings.Join(os.Args[1:], "|")) }
 GO
 printf 'go 1.22\n\nuse ./apps/cli\n' > "$work/go.work"
 if command -v go > /dev/null 2>&1; then
-  out="$( (cd "$work" && scripts/run cli -- --verbose 'two words') 2>&1 )"
+  out="$(run_real scripts/run cli -- --verbose 'two words')"
   if grep -q 'args:--verbose|two words' <<< "$out"; then
     pass
   else
