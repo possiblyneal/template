@@ -648,6 +648,74 @@ if command -v node > /dev/null 2>&1 && command -v npm > /dev/null 2>&1; then
   fi
   cleanup
 
+  # A TypeScript bin conventionally names build output, which a fresh clone does
+  # not have. Node's own failure for that is a module-not-found trace naming a
+  # file rather than the build that was never run, and the unit is well-formed
+  # and the command correct -- so the absence is caught here and what to do is
+  # named. Nothing about it is TypeScript-specific: the condition is a bin that
+  # is not on disk, and a plain JavaScript unit whose bin is a source file never
+  # reaches it.
+  fixture "a bin that is not built names the build rather than failing in node"
+  printf '{"name":"n","version":"1.0.0","bin":{"n":"./dist/cli.js"},"scripts":{"build":"echo built"}}\n' > package.json
+  unit_run=oneshot
+  out="$(_capability_run_node 2>&1)"
+  status=$?
+  unset unit_run
+  if (( status == 0 )); then
+    fail "a bin pointing at output that is not built was treated as runnable: $out"
+  elif grep -q 'MODULE_NOT_FOUND\|Cannot find module' <<<"$out"; then
+    fail "the failure was node's rather than the adapter's: $out"
+  elif grep -q './dist/cli.js' <<<"$out" && grep -q 'npm run build' <<<"$out"; then
+    pass
+  else
+    fail "the refusal named neither the missing path nor the build command: $out"
+  fi
+  cleanup
+
+  # The same absence in a package that builds nothing. Naming a build command
+  # that does not exist would send whoever is holding the failure to a command
+  # that fails differently.
+  fixture "a bin that is not built and no build script says so"
+  printf '{"name":"n","version":"1.0.0","bin":{"n":"./dist/cli.js"}}\n' > package.json
+  unit_run=oneshot
+  out="$(_capability_run_node 2>&1)"
+  status=$?
+  unset unit_run
+  if (( status == 0 )); then
+    fail "a bin pointing at a file that is not there was treated as runnable: $out"
+  elif grep -q 'MODULE_NOT_FOUND\|Cannot find module' <<<"$out"; then
+    fail "the failure was node's rather than the adapter's: $out"
+  elif grep -q './dist/cli.js' <<<"$out" && ! grep -q 'npm run build' <<<"$out"; then
+    pass
+  else
+    fail "a missing bin with no build script named a build command anyway: $out"
+  fi
+  cleanup
+
+  # has_npm_script needs npm on the PATH, so with node installed and npm not it
+  # is false for the tool rather than for package.json. Saying the package names
+  # no build script would then be a fact about the file asserted from a missing
+  # tool, so that branch stays quiet and the line above it -- true either way --
+  # is the whole refusal.
+  fixture "a missing npm is not reported as a missing build script"
+  printf '{"name":"n","version":"1.0.0","bin":{"n":"./dist/cli.js"},"scripts":{"build":"echo built"}}\n' > package.json
+  mkdir -p node-only
+  ln -s "$(command -v node)" node-only/node
+  unit_run=oneshot
+  out="$(PATH="$PWD/node-only" _capability_run_node 2>&1)"
+  status=$?
+  unset unit_run
+  if (( status == 0 )); then
+    fail "a bin pointing at output that is not built was treated as runnable: $out"
+  elif grep -q 'no build script' <<<"$out"; then
+    fail "an npm that is not installed was reported as a package that has no build script: $out"
+  elif grep -q './dist/cli.js' <<<"$out"; then
+    pass
+  else
+    fail "the refusal did not name the missing path: $out"
+  fi
+  cleanup
+
   # The bug the dispatch prevents, from the other side: a package that ships a
   # CLI and also serves is started as the service it declared itself to be.
   fixture "a long-lived unit runs the dev server even with a bin"
