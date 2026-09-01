@@ -153,6 +153,78 @@ else
 fi
 cleanup
 
+# --- packaging owns the unit's dist/ -----------------------------------------
+
+# scripts/release aborts when a unit declaring an executable produced no file,
+# and a binary left by an earlier build satisfies that guard without having been
+# built from the tagged commit -- the outcome the guard exists to prevent,
+# arriving by a route it cannot see. So packaging an executable unit produces
+# the whole of dist/ rather than adding to it.
+#
+# The unit here has no manifest, so nothing dispatches and the clearing is all
+# the case can see. That is deliberate: the clearing is keyed on the declaration
+# rather than on whether an adapter exists, which is what closes the hole for a
+# unit whose language has no packaging adapter wired.
+fixture "packaging clears a file an earlier build left"
+mkdir -p "$work/apps/tool/dist"
+printf '{"schema_version": 1, "run": "oneshot", "ships": {"kind": "executable", "targets": ["linux-amd64"]}}\n' \
+  > "$work/apps/tool/.unit.json"
+printf 'stale\n' > "$work/apps/tool/dist/tool-linux-amd64"
+out="$( (cd "$work" && scripts/package tool) 2>&1 )"
+status=$?
+if (( status != 0 )); then
+  fail "packaging a unit with no manifest failed (exit $status): $out"
+elif [[ -e "$work/apps/tool/dist/tool-linux-amd64" ]]; then
+  fail "a file from an earlier build survived packaging: $out"
+else
+  pass
+fi
+cleanup
+
+# A dry run reports what would be dispatched and runs nothing. Deleting the last
+# build while claiming to have done nothing is the one way it could be worse
+# than the real thing.
+fixture "a dry run deletes nothing"
+unit tool oneshot '{"kind": "executable", "targets": ["linux-amd64"]}'
+mkdir -p "$work/apps/tool/dist"
+printf 'binary\n' > "$work/apps/tool/dist/tool-linux-amd64"
+out="$(run_in scripts/package tool)"
+if [[ -f "$work/apps/tool/dist/tool-linux-amd64" ]]; then
+  pass
+else
+  fail "a dry run deleted the unit's dist/: $out"
+fi
+cleanup
+
+# The other half of the same rule: one invocation builds every declared target,
+# so clearing once before the dispatch cannot remove what this run produced.
+# Clearing inside the per-target loop would pass the case above and leave only
+# the last target's binary here.
+fixture "every declared target survives the clearing"
+unit cli oneshot '{"kind": "executable", "targets": ["linux-amd64", "macos-arm64"]}'
+mkdir -p "$work/apps/cli/src/hello" "$work/apps/cli/dist"
+printf 'package main\n\nfunc main() {}\n' > "$work/apps/cli/src/hello/main.go"
+printf 'go 1.22\n\nuse ./apps/cli\n' > "$work/go.work"
+# A name no build here produces, so being overwritten cannot stand in for being
+# cleared.
+printf 'stale\n' > "$work/apps/cli/dist/hello-windows-arm64"
+if command -v go > /dev/null 2>&1; then
+  out="$( (cd "$work" && scripts/package cli) 2>&1 )"
+  status=$?
+  if (( status != 0 )); then
+    fail "packaging two targets failed (exit $status): $out"
+  elif [[ -e "$work/apps/cli/dist/hello-windows-arm64" ]]; then
+    fail "a stale binary survived a build that produced files: $out"
+  elif [[ -f "$work/apps/cli/dist/hello-linux-amd64" && -f "$work/apps/cli/dist/hello-macos-arm64" ]]; then
+    pass
+  else
+    fail "not every declared target is in dist/: $(ls "$work/apps/cli/dist")"
+  fi
+else
+  echo "  skip  $current: go is not installed"
+fi
+cleanup
+
 # --- a quadlet unit is validated, not built ----------------------------------
 
 # systemd and podman build the image on the deploy host when the unit starts, so
