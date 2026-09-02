@@ -82,12 +82,13 @@ free_plan() {
 # repository <admin> [json fields...]: the repos/o/r view, every merge setting
 # at the value the template wants, plus whatever a case overrides.
 repository() {
-  local admin="$1"
+  local admin="$1" extra=""
   shift
+  (( $# == 0 )) || extra="$(printf ', %s' "$@")"
   endpoint repos/o/r <<EOF_JSON
 {"default_branch": "main", "permissions": {"admin": $admin},
  "allow_merge_commit": true, "allow_squash_merge": false,
- "allow_rebase_merge": false, "delete_branch_on_merge": true${*:+$(printf ', %s' "$@")}}
+ "allow_rebase_merge": false, "delete_branch_on_merge": true$extra}
 EOF_JSON
 }
 
