@@ -134,4 +134,16 @@ want='{"schema_version": 1, "run": "none", "ships": {"kind": "none"}}
 {"schema_version": 1, "run": "oneshot", "ships": {"kind": "executable", "targets": ["linux-amd64", "macos-arm64"]}}'
 if [[ "$out" == "$want" ]]; then pass; else fail "unexpected declarations: '$out'"; fi
 
+# The pair is asserted through scripts/package rather than by its bytes: what
+# a suite wants from it is a unit that validates before the case breaks it.
+scratch_repo
+current="quadlet_pair writes a pair scripts/package validates"
+suite <<'SUITE'
+scratch_repo
+declare_unit svc longlived quadlet
+quadlet_pair svc
+(cd "$work" && CI_DRY_RUN=1 scripts/package svc > /dev/null 2>&1) && echo validated
+SUITE
+if [[ "$out" == "validated" ]]; then pass; else fail "the pair did not validate: '$out'"; fi
+
 report

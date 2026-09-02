@@ -22,47 +22,24 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "$repo_root/scripts/tests/libs/harness.sh"
 
 fixture() {
+  scratch_repo
   current="$1"
-  work="$(mktemp -d)"
-  cp -r "$repo_root/scripts" "$work/"
 }
 
-# Writes a unit: a declaration, and a manifest so a language is present to
-# dispatch to.
-unit() {
-  local name="$1" run="$2" ships="$3"
-  mkdir -p "$work/apps/$name"
-  printf '{"schema_version": 1, "run": "%s", "ships": %s}\n' "$run" "$ships" \
-    > "$work/apps/$name/.unit.json"
-  printf 'module example.com/%s\n\ngo 1.22\n' "$name" > "$work/apps/$name/go.mod"
-}
-
-# Writes a well-formed quadlet pair under a unit, which each case below then
-# breaks in exactly one way.
-quadlet() {
-  local name="$1" dir="$work/apps/$1/deploy/quadlet"
-  mkdir -p "$dir"
-  printf '[Build]\nImageTag=localhost/%s:latest\nFile=./Containerfile\n' "$name" > "$dir/$name.build"
-  printf '[Container]\nImage=localhost/%s:latest\n' "$name" > "$dir/$name.container"
-  printf 'FROM scratch\n' > "$dir/Containerfile"
+# A manifest, so a language is present for the unit to dispatch to.
+go_mod() {
+  printf 'module example.com/%s\n\ngo 1.22\n' "$1" > "$work/apps/$1/go.mod"
 }
 
 run_in() {
   (cd "$work" && CI_DRY_RUN=1 "$@" 2>&1)
 }
 
-# The cases that need the real thing. CI_DRY_RUN is unset rather than left
-# alone, so a case asserting that a file was deleted cannot pass on a suite run
-# from a shell that already exported it -- which is every invocation from
-# scripts/ci. GOWORK is turned off for the other half of the same reason: a real
-# run reads the ambient environment, and an exported GOWORK points go_each at
-# the modules of whatever workspace the developer is in, whose mains then build
-# into the fixture's dist/ and fail a case over a file that never came from it.
+# The cases that need the real thing. Nothing is held back: the harness leaves
+# CI_DRY_RUN unset and GOWORK off, and says why.
 run_real() {
-  (cd "$work" && env -u CI_DRY_RUN GOWORK=off "$@" 2>&1)
+  (cd "$work" && "$@" 2>&1)
 }
-
-trap cleanup EXIT
 
 echo "unit-commands-test"
 
@@ -70,7 +47,7 @@ echo "unit-commands-test"
 # Without it every case here would fail on the tool rather than on the command,
 # so the suite says it skipped rather than reporting the gap as a defect.
 if ! command -v jq > /dev/null 2>&1; then
-  echo "  skip  unit-commands-test: jq is not installed"
+  skip "jq is not installed"
   report
   exit
 fi
@@ -80,20 +57,22 @@ fi
 # One unit needs no naming. Requiring it would make the common repository --
 # one deployable, one command -- the awkward case.
 fixture "one unit needs no name"
-unit only oneshot '{"kind": "none"}'
+declare_unit only oneshot
+go_mod only
 out="$(run_in scripts/run)"
 if grep -qE '^would-run +run go$' <<< "$out"; then
   pass
 else
   fail "a lone unit was not resolved without being named: $out"
 fi
-cleanup
 
 # Several units and no name is the ambiguity the command must not resolve on
 # its own, so it lists what it could have meant as lines to copy.
 fixture "several units must be named"
-unit alpha oneshot '{"kind": "none"}'
-unit beta oneshot '{"kind": "none"}'
+declare_unit alpha oneshot
+go_mod alpha
+declare_unit beta oneshot
+go_mod beta
 out="$(run_in scripts/run)"
 status=$?
 if (( status == 0 )); then
@@ -103,10 +82,10 @@ elif grep -q 'scripts/run alpha' <<< "$out" && grep -q 'scripts/run beta' <<< "$
 else
   fail "the refusal did not list the candidates: $out"
 fi
-cleanup
 
 fixture "a name that is not a unit is refused"
-unit alpha oneshot '{"kind": "none"}'
+declare_unit alpha oneshot
+go_mod alpha
 out="$(run_in scripts/run beta)"
 status=$?
 if (( status != 0 )) && grep -q 'No apps/beta directory' <<< "$out"; then
@@ -114,14 +93,14 @@ if (( status != 0 )) && grep -q 'No apps/beta directory' <<< "$out"; then
 else
   fail "a name matching no unit was not refused: $out"
 fi
-cleanup
 
 # --- what the declaration decides --------------------------------------------
 
 # A library is not broken for being a library. Failing here would make
 # `run: none` a state a repository has to route around rather than declare.
 fixture "run: none has nothing to run and says so"
-unit lib none '{"kind": "none"}'
+declare_unit lib none
+go_mod lib
 out="$(run_in scripts/run lib)"
 status=$?
 if (( status == 0 )) && grep -q 'run: none' <<< "$out"; then
@@ -129,11 +108,10 @@ if (( status == 0 )) && grep -q 'run: none' <<< "$out"; then
 else
   fail "a unit that runs as nothing did not exit 0 saying so (exit $status): $out"
 fi
-cleanup
 
 fixture "a unit with no declaration is named rather than assumed"
 mkdir -p "$work/apps/undeclared"
-printf 'module example.com/u\n\ngo 1.22\n' > "$work/apps/undeclared/go.mod"
+go_mod undeclared
 out="$(run_in scripts/run undeclared)"
 status=$?
 if (( status != 0 )) && grep -q '.unit.json' <<< "$out"; then
@@ -141,10 +119,10 @@ if (( status != 0 )) && grep -q '.unit.json' <<< "$out"; then
 else
   fail "a unit with no declaration was not named (exit $status): $out"
 fi
-cleanup
 
 fixture "ships: none has nothing to package"
-unit lib none '{"kind": "none"}'
+declare_unit lib none
+go_mod lib
 out="$(run_in scripts/package lib)"
 status=$?
 if (( status == 0 )) && grep -q 'ships: none' <<< "$out"; then
@@ -152,17 +130,16 @@ if (( status == 0 )) && grep -q 'ships: none' <<< "$out"; then
 else
   fail "a unit that ships nothing did not exit 0 saying so (exit $status): $out"
 fi
-cleanup
 
 fixture "a declared executable reaches the package adapter"
-unit tool oneshot '{"kind": "executable", "targets": ["linux-amd64"]}'
+declare_unit tool oneshot executable linux-amd64
+go_mod tool
 out="$(run_in scripts/package tool)"
 if grep -qE '^would-run +package go$' <<< "$out"; then
   pass
 else
   fail "a unit shipping an executable did not dispatch package: $out"
 fi
-cleanup
 
 # --- packaging owns the unit's dist/ -----------------------------------------
 
@@ -177,7 +154,8 @@ cleanup
 # installed: without one the adapter reports no runner and packaging still
 # exits 0.
 fixture "packaging clears a file an earlier build left"
-unit tool oneshot '{"kind": "executable", "targets": ["linux-amd64"]}'
+declare_unit tool oneshot executable linux-amd64
+go_mod tool
 mkdir -p "$work/apps/tool/dist"
 printf 'stale\n' > "$work/apps/tool/dist/tool-linux-amd64"
 out="$(run_real scripts/package tool)"
@@ -189,7 +167,6 @@ elif [[ -e "$work/apps/tool/dist/tool-linux-amd64" ]]; then
 else
   pass
 fi
-cleanup
 
 # The other side of the same rule. Four of the six languages have no packaging
 # adapter, and for a unit in one of those dist/ is not this command's output --
@@ -200,9 +177,8 @@ cleanup
 # Node needs no toolchain to reach this: package.json alone makes the language
 # present, and its packaging adapter is dispatched and reports no runner.
 fixture "a language that packages nothing keeps its dist/"
+declare_unit tscli oneshot executable linux-amd64
 mkdir -p "$work/apps/tscli/dist"
-printf '{"schema_version": 1, "run": "oneshot", "ships": {"kind": "executable", "targets": ["linux-amd64"]}}\n' \
-  > "$work/apps/tscli/.unit.json"
 printf '{"name": "tscli", "version": "1.0.0", "bin": "./dist/cli.js"}\n' \
   > "$work/apps/tscli/package.json"
 printf 'built\n' > "$work/apps/tscli/dist/cli.js"
@@ -215,13 +191,13 @@ elif [[ -f "$work/apps/tscli/dist/cli.js" ]]; then
 else
   fail "packaging deleted a build it cannot replace: $out"
 fi
-cleanup
 
 # A dry run reports what would be dispatched and runs nothing. Deleting the last
 # build while claiming to have done nothing is the one way it could be worse
 # than the real thing.
 fixture "a dry run deletes nothing"
-unit tool oneshot '{"kind": "executable", "targets": ["linux-amd64"]}'
+declare_unit tool oneshot executable linux-amd64
+go_mod tool
 mkdir -p "$work/apps/tool/dist"
 printf 'binary\n' > "$work/apps/tool/dist/tool-linux-amd64"
 out="$(run_in scripts/package tool)"
@@ -230,14 +206,14 @@ if [[ -f "$work/apps/tool/dist/tool-linux-amd64" ]]; then
 else
   fail "a dry run deleted the unit's dist/: $out"
 fi
-cleanup
 
 # The other half of the same rule: one invocation builds every declared target,
 # so clearing once before the dispatch cannot remove what this run produced.
 # Clearing inside the per-target loop would pass the case above and leave only
 # the last target's binary here.
 fixture "every declared target survives the clearing"
-unit cli oneshot '{"kind": "executable", "targets": ["linux-amd64", "macos-arm64"]}'
+declare_unit cli oneshot executable linux-amd64 macos-arm64
+go_mod cli
 mkdir -p "$work/apps/cli/src/hello" "$work/apps/cli/dist"
 printf 'package main\n\nfunc main() {}\n' > "$work/apps/cli/src/hello/main.go"
 printf 'go 1.22\n\nuse ./apps/cli\n' > "$work/go.work"
@@ -257,9 +233,8 @@ if command -v go > /dev/null 2>&1; then
     fail "not every declared target is in dist/: $(ls "$work/apps/cli/dist")"
   fi
 else
-  echo "  skip  $current: go is not installed"
+  skip "go is not installed"
 fi
-cleanup
 
 # --- a quadlet unit is validated, not built ----------------------------------
 
@@ -268,8 +243,9 @@ cleanup
 # runs on a machine with no container runtime, which is the property being kept:
 # a repository shipping a service must not need podman to pass its own gate.
 fixture "a well-formed quadlet pair validates and builds nothing"
-unit svc longlived '{"kind": "quadlet"}'
-quadlet svc
+declare_unit svc longlived quadlet
+go_mod svc
+quadlet_pair svc
 out="$(run_in scripts/package svc)"
 status=$?
 if (( status != 0 )); then
@@ -279,13 +255,13 @@ elif [[ -e "$work/apps/svc/dist" ]]; then
 else
   pass
 fi
-cleanup
 
 # quadlet resolves an Image naming a .build file to what that build produces, so
 # both spellings are the same reference and both have to be accepted.
 fixture "an Image naming the .build unit is accepted"
-unit svc longlived '{"kind": "quadlet"}'
-quadlet svc
+declare_unit svc longlived quadlet
+go_mod svc
+quadlet_pair svc
 printf '[Container]\nImage=svc.build\n' > "$work/apps/svc/deploy/quadlet/svc.container"
 out="$(run_in scripts/package svc)"
 status=$?
@@ -294,13 +270,13 @@ if (( status == 0 )); then
 else
   fail "an Image naming the build unit was rejected (exit $status): $out"
 fi
-cleanup
 
 # The failure this catches is a service that will not start on the deploy host,
 # where the build runs and the Containerfile is not where the unit said.
 fixture "a .build naming a Containerfile that does not exist is refused"
-unit svc longlived '{"kind": "quadlet"}'
-quadlet svc
+declare_unit svc longlived quadlet
+go_mod svc
+quadlet_pair svc
 rm "$work/apps/svc/deploy/quadlet/Containerfile"
 out="$(run_in scripts/package svc)"
 status=$?
@@ -309,11 +285,11 @@ if (( status != 0 )) && grep -q 'Containerfile' <<< "$out"; then
 else
   fail "a missing Containerfile was not refused (exit $status): $out"
 fi
-cleanup
 
 fixture "a .container asking for an image no .build produces is refused"
-unit svc longlived '{"kind": "quadlet"}'
-quadlet svc
+declare_unit svc longlived quadlet
+go_mod svc
+quadlet_pair svc
 printf '[Container]\nImage=localhost/other:latest\n' > "$work/apps/svc/deploy/quadlet/svc.container"
 out="$(run_in scripts/package svc)"
 status=$?
@@ -322,11 +298,11 @@ if (( status != 0 )) && grep -q 'localhost/other:latest' <<< "$out"; then
 else
   fail "an image no build produces was not refused (exit $status): $out"
 fi
-cleanup
 
 fixture "a missing .build unit is refused"
-unit svc longlived '{"kind": "quadlet"}'
-quadlet svc
+declare_unit svc longlived quadlet
+go_mod svc
+quadlet_pair svc
 rm "$work/apps/svc/deploy/quadlet/svc.build"
 out="$(run_in scripts/package svc)"
 status=$?
@@ -335,11 +311,11 @@ if (( status != 0 )) && grep -q '.build' <<< "$out"; then
 else
   fail "a missing .build unit was not refused (exit $status): $out"
 fi
-cleanup
 
 fixture "a missing .container unit is refused"
-unit svc longlived '{"kind": "quadlet"}'
-quadlet svc
+declare_unit svc longlived quadlet
+go_mod svc
+quadlet_pair svc
 rm "$work/apps/svc/deploy/quadlet/svc.container"
 out="$(run_in scripts/package svc)"
 status=$?
@@ -348,13 +324,13 @@ if (( status != 0 )) && grep -q '.container' <<< "$out"; then
 else
   fail "a missing .container unit was not refused (exit $status): $out"
 fi
-cleanup
 
 # podman reads the Containerfile out of the working directory when the build
 # names no File, so requiring File would reject a unit podman accepts.
 fixture "a .build with SetWorkingDirectory and no File is accepted"
-unit svc longlived '{"kind": "quadlet"}'
-quadlet svc
+declare_unit svc longlived quadlet
+go_mod svc
+quadlet_pair svc
 printf '[Build]\nImageTag=localhost/svc:latest\nSetWorkingDirectory=unit\n' \
   > "$work/apps/svc/deploy/quadlet/svc.build"
 out="$(run_in scripts/package svc)"
@@ -364,14 +340,14 @@ if (( status == 0 )); then
 else
   fail "a build using the working directory was rejected (exit $status): $out"
 fi
-cleanup
 
 # --- what reaches the program ------------------------------------------------
 
 # The program's flags and this script's own must not compete for the same
 # argument. Everything after `--` is the program's, whatever it spells them.
 fixture "arguments after -- reach the program unchanged"
-unit cli oneshot '{"kind": "none"}'
+declare_unit cli oneshot
+go_mod cli
 mkdir -p "$work/apps/cli/src/hello"
 cat > "$work/apps/cli/src/hello/main.go" <<'GO'
 package main
@@ -395,16 +371,16 @@ if command -v go > /dev/null 2>&1; then
 else
   # The only case here that runs a real program, because argument passing is
   # the one thing a dry run cannot show.
-  echo "  skip  $current: go is not installed"
+  skip "go is not installed"
 fi
-cleanup
 
 # --- refusals that survived the rename ---------------------------------------
 
 # A run is one foreground process, so a unit holding two stacks is an ambiguity
 # to name rather than resolve.
 fixture "a unit holding several stacks is refused with the stacks named"
-unit both oneshot '{"kind": "none"}'
+declare_unit both oneshot
+go_mod both
 printf '{"name":"b","version":"1.0.0"}\n' > "$work/apps/both/package.json"
 out="$(run_in scripts/run both)"
 status=$?
@@ -415,6 +391,5 @@ elif grep -q 'node' <<< "$out" && grep -q 'go' <<< "$out"; then
 else
   fail "the refusal did not name both stacks: $out"
 fi
-cleanup
 
 report

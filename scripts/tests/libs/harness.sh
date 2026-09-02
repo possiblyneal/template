@@ -89,6 +89,16 @@ declare_unit() {
     "$run" "$kind" "$targets" > "$work/apps/$name/.unit.json"
 }
 
+# Writes a well-formed quadlet pair and its Containerfile under
+# apps/<name>/deploy/quadlet/, for a case to then break in exactly one way.
+quadlet_pair() {
+  local dir="$work/apps/$1/deploy/quadlet"
+  mkdir -p "$dir"
+  printf '[Build]\nImageTag=localhost/%s:latest\nFile=./Containerfile\n' "$1" > "$dir/$1.build"
+  printf '[Container]\nImage=localhost/%s:latest\n' "$1" > "$dir/$1.container"
+  printf 'FROM scratch\n' > "$dir/Containerfile"
+}
+
 # Puts <command> on the scratch repository's PATH with the body read from
 # stdin, shebang included: `stub gh <<'STUB' ... STUB`.
 stub() {
