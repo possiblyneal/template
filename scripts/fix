@@ -13,14 +13,10 @@ if ! language_capabilities has-any; then
   exit 0
 fi
 
-status=0
-language_capabilities run format-write || status=$?
+language_capabilities run format-write
 
-case "$status" in
-  0) echo "Review the diff before committing." ;;
-  "$NO_RUNNER")
-    echo "One or more present languages have no formatter."
-    echo "Add a private format-write adapter to scripts/libs/detect.sh."
-    ;;
-  *) exit "$status" ;;
-esac
+if tally; then
+  echo "Review the diff before committing."
+else
+  exit 1
+fi

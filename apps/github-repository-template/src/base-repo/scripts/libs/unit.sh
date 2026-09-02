@@ -82,9 +82,15 @@ unit_resolve() {
 # jq rather than a shell parse, for the reason scripts/structure gives: reading
 # a structured format by hand is how a check comes to accept one of several
 # valid spellings and call the rest wrong.
+#
+# unit_args is the one of the four no declaration holds: scripts/run fills it
+# from the arguments after `--`. Declared here with the rest so every adapter's
+# context has one home and a caller with no unit leaves all of it empty.
 unit_run=""
 unit_ships=""
 unit_targets=()
+# shellcheck disable=SC2034 # filled by scripts/run, read by the adapters
+unit_args=()
 
 # The path of the declaration for the unit at $1, on stdout, once it is known to
 # be readable. Both readers below go through it, so a missing file and a missing

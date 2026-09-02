@@ -19,6 +19,10 @@ set -euo pipefail
 # local sha is all zeros, which is every `git push --delete`. GitHub refuses to
 # delete the branch its HEAD points at, so the default branch is covered there.
 
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/result.sh
+source "$(dirname "${BASH_SOURCE[0]}")/libs/result.sh"
+
 protected_branches=("main" "master")
 
 destination="${PRE_COMMIT_REMOTE_BRANCH:-}"
@@ -31,8 +35,7 @@ destination="${destination#refs/heads/}"
 
 for branch in "${protected_branches[@]}"; do
   if [[ "$destination" == "$branch" ]]; then
-    printf 'FAIL          protect-branch: refusing to push to %s.\n' "$destination"
-    printf '              Open a pull request instead; %s is written by merging one.\n' "$destination"
+    result protect-branch FAIL "refusing to push to $destination; open a pull request instead, since $destination is written by merging one"
     exit 1
   fi
 done

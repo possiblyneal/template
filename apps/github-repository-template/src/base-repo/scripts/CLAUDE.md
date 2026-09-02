@@ -55,8 +55,6 @@ Adding a language means: add it to `DETECT_LANGUAGES`, add its `has_<lang>` dete
 
 Adding a check means adding it to `DETECT_CAPABILITIES` and writing an adapter per language, or declaring it not-applicable in `_capability_is_not_applicable`.
 
-Changes here almost always belong in `apps/github-repository-template/src/base-repo/scripts/` too. Decide explicitly; a fix in one tree only is how the two drift.
-
 ## Verification
 
 Each suite is `scripts/tests/<name>-test`, reports through the harness, and asserts through the public surface.

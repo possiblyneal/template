@@ -12,73 +12,62 @@ source "$repo_root/scripts/tests/libs/harness.sh"
 
 
 fixture() {
+  scratch_repo
   current="$1"
-  work="$(mktemp -d)"
-  cp -r "$repo_root/scripts" "$work/"
-  mkdir "$work/bin"
-  cat > "$work/bin/gh" <<'EOF'
+  stub gh <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "${GH_TRACE:?}"
 exit 1
-EOF
-  chmod +x "$work/bin/gh"
+STUB
 }
-
-
-trap cleanup EXIT
 
 echo "health-checks-test"
 
 fixture "doctor stays offline"
-out="$(cd "$work" && GH_TRACE="$work/gh-called" PATH="$work/bin:$PATH" scripts/doctor 2>&1)"
+out="$(cd "$work" && GH_TRACE="$work/gh-called" scripts/doctor 2>&1)"
 status=$?
 if (( status == 0 )) && [[ ! -e "$work/gh-called" ]]; then
   pass
 else
   fail "scripts/doctor contacted GitHub or failed in an otherwise healthy local fixture"
 fi
-cleanup
 
 fixture "run stays offline"
-out="$(cd "$work" && GH_TRACE="$work/gh-called" PATH="$work/bin:$PATH" scripts/run 2>&1)"
+out="$(cd "$work" && GH_TRACE="$work/gh-called" scripts/run 2>&1)"
 status=$?
 if (( status == 0 )) && [[ ! -e "$work/gh-called" ]]; then
   pass
 else
   fail "scripts/run contacted GitHub or failed in an empty local fixture"
 fi
-cleanup
 
 fixture "package stays offline"
-out="$(cd "$work" && GH_TRACE="$work/gh-called" PATH="$work/bin:$PATH" scripts/package 2>&1)"
+out="$(cd "$work" && GH_TRACE="$work/gh-called" scripts/package 2>&1)"
 status=$?
 if (( status == 0 )) && [[ ! -e "$work/gh-called" ]]; then
   pass
 else
   fail "scripts/package contacted GitHub or failed in an empty local fixture"
 fi
-cleanup
 
 fixture "repository settings are explicit"
-out="$(cd "$work" && GH_TRACE="$work/gh-called" PATH="$work/bin:$PATH" scripts/repo-settings check 2>&1)"
+out="$(cd "$work" && GH_TRACE="$work/gh-called" scripts/repo-settings check 2>&1)"
 status=$?
 if (( status == 0 )) &&
   grep -qx 'auth status' "$work/gh-called" &&
-  grep -q 'optional missing: gh auth' <<<"$out"; then
+  grep -qE '^gh-auth +not-applicable' <<<"$out"; then
   pass
 else
   fail "scripts/repo-settings check did not perform the hosted GitHub preflight"
 fi
-cleanup
 
 fixture "repository settings require a subcommand"
-out="$(cd "$work" && GH_TRACE="$work/gh-called" PATH="$work/bin:$PATH" scripts/repo-settings 2>&1)"
+out="$(cd "$work" && GH_TRACE="$work/gh-called" scripts/repo-settings 2>&1)"
 status=$?
 if (( status != 0 )) && grep -q 'Usage: scripts/repo-settings check' <<<"$out"; then
   pass
 else
   fail "scripts/repo-settings accepted a missing subcommand"
 fi
-cleanup
 
 report

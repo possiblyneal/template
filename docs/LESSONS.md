@@ -109,9 +109,9 @@ The root `.gitignore` pattern does not reach `apps/.../src/base-repo/.env`, so i
 
 `scripts/doctor` and `scripts/security` look for tools on PATH. pre-commit installs its own pinned copies in isolated environments.
 
-**Do:** Read "unavailable" from `scripts/security` as "not on PATH", not as "never ran". Check the pre-commit output for the same tool before concluding a scan was skipped.
+**Do:** Read `secret-scan not-applicable` from `scripts/security` as "not on PATH", not as "never ran". Check the pre-commit output for the same tool before concluding a scan was skipped.
 
-**Why:** `scripts/security` reports the secret scan unavailable while gitleaks is passing three lines later in the same `scripts/check` run. Reading the first and not the second understates the coverage and invites installing a redundant copy.
+**Why:** `scripts/security` reports the secret scan not-applicable while gitleaks is passing three lines later in the same `scripts/check` run. Reading the first and not the second understates the coverage and invites installing a redundant copy.
 
 **Source:** [.pre-commit-config.yaml](../.pre-commit-config.yaml)
 
