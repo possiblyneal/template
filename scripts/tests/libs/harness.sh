@@ -112,6 +112,7 @@ stub() {
 # repository; one it lacks is left out, so the case sees the absence it would
 # on a host without it.
 minimal_path() {
+  [[ -n "$work" ]] || { echo "minimal_path: no scratch repository; call scratch_repo first" >&2; return 1; }
   local dir="$work/minimal" tool
   mkdir -p "$dir"
   for tool in "$@"; do
