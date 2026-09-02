@@ -47,7 +47,7 @@ Reading the file needs `jq`, which is why `scripts/doctor` requires it once a un
 
 **`docs/` takes Markdown freely at every scope**; anything else needs permission.
 
-**`.structure-allow` is where permission is recorded.** A bare path allows that one file. A path ending in `/` names a prefix the audit stops descending into, which is how a vendored dependency or a tracked test fixture keeps a shape that is not this repository's to decide.
+**`.structure-allow` is where permission is recorded.** A bare path allows that one file. A path ending in `/` names a prefix the audit stops descending into, which is how a vendored dependency or a tracked test fixture keeps a shape that is not this repository's to decide. The one place it still looks inside is a domain's own `src/`: without that lookup a prefix entry would turn the domain rule stricter rather than more lenient.
 
 Three rules are about content rather than placement and no script can settle them: whether `libs/` really holds what several apps share, whether `tests/` really spans them, and whether a file sits at the scope it belongs to. `scripts/structure` reports all three `not-applicable` rather than inferring them from paths.
 

@@ -81,7 +81,7 @@ The specific operating parameters for the AI agent.
 
 `scripts/structure`: Audits where files sit against the Layout rules in the root `CLAUDE.md` — the root folder and file allowlists, the `apps/` unit-and-domain shape, the closed folder vocabulary under a domain, `src/` placement, the leaf rule, and the Markdown-only rule for `docs/`. Called by `scripts/check` and by pre-commit on every commit. It reads the contents of exactly one file, a unit's `.unit.json`, whose whole purpose is to state what a tree cannot show; the three rules that turn on what any other file contains are reported `not-applicable` rather than guessed. Reading a declaration needs `jq`, and its absence is reported `unavailable` rather than passed over.
 
-`.structure-allow`: Convention (not a shipped file) for the permission the Layout rules refer to — one path per line to allow a named exception, a trailing `/` to stop the audit descending into a vendored or fixture tree. Absent until a repository needs one.
+`.structure-allow`: Convention (not a shipped file) for the permission the Layout rules refer to — one path per line to allow a named exception, a trailing `/` to stop the audit descending into a vendored or fixture tree, save for one lookup that keeps a prefix over a domain's `src/` from failing the domain it defines. Absent until a repository needs one.
 
 `tools/`: Convention (not a shipped directory) for helpers that must be built before they run, one directory per program.
 

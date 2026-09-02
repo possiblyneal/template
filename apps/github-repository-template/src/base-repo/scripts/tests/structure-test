@@ -152,6 +152,21 @@ write apps/billing/invoicing/src/main.py
 write apps/billing/invoicing/tets/a-test.py
 assert_fails domain-folders
 
+fixture "a folder under something that is not a domain is one finding"
+unit billing
+write apps/billing/tets/unit/a-test.py
+assert_fails apps-layout
+
+# A prefix entry only ever hides paths from the audit. The domain rule is the
+# one check that could read that hiding as a violation, since it asserts a
+# path is present rather than that none is misplaced.
+fixture "a structure-allow prefix over a domain's src does not fail the domain"
+unit billing
+write apps/billing/invoicing/src/main.py
+write apps/billing/invoicing/docs/a-note.md
+write .structure-allow 'apps/billing/invoicing/src/'
+assert_passes
+
 fixture "a domain holds scoped folders and its own files"
 unit billing
 write apps/billing/invoicing/src/main.py
