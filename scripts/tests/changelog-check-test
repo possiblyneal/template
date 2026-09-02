@@ -99,6 +99,15 @@ else
   fail "$out"
 fi
 
+fixture "awk missing is unavailable, not a pass" "$valid"
+status=0
+out="$(PATH="$(minimal_path bash dirname basename)" "$repo_root/scripts/changelog-check" "$work/CHANGELOG.md" 2>&1)" || status=$?
+if (( status != 0 )) && grep -qE '^changelog +unavailable +awk could not check ' <<< "$out"; then
+  pass
+else
+  fail "$out"
+fi
+
 current="unrelated paths are ignored"
 if out="$("$repo_root/scripts/changelog-check" "$repo_root/scripts/check" 2>&1)" && [[ -z "$out" ]]; then
   pass

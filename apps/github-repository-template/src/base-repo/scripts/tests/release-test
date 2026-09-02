@@ -49,8 +49,9 @@ release_real() {
 
 echo "release-test"
 
-# jq reads each unit's declaration, and scripts/doctor requires it once a unit
-# has one. Without it every case would fail on the tool rather than on the walk.
+# jq reads each unit's declaration, and scripts/doctor requires it. Without it
+# every case would fail on the tool rather than on the walk, so the suite skips
+# every case, which the harness reports as a failure.
 if ! command -v jq > /dev/null 2>&1; then
   skip "jq is not installed"
   report

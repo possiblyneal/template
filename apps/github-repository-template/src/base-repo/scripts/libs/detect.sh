@@ -715,18 +715,12 @@ _capability_is_not_applicable() {
 
 DETECT_CAPABILITIES=(lint format-check typecheck test build audit toolchain format-write run package)
 
-_capability_is_supported() {
-  local cap
-  for cap in "${DETECT_CAPABILITIES[@]}"; do
-    [[ "$1" != "$cap" ]] || return 0
-  done
-  return 1
-}
-
-_language_is_supported() {
-  local supported
-  for supported in "${DETECT_LANGUAGES[@]}"; do
-    [[ "$1" == "$supported" ]] && return 0
+# _in_list <word> <items…>: whether the word is one of the items.
+_in_list() {
+  local word="$1" item
+  shift
+  for item in "$@"; do
+    [[ "$word" == "$item" ]] && return 0
   done
   return 1
 }
@@ -753,11 +747,11 @@ _language_capabilities_run() {
   capabilities=("$@")
 
   for cap in "${capabilities[@]}"; do
-    _capability_is_supported "$cap" || { echo "Unknown capability: $cap" >&2; return 2; }
+    _in_list "$cap" "${DETECT_CAPABILITIES[@]}" || { echo "Unknown capability: $cap" >&2; return 2; }
   done
 
   if [[ -n "$selected" ]]; then
-    _language_is_supported "$selected" || { echo "Unsupported language: $selected" >&2; return 2; }
+    _in_list "$selected" "${DETECT_LANGUAGES[@]}" || { echo "Unsupported language: $selected" >&2; return 2; }
     has_language "$selected" || { echo "Language is not present: $selected" >&2; return 2; }
     languages=("$selected")
   else

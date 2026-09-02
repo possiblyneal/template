@@ -17,11 +17,11 @@ for path in "$@"; do
     continue
   fi
 
-  # Every line awk prints is one rule broken, so the lines are the findings
-  # and its exit status says nothing they do not.
-  while IFS= read -r finding; do
-    [[ -n "$finding" ]] && record "$finding"
-  done < <(awk '
+  # Every line awk prints is one rule broken, so the lines are the findings.
+  # awk exits 1 when it printed one; anything higher means it did not run,
+  # which is the one thing the lines cannot say.
+  status=0
+  findings="$(awk '
     function fail(message) {
       printf "%s:%d: %s\n", FILENAME, NR, message
       failed = 1
@@ -103,7 +103,14 @@ for path in "$@"; do
       }
       exit failed
     }
-  ' "$path")
+  ' "$path")" || status=$?
+  if (( status > 1 )); then
+    result changelog unavailable "awk could not check $path (exit $status)"
+    continue
+  fi
+  while IFS= read -r finding; do
+    [[ -n "$finding" ]] && record "$finding"
+  done <<< "$findings"
   verdict changelog "$path is well-formed"
 done
 

@@ -56,14 +56,19 @@ remote() {
   printf 'o/r\n' > "$work/gh/remote"
 }
 
+# api_fixture <path>: the file the gh stub answers `gh api <path>` from.
+api_fixture() {
+  printf '%s' "$work/gh/api/${1//[\/?=]/_}"
+}
+
 # endpoint <path> with the body on stdin: what `gh api <path>` answers.
 endpoint() {
-  cat > "$work/gh/api/${1//[\/?=]/_}"
+  cat > "$(api_fixture "$1")"
 }
 
 # endpoint_error <path> <status> <message>: what `gh api <path>` refuses with.
 endpoint_error() {
-  printf '{"message": "%s", "status": "%s"}\n' "$3" "$2" > "$work/gh/api/${1//[\/?=]/_}.error"
+  printf '{"message": "%s", "status": "%s"}\n' "$3" "$2" > "$(api_fixture "$1").error"
 }
 
 # not_offered <path>: GitHub's refusal for a setting the plan does not include.
