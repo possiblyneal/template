@@ -30,11 +30,6 @@ source "$repo_root/scripts/tests/libs/harness.sh"
 # shellcheck source=libs/detect.sh
 source "$repo_root/scripts/libs/detect.sh"
 
-fixture() {
-  scratch_repo
-  current="$1"
-}
-
 # The gate, as scripts/ci reports it under the dry run. Stdin is /dev/null for
 # every command below that a stub might answer: a stub that drains stdin would
 # otherwise block on the suite's own.
@@ -703,11 +698,7 @@ if command -v jq >/dev/null 2>&1 && command -v node >/dev/null 2>&1 && command -
   fixture "a missing npm is not reported as a missing build script"
   declare_unit web oneshot
   printf '{"name":"n","version":"1.0.0","bin":{"n":"./dist/cli.js"},"scripts":{"build":"echo built"}}\n' > "$work/apps/web/package.json"
-  mkdir -p "$work/node-only"
-  for tool in bash chmod dirname basename find sort sed awk grep cat jq node; do
-    ln -s "$(command -v "$tool")" "$work/node-only/$tool"
-  done
-  out="$(PATH="$work/node-only" run_real web)"
+  out="$(PATH="$(minimal_path bash chmod dirname basename find sort sed awk grep cat jq node)" run_real web)"
   status=$?
   if (( status == 0 )); then
     fail "a bin pointing at output that is not built was treated as runnable: $out"
@@ -784,14 +775,18 @@ fi
 
 # --- aggregate outcomes ------------------------------------------------------
 
+# run returns nothing about the outcome: the result line carries it, and the
+# tally the command ends with turns it into the exit status. So each case here
+# asserts the line, and that run itself came back 0 rather than encoding the
+# outcome a second way.
 fixture "unavailable capability"
 printf '{"name":"n","version":"1.0.0"}\n' > "$work/package.json"
 out="$(capabilities run lint)"
 status=$?
-if (( status == NO_RUNNER )) && grep -qE '^lint +unavailable +node$' <<<"$out"; then
+if (( status == 0 )) && grep -qE '^lint +unavailable +node$' <<<"$out"; then
   pass
 else
-  fail "an absent runner is not reported as unavailable with the sentinel status"
+  fail "an absent runner is not reported as unavailable on its line with run returning 0: exit $status: $out"
 fi
 
 fixture "failure does not stop polyglot dispatch"
@@ -806,12 +801,12 @@ exit 1
 STUB
 out="$(capabilities run lint)"
 status=$?
-if (( status == 1 )) &&
+if (( status == 0 )) &&
   grep -qE '^lint +FAIL +node \(exit 7\)$' <<<"$out" &&
   grep -qE '^lint +pass +python$' <<<"$out"; then
   pass
 else
-  fail "a failed adapter hides a later language or returns the wrong aggregate status"
+  fail "a failed adapter hides a later language or run encodes the outcome in its return: exit $status: $out"
 fi
 
 report

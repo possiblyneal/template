@@ -21,11 +21,6 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=libs/harness.sh
 source "$repo_root/scripts/tests/libs/harness.sh"
 
-fixture() {
-  scratch_repo
-  current="$1"
-}
-
 # A manifest, so a language is present for the unit to dispatch to.
 go_mod() {
   printf 'module example.com/%s\n\ngo 1.22\n' "$1" > "$work/apps/$1/go.mod"

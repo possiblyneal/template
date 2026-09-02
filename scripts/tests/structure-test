@@ -18,13 +18,8 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=libs/harness.sh
 source "$repo_root/scripts/tests/libs/harness.sh"
 
-# The scratch repository, staged so that git ls-files can see it. No commit:
+# The scratch repository is staged so that git ls-files can see it. No commit:
 # the index is what the script enumerates.
-fixture() {
-  scratch_repo
-  current="$1"
-}
-
 # Stages every path written since the fixture was created, then audits.
 audit() {
   git -C "$work" add -A > /dev/null 2>&1
@@ -392,10 +387,7 @@ fixture "a missing jq makes the fact check unavailable rather than passing"
 declare_unit billing
 write apps/billing/src/main.py
 git -C "$work" add -A > /dev/null 2>&1
-for tool in bash dirname git; do
-  ln -s "$(command -v "$tool")" "$work/bin/$tool"
-done
-output="$( (cd "$work" && PATH="$work/bin" ./scripts/structure) 2>&1 )"
+output="$( (cd "$work" && PATH="$(minimal_path bash dirname git)" ./scripts/structure) 2>&1 )"
 if grep -qE '^unit-facts +unavailable' <<< "$output"; then
   pass
 else

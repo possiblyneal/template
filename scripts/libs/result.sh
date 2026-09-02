@@ -23,6 +23,14 @@
 
 result_failed=0
 
+# The layout alone: result_line <check> <word> <detail>. What result prints
+# once it has judged the state, and what a table that is not a set of Results
+# -- the capability probe, whose words are wired and absent -- prints so it
+# reads in the same columns. The widths live here and nowhere else.
+result_line() {
+  printf '%-18s %-16s %s\n' "$1" "$2" "$3"
+}
+
 # One line: result <check> <state> <detail>.
 result() {
   case "$2" in
@@ -33,7 +41,7 @@ result() {
       return 1
       ;;
   esac
-  printf '%-18s %-16s %s\n' "$1" "$2" "$3"
+  result_line "$1" "$2" "$3"
 }
 
 # Findings for the check currently being run, printed under its result line by

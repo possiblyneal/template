@@ -13,7 +13,7 @@ if ! language_capabilities has-any; then
   exit 0
 fi
 
-language_capabilities run format-write || true
+language_capabilities run format-write
 
 if tally; then
   echo "Review the diff before committing."

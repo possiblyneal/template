@@ -9,14 +9,11 @@ cd "$repo_root"
 source "$repo_root/scripts/libs/detect.sh"
 
 # Before the audit, which would run green over the package it cannot see.
-while IFS= read -r orphan; do
-  record "$orphan"
-done < <(detect_orphan_manifests)
-verdict detection "every package has a root manifest"
+judge_orphan_manifests
 tally || exit 1
 
 if language_capabilities has-any; then
-  language_capabilities run audit || true
+  language_capabilities run audit
 else
   result audit not-applicable "no project manifest"
 fi

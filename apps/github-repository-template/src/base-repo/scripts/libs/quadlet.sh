@@ -6,10 +6,6 @@
 # linters recognize it. The same rule libs/detect.sh follows, for the same
 # reason.
 
-# Unmatched globs below stand for "no such file" rather than for themselves.
-# Set here rather than by the caller, since the globs are here.
-shopt -s nullglob
-
 # Every assignment of one key in a systemd unit file, one per line. systemd
 # takes the last assignment of most keys, but `ImageTag` repeats where the
 # option does -- `podman build` takes several `--tag` -- so all of them are
@@ -28,21 +24,22 @@ quadlet_values() {
 # fails to start on the deploy host: a Containerfile that is not where the build
 # says it is, or a container asking for an image the build never produces.
 #
-# quadlet_validate <dir> <unit>: the directory holding the pair, and the unit
-# name the messages report it under.
+# quadlet_validate <dir> <label>: the directory holding the pair, and the name
+# the messages report the unit under. The pair is listed with compgen rather
+# than a glob so that no match is no file, whatever the caller's nullglob.
 quadlet_validate() {
-  local dir="$1" unit="$2" file value status=0
+  local dir="$1" label="$2" file value status=0
   local -a builds=() containers=() produced=()
 
-  builds=("$dir"/*.build)
-  containers=("$dir"/*.container)
+  mapfile -t builds < <(compgen -G "$dir/*.build" || true)
+  mapfile -t containers < <(compgen -G "$dir/*.container" || true)
 
   if (( ${#builds[@]} == 0 )); then
-    echo "apps/$unit declares ships: quadlet but $dir/ holds no .build unit." >&2
+    echo "$label declares ships: quadlet but $dir/ holds no .build unit." >&2
     status=1
   fi
   if (( ${#containers[@]} == 0 )); then
-    echo "apps/$unit declares ships: quadlet but $dir/ holds no .container unit." >&2
+    echo "$label declares ships: quadlet but $dir/ holds no .container unit." >&2
     status=1
   fi
   (( status == 0 )) || return "$status"
@@ -92,6 +89,6 @@ quadlet_validate() {
     fi
   done
 
-  (( status == 0 )) && echo "apps/$unit ships a quadlet: validated $dir/, nothing built."
+  (( status == 0 )) && echo "$label ships a quadlet: validated $dir/, nothing built."
   return "$status"
 }

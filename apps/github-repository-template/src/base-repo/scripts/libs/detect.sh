@@ -299,6 +299,17 @@ detect_orphan_manifests() {
   done
 }
 
+# The orphans as a check: each one recorded as a finding, then the detection
+# verdict. Every command that runs the capabilities calls this first, since an
+# orphan is a package none of them can see.
+judge_orphan_manifests() {
+  local orphan
+  while IFS= read -r orphan; do
+    record "$orphan"
+  done < <(detect_orphan_manifests)
+  verdict detection "every package has a root manifest"
+}
+
 # The module's external interface is `language_capabilities` below. Everything
 # after this point is its private per-language implementation. Callers name a
 # capability; they do not know which command, manifest, or tool provides it.
@@ -722,7 +733,7 @@ _language_is_supported() {
 
 _language_capabilities_run() {
   local dry_run="" selected="" cap lang function status
-  local failed=0 unavailable=0
+  local unavailable=0
   local -a capabilities=() languages=()
 
   while (( $# > 0 )); do
@@ -780,23 +791,18 @@ _language_capabilities_run() {
           result "$cap" unavailable "$lang"
           unavailable=1
           ;;
-        *)
-          result "$cap" FAIL "$lang (exit $status)"
-          failed=1
-          ;;
+        *) result "$cap" FAIL "$lang (exit $status)" ;;
       esac
     done
   done
 
   # Said once, here, rather than decoded from the return value by each caller.
-  # The return value stays as it was for the callers inside this library; a
-  # command reads the outcome from the tally, which saw every line above.
+  # The outcome is not returned at all: every line above went through result,
+  # so the tally holds it, and a second channel would be one more thing to keep
+  # agreeing with the first. Only a usage error returns non-zero.
   if (( unavailable )); then
     echo "Install the tool behind each unavailable line, or add its private adapter to scripts/libs/detect.sh."
   fi
-  (( failed == 0 )) || return 1
-  (( unavailable == 0 )) || return "$NO_RUNNER"
-  return 0
 }
 
 _codeql_entry() {
@@ -850,7 +856,7 @@ _language_capabilities_probe() {
     for lang in "${DETECT_LANGUAGES[@]}"; do
       state=absent
       ! declare -F "_capability_${cap//-/_}_${lang}" >/dev/null || state=wired
-      printf '%-18s %-16s %s\n' "$cap" "$state" "$lang"
+      result_line "$cap" "$state" "$lang"
     done
   done
 }

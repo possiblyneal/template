@@ -17,17 +17,29 @@ fixture() {
   printf '%s\n' "$2" > "$work/CHANGELOG.md"
 }
 
+# Each verdict is asserted on the line it prints, since a hook and a person
+# read the same output and the result layout is the contract.
 assert_accepts() {
-  if "$repo_root/scripts/changelog-check" "$work/CHANGELOG.md" > /dev/null 2>&1; then
+  local status=0
+  out="$("$repo_root/scripts/changelog-check" "$work/CHANGELOG.md" 2>&1)" || status=$?
+  if (( status == 0 )) && grep -qE '^changelog +pass +.*CHANGELOG.md is well-formed$' <<< "$out"; then
     pass
   else
-    fail "valid changelog was rejected"
+    fail "valid changelog was rejected: $out"
   fi
 }
 
+# assert_rejects [finding]: a failing exit, a FAIL line, and when given, the
+# finding under it.
 assert_rejects() {
-  if "$repo_root/scripts/changelog-check" "$work/CHANGELOG.md" > /dev/null 2>&1; then
-    fail "invalid changelog was accepted"
+  local status=0
+  out="$("$repo_root/scripts/changelog-check" "$work/CHANGELOG.md" 2>&1)" || status=$?
+  if (( status == 0 )); then
+    fail "invalid changelog was accepted: $out"
+  elif ! grep -qE '^changelog +FAIL +[0-9]+ violation\(s\)$' <<< "$out"; then
+    fail "no FAIL line: $out"
+  elif [[ -n "${1:-}" ]] && ! grep -qE "^ +.*$1" <<< "$out"; then
+    fail "wanted a finding matching '$1' in: $out"
   else
     pass
   fi
@@ -58,31 +70,48 @@ fixture "a valid changelog passes" "$valid"
 assert_accepts
 
 fixture "a missing Unreleased section fails" "${valid/Unreleased/Pending}"
-assert_rejects
+assert_rejects 'expected exactly one ## \[Unreleased\] section'
 
 fixture "Unreleased must lead release sections" "${valid/Unreleased/$'1.2.2] - 2026-08-10\n\n## [Unreleased'}"
-assert_rejects
+assert_rejects '\[Unreleased\] must be the first release section'
 
 fixture "an unknown category fails" "${valid/Added/Other}"
-assert_rejects
+assert_rejects 'category must be Added, Changed, Deprecated, Removed, Fixed, or Security'
 
 fixture "an empty category fails" "${valid/- A useful change./}"
-assert_rejects
+assert_rejects 'category Added must contain a list entry'
 
 fixture "a malformed release heading fails" "${valid/1.2.3/1.2}"
-assert_rejects
+assert_rejects 'release headings must use ## \[x.y.z\] - YYYY-MM-DD'
 
 fixture "a missing release reference fails" "${valid/1.2.3]:/1.2.4]:}"
-assert_rejects
+assert_rejects 'missing \[1.2.3\] link reference'
 
 fixture "a missing Unreleased reference fails" "${valid/Unreleased]:/Pending]:}"
-assert_rejects
+assert_rejects 'missing \[Unreleased\] link reference'
 
-current="unrelated paths are ignored"
-if "$repo_root/scripts/changelog-check" "$repo_root/scripts/check" > /dev/null 2>&1; then
+current="a missing file fails on its own line"
+status=0
+out="$("$repo_root/scripts/changelog-check" "$work/absent/CHANGELOG.md" 2>&1)" || status=$?
+if (( status != 0 )) && grep -qE '^changelog +FAIL +.*absent/CHANGELOG.md does not exist$' <<< "$out"; then
   pass
 else
-  fail "an unrelated path did not produce a no-op"
+  fail "$out"
+fi
+
+current="unrelated paths are ignored"
+if out="$("$repo_root/scripts/changelog-check" "$repo_root/scripts/check" 2>&1)" && [[ -z "$out" ]]; then
+  pass
+else
+  fail "an unrelated path did not produce a no-op: $out"
+fi
+
+current="each path gets its own verdict"
+out="$("$repo_root/scripts/changelog-check" "$work/CHANGELOG.md" "$work/CHANGELOG.md" 2>&1)"
+if (( $(grep -cE '^changelog ' <<< "$out") == 2 )); then
+  pass
+else
+  fail "$out"
 fi
 
 report

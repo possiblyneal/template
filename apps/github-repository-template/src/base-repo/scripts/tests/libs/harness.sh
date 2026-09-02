@@ -79,9 +79,8 @@ scratch_repo() {
 # declaration a fixture exercising some other rule owes.
 declare_unit() {
   local name="$1" run="${2:-none}" kind="${3:-none}" targets=""
-  shift 3 2>/dev/null || shift $#
-  if (( $# > 0 )); then
-    targets="$(printf ', "%s"' "$@")"
+  if (( $# > 3 )); then
+    targets="$(printf ', "%s"' "${@:4}")"
     targets=", \"targets\": [${targets:2}]"
   fi
   mkdir -p "$work/apps/$name"
@@ -102,8 +101,31 @@ quadlet_pair() {
 # Puts <command> on the scratch repository's PATH with the body read from
 # stdin, shebang included: `stub gh <<'STUB' ... STUB`.
 stub() {
+  [[ -n "$work" ]] || { echo "stub: no scratch repository; call scratch_repo first" >&2; return 1; }
   cat > "$work/bin/$1"
   chmod +x "$work/bin/$1"
+}
+
+# A PATH holding only the named tools, for a case asserting what a command does
+# without one: `PATH="$(minimal_path bash git)" scripts/structure`. Each tool
+# the harness PATH has is linked into a fresh directory under the scratch
+# repository; one it lacks is left out, so the case sees the absence it would
+# on a host without it.
+minimal_path() {
+  local dir="$work/minimal" tool
+  mkdir -p "$dir"
+  for tool in "$@"; do
+    command -v "$tool" >/dev/null 2>&1 && ln -sf "$(command -v "$tool")" "$dir/$tool"
+  done
+  echo "$dir"
+}
+
+# The fixture most suites need: a fresh scratch repository and the case's
+# name. A suite whose cases need more defines its own fixture after sourcing
+# this file, which replaces this one.
+fixture() {
+  scratch_repo
+  current="$1"
 }
 
 # Guarded on being under the temp directory as well as on being set: this runs

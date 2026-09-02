@@ -9,10 +9,7 @@ cd "$repo_root"
 source "$repo_root/scripts/libs/detect.sh"
 
 # Before the checks, which would run green over the package none of them sees.
-while IFS= read -r orphan; do
-  record "$orphan"
-done < <(detect_orphan_manifests)
-verdict detection "every package has a root manifest"
+judge_orphan_manifests
 tally || exit 1
 
 if ! language_capabilities has-any; then
@@ -23,7 +20,7 @@ fi
 
 args=()
 [[ -z "${CI_DRY_RUN:-}" ]] || args+=(--dry-run)
-language_capabilities run "${args[@]}" lint format-check typecheck test build || true
+language_capabilities run "${args[@]}" lint format-check typecheck test build
 
 [[ -z "${CI_DRY_RUN:-}" ]] || exit 0
 

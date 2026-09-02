@@ -50,14 +50,11 @@ check_required gh
 
 # Language toolchains are private adapters in the capabilities module, which
 # reports each missing one as unavailable without doctor knowing its command.
-language_capabilities run toolchain || true
+language_capabilities run toolchain
 
 # A package nested under apps/ or libs/ whose language has no root manifest is
 # invisible to every check, so its toolchain goes unreported here too.
-while IFS= read -r orphan; do
-  record "$orphan"
-done < <(detect_orphan_manifests)
-verdict detection "every package has a root manifest"
+judge_orphan_manifests
 
 # -print -quit rather than a pipe into `grep -q`: grep exits at its first match
 # and closes the pipe, so find dies of SIGPIPE and pipefail reports 141, which
@@ -91,27 +88,15 @@ if [[ -s .pre-commit-config.yaml ]]; then
   fi
 fi
 
-# Two unrelated things need jq, and either one makes it required here.
-#
-# The PreToolUse and ConfigChange hooks parse their input with it. A hook that
+# jq is required whether or not anything here reads a file with it yet. The
+# PreToolUse and ConfigChange hooks parse their input with it, and a hook that
 # exits non-zero for any reason other than a deliberate block is a non-blocking
-# error, so a missing jq lets writes outside the repository and mid-session
-# settings reloads through without a prompt or a block.
-#
-# And scripts/structure reads every unit's .unit.json with it. That runs from
-# pre-commit on every commit, so without jq the audit reports unavailable and
-# refuses the commit -- which is correct, and worth naming here rather than
-# leaving someone to read it off a blocked commit.
-needs_jq=""
-if [[ -x .claude/hooks/ask-outside-repo.sh || -x .claude/hooks/block-config-change.sh ]]; then
-  needs_jq=1
-fi
-if compgen -G 'apps/*/.unit.json' > /dev/null; then
-  needs_jq=1
-fi
-if [[ -n "$needs_jq" ]]; then
-  check_required jq
-fi
+# error, so a missing jq lets writes outside the repository through without a
+# prompt. scripts/structure reads every unit's .unit.json with it, from
+# pre-commit on every commit. And the suites that exercise a unit skip every
+# case without it, which the gate reads as a suite that verified nothing, so a
+# host this passes has to be one where scripts/check can run.
+check_required jq
 
 if tally; then
   echo "Environment checks passed. Add project-specific checks to scripts/doctor."

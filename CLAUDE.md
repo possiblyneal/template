@@ -83,7 +83,7 @@ Root *files* are permitted by name rather than by pattern: the eight the templat
 
 The two facts vary independently, so every pairing is legal and the audit checks values alone. A scheduled job runs `oneshot` and ships a `quadlet`; a library runs `none` and still ships. A rule forbidding a combination is a rule nobody revisits when the exception arrives.
 
-Reading the file needs `jq`, which is why `scripts/doctor` requires it once a unit declares. Without it the audit reports `unavailable` and fails rather than passing over a file it never opened.
+Reading the file needs `jq`, which `scripts/doctor` requires. Without it the audit reports `unavailable` and fails rather than passing over a file it never opened, and the suites that exercise a unit skip every case.
 
 **Scoped folders are leaves for their own kind.** `libs/`, `tests/`, `scripts/`, `tools/`, `assets/`, `docs/`, and `deploy/` may nest a different kind — `scripts/tests/libs/` is fine — but never another of the same kind at any depth, and never a `src/`. Choose the folder whose scope matches the file's scope.
 

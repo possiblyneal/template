@@ -1,22 +1,18 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-# One assertion per command that ends with the result library's tally: an
-# unavailable line is a failing exit. Each fixture is a Node package naming no
-# script and no bin, so every Node adapter answers NO_RUNNER and the line is
-# unavailable rather than FAIL -- the outcome that used to be decoded from a
-# return value by each command, and by two of them into a green exit.
+# The result library's contract, and one assertion per command that ends with
+# its tally: an unavailable line is a failing exit. Each fixture is a Node
+# package naming no script and no bin, so every Node adapter answers NO_RUNNER
+# and the line is unavailable rather than FAIL -- the outcome that used to be
+# decoded from a return value by each command, and by two of them into a green
+# exit.
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=libs/harness.sh
 source "$repo_root/scripts/tests/libs/harness.sh"
-
-fixture() {
-  scratch_repo
-  current="$1"
-}
 
 # Present, and with nothing any adapter can run. Holds whether or not node is
 # installed: without it the script lookup fails the same way.
@@ -37,6 +33,34 @@ assert_unavailable() {
 
 echo "result-gate-test"
 
+# --- the library itself ------------------------------------------------------
+
+# shellcheck source-path=SCRIPTDIR/..
+# shellcheck source=libs/result.sh
+source "$repo_root/scripts/libs/result.sh"
+
+current="a word that is not a state is refused"
+out="$(result lint green "detail" 2>&1)"
+status=$?
+if (( status == 1 )) && [[ "$out" == "result: 'green' is not a Result state"* ]]; then
+  pass
+else
+  fail "exit $status: $out"
+fi
+
+current="a finding recorded twice is reported once"
+record "the same finding"
+record "the same finding"
+out="$(verdict lint "clean")"
+if grep -qE '^lint +FAIL +1 violation\(s\)$' <<< "$out" && (( $(grep -c 'the same finding' <<< "$out") == 1 )); then
+  pass
+else
+  fail "$out"
+fi
+result_failed=0
+
+# --- the commands ------------------------------------------------------------
+
 fixture "ci fails on an unavailable capability"
 bare_package "$work"
 out="$(cd "$work" && scripts/ci 2>&1)"
@@ -51,11 +75,13 @@ assert_unavailable $? 'format-write +unavailable +node' "$out"
 # line is the one that cannot pass.
 fixture "doctor fails on a missing toolchain"
 bare_package "$work"
-for tool in bash git dirname basename find sort sed awk grep gh; do
-  command -v "$tool" > /dev/null 2>&1 && ln -s "$(command -v "$tool")" "$work/bin/$tool"
-done
-out="$(cd "$work" && PATH="$work/bin" scripts/doctor 2>&1)"
+out="$(cd "$work" && PATH="$(minimal_path bash git dirname basename find sort sed awk grep gh jq)" scripts/doctor 2>&1)"
 assert_unavailable $? 'toolchain +unavailable +node' "$out"
+
+fixture "security fails on an unavailable audit"
+bare_package "$work"
+out="$(cd "$work" && scripts/security 2>&1)"
+assert_unavailable $? 'audit +unavailable +node' "$out"
 
 # run checks the environment first, so the workspace root keeps the unit from
 # being an orphan and a stub npm keeps the toolchain line passing on any host.

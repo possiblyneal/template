@@ -64,5 +64,5 @@ fi
 args=(--language "${languages[0]}")
 [[ -z "${CI_DRY_RUN:-}" ]] || args+=(--dry-run)
 
-language_capabilities run "${args[@]}" run || true
+language_capabilities run "${args[@]}" run
 tally
