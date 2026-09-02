@@ -62,8 +62,6 @@ Three rules are about content rather than placement and no script can settle the
 
 ## Agent skills
 
-Where the engineering skills read their configuration. Most of them — `/wayfinder`, `/triage`, `/to-spec`, `/to-tickets` — never name `docs/agents/` by path: each says the tracker "should have been provided to you" and falls back to a local-markdown tracker when nothing was. This section is the provision, which is why it stays even though every fact in it is recorded in a file it points at.
-
 ### Issue tracker
 
 GitHub Issues on this repository, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
