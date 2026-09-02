@@ -54,11 +54,10 @@ language_capabilities run toolchain || true
 
 # A package nested under apps/ or libs/ whose language has no root manifest is
 # invisible to every check, so its toolchain goes unreported here too.
-orphans="$(language_capabilities check-orphans || true)"
-if [[ -n "$orphans" ]]; then
-  result detection FAIL "a package has no root manifest"
-  echo "$orphans"
-fi
+while IFS= read -r orphan; do
+  record "$orphan"
+done < <(detect_orphan_manifests)
+verdict detection "every package has a root manifest"
 
 # -print -quit rather than a pipe into `grep -q`: grep exits at its first match
 # and closes the pipe, so find dies of SIGPIPE and pipefail reports 141, which

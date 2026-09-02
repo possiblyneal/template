@@ -15,7 +15,6 @@ Usage: scripts/detect <command>
   languages       Present languages, one per line
   github-output   language=true|false lines, plus trivy, for $GITHUB_OUTPUT
   codeql-matrix   matrix=<json> for $GITHUB_OUTPUT, for the CodeQL job's strategy
-  check-orphans   Fail when a nested manifest has no root manifest of its language
 EOF
 }
 
@@ -23,7 +22,6 @@ case "${1:-}" in
   languages) language_capabilities present ;;
   github-output) language_capabilities github-output ;;
   codeql-matrix) language_capabilities codeql-matrix ;;
-  check-orphans) language_capabilities check-orphans ;;
   ""|-h|--help|help) usage ;;
   *)
     echo "Unknown command: $1" >&2

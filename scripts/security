@@ -8,13 +8,12 @@ cd "$repo_root"
 # shellcheck source=libs/detect.sh
 source "$repo_root/scripts/libs/detect.sh"
 
-orphans="$(language_capabilities check-orphans || true)"
-if [[ -n "$orphans" ]]; then
-  result detection FAIL "a package has no root manifest"
-  echo
-  echo "$orphans"
-  exit 1
-fi
+# Before the audit, which would run green over the package it cannot see.
+while IFS= read -r orphan; do
+  record "$orphan"
+done < <(detect_orphan_manifests)
+verdict detection "every package has a root manifest"
+tally || exit 1
 
 if language_capabilities has-any; then
   language_capabilities run audit || true

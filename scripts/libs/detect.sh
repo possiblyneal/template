@@ -242,20 +242,18 @@ has_npm_script() {
 # A nested manifest is not always named like the root one it belongs to: a Go
 # module is go.mod under a root go.work, and a Gradle project is build.gradle.kts
 # under a root settings.gradle.kts. Each pair is listed rather than assumed.
+#
+# One line per orphan on stdout, and exit 0 whether or not there were any:
+# each line is a finding for the caller to record under its own verdict, and
+# an empty list is that verdict's pass. No second channel carries the answer.
 _detect_orphan_report() {
   local nested="${1#./}" root="$2" noun="$3" fix="$4"
 
-  echo "Found $nested with no root $root."
-  echo
-  echo "  This repository's checks run from root workspace manifests, so this"
-  echo "  $noun is invisible to lint, test, and audit."
-  echo
-  echo "  Fix: $fix, or move the $noun under an existing workspace."
-  echo
+  echo "$nested has no root $root, so no check sees this $noun; $fix, or move it under an existing workspace"
 }
 
 detect_orphan_manifests() {
-  local lang root nested dir found=1
+  local lang root nested dir
 
   # language:nested manifest:root manifest:noun. Swift is absent deliberately:
   # it has no root manifest, so nested packages are how a Swift repository is
@@ -289,8 +287,6 @@ detect_orphan_manifests() {
       # without a workspace file, not a nested module missing one.
       [[ "$dir" != "." ]] || continue
 
-      found=0
-
       case "$lang" in
         go) _detect_orphan_report "$nested" "$root" "$noun" \
           "run 'go work init ./$dir' at the repository root" ;;
@@ -301,8 +297,6 @@ detect_orphan_manifests() {
       esac
     done < <(detect_find "$nested_name" -print)
   done
-
-  return "$found"
 }
 
 # The module's external interface is `language_capabilities` below. Everything
@@ -829,14 +823,6 @@ _language_capabilities_github_output() {
   if has_trivy_target; then echo "trivy=true"; else echo "trivy=false"; fi
 }
 
-_language_capabilities_check_orphans() {
-  local orphans
-  orphans="$(detect_orphan_manifests || true)"
-  [[ -n "$orphans" ]] || return 0
-  echo "$orphans"
-  return 1
-}
-
 _language_capabilities_codeql_matrix() {
   local lang entry language build_mode runner
   local -a entries=()
@@ -860,12 +846,11 @@ language_capabilities() {
     supported) printf '%s\n' "${DETECT_LANGUAGES[@]}" ;;
     present) detect_present_languages ;;
     has-any) has_any_manifest ;;
-    check-orphans) _language_capabilities_check_orphans ;;
     github-output) _language_capabilities_github_output ;;
     codeql-matrix) _language_capabilities_codeql_matrix ;;
     run) _language_capabilities_run "$@" ;;
     ""|-h|--help|help)
-      echo "Usage: language_capabilities supported|present|has-any|check-orphans|github-output|codeql-matrix|run"
+      echo "Usage: language_capabilities supported|present|has-any|github-output|codeql-matrix|run"
       ;;
     *) echo "Unknown language capabilities command: $command" >&2; return 2 ;;
   esac
