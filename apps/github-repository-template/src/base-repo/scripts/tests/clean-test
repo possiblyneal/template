@@ -14,17 +14,10 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=libs/harness.sh
 source "$repo_root/scripts/tests/libs/harness.sh"
 
-fixture() {
-  current="$1"
-  work="$(mktemp -d)"
-  cp -r "$repo_root/scripts" "$work/"
-}
-
-trap cleanup EXIT
-
 echo "clean-test"
 
-fixture "scripts/clean does not search inside a pruned directory"
+scratch_repo
+current="scripts/clean does not search inside a pruned directory"
 for dir in .venv venv vendor target .git node_modules .build; do
   mkdir -p "$work/$dir/__pycache__"
   : > "$work/$dir/__pycache__/marker.pyc"
@@ -39,9 +32,9 @@ if [[ -z "$missing" ]]; then
 else
   fail "scripts/clean deleted __pycache__ inside pruned dir(s):$missing"
 fi
-cleanup
 
-fixture "scripts/clean still removes this repository's own generated caches"
+scratch_repo
+current="scripts/clean still removes this repository's own generated caches"
 mkdir -p "$work/apps/a/dist" "$work/apps/a/__pycache__"
 : > "$work/apps/a/dist/bundle.js"
 : > "$work/apps/a/__pycache__/m.pyc"
@@ -51,6 +44,5 @@ if [[ ! -d "$work/apps/a/dist" && ! -d "$work/apps/a/__pycache__" ]]; then
 else
   fail "scripts/clean left a generated dist/ or __pycache__/ directory in place"
 fi
-cleanup
 
 report

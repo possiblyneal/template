@@ -16,7 +16,7 @@ source "$repo_root/scripts/tests/libs/harness.sh"
 script="$repo_root/scripts/protect-branch"
 
 # The script reads one environment variable and writes no files, so the fixture
-# is the variable. work stays empty and cleanup stays a no-op.
+# is the variable and no scratch repository is needed.
 run_with_destination() {
   if [[ "$1" == "unset" ]]; then
     env -u PRE_COMMIT_REMOTE_BRANCH "$script" 2>&1
