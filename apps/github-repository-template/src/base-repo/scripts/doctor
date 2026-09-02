@@ -13,26 +13,25 @@ source "$repo_root/scripts/libs/detect.sh"
 # shellcheck source=libs/precommit.sh
 source "$repo_root/scripts/libs/precommit.sh"
 
-missing=0
-
 check_required() {
   local tool="$1"
 
   if command -v "$tool" >/dev/null 2>&1; then
-    echo "ok: $tool"
+    result "$tool" pass "$(command -v "$tool")"
   else
-    echo "missing: $tool"
-    missing=1
+    result "$tool" unavailable "not on PATH"
   fi
 }
 
+# An optional tool that is absent is not-applicable rather than unavailable:
+# nothing here fails for the lack of it, and the detail says what it would add.
 check_optional() {
-  local tool="$1"
+  local tool="$1" absent="$2"
 
   if command -v "$tool" >/dev/null 2>&1; then
-    echo "ok: $tool"
+    result "$tool" pass "$(command -v "$tool")"
   else
-    echo "optional missing: $tool"
+    result "$tool" not-applicable "$absent"
   fi
 }
 
@@ -49,34 +48,23 @@ check_required bash
 # keeps doctor off GitHub state.
 check_required gh
 
-# Language toolchains are private adapters in the capabilities module. Doctor
-# treats unavailable as a missing required tool without knowing its command.
-toolchain_status=0
-language_capabilities run toolchain || toolchain_status=$?
-if (( toolchain_status != 0 )); then
-  missing=1
-fi
-
-if (( toolchain_status == NO_RUNNER )); then
-  echo "Install each missing toolchain, then rerun scripts/doctor."
-elif (( toolchain_status != 0 )); then
-  echo "A language toolchain check failed."
-fi
+# Language toolchains are private adapters in the capabilities module, which
+# reports each missing one as unavailable without doctor knowing its command.
+language_capabilities run toolchain || true
 
 # A package nested under apps/ or libs/ whose language has no root manifest is
 # invisible to every check, so its toolchain goes unreported here too.
 orphans="$(language_capabilities check-orphans || true)"
 if [[ -n "$orphans" ]]; then
-  echo
+  result detection FAIL "a package has no root manifest"
   echo "$orphans"
-  missing=1
 fi
 
 # -print -quit rather than a pipe into `grep -q`: grep exits at its first match
 # and closes the pipe, so find dies of SIGPIPE and pipefail reports 141, which
 # reads as "no container files" and silently skips the check.
 if [[ -n "$(detect_find Dockerfile -print -quit)$(detect_find compose.yml -print -quit)$(detect_find docker-compose.yml -print -quit)" ]]; then
-  check_optional docker
+  check_optional docker "not on PATH; the container files here are built with it"
 fi
 
 # A pre-commit config does nothing until `pre-commit install` writes a hook
@@ -91,21 +79,16 @@ fi
 # that list and answers which hooks this clone is missing.
 if [[ -s .pre-commit-config.yaml ]]; then
   if ! command -v pre-commit >/dev/null 2>&1; then
-    echo "missing: pre-commit (.pre-commit-config.yaml is present but the tool is not installed)"
-    echo "  Install it, then run: pre-commit install"
-    missing=1
+    result pre-commit unavailable ".pre-commit-config.yaml is present but the tool is not installed; install it, then run: pre-commit install"
   else
     uninstalled="$(pre_commit_hooks_missing .pre-commit-config.yaml)"
 
     if [[ -n "$uninstalled" ]]; then
       while IFS= read -r hook_type; do
-        echo "missing: $hook_type hook (installed tool, but no $hook_type hook in this clone)"
+        record "no $hook_type hook in this clone; run: pre-commit install"
       done <<<"$uninstalled"
-      echo "  Run: pre-commit install"
-      missing=1
-    else
-      echo "ok: pre-commit"
     fi
+    verdict pre-commit "every configured hook is installed"
   fi
 fi
 
@@ -131,9 +114,9 @@ if [[ -n "$needs_jq" ]]; then
   check_required jq
 fi
 
-if [[ "$missing" -ne 0 ]]; then
-  echo "Required tools missing. Install them, then rerun scripts/doctor."
+if tally; then
+  echo "Environment checks passed. Add project-specific checks to scripts/doctor."
+else
+  echo "Fix what is reported above, then rerun scripts/doctor."
   exit 1
 fi
-
-echo "Environment checks passed. Add project-specific checks to scripts/doctor."

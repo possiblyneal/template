@@ -166,6 +166,8 @@ fi
 # this dist/ under the clearing, and the clearing runs before the dispatch -- so
 # a module with no main package produces no file whether or not go is installed,
 # and the first assertion below decides the case before the rest can differ.
+# Packaging then reports the unit unavailable and the release stops there, one
+# step short of the walk's own guard.
 fixture "a binary from an earlier build does not reach the release"
 declare_unit tool none executable linux-amd64
 printf 'module example.com/tool\n\ngo 1.22\n' > "$work/apps/tool/go.mod"
@@ -177,8 +179,8 @@ if [[ -e "$work/apps/tool/dist/tool-linux-amd64" ]]; then
   fail "a file from an earlier build survived the release's packaging step: $out"
 elif (( status == 0 )); then
   fail "a release survived a unit whose only file was from an earlier build: $out"
-elif ! grep -q 'produced no file' <<< "$out"; then
-  fail "the release stopped somewhere other than the walk's guard: $out"
+elif ! grep -qE '^package +unavailable +go' <<< "$out"; then
+  fail "the release stopped somewhere other than packaging: $out"
 elif [[ -e "$work/gh-called" ]]; then
   fail "gh was called with a binary from an earlier build: $(cat "$work/gh-called")"
 else

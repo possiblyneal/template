@@ -22,6 +22,12 @@
 # a detection function reads as "absent" — the one wrong answer that is silent
 # rather than loud.
 
+# Every result line here goes through the result library, so a caller that
+# sources this file has the layout and the tally without sourcing it twice.
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=result.sh
+source "$(dirname "${BASH_SOURCE[0]}")/result.sh"
+
 # The single place the supported set is written down. Callers iterate this
 # rather than keeping their own list.
 DETECT_LANGUAGES=(node python go rust swift kotlin)
@@ -723,10 +729,6 @@ _language_is_supported() {
   return 1
 }
 
-_capability_result() {
-  printf '%-14s %s %s\n' "$1" "$2" "$3"
-}
-
 _language_capabilities_run() {
   local dry_run="" selected="" cap lang function status
   local failed=0 unavailable=0
@@ -763,38 +765,44 @@ _language_capabilities_run() {
   for cap in "${capabilities[@]}"; do
     for lang in "${languages[@]}"; do
       if _capability_is_not_applicable "$cap" "$lang"; then
-        _capability_result not-applicable "$cap" "$lang"
+        result "$cap" not-applicable "$lang"
         continue
       fi
 
       function="_capability_${cap//-/_}_${lang}"
       if ! declare -F "$function" >/dev/null; then
-        _capability_result unavailable "$cap" "$lang"
+        result "$cap" unavailable "$lang"
         unavailable=1
         continue
       fi
 
       if [[ -n "$dry_run" ]]; then
-        _capability_result would-run "$cap" "$lang"
+        result "$cap" would-run "$lang"
         continue
       fi
 
       status=0
       "$function" || status=$?
       case "$status" in
-        0) _capability_result pass "$cap" "$lang" ;;
+        0) result "$cap" pass "$lang" ;;
         "$NO_RUNNER")
-          _capability_result unavailable "$cap" "$lang"
+          result "$cap" unavailable "$lang"
           unavailable=1
           ;;
         *)
-          _capability_result "FAIL (exit $status)" "$cap" "$lang"
+          result "$cap" FAIL "$lang (exit $status)"
           failed=1
           ;;
       esac
     done
   done
 
+  # Said once, here, rather than decoded from the return value by each caller.
+  # The return value stays as it was for the callers inside this library; a
+  # command reads the outcome from the tally, which saw every line above.
+  if (( unavailable )); then
+    echo "Install the tool behind each unavailable line, or add its private adapter to scripts/libs/detect.sh."
+  fi
   (( failed == 0 )) || return 1
   (( unavailable == 0 )) || return "$NO_RUNNER"
   return 0

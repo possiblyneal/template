@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+# One assertion per command that ends with the result library's tally: an
+# unavailable line is a failing exit. Each fixture is a Node package naming no
+# script and no bin, so every Node adapter answers NO_RUNNER and the line is
+# unavailable rather than FAIL -- the outcome that used to be decoded from a
+# return value by each command, and by two of them into a green exit.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/harness.sh
+source "$repo_root/scripts/tests/libs/harness.sh"
+
+fixture() {
+  scratch_repo
+  current="$1"
+}
+
+# Present, and with nothing any adapter can run. Holds whether or not node is
+# installed: without it the script lookup fails the same way.
+bare_package() {
+  mkdir -p "$1"
+  printf '{"name":"n","version":"1.0.0"}\n' > "$1/package.json"
+}
+
+# Asserts a command exited non-zero and printed the named pair as unavailable.
+assert_unavailable() {
+  local status="$1" line="$2" out="$3"
+  if (( status != 0 )) && grep -qE "^$line$" <<< "$out"; then
+    pass
+  else
+    fail "wanted '$line' and a failing exit, got exit $status: $out"
+  fi
+}
+
+echo "result-gate-test"
+
+fixture "ci fails on an unavailable capability"
+bare_package "$work"
+out="$(cd "$work" && scripts/ci 2>&1)"
+assert_unavailable $? 'lint +unavailable +node' "$out"
+
+fixture "fix fails on a language with no formatter"
+bare_package "$work"
+out="$(cd "$work" && scripts/fix 2>&1)"
+assert_unavailable $? 'format-write +unavailable +node' "$out"
+
+# doctor's PATH holds what doctor itself needs and not npm, so the toolchain
+# line is the one that cannot pass.
+fixture "doctor fails on a missing toolchain"
+bare_package "$work"
+for tool in bash git dirname basename find sort sed awk grep gh; do
+  command -v "$tool" > /dev/null 2>&1 && ln -s "$(command -v "$tool")" "$work/bin/$tool"
+done
+out="$(cd "$work" && PATH="$work/bin" scripts/doctor 2>&1)"
+assert_unavailable $? 'toolchain +unavailable +node' "$out"
+
+# run checks the environment first, so the workspace root keeps the unit from
+# being an orphan and a stub npm keeps the toolchain line passing on any host.
+fixture "run fails on a unit with no run adapter"
+declare_unit web oneshot executable linux-amd64
+bare_package "$work/apps/web"
+printf '{"name":"n","version":"1.0.0","workspaces":["apps/*"]}\n' > "$work/package.json"
+stub npm <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+out="$(cd "$work" && scripts/run 2>&1)"
+assert_unavailable $? 'run +unavailable +node' "$out"
+
+fixture "package fails on a language with no package adapter"
+declare_unit web oneshot executable linux-amd64
+bare_package "$work/apps/web"
+out="$(cd "$work" && scripts/package 2>&1)"
+assert_unavailable $? 'package +unavailable +node' "$out"
+
+report

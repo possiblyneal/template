@@ -68,10 +68,5 @@ fi
 args=(--language "${languages[0]}")
 [[ -z "${CI_DRY_RUN:-}" ]] || args+=(--dry-run)
 
-status=0
-language_capabilities run "${args[@]}" run || status=$?
-case "$status" in
-  0) ;;
-  "$NO_RUNNER") echo "No run command configured for ${languages[0]}. Add its private adapter to scripts/libs/detect.sh." ;;
-  *) exit "$status" ;;
-esac
+language_capabilities run "${args[@]}" run || true
+tally

@@ -77,10 +77,5 @@ fi
 args=(package)
 [[ -z "${CI_DRY_RUN:-}" ]] || args=(--dry-run package)
 
-status=0
-language_capabilities run "${args[@]}" || status=$?
-case "$status" in
-  0) ;;
-  "$NO_RUNNER") echo "No package command configured for: ${languages[*]}. Add the private adapter to scripts/libs/detect.sh." ;;
-  *) exit "$status" ;;
-esac
+language_capabilities run "${args[@]}" || true
+tally

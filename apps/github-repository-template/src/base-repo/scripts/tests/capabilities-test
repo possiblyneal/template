@@ -47,7 +47,7 @@ assert_dispatches() {
         ;;
     esac
 
-    if ! grep -qE "^${expected} +$check $lang$" <<<"$out"; then
+    if ! grep -qE "^$check +${expected} +$lang$" <<<"$out"; then
       fail "$check does not report $expected for $lang"
       return
     fi
@@ -63,7 +63,7 @@ assert_dispatches_delivery() {
   local lang="$1" check out
   out="$(language_capabilities run --dry-run run package)"
   for check in run package; do
-    if ! grep -qE "^would-run +$check $lang$" <<<"$out"; then
+    if ! grep -qE "^$check +would-run +$lang$" <<<"$out"; then
       fail "$check does not dispatch for $lang"
       return
     fi
@@ -102,8 +102,8 @@ printf 'module example.com/m\n\ngo 1.22\n' > go.mod
 out="$(language_capabilities run --dry-run lint typecheck)"
 status=$?
 if (( status == 0 )) &&
-  grep -qx "would-run      lint go" <<<"$out" &&
-  grep -qx "not-applicable typecheck go" <<<"$out"; then
+  grep -qE '^lint +would-run +go$' <<<"$out" &&
+  grep -qE '^typecheck +not-applicable +go$' <<<"$out"; then
   pass
 else
   fail "the interface does not distinguish runnable and inapplicable capabilities"
@@ -243,7 +243,7 @@ fixture "swift audit with no Package.resolved is not-applicable"
 mkdir -p apps/ios
 printf '// swift-tools-version:5.9\n' > apps/ios/Package.swift
 out="$(language_capabilities run --dry-run audit 2>&1)"
-if grep -qE '^not-applicable +audit swift$' <<<"$out"; then
+if grep -qE '^audit +not-applicable +swift$' <<<"$out"; then
   pass
 else
   fail "a Swift package with no Package.resolved reports audit as unavailable instead of not-applicable"
@@ -253,7 +253,7 @@ cleanup
 fixture "kotlin audit with no gradle.lockfile is not-applicable"
 printf 'rootProject.name = "k"\n' > settings.gradle.kts
 out="$(language_capabilities run --dry-run audit 2>&1)"
-if grep -qE '^not-applicable +audit kotlin$' <<<"$out"; then
+if grep -qE '^audit +not-applicable +kotlin$' <<<"$out"; then
   pass
 else
   fail "a Gradle project with no gradle.lockfile reports audit as unavailable instead of not-applicable"
@@ -774,7 +774,7 @@ fixture "unavailable capability"
 printf '{"name":"n","version":"1.0.0"}\n' > package.json
 out="$(language_capabilities run lint 2>&1)"
 status=$?
-if (( status == NO_RUNNER )) && grep -qE '^unavailable +lint node$' <<<"$out"; then
+if (( status == NO_RUNNER )) && grep -qE '^lint +unavailable +node$' <<<"$out"; then
   pass
 else
   fail "an absent runner is not reported as unavailable with the sentinel status"
@@ -796,8 +796,8 @@ chmod +x bin/uv
 out="$(PATH="$PWD/bin:$PATH" language_capabilities run lint 2>&1)"
 status=$?
 if (( status == 1 )) &&
-  grep -qE '^FAIL \(exit 7\) +lint node$' <<<"$out" &&
-  grep -qE '^pass +lint python$' <<<"$out"; then
+  grep -qE '^lint +FAIL +node \(exit 7\)$' <<<"$out" &&
+  grep -qE '^lint +pass +python$' <<<"$out"; then
   pass
 else
   fail "a failed adapter hides a later language or returns the wrong aggregate status"

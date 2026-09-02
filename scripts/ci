@@ -24,18 +24,8 @@ fi
 
 args=()
 [[ -z "${CI_DRY_RUN:-}" ]] || args+=(--dry-run)
-status=0
-language_capabilities run "${args[@]}" lint format-check typecheck test build || status=$?
+language_capabilities run "${args[@]}" lint format-check typecheck test build || true
 
 [[ -z "${CI_DRY_RUN:-}" ]] || exit 0
 
-case "$status" in
-  0) ;;
-  "$NO_RUNNER")
-    echo
-    echo "One or more required capabilities are unavailable."
-    echo "Install the missing tool or add its private language adapter to scripts/libs/detect.sh."
-    exit 1
-    ;;
-  *) exit "$status" ;;
-esac
+tally

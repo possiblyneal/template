@@ -16,17 +16,20 @@
 # FAIL, indented 21 spaces, so a finding is any line starting with whitespace.
 # A state is one of pass, not-applicable, unavailable, or FAIL and nothing
 # else: a check that did not run is not a check that passed, so unavailable
-# fails the tally the same as FAIL does.
+# fails the tally the same as FAIL does. One more word is accepted in the
+# state column and is not a state: would-run, the dry-run marker for a check
+# that was wired and not executed. It counts as neither, and prints in the
+# same layout so a dry run reads like the run it stands in for.
 
 result_failed=0
 
 # One line: result <check> <state> <detail>.
 result() {
   case "$2" in
-    pass | not-applicable) ;;
+    pass | not-applicable | would-run) ;;
     unavailable | FAIL) result_failed=1 ;;
     *)
-      echo "result: '$2' is not a Result state (pass, not-applicable, unavailable, FAIL)" >&2
+      echo "result: '$2' is not a Result state (pass, not-applicable, unavailable, FAIL, or would-run in a dry run)" >&2
       return 1
       ;;
   esac

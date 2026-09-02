@@ -60,7 +60,7 @@ fixture "one unit needs no name"
 declare_unit only oneshot
 go_mod only
 out="$(run_in scripts/run)"
-if grep -qE '^would-run +run go$' <<< "$out"; then
+if grep -qE '^run +would-run +go$' <<< "$out"; then
   pass
 else
   fail "a lone unit was not resolved without being named: $out"
@@ -135,7 +135,7 @@ fixture "a declared executable reaches the package adapter"
 declare_unit tool oneshot executable linux-amd64
 go_mod tool
 out="$(run_in scripts/package tool)"
-if grep -qE '^would-run +package go$' <<< "$out"; then
+if grep -qE '^package +would-run +go$' <<< "$out"; then
   pass
 else
   fail "a unit shipping an executable did not dispatch package: $out"
@@ -151,8 +151,8 @@ fi
 #
 # Go is present here by its manifest alone, and the clearing runs before the
 # dispatch, so this case sees the clearing whether or not a Go toolchain is
-# installed: without one the adapter reports no runner and packaging still
-# exits 0.
+# installed: a module with no main package is unavailable to package either
+# way, and the exit is the failing one, but dist/ was emptied first.
 fixture "packaging clears a file an earlier build left"
 declare_unit tool oneshot executable linux-amd64
 go_mod tool
@@ -160,10 +160,10 @@ mkdir -p "$work/apps/tool/dist"
 printf 'stale\n' > "$work/apps/tool/dist/tool-linux-amd64"
 out="$(run_real scripts/package tool)"
 status=$?
-if (( status != 0 )); then
-  fail "packaging a unit that ships an executable failed (exit $status): $out"
-elif [[ -e "$work/apps/tool/dist/tool-linux-amd64" ]]; then
+if [[ -e "$work/apps/tool/dist/tool-linux-amd64" ]]; then
   fail "a file from an earlier build survived packaging: $out"
+elif (( status == 0 )) || ! grep -qE '^package +unavailable +go' <<< "$out"; then
+  fail "a unit with nothing to build did not report unavailable (exit $status): $out"
 else
   pass
 fi
@@ -175,7 +175,9 @@ fi
 # than it started with and abort the release the clearing exists to protect.
 #
 # Node needs no toolchain to reach this: package.json alone makes the language
-# present, and its packaging adapter is dispatched and reports no runner.
+# present, and its packaging adapter is dispatched and reports unavailable. The
+# exit is the failing one, since a unit that promised an executable got none,
+# and the file the unit's own build wrote is still there.
 fixture "a language that packages nothing keeps its dist/"
 declare_unit tscli oneshot executable linux-amd64
 mkdir -p "$work/apps/tscli/dist"
@@ -184,12 +186,12 @@ printf '{"name": "tscli", "version": "1.0.0", "bin": "./dist/cli.js"}\n' \
 printf 'built\n' > "$work/apps/tscli/dist/cli.js"
 out="$(run_real scripts/package tscli)"
 status=$?
-if (( status != 0 )); then
-  fail "packaging a unit whose language has no adapter failed (exit $status): $out"
-elif [[ -f "$work/apps/tscli/dist/cli.js" ]]; then
-  pass
-else
+if [[ ! -f "$work/apps/tscli/dist/cli.js" ]]; then
   fail "packaging deleted a build it cannot replace: $out"
+elif (( status == 0 )) || ! grep -qE '^package +unavailable +node' <<< "$out"; then
+  fail "a language with no adapter did not report unavailable (exit $status): $out"
+else
+  pass
 fi
 
 # A dry run reports what would be dispatched and runs nothing. Deleting the last
