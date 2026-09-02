@@ -29,24 +29,24 @@ A helper that must be built before it runs belongs in `tools/`, not here.
 ## Local Contracts
 
 - **`libs/detect.sh` owns every language decision.** Commands name a capability, never an adapter; `DETECT_LANGUAGES` and `DETECT_PRUNE_DIRS` are the lists.
-- **The orphan rule tests the exact root manifest, not language presence.** `detect_orphan_manifests` prints one per orphan; `judge_orphan_manifests` records them and stops `ci` and `security`.
-- **A check that did not run is not a check that passed.** `unavailable` fails the run when the check was expected; a Kotlin or Swift audit without a lockfile and the secret scan without gitleaks are `not-applicable`.
-- **`libs/result.sh` owns how a check reports; its printed layout is an interface.** `result` refuses a fifth state, `record` dedups, `tally` is a command's last line and its exit status; `would-run` is a marker, not a state.
-- **A check owns no stdin.** The dispatch closes fd 0 for every capability but `run`, so a stdin-draining tool cannot hang it; the `*_each` helpers take their list on fd 3, and pipes end in a variable, never a reader that exits early, since `pipefail` turns SIGPIPE into 141.
+- **The orphan rule tests the exact root manifest, not language presence.** `detect_orphan_manifests` prints a line per orphan; `judge_orphan_manifests` records them and stops `ci` and `security`.
+- **A check that did not run is not a check that passed.** `unavailable` fails the run whenever the check was expected; a Kotlin or Swift audit without a lockfile and the secret scan without gitleaks are `not-applicable`.
+- **`libs/result.sh` owns how a check reports, and its printed layout is an interface.** `result` refuses a fifth state, `record` dedups, `tally` is a command's last line and its exit status. `would-run` is a marker, not a state.
+- **A check owns no stdin.** The dispatch closes fd 0 for every capability but `run`, so a stdin-draining tool cannot hang it; the `*_each` helpers take their list on fd 3, and pipes end in a variable, never a reader that exits early, since `pipefail` turns SIGPIPE into 141, read as absent.
 - **Four runners exit non-zero without a real failure and are translated**: pytest on no tests, npm's placeholder test, `uv run` on a missing tool, `uv audit` on an older uv.
 - **Go capabilities run once per module** through `go_each`, which fails on an empty `go list -m`; gofmt stays at the root. `_go_main_packages` yields one program, `NO_RUNNER`, or a refusal.
-- **An adapter is honest about what it did.** Capture the exit status, not only the output. No function stands in for an absent one: the probe reads `absent` off the function table, the dispatch reports `unavailable`, and `NO_RUNNER` never leaves it. Node's `run` refuses a missing `bin`.
-- **`libs/*.sh` and `harness.sh` are sourced, never executed** — no shebang, no executable bit, `.sh`. every other is extensionless and executable, since pre-commit reads a shebang only on one.
+- **An adapter is honest about what it did.** Capture the tool's exit status, not only its output. No function stands in for an absent one: the probe reads `absent` off the function table, the dispatch reports `unavailable`, and `NO_RUNNER` never leaves it. Node's `run` refuses a missing `bin`.
+- **`libs/*.sh` and `harness.sh` are sourced, never executed** — no shebang, no executable bit, `.sh`. Every other script is extensionless and executable; pre-commit reads a shebang only on one.
 - **`harness.sh` owns the counting and the primitives**: `scratch_repo`, `fixture`, `declare_unit`, `quadlet_pair`, `stub`, `minimal_path`, `skip`. No suite changes directory; `report` fails a suite that passed nothing and skipped something.
-- **`libs/precommit.sh` owns which git hooks are owed, and parses `default_install_hook_types`: three valid YAML forms.** `adr-index` and `structure` are hooks, not capabilities, and run `always_run` with no `files:` filter, since staged paths exclude deletions.
+- **`libs/precommit.sh` owns which git hooks are owed, and parses `default_install_hook_types` rather than grepping: three valid YAML forms.** `adr-index` and `structure` are hooks, not capabilities, and run `always_run` with no `files:` filter, since staged paths exclude deletions.
 - **`structure` holds the layout rules as code**; the only file it opens is a `.unit.json`. Depth stops at the first `src/`; a domain is its `src/`, not its name. It enumerates with `git ls-files`, needs `jq`, and reports the three content rules `not-applicable`.
-- **`run` and `package` take their context as globals** from `libs/unit.sh`. `package` clears `dist/` before dispatch, only where `packaging_writes_dist` and never on a dry run, so a stale binary cannot pass `release`'s output guard.
+- **`run` and `package` take their context as globals** from `libs/unit.sh`. `package` clears `dist/` before dispatch, only where `packaging_writes_dist` and never on a dry run, so a stale binary cannot satisfy `release`'s output guard.
 - **`release` is the only script here that writes to GitHub.** Changelog section or generated notes, never both; it packages first, checks an `executable` unit produced a file, and runs `ci`.
-- **`changelog-check` validates only the paths it is given, at `pre-push`** — form, not whether one was owed; CI re-runs it over the PR range.
-- **`protect-branch` reads the push destination, not the current branch**; silent when unset.
+- **`changelog-check` validates only the paths it is given, at `pre-push`** — form, not whether an entry was owed; CI re-runs it over the PR range.
+- **`protect-branch` reads the push destination, not the current branch**, and is silent when unset.
 - **`worktree-cleanup` prunes metadata, never a directory**, and reads only `--report`.
 - **`check` globs tests with `nullglob` and sweeps untracked files in a second pass by path**, which `--all-files` cannot see.
-- **Local commands stay off hosted GitHub state**; only `repo-settings check` crosses it. The boundary is hosted state, not connectivity.
+- **Local commands stay off hosted GitHub state** — the boundary is hosted state, not connectivity, and only `repo-settings check` crosses it.
 - **`repo-settings` reports and never changes**, since a ruleset write replaces rather than merges. One fetch, then judgments off it: preflight absences stop green, a plan 403 is `not-applicable` and any other refusal `unavailable`, CODEOWNERS above the admin gate.
 
 ## Work Guidance

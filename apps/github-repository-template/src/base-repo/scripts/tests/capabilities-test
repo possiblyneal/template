@@ -392,12 +392,16 @@ stub swift <<'STUB'
 STUB
 out="$(cd "$work" && MARKER="$work/read" scripts/ci 2>&1 <<<"the caller's stdin")"
 status=$?
+# One line per call, each the byte count that call read, so a fixture that later
+# holds two packages still reads as two answers rather than as one number.
 if (( status != 0 )); then
   fail "the gate failed though the stubbed swift call succeeded (exit $status): $out"
-elif [[ "$(tr -dc '0-9' < "$work/read")" == 0 ]]; then
+elif [[ ! -s "$work/read" ]]; then
+  fail "swift test never ran, so the case proved nothing: $out"
+elif ! grep -qvE '^ *0$' "$work/read"; then
   pass
 else
-  fail "swift test read $(tr -dc '0-9' < "$work/read") bytes of the gate's own stdin"
+  fail "swift test read $(tr -s ' \n' ' ' < "$work/read")bytes of the gate's own stdin"
 fi
 
 # run is the exception and has to stay one: it starts the unit's own program in
