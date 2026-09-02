@@ -341,6 +341,45 @@ else
   fail "a build using the working directory was rejected (exit $status): $out"
 fi
 
+fixture "a .build naming no ImageTag is refused"
+declare_unit svc longlived quadlet
+go_mod svc
+quadlet_pair svc
+printf '[Build]\nFile=./Containerfile\n' > "$work/apps/svc/deploy/quadlet/svc.build"
+out="$(run_in scripts/package svc)"
+status=$?
+if (( status != 0 )) && grep -q 'names no ImageTag' <<< "$out"; then
+  pass
+else
+  fail "a build producing no image was not refused (exit $status): $out"
+fi
+
+fixture "a .build naming neither File nor SetWorkingDirectory is refused"
+declare_unit svc longlived quadlet
+go_mod svc
+quadlet_pair svc
+printf '[Build]\nImageTag=localhost/svc:latest\n' > "$work/apps/svc/deploy/quadlet/svc.build"
+out="$(run_in scripts/package svc)"
+status=$?
+if (( status != 0 )) && grep -q 'neither File nor SetWorkingDirectory' <<< "$out"; then
+  pass
+else
+  fail "a build with no Containerfile to read was not refused (exit $status): $out"
+fi
+
+fixture "a .container naming no Image is refused"
+declare_unit svc longlived quadlet
+go_mod svc
+quadlet_pair svc
+printf '[Container]\n' > "$work/apps/svc/deploy/quadlet/svc.container"
+out="$(run_in scripts/package svc)"
+status=$?
+if (( status != 0 )) && grep -q 'names no Image' <<< "$out"; then
+  pass
+else
+  fail "a container running nothing was not refused (exit $status): $out"
+fi
+
 # --- what reaches the program ------------------------------------------------
 
 # The program's flags and this script's own must not compete for the same
