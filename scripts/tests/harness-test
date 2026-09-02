@@ -3,7 +3,7 @@ set -uo pipefail
 
 # The harness is the one module here whose defect no other suite can see: a
 # report that reads green over a run that verified nothing is exactly what the
-# other twelve trust it not to do. So each case writes a small suite that
+# other fifteen trust it not to do. So each case writes a small suite that
 # sources the harness, runs it as a process, and asserts on what a caller of
 # scripts/check would see -- the tally line and the exit status -- plus what
 # it leaves behind on disk.

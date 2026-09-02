@@ -1,0 +1,283 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+# scripts/repo-settings check, seen through the command line a person runs.
+# gh is a stub answering from files: one per endpoint under $GH_FIXTURES/api,
+# an absent file meaning the endpoint cannot be read. Nothing here reaches the
+# network, and every judgment is asserted on the result line it prints, since
+# the layout is a contract and this is the suite that holds it to one.
+#
+# Not `set -e`: a failing assertion is recorded and the remaining cases still
+# run, so one break does not hide the rest.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/harness.sh
+source "$repo_root/scripts/tests/libs/harness.sh"
+
+fixture() {
+  scratch_repo
+  current="$1"
+  mkdir -p "$work/gh/api"
+  stub gh <<'STUB'
+#!/usr/bin/env bash
+# Every call is recorded; the answer comes from a file, or there is none.
+printf '%s\n' "$*" >> "${GH_FIXTURES:?}/calls"
+case "$1 $2" in
+  "auth status") [[ -e "$GH_FIXTURES/authed" ]] ;;
+  "repo view") [[ -e "$GH_FIXTURES/remote" ]] && cat "$GH_FIXTURES/remote" ;;
+  "api "*) [[ -e "$GH_FIXTURES/api/${2//[\/?=]/_}" ]] && cat "$GH_FIXTURES/api/${2//[\/?=]/_}" ;;
+  *) exit 1 ;;
+esac
+STUB
+}
+
+authed() {
+  touch "$work/gh/authed"
+}
+
+remote() {
+  authed
+  printf 'o/r\n' > "$work/gh/remote"
+}
+
+# endpoint <path> with the body on stdin: what `gh api <path>` answers.
+endpoint() {
+  cat > "$work/gh/api/${1//[\/?=]/_}"
+}
+
+# repository <admin> [json fields...]: the repos/o/r view, every merge setting
+# at the value the template wants, plus whatever a case overrides.
+repository() {
+  local admin="$1"
+  shift
+  endpoint repos/o/r <<EOF_JSON
+{"default_branch": "main", "permissions": {"admin": $admin},
+ "allow_merge_commit": true, "allow_squash_merge": false,
+ "allow_rebase_merge": false, "delete_branch_on_merge": true${*:+$(printf ', %s' "$@")}}
+EOF_JSON
+}
+
+check() {
+  (cd "$work" && GH_FIXTURES="$work/gh" scripts/repo-settings check 2>&1)
+}
+
+assert_line() {
+  if grep -qE "$1" <<<"$out"; then
+    pass
+  else
+    fail "wanted '$1' in: $out"
+  fi
+}
+
+# The output line a pattern first matches, for the ordering cases.
+line_of() {
+  grep -nE "$1" <<<"$out" | head -n 1 | cut -d: -f1
+}
+
+echo "repo-settings-test"
+
+if ! command -v jq > /dev/null 2>&1; then
+  skip "jq is not installed"
+  report
+  exit
+fi
+
+# The preflight. Each absence is optional and ends the run green, and the
+# remote's settings are never asked for past it.
+fixture "an unauthenticated gh is optional and stops the run"
+out="$(check)"
+status=$?
+if (( status == 0 )) && grep -qx 'auth status' "$work/gh/calls" && ! grep -q '^api' "$work/gh/calls"; then
+  assert_line '^gh-auth +not-applicable +not logged in'
+else
+  fail "exit $status, calls: $(cat "$work/gh/calls")"
+fi
+
+fixture "no GitHub remote is optional and stops the run"
+authed
+out="$(check)"
+status=$?
+if (( status == 0 )) && ! grep -q '^api' "$work/gh/calls"; then
+  assert_line '^remote +not-applicable'
+else
+  fail "exit $status, calls: $(cat "$work/gh/calls")"
+fi
+
+# Past the preflight, what cannot be read is unavailable and fails the tally.
+fixture "settings the token cannot read are unavailable"
+remote
+out="$(check)"
+status=$?
+if (( status != 0 )); then
+  assert_line "^settings +unavailable +o/r's settings cannot be read"
+else
+  fail "exit 0 over unreadable settings: $out"
+fi
+
+fixture "an absent CODEOWNERS file passes"
+remote
+repository true
+out="$(check)"
+assert_line '^codeowners +pass +no CODEOWNERS file on main'
+
+fixture "a CODEOWNERS line GitHub rejects is a finding"
+remote
+repository true
+endpoint 'repos/o/r/codeowners/errors?ref=main' <<'JSON'
+{"errors": [{"path": "CODEOWNERS", "line": 3, "column": 1, "kind": "Unknown owner", "message": "@o/nobody does not exist"}]}
+JSON
+out="$(check)"
+status=$?
+if (( status != 0 )) && grep -qE '^codeowners +FAIL +1 violation' <<<"$out"; then
+  assert_line '^ +CODEOWNERS:3:1 Unknown owner -- @o/nobody does not exist'
+else
+  fail "exit $status: $out"
+fi
+
+# Whether the file is binding, in each of the ways it can be answered.
+fixture "code owner review is unavailable where branch rules are not offered"
+remote
+repository true
+endpoint 'repos/o/r/codeowners/errors?ref=main' <<<'{"errors": []}'
+out="$(check)"
+status=$?
+if (( status != 0 )); then
+  assert_line '^owner-review +unavailable +whether main requires code owner review is not offered'
+else
+  fail "exit 0 over an unreadable review requirement: $out"
+fi
+
+fixture "a ruleset requiring code owner review passes"
+remote
+repository false
+endpoint 'repos/o/r/codeowners/errors?ref=main' <<<'{"errors": []}'
+endpoint repos/o/r/rules/branches/main <<<'[{"type": "pull_request", "parameters": {"require_code_owner_review": true}}]'
+out="$(check)"
+assert_line '^owner-review +pass +required on main by a ruleset'
+
+fixture "a non-admin cannot read classic branch protection"
+remote
+repository false
+endpoint 'repos/o/r/codeowners/errors?ref=main' <<<'{"errors": []}'
+endpoint repos/o/r/rules/branches/main <<<'[]'
+out="$(check)"
+assert_line '^owner-review +unavailable +no ruleset requires it on main, and reading classic branch protection needs admin'
+
+fixture "classic branch protection requiring code owner review passes"
+remote
+repository true
+endpoint 'repos/o/r/codeowners/errors?ref=main' <<<'{"errors": []}'
+endpoint repos/o/r/rules/branches/main <<<'[]'
+endpoint repos/o/r/branches/main/protection <<<'{"required_pull_request_reviews": {"require_code_owner_reviews": true}}'
+out="$(check)"
+assert_line '^owner-review +pass +required on main by classic branch protection'
+
+fixture "code owner review required nowhere is optional"
+remote
+repository true
+endpoint 'repos/o/r/codeowners/errors?ref=main' <<<'{"errors": []}'
+endpoint repos/o/r/rules/branches/main <<<'[]'
+out="$(check)"
+assert_line '^owner-review +not-applicable +not required on main'
+
+# The admin gate, and that CODEOWNERS is judged above it.
+fixture "a non-admin is told the settings need admin, after CODEOWNERS"
+remote
+repository false
+out="$(check)"
+status=$?
+if (( status == 0 )); then
+  fail "exit 0 over settings a non-admin cannot read: $out"
+elif grep -qE '^merge-commits' <<<"$out"; then
+  fail "a merge setting was judged from a token that cannot read it: $out"
+elif [[ -z "$(line_of '^codeowners +pass')" || -z "$(line_of '^admin +unavailable')" ]]; then
+  fail "codeowners or admin line missing: $out"
+elif (( $(line_of '^codeowners +pass') < $(line_of '^admin +unavailable') )); then
+  pass
+else
+  fail "CODEOWNERS was judged below the admin gate: $out"
+fi
+
+# Each boolean, at the value the template wants and at the other one.
+fixture "every merge setting at its wanted value passes"
+remote
+repository true
+out="$(check)"
+status=$?
+current="merge commits allowed pass"
+assert_line '^merge-commits +pass +allow_merge_commit is true'
+current="squash merging off passes"
+assert_line '^squash-merging +pass +allow_squash_merge is false'
+current="rebase merging off passes"
+assert_line '^rebase-merging +pass +allow_rebase_merge is false'
+current="head branch deletion on passes"
+assert_line '^delete-branches +pass +delete_branch_on_merge is true'
+current="merge commits are judged before squash and rebase"
+if (( $(line_of '^merge-commits') < $(line_of '^squash-merging') && $(line_of '^merge-commits') < $(line_of '^rebase-merging') )); then
+  pass
+else
+  fail "merge commits were not judged first: $out"
+fi
+current="a run of optional settings exits 0"
+if (( status == 0 )); then pass; else fail "exit $status: $out"; fi
+
+fixture "every merge setting at the other value is optional with its remediation"
+remote
+repository true '"allow_merge_commit": false' '"allow_squash_merge": true' \
+  '"allow_rebase_merge": true' '"delete_branch_on_merge": false'
+out="$(check)"
+status=$?
+current="merge commits off is optional"
+assert_line '^merge-commits +not-applicable +allow_merge_commit is false on o/r; turn it on in Settings'
+current="squash merging on is optional"
+assert_line '^squash-merging +not-applicable +allow_squash_merge is true on o/r; turn it off in Settings'
+current="rebase merging on is optional"
+assert_line '^rebase-merging +not-applicable +allow_rebase_merge is true on o/r; turn it off in Settings'
+current="head branch deletion off is optional"
+assert_line '^delete-branches +not-applicable +delete_branch_on_merge is false on o/r; turn it on in Settings'
+current="an optional setting off does not fail the run"
+if (( status == 0 )); then pass; else fail "exit $status: $out"; fi
+
+# Push protection: enabled, disabled, and not offered are three answers.
+fixture "push protection enabled passes"
+remote
+repository true '"security_and_analysis": {"secret_scanning_push_protection": {"status": "enabled"}}'
+out="$(check)"
+assert_line '^push-protection +pass +enabled on o/r'
+
+fixture "push protection disabled is optional with where to enable it"
+remote
+repository true '"security_and_analysis": {"secret_scanning_push_protection": {"status": "disabled"}}'
+out="$(check)"
+assert_line '^push-protection +not-applicable +disabled on o/r; enable it in Settings'
+
+fixture "push protection not offered names the plan"
+remote
+repository true
+out="$(check)"
+assert_line "^push-protection +not-applicable +not offered for o/r's plan and visibility"
+
+# Rulesets: the same three.
+fixture "an active branch ruleset passes"
+remote
+repository true
+endpoint repos/o/r/rulesets <<<'[{"target": "branch", "enforcement": "active"}]'
+out="$(check)"
+assert_line '^rulesets +pass +an active branch ruleset on o/r'
+
+fixture "no active branch ruleset is optional with what to add"
+remote
+repository true
+endpoint repos/o/r/rulesets <<<'[{"target": "branch", "enforcement": "disabled"}]'
+out="$(check)"
+assert_line '^rulesets +not-applicable +no active branch ruleset on o/r; add one in Settings'
+
+fixture "rulesets not offered names the plan"
+remote
+repository true
+out="$(check)"
+assert_line "^rulesets +not-applicable +not offered for o/r's plan and visibility"
+
+report

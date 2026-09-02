@@ -4,174 +4,182 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/result.sh
+source "$repo_root/scripts/libs/result.sh"
+
 usage() {
   echo "Usage: scripts/repo-settings check" >&2
 }
 
-check_github_settings() {
-  local repo json admin rulesets
-  local branch owner_errors error_count branch_rules protection
+# One fetch, then judgments. fetch_settings calls gh and leaves a single JSON
+# document in $settings keyed by endpoint -- repo, codeowners_errors,
+# branch_rules, protection, rulesets -- with a missing key meaning that
+# endpoint could not be read. Every judgment below reads the document and
+# nothing else, so a suite stubs gh per endpoint and the judgments are seen
+# through the same command line a person runs.
+settings='{}'
+repo=""
+branch=""
 
-  if ! command -v gh >/dev/null 2>&1; then
-    echo "optional missing: gh (cannot check the remote's branch and secret settings)"
-    return
-  fi
-
-  if ! gh auth status >/dev/null 2>&1; then
-    echo "optional missing: gh auth (run: gh auth login)"
-    return
-  fi
-
-  if ! command -v jq >/dev/null 2>&1; then
-    echo "optional missing: jq (cannot read the remote's branch and secret settings)"
-    return
-  fi
-
-  if ! repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)"; then
-    echo "optional missing: a GitHub remote (nothing to check settings on yet)"
-    return
-  fi
-
-  if ! json="$(gh api "repos/$repo" 2>/dev/null)"; then
-    echo "optional missing: read access to $repo's settings"
-    return
-  fi
-
-  # security_and_analysis is absent for a non-admin and for a plan that does not
-  # offer the feature, so admin tells the two apart. Read here and gated further
-  # down, because the CODEOWNERS section between the two needs the answer without
-  # being subject to it.
-  admin="$(jq -r '.permissions.admin // false' <<<"$json")"
-  branch="$(jq -r '.default_branch // "main"' <<<"$json")"
-
-  # Every way CODEOWNERS fails is silent, so this is the section that has to ask
-  # rather than wait to be told. It sits above the admin gate because the errors
-  # endpoint needs only read access, and a non-admin is exactly who benefits from
-  # being told the file is broken. It sits below the read-access check because
-  # that check is what makes a 404 here mean "no CODEOWNERS file" instead of "no
-  # access to look" -- the two are the same status code. Do not reorder either.
-  if ! owner_errors="$(gh api "repos/$repo/codeowners/errors?ref=$branch" 2>/dev/null)"; then
-    echo "ok: no CODEOWNERS file (nothing to validate)"
-  else
-    error_count="$(jq -r '.errors | length' <<<"$owner_errors")"
-    if (( error_count > 0 )); then
-      echo "optional missing: a CODEOWNERS on $branch that GitHub accepts whole"
-      jq -r '.errors[] | "  \(.path):\(.line):\(.column) \(.kind) -- \(.message)"' <<<"$owner_errors"
-      echo "  Each line above is skipped while the rest of the file still applies, so the file half works and no pull request says so."
-    else
-      echo "ok: CODEOWNERS parses on $branch"
+fetch_settings() {
+  local key endpoint body
+  for key in repo codeowners_errors branch_rules protection rulesets; do
+    case "$key" in
+      repo) endpoint="repos/$repo" ;;
+      codeowners_errors) endpoint="repos/$repo/codeowners/errors?ref=$branch" ;;
+      branch_rules) endpoint="repos/$repo/rules/branches/$branch" ;;
+      protection) endpoint="repos/$repo/branches/$branch/protection" ;;
+      rulesets) endpoint="repos/$repo/rulesets" ;;
+    esac
+    if body="$(gh api "$endpoint" 2>/dev/null)"; then
+      settings="$(jq --arg k "$key" --argjson v "$body" '. + {($k): $v}' <<<"$settings")"
     fi
-
-    # A CODEOWNERS file that nothing requires is a no-op: it requests reviewers
-    # and merges without them. Rulesets and classic branch protection can each
-    # impose the requirement, and this endpoint reports only the first, so a
-    # repository protected the classic way reads as unrequired here. Checking
-    # that second source needs admin, which is why "not required" is only
-    # claimed when both were actually readable.
-    if ! branch_rules="$(gh api "repos/$repo/rules/branches/$branch" 2>/dev/null)"; then
-      echo "optional missing: whether $branch requires code owner review (not offered for $repo's plan and visibility)"
-      echo "  Unread is not unrequired. Until it can be read, treat the file as requesting reviewers that nothing waits for."
-    elif [[ "$(jq -r '[.[] | select(.type == "pull_request") | select(.parameters.require_code_owner_review == true)] | length' <<<"$branch_rules")" -gt 0 ]]; then
-      echo "ok: code owner review required on $branch"
-    elif [[ "$admin" != "true" ]]; then
-      echo "optional missing: whether $branch requires code owner review (needs admin on $repo to read its branch protection)"
-      echo "  No ruleset imposes it, but classic branch protection still could, and that is the half a non-admin cannot see."
-    elif protection="$(gh api "repos/$repo/branches/$branch/protection" 2>/dev/null)" &&
-      [[ "$(jq -r '.required_pull_request_reviews.require_code_owner_reviews // false' <<<"$protection")" == "true" ]]; then
-      echo "ok: code owner review required on $branch (classic branch protection)"
-    else
-      echo "optional missing: code owner review required on $branch"
-      echo "  Turn it on in Settings, under Rules, in the pull request rule."
-      echo "  Without it CODEOWNERS only requests a reviewer and nothing waits for the answer: a pull request touching an owned path merges with no code owner approval and no record that one was expected."
+    # The branch every other endpoint is asked about is the one the
+    # repository view names, so it is read as soon as that view lands.
+    if [[ "$key" == repo ]]; then
+      branch="$(setting '.repo.default_branch // "main"')"
     fi
-  fi
+  done
+}
 
-  if [[ "$admin" != "true" ]]; then
-    echo "optional missing: admin on $repo (its settings cannot be read from here)"
+setting() {
+  jq -r "$1" <<<"$settings"
+}
+
+readable() {
+  jq -e --arg k "$1" 'has($k)' <<<"$settings" >/dev/null
+}
+
+# Every way a CODEOWNERS file fails is silent -- a rejected line is skipped
+# while the rest of the file still applies, an owner without write access is
+# dropped -- so it is asked about rather than waited on. codeowners/errors needs
+# only read access, and a non-admin is exactly who benefits from being told the
+# file is broken, so this runs above the admin gate. It runs below the settings
+# read because that is what makes a 404 here mean "no CODEOWNERS file" rather
+# than "no access to look"; the two are the same status code.
+judge_codeowners() {
+  if ! readable codeowners_errors; then
+    result codeowners pass "no CODEOWNERS file on $branch, nothing to validate"
     return
   fi
+  local finding
+  while IFS= read -r finding; do
+    record "$finding"
+  done < <(setting '.codeowners_errors.errors[]? | "\(.path):\(.line):\(.column) \(.kind) -- \(.message)"')
+  verdict codeowners "CODEOWNERS parses on $branch"
 
-  # The merge commit is the only method the two checks below leave, so it has to
-  # be on for a pull request to land at all. GitHub refuses to disable all three,
-  # which makes this the one to read first: a repository with this off is one
-  # where the two settings below could not have been applied. Offered on every
-  # plan, like them.
-  if [[ "$(jq -r '.allow_merge_commit // false' <<<"$json")" == "true" ]]; then
-    echo "ok: merge commits allowed"
+  # The requirement that makes the file binding can come from a ruleset or from
+  # classic branch protection. rules/branches reports only the first, so a
+  # repository protected the classic way reads as unrequired there, and the
+  # second needs admin to read. An unread requirement is reported as itself
+  # rather than as unrequired: a file wrongly reported as binding is the one
+  # error that leaves someone trusting a review gate that does not exist.
+  if ! readable branch_rules; then
+    result owner-review unavailable "whether $branch requires code owner review is not offered for $repo's plan and visibility; until it can be read, treat CODEOWNERS as requesting reviewers that nothing waits for"
+  elif [[ "$(setting '[.branch_rules[]? | select(.type == "pull_request" and .parameters.require_code_owner_review == true)] | length')" != 0 ]]; then
+    result owner-review pass "required on $branch by a ruleset"
+  elif [[ "$(setting '.repo.permissions.admin')" != true ]]; then
+    result owner-review unavailable "no ruleset requires it on $branch, and reading classic branch protection needs admin on $repo"
+  elif readable protection && [[ "$(setting '.protection.required_pull_request_reviews.require_code_owner_reviews')" == true ]]; then
+    result owner-review pass "required on $branch by classic branch protection"
   else
-    echo "optional missing: merge commits enabled on $repo"
-    echo "  Turn it on in Settings, under Pull Requests."
-    echo "  With squash and rebase off, a repository that also has this off has no way left to merge a pull request."
+    result owner-review not-applicable "not required on $branch, so CODEOWNERS only requests a reviewer and nothing waits for the answer; require it in Settings, under Rules, in the pull request rule"
   fi
+}
 
-  # Squash merging has to stay off for the commit-message rules to mean
-  # anything. A squashed commit takes its message from the pull request title,
-  # written in GitHub's web interface where no local hook can reach it, so one
-  # click past every rule in .commitlintrc.yaml. Merging keeps the messages the
-  # commit-msg hook already checked. Unlike the settings below, this one is
-  # offered on every plan, so it is checked before anything can return early.
-  if [[ "$(jq -r '.allow_squash_merge // false' <<<"$json")" == "true" ]]; then
-    echo "optional missing: squash merging disabled on $repo"
-    echo "  Turn it off in Settings, under Pull Requests."
-    echo "  A squash takes its message from the pull request title, which the commit-msg hook never sees."
+# Merge commits are read before the other two merge methods: with both of those
+# off, a repository that also has this off has no way left to merge a pull
+# request, and GitHub refuses to write that state rather than reporting it.
+judge_merge_settings() {
+  boolean_setting allow_merge_commit true merge-commits \
+    "turn it on in Settings, under Pull Requests; with squash and rebase off there is no way left to merge a pull request"
+  boolean_setting allow_squash_merge false squash-merging \
+    "turn it off in Settings, under Pull Requests; a squash takes its message from the pull request title, which the commit-msg hook never sees"
+  boolean_setting allow_rebase_merge false rebase-merging \
+    "turn it off in Settings, under Pull Requests; a rebase replays the branch as new commits, so what lands is not what CI ran against"
+  boolean_setting delete_branch_on_merge true delete-branches \
+    "turn it on in Settings, under Pull Requests; merged branches otherwise accumulate on the remote"
+}
+
+# boolean_setting <field> <want> <check> <remediation>: a setting off is
+# optional and reported not-applicable with what turning it on costs.
+boolean_setting() {
+  local field="$1" want="$2" check="$3" remediation="$4" value
+  value="$(setting ".repo.$field // false")"
+  if [[ "$value" == "$want" ]]; then
+    result "$check" pass "$field is $value on $repo"
   else
-    echo "ok: squash merging off"
+    result "$check" not-applicable "$field is $value on $repo; $remediation"
   fi
+}
 
-  # Rebase keeps the messages but not the commits: the branch is replayed as
-  # new objects with new parents, so what lands is never what CI ran against
-  # and no merge commit records the pull request. Offered on every plan, like
-  # squash merging above.
-  if [[ "$(jq -r '.allow_rebase_merge // false' <<<"$json")" == "true" ]]; then
-    echo "optional missing: rebase merging disabled on $repo"
-    echo "  Turn it off in Settings, under Pull Requests."
-    echo "  A rebase replays the branch as new commits, so what lands is not what CI ran against."
-  else
-    echo "ok: rebase merging off"
-  fi
-
-  # A merged branch left behind is only clutter, but it is clutter every
-  # generated repository accumulates, and the fix is a checkbox rather than a
-  # workflow: deleting the head branch from Actions costs `contents: write` on
-  # a `pull_request: closed` trigger to reimplement what GitHub already does.
-  # Offered on every plan, like squash merging above.
-  if [[ "$(jq -r '.delete_branch_on_merge // false' <<<"$json")" == "true" ]]; then
-    echo "ok: merged head branches deleted"
-  else
-    echo "optional missing: automatic head branch deletion on $repo"
-    echo "  Turn it on in Settings, under Pull Requests."
-    echo "  Nothing is lost by leaving it off; merged branches simply accumulate until someone prunes them by hand."
-  fi
-
-  case "$(jq -r '.security_and_analysis.secret_scanning_push_protection.status // "unavailable"' <<<"$json")" in
-    enabled) echo "ok: push protection" ;;
+# security_and_analysis is absent for a plan that does not offer it, and the
+# status is "unavailable" for one that offers it only on another visibility.
+judge_push_protection() {
+  case "$(setting '.repo.security_and_analysis.secret_scanning_push_protection.status // "unavailable"')" in
+    enabled)
+      result push-protection pass "enabled on $repo"
+      ;;
     unavailable)
-      echo "optional missing: push protection (not offered for $repo's plan and visibility)"
-      echo "  It needs GitHub Advanced Security on a private repository, and is free on a public one."
-      echo "  Until then gitleaks in .pre-commit-config.yaml is the only check that sees a secret before it is pushed."
+      result push-protection not-applicable "not offered for $repo's plan and visibility (GitHub Advanced Security on a private repository, free on a public one); until then gitleaks in .pre-commit-config.yaml is the only check that sees a secret before it is pushed"
       ;;
     *)
-      echo "optional missing: push protection (disabled on $repo)"
-      echo "  Enable it in Settings, under Advanced Security."
+      result push-protection not-applicable "disabled on $repo; enable it in Settings, under Advanced Security"
       ;;
   esac
+}
 
-  if ! rulesets="$(gh api "repos/$repo/rulesets" 2>/dev/null)"; then
-    echo "optional missing: branch rulesets (not offered for $repo's plan and visibility)"
-    echo "  They need GitHub Pro on a private repository, and are free on a public one."
-    echo "  Until then the local hooks are all of it: no-commit-to-branch refuses a commit made on main,"
-    echo "  and scripts/protect-branch refuses a push whose destination is main."
+judge_rulesets() {
+  if ! readable rulesets; then
+    result rulesets not-applicable "not offered for $repo's plan and visibility (GitHub Pro on a private repository, free on a public one); until then the local hooks are all of it: no-commit-to-branch refuses a commit made on $branch and scripts/protect-branch refuses a push whose destination is $branch"
+  elif [[ "$(setting '[.rulesets[]? | select(.target == "branch" and .enforcement == "active")] | length')" != 0 ]]; then
+    result rulesets pass "an active branch ruleset on $repo"
+  else
+    result rulesets not-applicable "no active branch ruleset on $repo; add one in Settings, under Rules, requiring a pull request and the CI check, since without it a fresh clone has neither local hook until they are installed"
+  fi
+}
+
+# The preflight: each tool or access this needs and does not have is an optional
+# absence, reported as such and ending the run, since nothing after it could be
+# read. A setting the token cannot read once the run is under way is
+# unavailable instead, and fails the tally -- a check that did not run is not a
+# check that passed.
+check_github_settings() {
+  if ! command -v gh >/dev/null 2>&1; then
+    result gh not-applicable "not on PATH; the remote's branch and secret settings cannot be read without it"
+    return
+  fi
+  if ! gh auth status >/dev/null 2>&1; then
+    result gh-auth not-applicable "not logged in; run: gh auth login"
+    return
+  fi
+  if ! command -v jq >/dev/null 2>&1; then
+    result jq not-applicable "not on PATH; the remote's branch and secret settings cannot be read without it"
+    return
+  fi
+  if ! repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)"; then
+    result remote not-applicable "no GitHub remote, nothing to check settings on yet"
     return
   fi
 
-  if [[ "$(jq -r '[.[] | select(.target == "branch" and .enforcement == "active")] | length' <<<"$rulesets")" -gt 0 ]]; then
-    echo "ok: branch ruleset"
-  else
-    echo "optional missing: an active branch ruleset on $repo"
-    echo "  Add one in Settings, under Rules, requiring a pull request and the CI check."
-    echo "  Without it the local hooks are all of it -- no-commit-to-branch on commit, scripts/protect-branch"
-    echo "  on push -- and a fresh clone has neither until the hooks are installed."
+  fetch_settings
+
+  if ! readable repo; then
+    result settings unavailable "$repo's settings cannot be read with this token"
+    return
   fi
+
+  judge_codeowners
+
+  if [[ "$(setting '.repo.permissions.admin')" != true ]]; then
+    result admin unavailable "$repo's merge, branch, and security settings need admin to read"
+    return
+  fi
+
+  judge_merge_settings
+  judge_push_protection
+  judge_rulesets
 }
 
 case "${1:-}" in
@@ -181,6 +189,7 @@ case "${1:-}" in
       exit 2
     fi
     check_github_settings
+    tally
     ;;
   *)
     usage
