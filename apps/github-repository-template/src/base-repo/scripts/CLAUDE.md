@@ -28,67 +28,26 @@ A helper that must be built before it runs belongs in `tools/`, not here.
 
 ## Local Contracts
 
-**`libs/detect.sh` owns every language-specific decision.** Commands name a capability — `lint`, `test`, `audit`, `format-write` — never a language adapter. `DETECT_LANGUAGES` and `DETECT_PRUNE_DIRS` are the single lists; iterate them, never copy them.
-
-**The orphan rule tests the exact root manifest, not language presence.** `has_go` and `has_kotlin` each accept two filenames and only one of the two wires up a nested package. `detect_orphan_manifests` prints one line per orphan and exits 0 either way; `judge_orphan_manifests` turns them into findings, and `ci` and `security` stop there when it fails.
-
-**A check that did not run is not a check that passed.** The states are `pass`, `not-applicable`, `unavailable`, `FAIL`, and `unavailable` fails the run whenever the check was expected. `audit:kotlin` and `audit:swift` are `not-applicable` without a lockfile: nothing to scan is not a missing tool.
-
-**`libs/result.sh` owns how a check reports, and its printed layout is an interface.** Suites grep `^<check> +<state>` for a column and `^ +` for a finding.
-
-- `result <check> <state> <detail>` pads the check to 18 columns and the state to 16, and refuses any word outside the four states. `result_line` is the layout alone, for a table that is not a set of Results.
-- `record` collects findings once each, `verdict` closes a check, and `tally` returns non-zero on any `FAIL` or `unavailable`. A command ends with `tally` and its status is the run's.
-- `would-run` rides the state column and is not a state.
-- `language_capabilities run` reports on the line, so its only non-zero return is a usage error. `NO_RUNNER` never leaves the dispatcher.
-- `doctor`, `fix`, `run`, `package`, `security`, `structure`, `changelog-check`, `protect-branch`, and `repo-settings` all report through these states. `security` calls the secret scan `not-applicable` without gitleaks, since pre-commit runs its own pinned copy.
-
-**Pipes end in a variable or a `-print -quit` test, never a reader that exits early.** SIGPIPE under `pipefail` reports 141, which a detection function reads as "absent". `swift_each`, `trivy_each`, and `go_each` read their list on fd 3 so the command they run cannot consume it.
-
-**Four runners contradict the pass/fail rule and are special-cased deliberately.** pytest exits 5 on no tests, npm's placeholder test script exits 1, `uv run` exits 2 on a missing tool, and `uv audit` exits 2 on a uv predating the subcommand. Do not remove them.
-
-**A capability adapter captures a tool's own exit status, not just its output.** A runner is called `|| status=$?`, so a failure with empty stdout otherwise reads as a pass.
-
-**Go capabilities run once per module, not at the repository root.** `./...` matches nothing at a workspace root. `go_each` enumerates with `go list -m` and fails on an empty or failed listing; the two gofmt adapters stay at the root, since gofmt walks the filesystem. `_go_main_packages` dispatches on the count: one is the program, none is `NO_RUNNER`, several is refused with the candidates named.
-
-**`scripts/check`'s test-runner glob uses `nullglob`**, or an empty `tests/` reads as one missing test script.
-
-**`libs/precommit.sh` owns which git hooks are owed, and parses rather than greps.** `default_install_hook_types` has three valid YAML forms and a single-line pattern matches one, reporting no hooks owed. The config path is a parameter; the clone is the working directory.
-
-**`libs/*.sh` and `tests/libs/harness.sh` are sourced, never executed.** No shebang, no executable bit, `.sh` so linters recognize them. Every other script here is extensionless and executable, since pre-commit reads a shebang only on an executable file.
-
-`harness.sh` holds the counting and the fixture primitives: `scratch_repo`, `fixture`, `declare_unit`, `quadlet_pair`, `stub`, `minimal_path`, and `skip`, which is counted. It also owns the ambient isolation — `GIT_CONFIG_*` to `/dev/null`, `GOWORK=off`, `CI_DRY_RUN` unset. No suite changes directory; a command under test runs in a subshell that `cd`s into `$work`.
-
-**`report` fails a suite that passed nothing and skipped something.** A run that verified nothing must not read as green.
-
-**A suite never consumes its caller's stdin.** Fixtures stub commands that drain stdin on purpose, so every invocation that might reach one gets `</dev/null`.
-
-**`adr-index` and `structure` are pre-commit hooks, not capabilities.** Both run `always_run` with no `files:` filter, because that filter reads staged paths and staged paths exclude deletions. `adr-index` also self-reports its rewrite with a non-zero exit, since pre-commit sees no change while the index is still untracked.
-
-**`structure` holds the layout rules as code** and reads the contents of exactly one file, a unit's `.unit.json`. Depth rules stop at the first `src/` and start at `scope_start`, `2` under `apps/` because a unit name is not a scoped folder. A domain is recognized by its own `src/`, never by name. It enumerates with `git ls-files`, so gitignored scratch needs no prune list, and it requires `jq`. Three rules are about content and report `not-applicable` — do not improve them into a guess. It checks declared values and never a `run`-and-`ships` pairing, per ADR 0001.
-
-**`run` and `package` take their context as globals, not parameters**, from `libs/unit.sh`. `package` is not in the gate and shells out to no container runtime; a `quadlet` unit is validated by reading its pair.
-
-**Packaging clears the unit's `dist/` before it dispatches**, only for a language that packages there per `packaging_writes_dist`, and never on a dry run. `release` aborts on a unit that shipped nothing, and a stale binary would satisfy that guard without having been built from the tagged commit.
-
-**No function stands in for an absent adapter.** `language_capabilities probe` reads `absent` off the function table, and the dispatch reports `unavailable` rather than a stub answering `NO_RUNNER`.
-
-**The Node `run` adapter refuses a `bin` that is not on disk**, naming `npm run build` when the package has one, rather than letting Node emit a module-not-found trace.
-
-**`changelog-check` validates only the paths it is given, at `pre-push`.** It judges Keep a Changelog form, not whether a change owed an entry, so a repository with no `CHANGELOG.md` never invokes it. CI re-runs it over the whole pull-request range.
-
-**`protect-branch` reads the push destination, not the current branch** — the case `no-commit-to-branch` cannot see. It is silent when `PRE_COMMIT_REMOTE_BRANCH` is unset, leaving multi-ref and delete pushes to the server, because a guard that fires on ordinary work gets bypassed.
-
-**`worktree-cleanup` prunes metadata and never deletes a directory.** It ignores its positional arguments, which differ per hook stage, and reads only `--report`.
-
-**`check`'s pre-commit sweep covers untracked files, in a second pass by path**, since `--all-files` enumerates through git and cannot see the files most likely to be new.
-
-**Local commands stay off hosted GitHub state.** `doctor`, `check`, `run`, and `package` read no repository settings, branches, or releases; only `repo-settings check` does. The boundary is hosted state, not connectivity.
-
-**`release` is the only script here that writes to GitHub.** It publishes the changelog section matching the tag, or GitHub-generated notes when there is no changelog, and must never treat an uncut version and an absent changelog as the same thing. It packages every unit before the tag is cut, checks separately that a unit declaring `ships: executable` produced a file, and runs `scripts/ci` itself. Nothing else should call it.
-
-**`repo-settings` reports and never changes**, because a ruleset write replaces rather than merges and could silently revert a deliberate loosening. It fetches once into one JSON document and judges after, which is the seam its suite stubs `gh` at. Preflight absences are `not-applicable` and stop green; a 403 carrying GitHub's upgrade message is `not-applicable` naming the plan and any other refusal is `unavailable`. Merge commits are read before squash and rebase, since GitHub refuses to write a repository with no way to merge.
-
-**The CODEOWNERS judgment runs above the admin gate and below the read-access check**, so a broken file is reported to a non-admin and a 404 means no file rather than no access. `judge_owner_review` has a fourth outcome, `unavailable`: the requirement can come from classic branch protection, which needs admin to read, and a file wrongly reported as binding leaves someone trusting a review gate that does not exist.
+- **`libs/detect.sh` owns every language decision.** Commands name a capability, never an adapter; `DETECT_LANGUAGES` and `DETECT_PRUNE_DIRS` are the lists.
+- **The orphan rule tests the exact root manifest, not language presence.** `detect_orphan_manifests` prints a line per orphan; `judge_orphan_manifests` records them and stops `ci` and `security`.
+- **A check that did not run is not a check that passed.** `unavailable` fails the run whenever the check was expected; a Kotlin or Swift audit without a lockfile and the secret scan without gitleaks are `not-applicable`.
+- **`libs/result.sh` owns how a check reports, and its printed layout is an interface.** `result` refuses a fifth state, `record` dedups, `tally` is a command's last line and its exit status. `would-run` is a marker, not a state.
+- **Pipes end in a variable, never a reader that exits early**: `pipefail` turns SIGPIPE into 141, read as absent. `swift_each`, `trivy_each`, and `go_each` take their list on fd 3.
+- **Four runners exit non-zero without a real failure and are translated**: pytest on no tests, npm's placeholder test, `uv run` on a missing tool, `uv audit` on an older uv.
+- **Go capabilities run once per module** through `go_each`, which fails on an empty `go list -m`; gofmt stays at the root. `_go_main_packages` yields one program, `NO_RUNNER`, or a refusal.
+- **An adapter is honest about what it did.** Capture the tool's exit status, not only its output. No function stands in for an absent one: the probe reads `absent` off the function table, the dispatch reports `unavailable`, and `NO_RUNNER` never leaves it. Node's `run` refuses a missing `bin`.
+- **`libs/*.sh` and `harness.sh` are sourced, never executed** — no shebang, no executable bit, `.sh`. Every other script is extensionless and executable; pre-commit reads a shebang only on one.
+- **`harness.sh` owns the counting and the primitives**: `scratch_repo`, `fixture`, `declare_unit`, `quadlet_pair`, `stub`, `minimal_path`, `skip`. No suite changes directory or lets a stub read its stdin; `report` fails a suite that passed nothing and skipped something.
+- **`libs/precommit.sh` owns which git hooks are owed, and parses `default_install_hook_types` rather than grepping: three valid YAML forms.** `adr-index` and `structure` are hooks, not capabilities, and run `always_run` with no `files:` filter, since staged paths exclude deletions.
+- **`structure` holds the layout rules as code**; the only file it opens is a `.unit.json`. Depth stops at the first `src/`; a domain is its `src/`, not its name. It enumerates with `git ls-files`, needs `jq`, and reports the three content rules `not-applicable`.
+- **`run` and `package` take their context as globals** from `libs/unit.sh`. `package` clears `dist/` before dispatch, only where `packaging_writes_dist` and never on a dry run, so a stale binary cannot satisfy `release`'s output guard.
+- **`release` is the only script here that writes to GitHub.** Changelog section or generated notes, never both; it packages first, checks an `executable` unit produced a file, and runs `ci`.
+- **`changelog-check` validates only the paths it is given, at `pre-push`** — form, not whether an entry was owed; CI re-runs it over the PR range.
+- **`protect-branch` reads the push destination, not the current branch**, and is silent when unset.
+- **`worktree-cleanup` prunes metadata, never a directory**, and reads only `--report`.
+- **`check` globs tests with `nullglob` and sweeps untracked files in a second pass by path**, which `--all-files` cannot see.
+- **Local commands stay off hosted GitHub state** — the boundary is hosted state, not connectivity, and only `repo-settings check` crosses it.
+- **`repo-settings` reports and never changes**, since a ruleset write replaces rather than merges. One fetch, then judgments off it: preflight absences stop green, a plan 403 is `not-applicable` and any other refusal `unavailable`, CODEOWNERS above the admin gate.
 
 ## Work Guidance
 
