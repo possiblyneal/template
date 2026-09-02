@@ -76,4 +76,6 @@ Single-context: one `CONTEXT.md` at the root once a glossary exists, ADRs in `do
 
 ## Child Index
 
-This project is not yet indexed. Before continuing you must read `~/.claude/rules/documentation.md`, scan the project, build the `CLAUDE.md` tree and replace this message with the actual child index. Go deep and scan files recursively to properly evaluate complexity and create nested `CLAUDE.md` files where needed. Do not create `CLAUDE.md` files in dot folders.
+- `scripts/CLAUDE.md` — the language-capabilities interface, the result states, the test harness, and what adding a language or check requires
+
+The rest of this project is not yet indexed. Before continuing you must read `~/.claude/rules/documentation.md`, scan the project, build the `CLAUDE.md` tree and replace this message with the actual child index, keeping the entry above. Go deep and scan files recursively to properly evaluate complexity and create nested `CLAUDE.md` files where needed. Do not create `CLAUDE.md` files in dot folders.

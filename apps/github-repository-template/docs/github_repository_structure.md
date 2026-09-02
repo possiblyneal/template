@@ -67,6 +67,8 @@ The specific operating parameters for the AI agent.
 
 `scripts/`: Portable shell scripts, run locally or in CI, covering checks, releases, security audits, and branch protection.
 
+`scripts/CLAUDE.md`: The contract for `scripts/` — what each script is for, the four result states, the language-capabilities interface and its test harness, and what adding a language or a check requires. The root copy's counterpart, minus the one paragraph that only applies to the template.
+
 `scripts/libs/`: Shared shell libraries used by the `scripts/` entry points.
 
 `scripts/detect`: Reports which languages are present in the repository and which capability adapters are wired, for use by scripts and workflows.
