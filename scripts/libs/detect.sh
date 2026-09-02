@@ -414,14 +414,12 @@ _capability_format_write_kotlin() { gradle_has_task ktlintFormat || return "$NO_
 # program's own entry point and a dev server, which are different programs.
 # Delete the branch and a CLI starts a web server, or fails looking for one.
 #
-# Each is expanded with the `+` form so an adapter called with none of it set --
-# from a test, or from a caller that has no unit -- reads an absent array as
-# empty rather than tripping `set -u`.
-# Declared, never assigned, so this file names the context it depends on rather
-# than reading it out of nowhere. `declare -g` without a value creates nothing
-# and overwrites nothing, so it does not matter whether the caller fills them
-# before or after sourcing this file.
-declare -g unit_run unit_args unit_targets
+# All three are declared in libs/unit.sh, beside the reader that fills the
+# declared ones, and nowhere here: a caller with no unit leaves them empty, and
+# each adapter reads an empty value as the default -- the `${unit_run:-}` test
+# falls to the long-lived branch, the `+` expansion reads an absent array as
+# empty rather than tripping `set -u`. shellcheck reads each array's first use
+# below as unassigned, and the directive there names the declaration's home.
 
 # The paths `bin` names, one per line. A string names one and an object names
 # several; either way the field is the package's own declaration of what it is
@@ -443,6 +441,7 @@ _capability_run_node() {
 
   if [[ "${unit_run:-}" != oneshot ]]; then
     has_npm_script dev || return "$NO_RUNNER"
+    # shellcheck disable=SC2154 # declared in libs/unit.sh, filled by scripts/run
     npm run dev -- ${unit_args[@]+"${unit_args[@]}"}
     return
   fi
@@ -558,7 +557,6 @@ _capability_run_go() {
   esac
 }
 _capability_run_rust() { cargo run -- ${unit_args[@]+"${unit_args[@]}"}; }
-_capability_run_swift() { return "$NO_RUNNER"; }
 # Gradle takes program arguments as one string rather than a list, so this is
 # the one adapter that cannot pass them through unchanged: an argument
 # containing a space arrives as two.
@@ -604,6 +602,7 @@ _capability_package_go() {
   fi
 
   mkdir -p dist
+  # shellcheck disable=SC2154 # declared and filled in libs/unit.sh
   for target in ${unit_targets[@]+"${unit_targets[@]}"}; do
     if ! pair="$(_package_go_target "$target")"; then
       result "$target" not-applicable "no Go GOOS/GOARCH is named for it"
@@ -665,18 +664,17 @@ _capability_package_rust() {
   return "$status"
 }
 
-# No adapter yet, and the gap is a signpost rather than a mystery: a Node or
-# Python executable means bundling an interpreter, and a Swift or Kotlin one
-# means a toolchain decision this template has not made. Each is where that
-# adapter goes when the need arrives.
-_capability_package_node() { return "$NO_RUNNER"; }
-_capability_package_python() { return "$NO_RUNNER"; }
-_capability_package_swift() { return "$NO_RUNNER"; }
-_capability_package_kotlin() { return "$NO_RUNNER"; }
+# No packaging adapter for Node, Python, Swift, or Kotlin, and no run adapter
+# for Swift, and each gap is a signpost rather than a mystery: a Node or Python
+# executable means bundling an interpreter, and a Swift or Kotlin one means a
+# toolchain decision this template has not made. The dispatch reports each as
+# `unavailable` and `language_capabilities probe` reports it `absent`, so the
+# gap is visible without a function standing in for the adapter that is not
+# there.
 
 # Whether any of the languages named packages into the unit's dist/. Only the
-# adapters above that produce a file write there; the NO_RUNNER stubs write
-# nothing, so for a unit in one of those languages dist/ is not the packaging
+# adapters above that produce a file write there; a language with no adapter
+# writes nothing, so for a unit in one of those languages dist/ is not the packaging
 # command's output but whatever the unit's own build left -- which is what
 # scripts/ci produces before the release walk reads it. scripts/package empties
 # dist/ before dispatching, and asks this first so it empties only a directory
@@ -704,11 +702,14 @@ _capability_is_not_applicable() {
   esac
 }
 
+DETECT_CAPABILITIES=(lint format-check typecheck test build audit toolchain format-write run package)
+
 _capability_is_supported() {
-  case "$1" in
-    lint|format-check|typecheck|test|build|audit|toolchain|format-write|run|package) return 0 ;;
-    *) return 1 ;;
-  esac
+  local cap
+  for cap in "${DETECT_CAPABILITIES[@]}"; do
+    [[ "$1" != "$cap" ]] || return 0
+  done
+  return 1
 }
 
 _language_is_supported() {
@@ -838,6 +839,22 @@ _language_capabilities_codeql_matrix() {
   printf 'matrix={"include":[%s]}\n' "$(IFS=,; echo "${entries[*]}")"
 }
 
+# One line per capability and language: `wired` when an adapter is defined for
+# the pair, `absent` when none is. Wiring alone -- no manifest is read and no
+# tool is looked for -- so the answer is the same on every machine, and a suite
+# can hold the whole table against the one this file is meant to have without
+# naming a private function.
+_language_capabilities_probe() {
+  local cap lang state
+  for cap in "${DETECT_CAPABILITIES[@]}"; do
+    for lang in "${DETECT_LANGUAGES[@]}"; do
+      state=absent
+      ! declare -F "_capability_${cap//-/_}_${lang}" >/dev/null || state=wired
+      printf '%-18s %-16s %s\n' "$cap" "$state" "$lang"
+    done
+  done
+}
+
 language_capabilities() {
   local command="${1:-}"
   (( $# == 0 )) || shift
@@ -848,9 +865,10 @@ language_capabilities() {
     has-any) has_any_manifest ;;
     github-output) _language_capabilities_github_output ;;
     codeql-matrix) _language_capabilities_codeql_matrix ;;
+    probe) _language_capabilities_probe ;;
     run) _language_capabilities_run "$@" ;;
     ""|-h|--help|help)
-      echo "Usage: language_capabilities supported|present|has-any|github-output|codeql-matrix|run"
+      echo "Usage: language_capabilities supported|present|has-any|github-output|codeql-matrix|probe|run"
       ;;
     *) echo "Unknown language capabilities command: $command" >&2; return 2 ;;
   esac

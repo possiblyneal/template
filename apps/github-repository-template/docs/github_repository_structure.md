@@ -69,7 +69,7 @@ The specific operating parameters for the AI agent.
 
 `scripts/libs/`: Shared shell libraries used by the `scripts/` entry points.
 
-`scripts/detect`: Reports which languages are present in the repository, for use by scripts and workflows.
+`scripts/detect`: Reports which languages are present in the repository and which capability adapters are wired, for use by scripts and workflows.
 
 `scripts/tests/`: Tests for the scripts themselves.
 

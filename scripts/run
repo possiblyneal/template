@@ -40,10 +40,6 @@ if [[ -n "$unit" ]]; then
     echo "apps/$unit declares run: none, so there is nothing to run."
     exit 0
   fi
-else
-  # No units at all, so nothing has declared anything. What is left is the
-  # repository root, and the long-lived form is what ran here before units did.
-  unit_run=longlived
 fi
 
 mapfile -t languages < <(language_capabilities present)
