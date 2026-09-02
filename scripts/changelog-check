@@ -4,18 +4,24 @@ set -euo pipefail
 # Validate only the changelog paths supplied by pre-commit. Whether a change is
 # notable remains a judgment for the pull request; this script checks the
 # structure of an entry that was chosen to be recorded.
-status=0
+
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/result.sh
+source "$(dirname "${BASH_SOURCE[0]}")/libs/result.sh"
 
 for path in "$@"; do
   [[ "$(basename "$path")" == "CHANGELOG.md" ]] || continue
 
   if [[ ! -f "$path" ]]; then
-    printf 'FAIL          changelog: %s does not exist.\n' "$path"
-    status=1
+    result changelog FAIL "$path does not exist"
     continue
   fi
 
-  if ! awk '
+  # Every line awk prints is one rule broken, so the lines are the findings
+  # and its exit status says nothing they do not.
+  while IFS= read -r finding; do
+    [[ -n "$finding" ]] && record "$finding"
+  done < <(awk '
     function fail(message) {
       printf "%s:%d: %s\n", FILENAME, NR, message
       failed = 1
@@ -97,9 +103,8 @@ for path in "$@"; do
       }
       exit failed
     }
-  ' "$path"; then
-    status=1
-  fi
+  ' "$path")
+  verdict changelog "$path is well-formed"
 done
 
-exit "$status"
+tally

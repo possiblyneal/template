@@ -592,16 +592,12 @@ _package_rust_target() {
   esac
 }
 
-# One line per target, because a single per-language result cannot say that one
-# target built and another could not be reached from here. A target the
-# toolchain genuinely cannot reach is not-applicable with the reason named; an
-# unwired language is unavailable. They look alike and are different facts, and
-# reporting the first as the second makes an impossible build read as a broken
-# install.
-_package_target_result() {
-  printf '  %-14s %s: %s\n' "$1" "$2" "$3"
-}
-
+# A result line per target, because a single per-language result cannot say
+# that one target built and another could not be reached from here. A target
+# the toolchain genuinely cannot reach is not-applicable with the reason named;
+# an unwired language is unavailable. They look alike and are different facts,
+# and reporting the first as the second makes an impossible build read as a
+# broken install.
 _capability_package_go() {
   local target pair goos goarch package status=0
   local -a mains=()
@@ -616,7 +612,7 @@ _capability_package_go() {
   mkdir -p dist
   for target in ${unit_targets[@]+"${unit_targets[@]}"}; do
     if ! pair="$(_package_go_target "$target")"; then
-      _package_target_result not-applicable "$target" "no Go GOOS/GOARCH is named for it"
+      result "$target" not-applicable "no Go GOOS/GOARCH is named for it"
       continue
     fi
     read -r goos goarch <<< "$pair"
@@ -640,8 +636,8 @@ _capability_package_rust() {
   # Both absences are no runner, but they read differently to whoever is
   # holding the failure: cargo missing is the language not installed, and jq
   # missing is a Rust unit that would package if one more tool were here. The
-  # caller prints "no package command configured" for either, so this one says
-  # what is actually missing before it goes quiet.
+  # library reports either as unavailable, so this one says what is actually
+  # missing before it goes quiet.
   if ! command -v jq > /dev/null 2>&1; then
     echo "cargo is here but jq is not, and the binary names are read out of cargo metadata." >&2
     return "$NO_RUNNER"
@@ -650,7 +646,7 @@ _capability_package_rust() {
   mkdir -p dist
   for target in ${unit_targets[@]+"${unit_targets[@]}"}; do
     if ! triple="$(_package_rust_target "$target")"; then
-      _package_target_result not-applicable "$target" "no Rust target triple is named for it"
+      result "$target" not-applicable "no Rust target triple is named for it"
       continue
     fi
     # rustup is how a cross target is installed, so its list is the honest
@@ -659,7 +655,7 @@ _capability_package_rust() {
     # rather than a skip.
     if command -v rustup > /dev/null 2>&1 &&
       ! grep -qx "$triple" <<< "$(rustup target list --installed 2> /dev/null)"; then
-      _package_target_result not-applicable "$target" "the Rust target $triple is not installed (rustup target add $triple)"
+      result "$target" not-applicable "the Rust target $triple is not installed (rustup target add $triple)"
       continue
     fi
 
