@@ -32,8 +32,8 @@ source "$repo_root/scripts/tests/libs/harness.sh"
 # commit-msg wiring healthy while the real config had scoped commitlint out of
 # existence. That is a check that did not run reading as a check that passed.
 fixture() {
+  scratch_repo
   current="$1"
-  work="$(mktemp -d)"
   {
     # Each key and whatever list form it carries, copied verbatim -- a wrapped
     # flow list and a block list both continue onto the lines below, and a
@@ -58,14 +58,7 @@ fixture() {
   # reach the hook if this file travels with it.
   cp "$repo_root/.commitlintrc.yaml" "$work/"
 
-  (
-    cd "$work" || exit 1
-    git init -q .
-    git config user.email test@example.com
-    git config user.name test
-    git config commit.gpgsign false
-    pre-commit install
-  ) > /dev/null 2>&1
+  (cd "$work" && pre-commit install) > /dev/null 2>&1
 }
 
 # Stages a change and commits it with the given message, printing the combined
@@ -80,12 +73,10 @@ attempt() {
 }
 
 
-trap cleanup EXIT
-
 echo "commitlint-test"
 
-if ! command -v pre-commit > /dev/null 2>&1 || ! command -v git > /dev/null 2>&1; then
-  echo "  SKIP  commitlint: pre-commit or git is not installed"
+if ! command -v pre-commit > /dev/null 2>&1; then
+  skip "pre-commit is not installed"
   report
   exit
 fi
@@ -100,7 +91,6 @@ if [[ -f "$work/.git/hooks/commit-msg" ]]; then
 else
   fail "pre-commit install left no commit-msg hook, so no message is checked"
 fi
-cleanup
 
 fixture "a subject that is not conventional is rejected"
 out="$(attempt "nope")"
@@ -110,7 +100,6 @@ if (( status != 0 )); then
 else
   fail "an unconventional subject committed cleanly: $out"
 fi
-cleanup
 
 fixture "a conventional subject with a body is accepted"
 out="$(attempt "feat: add a commit message check
@@ -123,7 +112,6 @@ if (( status == 0 )); then
 else
   fail "a valid conventional commit was rejected: $out"
 fi
-cleanup
 
 # GitHub writes this subject itself when a pull request is merged, and no local
 # hook can reach it. commitlint's default ignore list is what keeps a merge from
@@ -136,7 +124,6 @@ if (( status == 0 )); then
 else
   fail "a merge subject was rejected, which would block every merge: $out"
 fi
-cleanup
 
 # body-leading-blank is a warning in config-conventional and an error here. The
 # rule name is asserted rather than just the exit status, since a malformed
@@ -150,6 +137,5 @@ if (( status != 0 )) && grep -q "body-leading-blank" <<< "$out"; then
 else
   fail "a body with no leading blank line was not caught by the rule: $out"
 fi
-cleanup
 
 report

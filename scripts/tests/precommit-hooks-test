@@ -25,8 +25,8 @@ source "$repo_root/scripts/libs/precommit.sh"
 
 
 fixture() {
+  scratch_repo
   current="$1"
-  work="$(mktemp -d)"
   printf '%s\n' "$2" > "$work/.pre-commit-config.yaml"
 }
 
@@ -39,8 +39,6 @@ types_of() {
   printf '%s' "${parsed[*]:-}"
 }
 
-trap cleanup EXIT
-
 echo "precommit-hooks-test"
 
 fixture "flow style is read" 'default_install_hook_types: [pre-commit, commit-msg, pre-push, post-checkout, post-merge]
@@ -51,7 +49,6 @@ if [[ "$got" == "pre-commit commit-msg pre-push post-checkout post-merge" ]]; th
 else
   fail "flow style read as '$got'"
 fi
-cleanup
 
 # The form a reformat or a hand-edit produces. This is the one a single-line
 # pattern misses, and missing it is indistinguishable from a config that never
@@ -69,7 +66,6 @@ if [[ "$got" == "pre-commit commit-msg pre-push post-checkout post-merge" ]]; th
 else
   fail "block style read as '$got', so the commit-msg hook would never be required"
 fi
-cleanup
 
 # What a line-length formatter makes of the flow form, with the key itself
 # unchanged. Reading only the first line here yields half a list, which is the
@@ -83,7 +79,6 @@ if [[ "$got" == "pre-commit commit-msg pre-push post-checkout post-merge" ]]; th
 else
   fail "a wrapped flow list read as '$got'"
 fi
-cleanup
 
 # The guard on the wrapped case: a scalar has no bracket to close, so treating
 # it as an unterminated list would swallow every line after it.
@@ -95,7 +90,6 @@ if [[ "$got" == "pre-commit" ]]; then
 else
   fail "a scalar value read as '$got'"
 fi
-cleanup
 
 fixture "quotes and trailing comments are tolerated" 'default_install_hook_types: ["pre-commit", "commit-msg", "pre-push", "post-checkout", "post-merge"]  # all five
 repos: []'
@@ -105,7 +99,6 @@ if [[ "$got" == "pre-commit commit-msg pre-push post-checkout post-merge" ]]; th
 else
   fail "a quoted list with a comment read as '$got'"
 fi
-cleanup
 
 # pre-commit installs the pre-commit hook when the key is absent, so an absent
 # key must not read as "no hooks are owed" -- that would report a clone with no
@@ -117,7 +110,6 @@ if [[ "$got" == "pre-commit" ]]; then
 else
   fail "an absent key read as '$got' rather than the pre-commit default"
 fi
-cleanup
 
 fixture "the block list ends at the next key" 'default_install_hook_types:
   - pre-commit
@@ -129,41 +121,30 @@ if [[ "$got" == "pre-commit" ]]; then
 else
   fail "the list ran past its own key and read as '$got'"
 fi
-cleanup
 
 # The end-to-end answer both callers actually use: config asks for all five
 # hooks, the clone has the ordinary pre-commit hook, and all four stage-specific
 # hooks are still reported.
 fixture "stage-specific hooks are reported missing" 'default_install_hook_types: [pre-commit, commit-msg, pre-push, post-checkout, post-merge]
 repos: []'
-(
-  cd "$work" || exit 1
-  git init -q .
-  touch .git/hooks/pre-commit
-) > /dev/null 2>&1
+touch "$work/.git/hooks/pre-commit"
 got="$(cd "$work" && pre_commit_hooks_missing .pre-commit-config.yaml)"
 if [[ "$got" == $'commit-msg\npre-push\npost-checkout\npost-merge' ]]; then
   pass
 else
   fail "missing hooks reported as '$got', expected every stage-specific hook"
 fi
-cleanup
 
 if command -v pre-commit >/dev/null 2>&1; then
   fixture "plain pre-commit install writes every configured hook" 'default_install_hook_types: [pre-commit, commit-msg, pre-push, post-checkout, post-merge]
 repos: []'
-  (
-    cd "$work" || exit 1
-    git init -q .
-    pre-commit install >/dev/null
-  )
+  (cd "$work" && pre-commit install > /dev/null)
   got="$(cd "$work" && pre_commit_hooks_missing .pre-commit-config.yaml)"
   if [[ -z "$got" ]]; then
     pass
   else
     fail "pre-commit install left hooks missing: '$got'"
   fi
-  cleanup
 fi
 
 report

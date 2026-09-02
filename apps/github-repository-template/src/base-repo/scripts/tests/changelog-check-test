@@ -12,8 +12,8 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "$repo_root/scripts/tests/libs/harness.sh"
 
 fixture() {
+  scratch_repo
   current="$1"
-  work="$(mktemp -d)"
   printf '%s\n' "$2" > "$work/CHANGELOG.md"
 }
 
@@ -52,41 +52,31 @@ All notable changes to this project will be documented in this file.
 [Unreleased]: https://example.test/compare/v1.2.3...HEAD
 [1.2.3]: https://example.test/releases/tag/v1.2.3'
 
-trap cleanup EXIT
-
 echo "changelog-check-test"
 
 fixture "a valid changelog passes" "$valid"
 assert_accepts
-cleanup
 
 fixture "a missing Unreleased section fails" "${valid/Unreleased/Pending}"
 assert_rejects
-cleanup
 
 fixture "Unreleased must lead release sections" "${valid/Unreleased/$'1.2.2] - 2026-08-10\n\n## [Unreleased'}"
 assert_rejects
-cleanup
 
 fixture "an unknown category fails" "${valid/Added/Other}"
 assert_rejects
-cleanup
 
 fixture "an empty category fails" "${valid/- A useful change./}"
 assert_rejects
-cleanup
 
 fixture "a malformed release heading fails" "${valid/1.2.3/1.2}"
 assert_rejects
-cleanup
 
 fixture "a missing release reference fails" "${valid/1.2.3]:/1.2.4]:}"
 assert_rejects
-cleanup
 
 fixture "a missing Unreleased reference fails" "${valid/Unreleased]:/Pending]:}"
 assert_rejects
-cleanup
 
 current="unrelated paths are ignored"
 if "$repo_root/scripts/changelog-check" "$repo_root/scripts/check" > /dev/null 2>&1; then

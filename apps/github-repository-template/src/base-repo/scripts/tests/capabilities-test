@@ -497,7 +497,7 @@ else
   # The declaration is JSON, so reading it needs jq. scripts/doctor requires it
   # once a unit declares; a machine without it skips the case rather than
   # reporting the missing tool as a defect here.
-  echo "  skip  $current: jq is not installed"
+  skip "jq is not installed"
 fi
 cleanup
 
@@ -593,7 +593,7 @@ if command -v jq >/dev/null 2>&1; then
 else
   # jq is not required to run the checks, so its absence skips this one rather
   # than failing a machine that is otherwise correctly set up.
-  echo "  skip  $current: jq is not installed"
+  skip "jq is not installed"
 fi
 cleanup
 
@@ -732,7 +732,8 @@ if command -v node > /dev/null 2>&1 && command -v npm > /dev/null 2>&1; then
   fi
   cleanup
 else
-  echo "  skip  the Node run adapter: node or npm is not installed"
+  current="the Node run adapter"
+  skip "node or npm is not installed"
 fi
 
 # --- an impossible build is not a broken install -----------------------------
@@ -763,7 +764,8 @@ if command -v go > /dev/null 2>&1; then
   fi
   cleanup
 else
-  echo "  skip  the package target outcomes: go is not installed"
+  current="the package target outcomes"
+  skip "go is not installed"
 fi
 
 # --- aggregate outcomes ------------------------------------------------------
