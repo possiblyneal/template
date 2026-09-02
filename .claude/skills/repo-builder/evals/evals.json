@@ -59,7 +59,7 @@
       "expected_output": "A local candidate carrying two application directories derived from the wayfinding answers, one ADR per deployable recording its choke point and language, and a report that names both boundaries and stops before remote operations.",
       "files": [],
       "expectations": [
-        "apps/recorder and apps/ingest-api both exist with the payload skeleton (src, tests, docs/specs, .unit.json), each declaration left at run: none and ships kind none, and apps/app-name is gone.",
+        "apps/recorder and apps/ingest-api both exist with the payload skeleton (src, .unit.json), each declaration left at run: none and ships kind none, and apps/app-name is gone.",
         "docs/adrs holds one accepted ADR per deployable, numbered from 0001, each scoped to its apps/<name> path and a lang: tag, with docs/adrs/0000-template.md left as a template.",
         "No root language manifest, toolchain, or package file is rendered for either language.",
         "generation.applications in .repo-template.json lists both names and records no language.",

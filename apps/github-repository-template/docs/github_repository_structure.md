@@ -57,13 +57,13 @@ The specific operating parameters for the AI agent.
 
 `apps/<name>/src/`: Source code for that unit.
 
-`apps/<name>/tests/`: Tests for that unit that don't touch other units.
+`apps/<name>/tests/`: Convention (not a shipped directory) for tests of that unit that don't touch other units.
 
-`apps/<name>/docs/specs/`: Specs describing that unit's own behavior and acceptance criteria.
+`apps/<name>/docs/specs/`: Convention (not a shipped directory) for specs describing that unit's own behavior and acceptance criteria.
 
-`libs/`: Shared internal libraries, schemas, and utilities used by apps.
+`libs/`: Convention (not a shipped directory) for shared internal libraries, schemas, and utilities used by several apps. Definitionally empty until a second app exists to share them.
 
-`tests/`: Repo-level tests spanning multiple apps or libraries.
+`tests/`: Convention (not a shipped directory) for repo-level tests spanning multiple apps or libraries. Definitionally empty until a second app exists to span.
 
 `scripts/`: Portable shell scripts, run locally or in CI, covering checks, releases, security audits, and branch protection.
 
@@ -95,7 +95,7 @@ The specific operating parameters for the AI agent.
 
 `docs/adrs/`: Architectural Decision Records — why past decisions were made.
 
-`docs/specs/`: Specs for contracts spanning multiple apps.
+`docs/specs/`: Convention (not a shipped directory) for specs of contracts spanning multiple apps. The shipped `docs/agents/issue-tracker.md` puts specs on the issue tracker instead, so a repository keeping them as files creates this directory itself.
 
 `docs/LESSONS.md`: Repository-specific knowledge that prevents recurring mistakes.
 

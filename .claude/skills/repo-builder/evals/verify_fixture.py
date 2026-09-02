@@ -192,11 +192,11 @@ def generation_multi(root: Path, fixture: dict[str, object]) -> list[Check]:
         (
             "skeleton replicated",
             all(
-                (candidate / f"apps/{name}" / sub).is_dir()
+                (candidate / f"apps/{name}" / "src").is_dir()
+                and (candidate / f"apps/{name}" / ".unit.json").is_file()
                 for name in expected
-                for sub in ("src", "tests", "docs/specs")
             ),
-            "each app carries src, tests, and docs/specs",
+            "each app carries src and .unit.json",
         ),
         (
             "placeholder app removed",

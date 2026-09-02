@@ -58,6 +58,7 @@ Three rules are about content rather than placement and no script can settle the
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/#specification).
 - This repo adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Pull requests merge; they are neither squashed nor rebased.
+- Plan mode writes to `docs/plans/`, which is tracked. A plan lands in the diff alongside the code it describes.
 
 ## Agent skills
 
