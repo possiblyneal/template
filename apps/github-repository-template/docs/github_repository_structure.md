@@ -45,7 +45,7 @@ The specific operating parameters for the AI agent.
 
 `.mcp.json`: Configures Model Context Protocol servers for this project. Ships empty.
 
-`CLAUDE.md`: The project's system prompt — conventions, commands, and context the AI needs to operate. Ships with the Layout rules `scripts/structure` enforces, since its failure messages point back at that section, and with an `## Agent skills` block pointing at `docs/agents/`: most engineering skills never name those files by path and fall back to a local-markdown tracker when nothing provides them, so the auto-loaded block is the provision rather than a summary.
+`CLAUDE.md`: The project's system prompt — conventions, commands, and context the AI needs to operate. Ships small: a pointer at `scripts/CLAUDE.md` for the commands, the Git rules, and a Child Index holding the instruction to scan the tree and build the rest of it. The Layout rules live in `scripts/structure` rather than here.
 
 `CLAUDE.local.md`: Personal, per-machine instructions loaded alongside `CLAUDE.md`, excluded by `.gitignore`. Not shipped.
 
@@ -103,7 +103,7 @@ The specific operating parameters for the AI agent.
 
 `docs/plans/`: Plans written in plan mode, tracked so they land in the diff with the code they describe.
 
-`docs/agents/`: How the engineering skills read the repository — `issue-tracker.md` names where issues live and how to work them, `triage-labels.md` the label vocabulary, `domain.md` the glossary and ADR layout. Shipped rather than collected, for the reasons `docs/adrs/0002-ship-agent-skill-configuration-in-the-payload.md` records; `.claude/skills/repo-builder/references/generate.md` step 6 confirms these files instead of running `/setup-matt-pocock-skills`, and creates the labels they name. Editable by hand afterwards. Reached through `CLAUDE.md`'s `## Agent skills` block rather than by path, which is why deleting that block silently disables all three.
+`docs/agents/`: How the engineering skills read the repository — `issue-tracker.md` names where issues live and how to work them, `triage-labels.md` the label vocabulary, `domain.md` the glossary and ADR layout. Shipped rather than collected, for the reasons `docs/adrs/0002-ship-agent-skill-configuration-in-the-payload.md` records; `.claude/skills/repo-builder/references/generate.md` step 6 confirms these files instead of running `/setup-matt-pocock-skills`, and creates the labels they name. Editable by hand afterwards. Indexed by the `CLAUDE.md` tree the bootstrap instruction builds.
 
 ### Root Configuration Files
 
