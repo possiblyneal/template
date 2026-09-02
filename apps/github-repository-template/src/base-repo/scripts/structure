@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Audit the repository's shape against the structure rules in CLAUDE.md.
+# Audit the repository's shape against the layout rules, which live here: each
+# check below carries the rule it enforces, as a literal list or a literal test.
 #
 # This checks where a file sits, and reads the contents of exactly one file --
 # a unit's .unit.json, which exists because how a unit runs and what it ships
@@ -288,6 +289,7 @@ verdict root-folders "every root folder is permitted"
 # which no name could distinguish. Below a domain the vocabulary closes.
 units=()
 declared=()
+misplaced=()
 domains=()
 unit_src=()
 domain_src=()
@@ -315,10 +317,18 @@ for path in "${paths[@]}"; do
   in_list "$unit" ${units[@]+"${units[@]}"} || units+=("$unit")
 
   child="${parts[2]}"
-  # A unit declares at its own root. One deeper is a domain's or a scoped
-  # folder's file, and domains do not declare -- the unit is what ships.
-  if (( ${#parts[@]} == 3 )) && [[ "$child" == .unit.json ]]; then
-    declared+=("$unit")
+  # A unit declares at its own root, and nowhere else: a domain does not
+  # declare, because the unit is what ships, and a declaration under a scoped
+  # folder is a file the audit would never read. Below a src/ the arrangement
+  # is the language's, so a declaration there is not this rule's to judge --
+  # which is also what keeps the template's own payload from being audited as
+  # if it were this repository.
+  if [[ "${parts[-1]}" == .unit.json ]] && (( src_limit == ${#parts[@]} )); then
+    if (( ${#parts[@]} == 3 )); then
+      declared+=("$unit")
+    else
+      misplaced+=("$path")
+    fi
   fi
   # A file directly under the unit is not a domain and not a src placement.
   (( ${#parts[@]} >= 4 )) || continue
@@ -402,11 +412,14 @@ verdict domain-folders "every folder under a domain is src/ or a scoped folder"
 if (( ${#units[@]} == 0 )); then
   result unit-declaration not-applicable "no units under apps/"
 else
+  for path in ${misplaced[@]+"${misplaced[@]}"}; do
+    record "$path: a declaration sits at its unit's root, never under a domain or a scoped folder"
+  done
   for unit in "${units[@]}"; do
     in_list "$unit" ${declared[@]+"${declared[@]}"} && continue
     record "apps/$unit/: no .unit.json; a unit declares how it runs and what it ships"
   done
-  verdict unit-declaration "every unit carries a declaration"
+  verdict unit-declaration "every unit carries a declaration, at its own root"
 fi
 
 if (( ${#declared[@]} == 0 )); then
@@ -491,6 +504,25 @@ for path in "${paths[@]}"; do
 done
 verdict deploy-folders "every deploy/ subfolder is a recognized technology"
 
+# --- tools programs ---------------------------------------------------------
+
+# tools/ holds helpers that must be built before they run, one directory per
+# program with its own manifest. Whether a directory carries a manifest is a
+# language question this script does not ask -- that is the orphan-manifest
+# rule's, in libs/detect.sh -- but whether a program got a directory at all is
+# placement, and the same rule deploy/ states in the same words.
+for path in "${paths[@]}"; do
+  split_path "$path"
+  for (( i = scope_start; i < ${#parts[@]} - 1 && i < src_limit; i++ )); do
+    [[ "${parts[i]}" == tools ]] || continue
+    (( i + 1 == ${#parts[@]} - 1 )) || continue
+    is_placeholder "$path" && continue
+    in_list "$path" ${allow_paths[@]+"${allow_paths[@]}"} && continue
+    record "$path: tools/ holds one directory per program, not loose files"
+  done
+done
+verdict tools-programs "every tools/ entry is a program directory"
+
 # --- docs content -----------------------------------------------------------
 
 for path in "${paths[@]}"; do
@@ -520,8 +552,8 @@ if (( pruned > 0 )); then
   echo "$pruned path(s) not descended into, per $allow_file."
 fi
 if tally; then
-  echo "Structure matches the rules in CLAUDE.md."
+  echo "Structure matches the layout rules."
 else
-  echo "Structure does not match the rules in CLAUDE.md."
+  echo "Structure does not match the layout rules; each finding above names the rule and the fix."
   exit 1
 fi

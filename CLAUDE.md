@@ -44,7 +44,7 @@ The only code this repository runs beyond shell is the Python under `.claude/ski
 
 ## Layout
 
-Where a new file goes. `scripts/structure` enforces everything in this section that is a question about placement, plus the values in a unit's declaration, and reports the three rules that are neither.
+Where a new file goes, restated for a reader. Every rule here that is a question about placement is enforced by `scripts/structure`, which holds them as code rather than as a copy of this prose; it also checks the values in a unit's declaration and reports `not-applicable` for the three rules that are neither. The orphan-manifest rule at the end is `libs/detect.sh`'s, since it is the one that needs a language.
 
 **Root holds only these, and everything at root is repo-wide in scope.** `libs/`, `tests/`, `scripts/`, `tools/`, `deploy/`, and `assets/` here hold only what is shared across apps or operates on the whole repository; anything scoped to one app or domain belongs under that app.
 
@@ -97,7 +97,7 @@ Reading the file needs `jq`, which `scripts/doctor` requires. Without it the aud
 
 Three rules are about content rather than placement and no script can settle them: whether `libs/` really holds what several apps share, whether `tests/` really spans them, and whether a file sits at the scope it belongs to. `scripts/structure` reports all three `not-applicable` rather than inferring them from paths.
 
-A package under `apps/` or `libs/` whose language has no root manifest fails the run rather than passing, because for the languages this rule covers the root manifest is what lists it: `go list -m` names the `use` entries in `go.work` and nothing else, and the Gradle settings file the same. Swift is excluded deliberately — it has no root manifest, so its packages are found by searching and nested ones are how a Swift repository is supposed to look. The failure names the root manifest to add.
+A package anywhere in the tree whose language has no root manifest fails the run rather than passing, because for the languages this rule covers the root manifest is what lists it: `go list -m` names the `use` entries in `go.work` and nothing else, and the Gradle settings file the same. Swift is excluded deliberately — it has no root manifest, so its packages are found by searching and nested ones are how a Swift repository is supposed to look. The failure names the root manifest to add.
 
 ## Repository settings
 
