@@ -308,6 +308,8 @@ units=()
 declared=()
 domains=()
 unit_src=()
+domain_src=()
+domain_extras=()
 apps_src=""
 for path in "${paths[@]}"; do
   [[ "$path" == apps/* ]] || continue
@@ -343,6 +345,20 @@ for path in "${paths[@]}"; do
     in_list "$unit" ${unit_src[@]+"${unit_src[@]}"} || unit_src+=("$unit")
   elif ! in_list "$child" "${scoped_folders[@]}"; then
     in_list "$unit/$child" ${domains[@]+"${domains[@]}"} || domains+=("$unit/$child")
+
+    # Below a domain the vocabulary closes. A domain is one folder under its
+    # unit and domains do not nest, so a folder here is src/ or a scoped folder
+    # and there is no third case a name could be. A file sitting directly in
+    # the domain is left alone, the same latitude a unit's own files get: a
+    # manifest has to live beside the source it declares.
+    (( ${#parts[@]} >= 5 )) || continue
+    grandchild="${parts[3]}"
+    if [[ "$grandchild" == src ]]; then
+      in_list "$unit/$child" ${domain_src[@]+"${domain_src[@]}"} || domain_src+=("$unit/$child")
+    elif ! in_list "$grandchild" "${scoped_folders[@]}"; then
+      in_list "$unit/$child/$grandchild" ${domain_extras[@]+"${domain_extras[@]}"} \
+        || domain_extras+=("$unit/$child/$grandchild")
+    fi
   fi
 done
 
@@ -355,7 +371,24 @@ for unit in ${units[@]+"${units[@]}"}; do
     fi
   done
 done
+
+# A domain holds its own src/ -- that is what the layout rules say a domain is.
+# The unit level cannot be an allowlist, since a domain name is the
+# repository's to choose and a typo has the same shape as a new business area.
+# Requiring the src/ separates them: a folder that is neither a scoped folder
+# nor a source tree is a misspelling or a misplacement, not a domain.
+for domain in ${domains[@]+"${domains[@]}"}; do
+  in_list "$domain" ${domain_src[@]+"${domain_src[@]}"} && continue
+  record "apps/$domain/: a domain holds a src/; without one this is a misspelled scoped folder or misplaced source"
+done
 verdict apps-layout "units and domains hold src/ where the rules place it"
+
+# --- domain vocabulary ------------------------------------------------------
+
+for domain in ${domain_extras[@]+"${domain_extras[@]}"}; do
+  record "apps/$domain/: a domain holds src/ or a scoped folder (${scoped_folders[*]}), and domains do not nest"
+done
+verdict domain-folders "every folder under a domain is src/ or a scoped folder"
 
 # --- unit declarations ------------------------------------------------------
 
