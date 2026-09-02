@@ -83,8 +83,6 @@ This project is not yet indexed. Replace this message with the actual index.
         '{"schema_version": 1, "run": "none", "ships": {"kind": "none"}}\n',
     )
     write(repo, "base-repo/apps/app-name/src/.gitkeep", "")
-    write(repo, "base-repo/apps/app-name/tests/.gitkeep", "")
-    write(repo, "base-repo/apps/app-name/docs/specs/.gitkeep", "")
     write(
         repo,
         "base-repo/docs/adrs/0000-template.md",

@@ -57,13 +57,13 @@ The specific operating parameters for the AI agent.
 
 `apps/<name>/src/`: Source code for that unit.
 
-`apps/<name>/tests/`: Tests for that unit that don't touch other units.
+`apps/<name>/tests/`: Convention (not a shipped directory) for tests of that unit that don't touch other units.
 
-`apps/<name>/docs/specs/`: Specs describing that unit's own behavior and acceptance criteria.
+`apps/<name>/docs/specs/`: Convention (not a shipped directory) for specs describing that unit's own behavior and acceptance criteria.
 
-`libs/`: Shared internal libraries, schemas, and utilities used by apps.
+`libs/`: Convention (not a shipped directory) for shared internal libraries, schemas, and utilities used by several apps. Definitionally empty until a second app exists to share them.
 
-`tests/`: Repo-level tests spanning multiple apps or libraries.
+`tests/`: Convention (not a shipped directory) for repo-level tests spanning multiple apps or libraries. Definitionally empty until a second app exists to span.
 
 `scripts/`: Portable shell scripts, run locally or in CI, covering checks, releases, security audits, and branch protection.
 
@@ -79,9 +79,9 @@ The specific operating parameters for the AI agent.
 
 `scripts/release`: Validates a version tag against the changelog, packages every unit under `apps/`, and cuts a GitHub release with whatever those units produced attached. Packaging runs before the tag, so a build that cannot be made publishes nothing; a repository where no unit ships a file still releases.
 
-`scripts/structure`: Audits where files sit against the Layout rules in the root `CLAUDE.md` — the root folder and file allowlists, the `apps/` unit-and-domain shape, `src/` placement, the leaf rule, and the Markdown-only rule for `docs/`. Called by `scripts/check` and by pre-commit on every commit. It reads the contents of exactly one file, a unit's `.unit.json`, whose whole purpose is to state what a tree cannot show; the three rules that turn on what any other file contains are reported `not-applicable` rather than guessed. Reading a declaration needs `jq`, and its absence is reported `unavailable` rather than passed over.
+`scripts/structure`: Audits where files sit against the Layout rules in the root `CLAUDE.md` — the root folder and file allowlists, the `apps/` unit-and-domain shape, the closed folder vocabulary under a domain, `src/` placement, the leaf rule, and the Markdown-only rule for `docs/`. Called by `scripts/check` and by pre-commit on every commit. It reads the contents of exactly one file, a unit's `.unit.json`, whose whole purpose is to state what a tree cannot show; the three rules that turn on what any other file contains are reported `not-applicable` rather than guessed. Reading a declaration needs `jq`, and its absence is reported `unavailable` rather than passed over.
 
-`.structure-allow`: Convention (not a shipped file) for the permission the Layout rules refer to — one path per line to allow a named exception, a trailing `/` to stop the audit descending into a vendored or fixture tree. Absent until a repository needs one.
+`.structure-allow`: Convention (not a shipped file) for the permission the Layout rules refer to — one path per line to allow a named exception, a trailing `/` to stop the audit descending into a vendored or fixture tree, save for one lookup that keeps a prefix over a domain's `src/` from failing the domain it defines. Absent until a repository needs one.
 
 `tools/`: Convention (not a shipped directory) for helpers that must be built before they run, one directory per program.
 
@@ -95,7 +95,7 @@ The specific operating parameters for the AI agent.
 
 `docs/adrs/`: Architectural Decision Records — why past decisions were made.
 
-`docs/specs/`: Specs for contracts spanning multiple apps.
+`docs/specs/`: Convention (not a shipped directory) for specs of contracts spanning multiple apps. The shipped `docs/agents/issue-tracker.md` puts specs on the issue tracker instead, so a repository keeping them as files creates this directory itself.
 
 `docs/LESSONS.md`: Repository-specific knowledge that prevents recurring mistakes.
 

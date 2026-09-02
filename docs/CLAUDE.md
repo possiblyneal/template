@@ -7,7 +7,7 @@ Durable knowledge about this repository: why decisions were made, what contracts
 ## Ownership
 
 - `adrs/` — architectural decision records, one repo-wide numbered sequence; `adrs/index.md` is generated from their frontmatter and is never hand-edited
-- `specs/` — contracts spanning apps, such as service-to-service APIs and shared schemas
+- `specs/` — contracts spanning apps, such as service-to-service APIs and shared schemas. A convention, not a directory on disk: it exists once the first spec is written, since a folder holding only its own name would be a second, uncheckable statement of this line
 - `plans/` — plans written in plan mode, pointed here by `plansDirectory` in `.claude/settings.json`
 - `LESSONS.md` — repository-specific knowledge that prevents recurring mistakes
 - `TODO.md` — backlogged informal tasks for this repository, not for a project generated from it

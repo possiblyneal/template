@@ -301,13 +301,16 @@ verdict root-folders "every root folder is permitted"
 # --- apps -------------------------------------------------------------------
 
 # A unit is a folder under apps/. A domain is a folder under a unit that is
-# neither src/ nor a scoped folder, so the two are told apart by what a folder
-# is not rather than by a marker file a repository would have to remember to
-# write.
+# neither src/ nor a scoped folder and holds a src/ of its own. The first half
+# tells a domain from a scoped folder without a marker file a repository would
+# have to remember to write; the second tells it from a misspelling of one,
+# which no name could distinguish. Below a domain the vocabulary closes.
 units=()
 declared=()
 domains=()
 unit_src=()
+domain_src=()
+domain_strays=()
 apps_src=""
 for path in "${paths[@]}"; do
   [[ "$path" == apps/* ]] || continue
@@ -343,8 +346,38 @@ for path in "${paths[@]}"; do
     in_list "$unit" ${unit_src[@]+"${unit_src[@]}"} || unit_src+=("$unit")
   elif ! in_list "$child" "${scoped_folders[@]}"; then
     in_list "$unit/$child" ${domains[@]+"${domains[@]}"} || domains+=("$unit/$child")
+
+    # Below a domain the vocabulary closes. A domain is one folder under its
+    # unit and domains do not nest, so a folder here is src/ or a scoped folder
+    # and there is no third case a name could be. A file sitting directly in
+    # the domain is left alone, the same latitude a unit's own files get: a
+    # manifest has to live beside the source it declares.
+    (( ${#parts[@]} >= 5 )) || continue
+    grandchild="${parts[3]}"
+    if [[ "$grandchild" == src ]]; then
+      in_list "$unit/$child" ${domain_src[@]+"${domain_src[@]}"} || domain_src+=("$unit/$child")
+    elif ! in_list "$grandchild" "${scoped_folders[@]}"; then
+      in_list "$unit/$child/$grandchild" ${domain_strays[@]+"${domain_strays[@]}"} \
+        || domain_strays+=("$unit/$child/$grandchild")
+    fi
   fi
 done
+
+# A .structure-allow prefix prunes paths before this walk sees them, which can
+# remove a domain's own src/ while a sibling path still registers the domain.
+# Permission must never make a check stricter than its absence would, so the
+# src/ is looked for once more in the tracked list, which pruning does not
+# touch. Every other check here only gets more lenient under a prefix entry.
+if (( pruned > 0 )); then
+  for domain in ${domains[@]+"${domains[@]}"}; do
+    in_list "$domain" ${domain_src[@]+"${domain_src[@]}"} && continue
+    for path in "${tracked[@]}"; do
+      [[ "$path" == "apps/$domain/src/"* ]] || continue
+      domain_src+=("$domain")
+      break
+    done
+  done
+fi
 
 for unit in ${units[@]+"${units[@]}"}; do
   in_list "$unit" ${unit_src[@]+"${unit_src[@]}"} || continue
@@ -355,7 +388,28 @@ for unit in ${units[@]+"${units[@]}"}; do
     fi
   done
 done
+
+# A domain holds its own src/ -- that is what the layout rules say a domain is.
+# The unit level cannot be an allowlist, since a domain name is the
+# repository's to choose and a typo has the same shape as a new business area.
+# Requiring the src/ separates them: a folder that is neither a scoped folder
+# nor a source tree is a misspelling or a misplacement, not a domain.
+for domain in ${domains[@]+"${domains[@]}"}; do
+  in_list "$domain" ${domain_src[@]+"${domain_src[@]}"} && continue
+  record "apps/$domain/: a domain holds a src/; without one this is a misspelled scoped folder or misplaced source"
+done
 verdict apps-layout "units and domains hold src/ where the rules place it"
+
+# --- domain vocabulary ------------------------------------------------------
+
+for stray in ${domain_strays[@]+"${domain_strays[@]}"}; do
+  # One misplacement is one finding. A folder under a parent that has no src/
+  # is already reported by apps-layout, and repeating it here would assert the
+  # opposite of what that finding said -- that the parent is a domain.
+  in_list "${stray%/*}" ${domain_src[@]+"${domain_src[@]}"} || continue
+  record "apps/$stray/: a domain holds src/ or a scoped folder (${scoped_folders[*]}), and domains do not nest"
+done
+verdict domain-folders "every folder under a domain is src/ or a scoped folder"
 
 # --- unit declarations ------------------------------------------------------
 

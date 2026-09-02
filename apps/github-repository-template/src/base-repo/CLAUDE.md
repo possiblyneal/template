@@ -19,7 +19,7 @@ Root *files* are permitted by name rather than by pattern: the eight this templa
 **`apps/` breaks the project into its smallest deployable units.** There may be only one.
 
 - Each unit is one folder under `apps/`: the smallest piece of this repository delivered on its own — deployed, installed, published, or copied. A file sitting directly in `apps/` belongs to no unit.
-- Split a unit into domains only when it spans distinct business areas that benefit from isolation. Each domain is one folder under its unit.
+- Split a unit into domains only when it spans distinct business areas that benefit from isolation. Each domain is one folder under its unit and holds its own `src/`. That `src/` is what tells a domain from a misspelled scoped folder — the unit level cannot be an allowlist, since a domain name is yours to choose — so a folder under a unit without one is a finding rather than a new domain. Below a domain the vocabulary does close: `src/`, a scoped folder, or the domain's own files. Domains do not nest.
 - `src/` sits under the unit when there are no domains, and under each domain when there are. Never both, and never `apps/src/`.
 - A unit or domain may hold its own `libs/`, `tests/`, `scripts/`, `docs/`, `tools/`, `deploy/`, or `assets/`, scoped strictly to it.
 
@@ -47,7 +47,7 @@ Reading the file needs `jq`, which is why `scripts/doctor` requires it once a un
 
 **`docs/` takes Markdown freely at every scope**; anything else needs permission.
 
-**`.structure-allow` is where permission is recorded.** A bare path allows that one file. A path ending in `/` names a prefix the audit stops descending into, which is how a vendored dependency or a tracked test fixture keeps a shape that is not this repository's to decide.
+**`.structure-allow` is where permission is recorded.** A bare path allows that one file. A path ending in `/` names a prefix the audit stops descending into, which is how a vendored dependency or a tracked test fixture keeps a shape that is not this repository's to decide. The one place it still looks inside is a domain's own `src/`: without that lookup a prefix entry would turn the domain rule stricter rather than more lenient.
 
 Three rules are about content rather than placement and no script can settle them: whether `libs/` really holds what several apps share, whether `tests/` really spans them, and whether a file sits at the scope it belongs to. `scripts/structure` reports all three `not-applicable` rather than inferring them from paths.
 
@@ -58,6 +58,7 @@ Three rules are about content rather than placement and no script can settle the
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/#specification).
 - This repo adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Pull requests merge; they are neither squashed nor rebased.
+- Plan mode writes to `docs/plans/`, which is tracked. A plan lands in the diff alongside the code it describes.
 
 ## Agent skills
 
