@@ -3,9 +3,10 @@ set -uo pipefail
 
 # scripts/repo-settings check, seen through the command line a person runs.
 # gh is a stub answering from files: one per endpoint under $GH_FIXTURES/api,
-# an absent file meaning the endpoint cannot be read. Nothing here reaches the
-# network, and every judgment is asserted on the result line it prints, since
-# the layout is a contract and this is the suite that holds it to one.
+# a body the endpoint answers or an error document it refuses with, and an
+# absent file meaning GitHub's own 404. Nothing here reaches the network, and
+# every judgment is asserted on the result line it prints, since the layout is
+# a contract and this is the suite that holds it to one.
 #
 # Not `set -e`: a failing assertion is recorded and the remaining cases still
 # run, so one break does not hide the rest.
@@ -22,12 +23,25 @@ fixture() {
   mkdir -p "$work/gh/api"
   stub gh <<'STUB'
 #!/usr/bin/env bash
-# Every call is recorded; the answer comes from a file, or there is none.
+# Every call is recorded. An api call answers from its file, refuses with its
+# .error file the way gh does -- the document on stdout and exit 1 -- and
+# without either answers GitHub's 404.
 printf '%s\n' "$*" >> "${GH_FIXTURES:?}/calls"
 case "$1 $2" in
   "auth status") [[ -e "$GH_FIXTURES/authed" ]] ;;
   "repo view") [[ -e "$GH_FIXTURES/remote" ]] && cat "$GH_FIXTURES/remote" ;;
-  "api "*) [[ -e "$GH_FIXTURES/api/${2//[\/?=]/_}" ]] && cat "$GH_FIXTURES/api/${2//[\/?=]/_}" ;;
+  "api "*)
+    file="$GH_FIXTURES/api/${2//[\/?=]/_}"
+    if [[ -e "$file" ]]; then
+      cat "$file"
+    elif [[ -e "$file.error" ]]; then
+      cat "$file.error"
+      exit 1
+    else
+      echo '{"message": "Not Found", "status": "404"}'
+      exit 1
+    fi
+    ;;
   *) exit 1 ;;
 esac
 STUB
@@ -45,6 +59,24 @@ remote() {
 # endpoint <path> with the body on stdin: what `gh api <path>` answers.
 endpoint() {
   cat > "$work/gh/api/${1//[\/?=]/_}"
+}
+
+# endpoint_error <path> <status> <message>: what `gh api <path>` refuses with.
+endpoint_error() {
+  printf '{"message": "%s", "status": "%s"}\n' "$3" "$2" > "$work/gh/api/${1//[\/?=]/_}.error"
+}
+
+# not_offered <path>: GitHub's refusal for a setting the plan does not include.
+not_offered() {
+  endpoint_error "$1" 403 "Upgrade to GitHub Pro or make this repository public to enable this feature."
+}
+
+# free_plan: a private repository on the free plan, where rules, classic
+# protection, and rulesets are all refused that way.
+free_plan() {
+  not_offered repos/o/r/rules/branches/main
+  not_offered repos/o/r/branches/main/protection
+  not_offered repos/o/r/rulesets
 }
 
 # repository <admin> [json fields...]: the repos/o/r view, every merge setting
@@ -86,6 +118,25 @@ fi
 
 # The preflight. Each absence is optional and ends the run green, and the
 # remote's settings are never asked for past it.
+fixture "a missing gh is optional and stops the run"
+out="$(PATH="$(minimal_path bash dirname jq)" check)"
+status=$?
+if (( status == 0 )) && [[ ! -e "$work/gh/calls" ]]; then
+  assert_line '^gh +not-applicable'
+else
+  fail "exit $status: $out"
+fi
+
+fixture "a missing jq is optional and stops the run"
+authed
+out="$(PATH="$(minimal_path bash dirname cat):$work/bin" check)"
+status=$?
+if (( status == 0 )) && ! grep -q '^api' "$work/gh/calls"; then
+  assert_line '^jq +not-applicable'
+else
+  fail "exit $status: $out"
+fi
+
 fixture "an unauthenticated gh is optional and stops the run"
 out="$(check)"
 status=$?
@@ -122,6 +173,18 @@ repository true
 out="$(check)"
 assert_line '^codeowners +pass +no CODEOWNERS file on main'
 
+fixture "a CODEOWNERS check GitHub refuses for another reason is unavailable"
+remote
+repository true
+endpoint_error 'repos/o/r/codeowners/errors?ref=main' 403 "API rate limit exceeded"
+out="$(check)"
+status=$?
+if (( status != 0 )); then
+  assert_line '^codeowners +unavailable +CODEOWNERS on main cannot be checked: API rate limit exceeded \(HTTP 403\)'
+else
+  fail "exit 0 over an unchecked CODEOWNERS: $out"
+fi
+
 fixture "a CODEOWNERS line GitHub rejects is a finding"
 remote
 repository true
@@ -137,14 +200,28 @@ else
 fi
 
 # Whether the file is binding, in each of the ways it can be answered.
-fixture "code owner review is unavailable where branch rules are not offered"
+fixture "code owner review is optional where branch rules are not offered"
 remote
 repository true
+free_plan
 endpoint 'repos/o/r/codeowners/errors?ref=main' <<<'{"errors": []}'
 out="$(check)"
 status=$?
+if (( status == 0 )); then
+  assert_line "^owner-review +not-applicable +not offered for o/r's plan and visibility"
+else
+  fail "exit $status over a plan that offers no review requirement: $out"
+fi
+
+fixture "branch rules refused for another reason are unavailable"
+remote
+repository true
+endpoint 'repos/o/r/codeowners/errors?ref=main' <<<'{"errors": []}'
+endpoint_error repos/o/r/rules/branches/main 500 "Server Error"
+out="$(check)"
+status=$?
 if (( status != 0 )); then
-  assert_line '^owner-review +unavailable +whether main requires code owner review is not offered'
+  assert_line '^owner-review +unavailable +whether main requires code owner review cannot be read: Server Error \(HTTP 500\)'
 else
   fail "exit 0 over an unreadable review requirement: $out"
 fi
@@ -182,6 +259,15 @@ endpoint repos/o/r/rules/branches/main <<<'[]'
 out="$(check)"
 assert_line '^owner-review +not-applicable +not required on main'
 
+fixture "classic branch protection refused for another reason is unavailable"
+remote
+repository true
+endpoint 'repos/o/r/codeowners/errors?ref=main' <<<'{"errors": []}'
+endpoint repos/o/r/rules/branches/main <<<'[]'
+endpoint_error repos/o/r/branches/main/protection 500 "Server Error"
+out="$(check)"
+assert_line '^owner-review +unavailable +no ruleset requires it on main, and classic branch protection cannot be read: Server Error \(HTTP 500\)'
+
 # The admin gate, and that CODEOWNERS is judged above it.
 fixture "a non-admin is told the settings need admin, after CODEOWNERS"
 remote
@@ -204,6 +290,7 @@ fi
 fixture "every merge setting at its wanted value passes"
 remote
 repository true
+free_plan
 out="$(check)"
 status=$?
 current="merge commits allowed pass"
@@ -227,6 +314,7 @@ fixture "every merge setting at the other value is optional with its remediation
 remote
 repository true '"allow_merge_commit": false' '"allow_squash_merge": true' \
   '"allow_rebase_merge": true' '"delete_branch_on_merge": false'
+free_plan
 out="$(check)"
 status=$?
 current="merge commits off is optional"
@@ -259,7 +347,7 @@ repository true
 out="$(check)"
 assert_line "^push-protection +not-applicable +not offered for o/r's plan and visibility"
 
-# Rulesets: the same three.
+# Rulesets: the same three, and the refusals that are neither.
 fixture "an active branch ruleset passes"
 remote
 repository true
@@ -277,7 +365,32 @@ assert_line '^rulesets +not-applicable +no active branch ruleset on o/r; add one
 fixture "rulesets not offered names the plan"
 remote
 repository true
+not_offered repos/o/r/rulesets
 out="$(check)"
 assert_line "^rulesets +not-applicable +not offered for o/r's plan and visibility"
+
+fixture "rulesets refused for another reason are unavailable"
+remote
+repository true
+endpoint_error repos/o/r/rulesets 500 "Server Error"
+out="$(check)"
+status=$?
+if (( status != 0 )); then
+  assert_line '^rulesets +unavailable +rulesets on o/r cannot be read: Server Error \(HTTP 500\)'
+else
+  fail "exit 0 over unreadable rulesets: $out"
+fi
+
+fixture "an answer that is not JSON is unavailable and the run goes on"
+remote
+repository true
+endpoint repos/o/r/rulesets <<<''
+out="$(check)"
+status=$?
+if (( status != 0 )) && grep -qE '^merge-commits +pass' <<<"$out"; then
+  assert_line '^rulesets +unavailable +rulesets on o/r cannot be read: gh api printed no JSON \(HTTP \)'
+else
+  fail "exit $status: $out"
+fi
 
 report
