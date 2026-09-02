@@ -777,8 +777,18 @@ _language_capabilities_run() {
         continue
       fi
 
+      # A check never reads stdin, and a check that inherits one holds the whole
+      # gate open: any tool that drains fd 0 -- swift test, gradle, npm test --
+      # blocks until the caller's stdin reaches EOF, which for a terminal or an
+      # agent harness is never, with no output to diagnose from. `run` is the
+      # one capability that starts the unit's own program in the foreground, so
+      # it is the one that keeps the stdin it was given.
       status=0
-      "$function" || status=$?
+      if [[ "$cap" == run ]]; then
+        "$function" || status=$?
+      else
+        "$function" </dev/null || status=$?
+      fi
       case "$status" in
         0) result "$cap" pass "$lang" ;;
         "$NO_RUNNER")

@@ -43,10 +43,17 @@ ci_real() {
 # scripts/run starts with scripts/doctor, which is another suite's subject and
 # would fail here on the toolchains each case deliberately does not have. The
 # copy of scripts in the fixture is where a stub answers it.
-run_real() {
+#
+# run_stdin hands the program whatever stdin the suite was given. That is what
+# scripts/run is for, and one case below is about it; every other case takes
+# run_real, which closes it like the rest of the suite.
+run_stdin() {
   printf '#!/usr/bin/env bash\nexit 0\n' > "$work/scripts/doctor"
   chmod +x "$work/scripts/doctor"
-  (cd "$work" && scripts/run "$@" 2>&1 </dev/null)
+  (cd "$work" && scripts/run "$@" 2>&1)
+}
+run_real() {
+  run_stdin "$@" </dev/null
 }
 
 capabilities() {
@@ -367,6 +374,53 @@ elif [[ "$(grep ' build$' "$work/visited" | tr '\n' ' ')" == "$work/apps/one bui
   pass
 else
   fail "go build ran in $(grep ' build$' "$work/visited" | tr '\n' ' ')rather than in both workspace modules"
+fi
+
+# --- a check never inherits the stdin it was called with ---------------------
+
+# The three cases above prove the list travels on fd 3. This is the other half:
+# whatever the caller's stdin holds, a check never sees it. A tool that drains
+# fd 0 -- swift test, gradle, npm test -- would otherwise read until the
+# caller's stdin reaches EOF, which for a terminal or an agent harness is never,
+# and the whole gate hangs with nothing printed to diagnose from.
+fixture "a check does not read the stdin the gate was called with"
+mkdir -p "$work/apps/a"
+printf '// swift-tools-version:5.9\n' > "$work/apps/a/Package.swift"
+stub swift <<'STUB'
+#!/usr/bin/env bash
+[[ "$1" != test ]] || wc -c >> "${MARKER:?}"
+STUB
+out="$(cd "$work" && MARKER="$work/read" scripts/ci 2>&1 <<<"the caller's stdin")"
+status=$?
+if (( status != 0 )); then
+  fail "the gate failed though the stubbed swift call succeeded (exit $status): $out"
+elif [[ "$(tr -dc '0-9' < "$work/read")" == 0 ]]; then
+  pass
+else
+  fail "swift test read $(tr -dc '0-9' < "$work/read") bytes of the gate's own stdin"
+fi
+
+# run is the exception and has to stay one: it starts the unit's own program in
+# the foreground, and a program that cannot read its stdin is not running.
+fixture "run hands the program the stdin scripts/run was called with"
+declare_unit one oneshot
+go_mod "$work/apps/one"
+stub go <<'STUB'
+#!/usr/bin/env bash
+case "$1:$2" in
+  list:-m) pwd; exit 0 ;;
+  list:*)  printf '%s\n' example.com/app; exit 0 ;;
+  run:*)   cat > "${MARKER:?}"; exit 0 ;;
+esac
+STUB
+out="$(MARKER="$work/stdin" run_stdin one <<<"typed at the program")"
+status=$?
+if (( status != 0 )); then
+  fail "run returned $status though the stubbed run succeeded: $out"
+elif [[ "$(cat "$work/stdin")" == "typed at the program" ]]; then
+  pass
+else
+  fail "the program read '$(cat "$work/stdin")' rather than the stdin scripts/run was given"
 fi
 
 # A listing that fails means the module graph could not be read. Reporting that
