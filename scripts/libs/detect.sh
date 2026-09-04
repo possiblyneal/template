@@ -621,7 +621,14 @@ _capability_package_go() {
     fi
     read -r goos goarch <<< "$pair"
     for package in "${mains[@]}"; do
-      GOOS="$goos" GOARCH="$goarch" go build -o "dist/$(basename "$package")-$target" "$package" || status=1
+      # A packaged binary is one that leaves this machine: `release` uploads
+      # what lands in `dist/`. Without CGO_ENABLED=0 a cross target builds
+      # static anyway, for want of a cross C toolchain, and the host target
+      # does not -- so the one build that reaches a release is the one that
+      # fails wherever libc differs. -trimpath keeps the runner's own paths
+      # out of a published artifact.
+      CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
+        go build -trimpath -ldflags='-s -w' -o "dist/$(basename "$package")-$target" "$package" || status=1
     done
   done
   return "$status"
