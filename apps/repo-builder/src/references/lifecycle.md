@@ -156,10 +156,11 @@ What replaces it is the check the copies actually need, which no reviewer was do
 For every path in the candidate diff, compare the candidate blob against the blob it was copied from and collect the paths that differ:
 
 ```bash
-for path in $(git -C <destination> diff --name-only --diff-filter=d <base>...HEAD); do
-  git -C <template> cat-file -p <commit>:<prefix>/"$path" 2> /dev/null |
-    diff -q - <destination>/"$path" > /dev/null || echo "$path"
-done
+git -C "<destination>" diff --name-only --diff-filter=d "<base>...HEAD" |
+  while read -r path; do
+    git -C "<template>" cat-file -p "<commit>:<prefix>/$path" 2> /dev/null |
+      diff -q - "<destination>/$path" > /dev/null || echo "$path"
+  done
 ```
 
 `<commit>` and `<prefix>` are each flow's own. Generate and update read the payload subtree at the target commit; adopt reads `repository-addons/` at the recorded commit, which is a sibling of the subtree rather than inside it. Where the template renamed a file its two names are two paths, so read the destination path against the payload's new one. A path `cat-file` cannot find was never a copy, and belongs to the authored surface instead.
