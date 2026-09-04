@@ -89,7 +89,7 @@ This project is not yet indexed. Replace this message with the actual index.
         """---
 type: Template
 title: <Decision title>
-scope: [] # `apps/<app-name>` for domain, or `lang:rust` for languages
+scope: [] # `apps/<app-name>` for one deployable, `domain` for a business area rather than a deployable, `global` for the repository as a whole, `lang:<name>` for a language
 status: proposed
 ---
 
