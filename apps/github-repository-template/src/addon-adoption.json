@@ -1,7 +1,7 @@
 {
   "_about": [
     "Which regions of each repository addon someone must edit before that addon is safe to ship.",
-    "Read by the repo-builder skill at generation time; see .claude/skills/repo-builder/references/generate.md step 2 and references/addon-adoption.md.",
+    "Read by the repo-builder skill at generation time; see apps/repo-builder/src/references/generate.md step 2 and references/addon-adoption.md.",
     "A sibling of repository-addons/ rather than a file inside it, because anything inside that directory looks like an addon to copy.",
     "Never copied into a generated repository. In-file guidance inside the addons themselves is deliberately NOT deduplicated against this file: that guidance serves the person adopting the file by hand in a repository that has no manifest.",
     "Occasion lives in docs/github_repository_structure.md and pairing lives in the skill's references/addon-adoption.md. Neither is repeated here.",

@@ -5,7 +5,7 @@ Read [`lifecycle.md`](lifecycle.md) first — the manifest, ownership, check rep
 1. Resolve the requested source to an exact commit and run:
 
    ```bash
-   python3 .claude/skills/repo-builder/scripts/preflight.py generate \
+   python3 apps/repo-builder/src/scripts/preflight.py generate \
      --template-repo <template-repo> \
      --target <ref-or-commit> \
      --subtree apps/github-repository-template/src/base-repo \
