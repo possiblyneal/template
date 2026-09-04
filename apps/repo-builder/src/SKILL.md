@@ -50,6 +50,7 @@ The helper is read-only and only authorizes the next stage. Claude owns personal
 5. Show the candidate diff, reconciliation summary, file-list account, addon adoption account, repository settings, and exact remote operations. Copying an addon does not adopt it: `apps/github-repository-template/src/addon-adoption.json` names the regions of each one that are wrong until edited, and none of them fail a check. Walk that entry for every addon taken and report each region as done or outstanding.
 6. Obtain confirmation immediately before repository creation, settings changes, pushes, or PR creation unless those exact actions and target were explicitly authorized in the invocation.
 7. Open the pull request and verify it. Never merge it, except the bootstrap-generate case `references/generate.md` step 12 documents. An empty check list means the workflows are unverified, not that they passed; check the commit's check-suites and [githubstatus.com](https://www.githubstatus.com/) before calling it a defect.
+8. Do not code-review the pull request. `references/lifecycle.md` gives the verbatim check that replaces it and why.
 
 On update, advance `.repo-template.json` only after the candidate validates, and include that advance in the same pull request. On conflict or failure, keep the recorded commit unchanged and stop with the evidence and decision needed.
 

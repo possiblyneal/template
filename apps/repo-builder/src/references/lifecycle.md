@@ -147,6 +147,20 @@ The [Wayfinding](wayfinding.md) handoff is also a stop, and the one that is not 
 
 Stop before further remote actions when semantic intent conflicts or verification fails. On a [generate](generate.md) that no longer means before any remote action at all: steps 4 and 5 have already created the repository and applied its settings, so a failure at any step from 5 to 10 leaves a real repository whose content was never published. Its default branch is the empty root commit, except after a failure at step 5 where the probe ran and was not rejected: its commit stays there. Name it, say what it already carries, and say whether resuming against it or deleting it is the next action — a stop reported as though nothing was created sends the user looking for a repository they already own. Keep `template.commit` at the previous version. Report exact paths, Git evidence, checks, and a recoverable next action. Do not approximate a missing old version, rebase unrelated template histories, reset/clean the destination, or claim a partial update succeeded.
 
+## Reviewing the pull request
+
+A pull request this skill opens is not code-reviewed. Almost all of it is the payload at the target commit, copied byte for byte, and that content was reviewed in the template repository before it was merged there; reviewing it again in every generated repository re-reviews the same lines once per destination and reports the template's own judgments as findings against a repository that did not make them. A `PostToolUse` hook asks for a review on every new pull request, and this is the case it does not apply to. Say in the final report that the review was skipped, so a green result is not read as a review that passed.
+
+What replaces it is the check the copies actually need, which no reviewer was doing anyway: prove they are copies. For every managed path in the diff, compare the candidate blob against the payload blob at the target commit and list the paths that differ.
+
+```sh
+git -C <template-repo> cat-file -p <target>:<subtree>/<path> | diff - <destination>/<path>
+```
+
+Everything that matches is the template's, already reviewed, and closed. What is left is the authored surface — a managed file the destination had also changed and this skill hand-merged, a file written for this destination that the payload only has a placeholder for, and `.repo-template.json` — and that list is short enough to read line by line. Read it that way, because it is where this skill's own mistakes land: a merge that keeps both intents can still leave a document asserting something the merge just made false, and a file the payload deletes can leave a live reference behind in destination-owned prose that no check reads. Grep the destination for every path the update deletes or renames before calling the candidate verified.
+
+Report the authored surface and the differing-path list in **File list**, so the reader sees which lines were the template's and which were this run's.
+
 ## Final report
 
 Use this stable shape. On a generate the Reconciliation lines are empty or trivially everything, and File list carries the weight — it is the only section reporting a file the payload ships and the candidate lacks, which no check can fail on. On an adopt the Template line shows the recorded commit on both sides because the pin does not move, and the Addon adoption block carries the weight. On a generate stopped at the wayfinding handoff there are no Application boundaries to report — that absence is the result; the Wayfinding line names the trigger and the map, Repository settings still reports the repository that exists, and Pending action carries the resume.
@@ -172,6 +186,7 @@ Use this stable shape. On a generate the Reconciliation lines are empty or trivi
 
 ### File list
 - <payload paths accounted for, and every difference named as intended or as a defect>
+- Authored surface: <managed paths whose candidate blob differs from the payload at the target commit, or none>
 
 ### Addon adoption
 - <addon taken>: <slot token, review section, or external step>: filled | reviewed | done | OUTSTANDING (<what remains>)
@@ -185,6 +200,8 @@ Use this stable shape. On a generate the Reconciliation lines are empty or trivi
 
 ### Verification
 - `<exact command>`: pass | fail | unavailable (<reason>)
+- Managed paths byte-identical to the payload: <count>/<count>, differing: <paths or none>
+- Code review: skipped, as [Reviewing the pull request](#reviewing-the-pull-request) directs
 - Default branch after merge: <check-suite result> | n/a (nothing merged)
 
 ### Pending action
