@@ -153,10 +153,10 @@ A pull request this skill opens is not code-reviewed. Almost all of it is the pa
 
 What replaces it is the check the copies actually need, which no reviewer was doing anyway: prove they are copies. Each flow runs it before its publish gate, because a check that runs once the pull request is open can no longer stop anything.
 
-For every path in the candidate diff, compare the candidate blob against the blob it was copied from and collect the paths that differ:
+For every path in the candidate diff, compare the candidate blob against the blob it was copied from and collect the paths that differ. Read the diff from the index rather than from a commit range: every flow runs this before the step that commits, so a range against `HEAD` is empty here and would report a clean `0/0` over nothing at all.
 
 ```bash
-git -C "<destination>" diff --name-only --diff-filter=d "<base>...HEAD" |
+git -C "<destination>" diff --cached --name-only --diff-filter=d |
   while read -r path; do
     git -C "<template>" cat-file -p "<commit>:<prefix>/$path" 2> /dev/null |
       diff -q - "<destination>/$path" > /dev/null || echo "$path"
