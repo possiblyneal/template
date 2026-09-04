@@ -5,7 +5,7 @@ Read [`lifecycle.md`](lifecycle.md) first — the manifest, ownership, check rep
 1. Resolve the requested source to an exact commit and run:
 
    ```bash
-   python3 .claude/skills/repo-builder/scripts/preflight.py generate \
+   python3 apps/repo-builder/src/scripts/preflight.py generate \
      --template-repo <template-repo> \
      --target <ref-or-commit> \
      --subtree apps/github-repository-template/src/base-repo \
@@ -102,7 +102,9 @@ Read [`lifecycle.md`](lifecycle.md) first — the manifest, ownership, check rep
    - keep `docs/adrs/0000-template.md` as the reusable ADR template;
    - create `.repo-template.json`;
    - render visibility and feature choices honestly. Keep `codeql.yml` for a private repository rather than omitting it. Its `scanning` job fails in seconds naming the reason, which is accurate — the repository has no static analysis coverage — and it turns green by itself when the repository goes public, where omitting the file leaves nothing to restore and nothing to say so. Report that red check as an expected initial state when handing the repository over; do not describe it as a passing build. Record an omission under `features` only when deliberately stripping the workflow, which is now a choice rather than the private-repository default.
-9. Install the candidate's local pre-commit hook if it requires one, stage the candidate, and run its documented checks as [Running the destination's checks](lifecycle.md#running-the-destinations-checks) directs. Git is already initialized and its remote already set, from steps 3 and 4. Staging matters twice over here: step 10 reads the tracked paths this stage produces.
+9. Install the candidate's local pre-commit hooks if it requires them, stage the candidate, and run its documented checks as [Running the destination's checks](lifecycle.md#running-the-destinations-checks) directs. Git is already initialized and its remote already set, from steps 3 and 4. Staging matters twice over here: step 10 reads the tracked paths this stage produces.
+
+   Verify the install by its outcome rather than by having run the command. `pre-commit install` refuses outright while `core.hooksPath` is set and reports that refusal on stderr, which a step that runs it and moves on does not read; the candidate then ships with no hooks, no secret scan, and no branch protection, and every later check still passes because each of them is a command this step runs directly. `scripts/doctor` is what distinguishes the two: it reports `pre-commit pass` only when every hook type the config asks for is present in the directory git will actually consult. A `FAIL` naming missing hooks here is this step's failure, not the candidate's, and [Running the destination's checks](lifecycle.md#running-the-destinations-checks) carries the remedy. Do not publish a candidate whose hooks did not install.
 
 10. Verify the file list, not only the content. Compare the payload's tracked paths at the source commit against the candidate's, and account for every difference as intended or as a defect. A file the payload ships and the candidate lacks is invisible to every check, because a check reads content and absence has no runner. Compare against the working tree as well as the index: a path the destination ignores is present and untracked rather than missing, and `.env` is the one the payload ships that way. Use `git ls-files` for the tracked comparison and `git ls-files -o -i --exclude-standard` for the untracked one; the flags are the whole point, since an ignored path appears in neither the plain form nor `-o --exclude-standard`, and the two disagree about `.env` in the direction that reads as missing. Do not build either list with the file-discovery tools — `.env` matches a `permissions.deny` rule, so Glob and Grep omit it and a listing built from them reports it missing when it is there.
 

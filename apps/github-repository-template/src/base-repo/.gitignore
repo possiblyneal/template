@@ -45,6 +45,7 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+.orca/
 
 # Dependencies. Unanchored: these nest legitimately in monorepos.
 node_modules/

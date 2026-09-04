@@ -55,9 +55,9 @@ Code scanning accepts uploaded results from a public repository, or from a priva
 
 **Source:** [`.repo-template.json`](../.repo-template.json)
 
-## Never give ruff or ty an `include` to reach `.claude/`
+## Never give ruff or ty an `include` to reach one path
 
-Both walk into a dot-directory unasked; only pytest needs telling, through `testpaths`, because its `norecursedirs` default skips `.*`. An `include` naming `.claude/skills/repo-builder` therefore narrows rather than widens: it silently drops `apps/` and `libs/`, where the Layout rules put product code.
+Both walk the whole tree unasked, so an `include` naming where the Python happens to live today narrows rather than widens: it silently drops every other path, including the rest of `apps/` and `libs/`, where the Layout rules put product code. pytest's `testpaths` is not the same instrument — it is set deliberately, to keep collection off the payload under `src/base-repo/`, which is a generated repository's files rather than this one's tests.
 
 **Do:** Confirm what a tool sees with `uv run ruff check . --show-files` before adding a path to `pyproject.toml`. Add nothing that the isolated run (`--isolated`) already reaches.
 
@@ -93,7 +93,7 @@ The root `.gitignore` pattern does not reach `apps/.../src/base-repo/.env`, so i
 
 **Why:** Every check in this repository is a check on content. Absence has no runner, so a missing file produces a green run.
 
-**Source:** [Generate flow](../.claude/skills/repo-builder/references/generate.md)
+**Source:** [Generate flow](../apps/repo-builder/src/references/generate.md)
 
 ## pre-commit --all-files reads the index, not the working tree
 

@@ -100,6 +100,15 @@ Report a check by what it did, and keep the four outcomes distinct: a check that
 
 A machine-wide `core.hooksPath` set for an unrelated purpose (an editor's own git integration, another agent's attribution hook) makes `pre-commit install` refuse outright, and breaks it again inside any throwaway fixture repository the repository's own tests spin up to exercise hook installation — fixtures inherit the same global config. Check `git config --global core.hooksPath` before treating either failure as a defect in the repository under test; a control run of the same checks against the template repository's own current HEAD reproduces an identical failure when this is the cause.
 
+The two halves have different remedies and neither is to unset the operator's key. A fixture is fixed by isolation, which the repository's own `scripts/tests/libs/harness.sh` already applies. A destination clone is fixed by installing under a neutralized global config and then pinning the key locally, so the hooks land in the clone and git is looking where they landed:
+
+```sh
+GIT_CONFIG_GLOBAL=/dev/null pre-commit install
+git config --local core.hooksPath "$(git rev-parse --path-format=absolute --git-common-dir)/hooks"
+```
+
+Both lines are needed and neither suffices alone. The first installs the files; without the second git keeps reading the shared directory and every installed hook is a silent no-op, which is why `scripts/doctor` asks `git rev-parse --git-path hooks` rather than looking in `.git/hooks`. The pin then shadows whatever the shared directory held, so link each of those hooks back into the clone before pinning: as `<type>.legacy` where pre-commit installed a hook of its own, since `pre-commit hook-impl` runs that file first, and under its own name where pre-commit installed nothing there to chain from. Removing and restoring the operator's global key around the install is not the shortcut it looks like: every other process on the machine reads the wrong config for the duration.
+
 ## Remote action gates
 
 Repository creation, settings writes, pushes, and pull-request creation are separate outward-facing actions. Plan and validate locally first. Immediately before them, show:

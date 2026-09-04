@@ -3,7 +3,7 @@
   "permissions": {
     "allow": [],
     "ask": [
-      "Edit(**/src/**)"
+      "Edit(apps/github-repository-template/src/**)"
     ],
     "deny": [],
     "additionalDirectories": []

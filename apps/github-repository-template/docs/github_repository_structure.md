@@ -103,7 +103,7 @@ The specific operating parameters for the AI agent.
 
 `docs/plans/`: Plans written in plan mode, tracked so they land in the diff with the code they describe.
 
-`docs/agents/`: How the engineering skills read the repository — `issue-tracker.md` names where issues live and how to work them, `triage-labels.md` the label vocabulary, `domain.md` the glossary and ADR layout. Shipped rather than collected, for the reasons `docs/adrs/0002-ship-agent-skill-configuration-in-the-payload.md` records; `.claude/skills/repo-builder/references/generate.md` step 6 confirms these files instead of running `/setup-matt-pocock-skills`, and creates the labels they name. Editable by hand afterwards. Indexed by the `CLAUDE.md` tree the bootstrap instruction builds.
+`docs/agents/`: How the engineering skills read the repository — `issue-tracker.md` names where issues live and how to work them, `triage-labels.md` the label vocabulary, `domain.md` the glossary and ADR layout. Shipped rather than collected, for the reasons `docs/adrs/0002-ship-agent-skill-configuration-in-the-payload.md` records; `apps/repo-builder/src/references/generate.md` step 6 confirms these files instead of running `/setup-matt-pocock-skills`, and creates the labels they name. Editable by hand afterwards. Indexed by the `CLAUDE.md` tree the bootstrap instruction builds.
 
 ### Root Configuration Files
 
@@ -117,7 +117,7 @@ The specific operating parameters for the AI agent.
 
 `.pre-commit-config.yaml`: Local checks that run automatically before a commit.
 
-`.commitlintrc.yaml`: Commit message rules (Conventional Commits).
+`.commitlintrc.yaml`: Commit message rules (Conventional Commits), plus a required `Generated-By:` trailer naming the model that wrote the commit. `scripts/attribute-commit` writes that trailer at `prepare-commit-msg` by rewriting an agent's `Co-Authored-By` line; the rule is what makes a commit fail when the hook is not installed rather than land unattributed, and a commit written by hand adds the trailer itself or is refused.
 
 ### Additions by Occasion
 

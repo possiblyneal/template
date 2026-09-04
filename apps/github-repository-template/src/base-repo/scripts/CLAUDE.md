@@ -13,6 +13,7 @@ One flat directory, not a `ci/` and a `scripts/` split. The boundary that split 
 - `repo-settings check` — hosted GitHub state, run explicitly
 - `adr-index` — called by pre-commit; regenerates `docs/adrs/index.md`
 - `structure` — called by `scripts/check` and by pre-commit; audits where files sit; the script itself holds the rules
+- `attribute-commit` — called by pre-commit at `prepare-commit-msg`; rewrites the agent's `Co-Authored-By` trailer to `Generated-By`, the trailer `.commitlintrc.yaml` then requires at `commit-msg`
 - `changelog-check` — called by pre-commit at `pre-push`, and by `ci.yml` over a pull-request range; validates `CHANGELOG.md` structure
 - `protect-branch` — called by pre-commit at `pre-push`; refuses a push whose destination ref is `main` or `master`
 - `worktree-cleanup` — called by pre-commit at `post-checkout` and `post-merge`, and by the SessionStart hook with `--report`; prunes Git's records for worktrees whose directories are gone
@@ -44,6 +45,7 @@ A helper that must be built before it runs belongs in `tools/`, not here.
 - **`release` is the only script here that writes to GitHub.** Changelog section or generated notes, never both; it packages first, checks an `executable` unit produced a file, and runs `ci`.
 - **`changelog-check` validates only the paths it is given, at `pre-push`** — form, not whether an entry was owed; CI re-runs it over the PR range.
 - **`protect-branch` reads the push destination, not the current branch**, and is silent when unset.
+- **`attribute-commit` rewrites and never inserts**, so the rule requiring the trailer has something left to fail on. Only trailers addressed to `noreply@anthropic.com` are touched, which is what leaves a human co-author's attribution alone.
 - **`worktree-cleanup` prunes metadata, never a directory**, and reads only `--report`.
 - **`check` globs tests with `nullglob` and sweeps untracked files in a second pass by path**, which `--all-files` cannot see.
 - **Local commands stay off hosted GitHub state** — the boundary is hosted state, not connectivity, and only `repo-settings check` crosses it.
@@ -69,6 +71,7 @@ Each suite is `scripts/tests/<name>-test`, reports through the harness, and asse
 - `release-test` — what `release` hands to `gh release create`, and each way the walk aborts before the tag is cut
 - `adr-index-test` — the index converges and pre-commit invokes the hook
 - `commitlint-test` — the `commit-msg` hook installs and commitlint judges a message. The only suite needing the network
+- `attribute-commit-test` — the agent trailer is rewritten, a human co-author is not, no trailer is inserted where none was, and a missing message file is not an error
 - `worktree-cleanup-test` — pruning is correct and idempotent and tolerates each hook stage's arguments
 - `session-start-test` — the operator's global `session-start.sh`, `not-applicable` where it is absent
 - `changelog-check-test` — each structural rule, the shipped addon changelog, a missing file, a missing awk, an unrelated path
@@ -76,4 +79,4 @@ Each suite is `scripts/tests/<name>-test`, reports through the harness, and asse
 - `structure-test` — each layout rule in both directions, `.structure-allow` at a path and at a prefix, every declaration value, and `jq` absent. Each fixture is a real repository with the script copied in, since it resolves its own root from `BASH_SOURCE`
 - `protect-branch-test` — bare, qualified, near-miss, and unset destinations
 
-`scripts/check` runs all sixteen before the checks they guard, then `structure` before `ci`. `ci.yml` runs them before toolchain setup and installs `pre-commit` first, so the two hook-wiring suites do not skip every case. shellcheck runs via pre-commit with `-x`.
+`scripts/check` runs all seventeen before the checks they guard, then `structure` before `ci`. `ci.yml` runs them before toolchain setup and installs `pre-commit` first, so the two hook-wiring suites do not skip every case. shellcheck runs via pre-commit with `-x`.

@@ -9,7 +9,7 @@ it missed, and silence reads as "nothing to do here".
 STDLIB ONLY, and that constraint is load-bearing rather than stylistic. This
 file runs two ways -- under
 
-    uv run --with pytest python -m pytest .claude/skills/repo-builder/scripts/tests/
+    uv run --with pytest python -m pytest apps/repo-builder/src/scripts/tests/
 
 and standalone from the addon-adoption pre-commit hook, which resolves no
 dependencies at all. A pytest-only idiom added later still passes the first and

@@ -8,7 +8,7 @@ Read [`lifecycle.md`](lifecycle.md) first — the manifest, ownership, check rep
 2. Run the read-only preflight before editing:
 
    ```bash
-   python3 <template-repo>/.claude/skills/repo-builder/scripts/preflight.py adopt \
+   python3 <template-repo>/apps/repo-builder/src/scripts/preflight.py adopt \
      --template-repo <template-repo> \
      --destination <destination> \
      --addon <destination-relative path> [--addon ...]

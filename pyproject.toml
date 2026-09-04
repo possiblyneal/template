@@ -1,11 +1,11 @@
 # This repository builds other repositories; it is not a Python package and
-# ships no Python. The file exists because `.claude/skills/repo-builder/` holds
+# ships no Python of its own. The file exists because apps/repo-builder/ holds
 # Python that scripts/check could not see: language detection reads a root
 # manifest (libs/detect.sh has_python), and without one the gate reported there
 # was nothing to check while a pytest suite sat untested. Declaring the language
 # is what puts ruff, ty, and pytest over that code.
 #
-# Root-only, deliberately. A generated repository has no repo-builder skill, so
+# Root-only, deliberately. A generated repository has no repo-builder unit, so
 # the payload at apps/github-repository-template/src/base-repo/ must not carry
 # this file -- it would declare Python in every repository that has none.
 
@@ -40,9 +40,11 @@ dev = ["pytest>=8", "ruff>=0.14", "ty>=0.0.1a21"]
 exclude = ["*.md"]
 
 [tool.pytest.ini_options]
-# pytest is the only one of the three that needs telling where the code is: its
-# default norecursedirs skips `.*`, which is every test this repository has.
-# ruff and ty both walk into a dot-directory unasked, so neither gets an
-# `include` here -- one would not widen what they see, it would narrow it to
-# this path and silently drop any Python later added under apps/ or libs/.
-testpaths = [".claude/skills/repo-builder/scripts/tests"]
+# pytest is the only one of the three that needs telling where the code is, and
+# the reason is the payload rather than the path: apps/github-repository-template/
+# src/base-repo/ is data, and a .py added there is a generated repository's file,
+# not a test of this one. Bounding collection is what keeps it from being
+# collected as though it were. ruff and ty get no `include` here -- one would not
+# widen what they see, it would narrow it to this path and silently drop any
+# Python later added under apps/ or libs/.
+testpaths = ["apps/repo-builder/src/scripts/tests"]

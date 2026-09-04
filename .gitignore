@@ -106,3 +106,9 @@ docker-data/
 
 # Scratch space for repo-builder skill iterations, not repository content.
 .claude/skills/repo-builder-workspace/
+
+# The repo-builder skill lives at apps/repo-builder/, where this repository
+# develops it. apps/repo-builder/scripts/install links it here so Claude Code
+# finds it; the link is a deployment artifact of that unit, not content, and
+# committing it would put the skill at two paths in the tree.
+.claude/skills/repo-builder

@@ -6,7 +6,7 @@ Read [`lifecycle.md`](lifecycle.md) first — the manifest, ownership, check rep
 2. Run the read-only preflight before editing:
 
    ```bash
-   python3 <template-repo>/.claude/skills/repo-builder/scripts/preflight.py update \
+   python3 <template-repo>/apps/repo-builder/src/scripts/preflight.py update \
      --template-repo <template-repo> \
      --target <ref-or-commit> \
      --destination <destination>
