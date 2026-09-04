@@ -45,7 +45,7 @@ The specific operating parameters for the AI agent.
 
 `.mcp.json`: Configures Model Context Protocol servers for this project. Ships empty.
 
-`CLAUDE.md`: The project's system prompt — conventions, commands, and context the AI needs to operate. Ships small: a pointer at `scripts/CLAUDE.md` for the commands, the Git rules, and a Child Index holding the instruction to scan the tree and build the rest of it. The Layout rules live in `scripts/structure` rather than here.
+`CLAUDE.md`: The project's system prompt — conventions, commands, and context the AI needs to operate. Ships small: a pointer at `scripts/CLAUDE.md` for the commands, the Git rules, the `## Agent skills` block that provides `docs/agents/` to the skills that never name it by path, and a Child Index holding the instruction to scan the tree and build the rest of it. The Layout rules live in `scripts/structure` rather than here.
 
 `CLAUDE.local.md`: Personal, per-machine instructions loaded alongside `CLAUDE.md`, excluded by `.gitignore`. Not shipped.
 
