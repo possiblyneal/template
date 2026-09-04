@@ -149,17 +149,30 @@ Stop before further remote actions when semantic intent conflicts or verificatio
 
 ## Reviewing the pull request
 
-A pull request this skill opens is not code-reviewed. Almost all of it is the payload at the target commit, copied byte for byte, and that content was reviewed in the template repository before it was merged there; reviewing it again in every generated repository re-reviews the same lines once per destination and reports the template's own judgments as findings against a repository that did not make them. A `PostToolUse` hook asks for a review on every new pull request, and this is the case it does not apply to. Say in the final report that the review was skipped, so a green result is not read as a review that passed.
+A pull request this skill opens is not code-reviewed. Almost all of it is the payload at the target commit, copied byte for byte, and that content was reviewed in the template repository before it merged there; reviewing it again in every generated repository re-reviews the same lines once per destination and reports the template's own judgments as findings against a repository that did not make them. Where a hook or a reviewer asks for a review of this pull request, this section is the answer to give, and the final report says the review was skipped so that a green result is not read as a review that passed.
 
-What replaces it is the check the copies actually need, which no reviewer was doing anyway: prove they are copies. For every managed path in the diff, compare the candidate blob against the payload blob at the target commit and list the paths that differ.
+What replaces it is the check the copies actually need, which no reviewer was doing anyway: prove they are copies. Each flow runs it before its publish gate, because a check that runs once the pull request is open can no longer stop anything.
 
-```sh
-git -C <template-repo> cat-file -p <target>:<subtree>/<path> | diff - <destination>/<path>
+For every path in the candidate diff, compare the candidate blob against the blob it was copied from and collect the paths that differ:
+
+```bash
+for path in $(git -C <destination> diff --name-only --diff-filter=d <base>...HEAD); do
+  git -C <template> cat-file -p <commit>:<prefix>/"$path" 2> /dev/null |
+    diff -q - <destination>/"$path" > /dev/null || echo "$path"
+done
 ```
 
-Everything that matches is the template's, already reviewed, and closed. What is left is the authored surface — a managed file the destination had also changed and this skill hand-merged, a file written for this destination that the payload only has a placeholder for, and `.repo-template.json` — and that list is short enough to read line by line. Read it that way, because it is where this skill's own mistakes land: a merge that keeps both intents can still leave a document asserting something the merge just made false, and a file the payload deletes can leave a live reference behind in destination-owned prose that no check reads. Grep the destination for every path the update deletes or renames before calling the candidate verified.
+`<commit>` and `<prefix>` are each flow's own. Generate and update read the payload subtree at the target commit; adopt reads `repository-addons/` at the recorded commit, which is a sibling of the subtree rather than inside it. Where the template renamed a file its two names are two paths, so read the destination path against the payload's new one. A path `cat-file` cannot find was never a copy, and belongs to the authored surface instead.
 
-Report the authored surface and the differing-path list in **File list**, so the reader sees which lines were the template's and which were this run's.
+What matches is the template's, already reviewed, and closed. What is left is the authored surface, short enough to read line by line. Read it that way, because it is where this skill's own mistakes land: a merge that keeps both intents can still leave a document asserting something the merge just made false, and a file the payload deletes can leave a live reference behind in destination-owned prose that no check reads. Grep the destination for every path the flow deletes or renames before calling the candidate verified.
+
+Which files make up that surface differs by flow:
+
+- **Update** — every managed file the destination had also changed and this skill hand-merged, plus `.repo-template.json`.
+- **Generate** — everything step 8 personalized: the root `CLAUDE.md` Child Index, each `apps/<name>/` and its `.unit.json`, the ADRs, and `.repo-template.json`. This surface is larger than update's and it gets no second look, because a bootstrap generate merges its own pull request under [Generate](generate.md) step 12. Read it before that merge rather than after.
+- **Adopt** — every region `addon-adoption.json` names for the addons taken. Here differing paths are the expected result rather than the exception: an addon is adopted by editing it, so byte-identity would mean the adoption never happened. Confirm that what differs is the named regions and nothing besides.
+
+Report the authored surface in **File list**, so the reader sees which lines were the template's and which were this run's.
 
 ## Final report
 
@@ -186,7 +199,7 @@ Use this stable shape. On a generate the Reconciliation lines are empty or trivi
 
 ### File list
 - <payload paths accounted for, and every difference named as intended or as a defect>
-- Authored surface: <managed paths whose candidate blob differs from the payload at the target commit, or none>
+- Authored surface: <paths whose candidate blob differs from the blob it was copied from, or none>
 
 ### Addon adoption
 - <addon taken>: <slot token, review section, or external step>: filled | reviewed | done | OUTSTANDING (<what remains>)
@@ -200,7 +213,7 @@ Use this stable shape. On a generate the Reconciliation lines are empty or trivi
 
 ### Verification
 - `<exact command>`: pass | fail | unavailable (<reason>)
-- Managed paths byte-identical to the payload: <count>/<count>, differing: <paths or none>
+- Copied paths byte-identical to their source: <count>/<count>; the rest are the authored surface, under File list
 - Code review: skipped, as [Reviewing the pull request](#reviewing-the-pull-request) directs
 - Default branch after merge: <check-suite result> | n/a (nothing merged)
 
