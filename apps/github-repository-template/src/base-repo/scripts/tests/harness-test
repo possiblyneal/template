@@ -57,8 +57,8 @@ SUITE
 assert_tally "1 passed, 1 failed, 0 skipped, 0 not-applicable" 1
 if [[ "$out" == *"  FAIL  b: broke"* ]]; then pass; else fail "the failing case was not named: '$out'"; fi
 
-# The silent green: every case skipped for a missing tool used to print
-# "0 passed, 0 failed" and exit 0, indistinguishable from a verified run.
+# The silent green: every case skipped for a missing tool used to exit 0,
+# indistinguishable from a verified run.
 scratch_repo
 current="everything skipped is unavailable, not green"
 suite <<'SUITE'

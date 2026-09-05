@@ -23,6 +23,13 @@ set -euo pipefail
 # because a generated repository that later grows a payload of its own is not
 # hypothetical: this repository is one, generated from the payload it now
 # holds.
+#
+# Everything is read from the Git index, both which paths exist and what each
+# one contains. The index is the tree being committed, and this runs at
+# pre-commit: reading content from the working tree instead would pass a staged
+# divergence whose fix is sitting unstaged beside it, and fail a staged
+# agreement carrying an unstaged scratch edit. Both are the wrong answer to
+# "may this commit proceed".
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
@@ -33,7 +40,7 @@ source "$repo_root/scripts/libs/result.sh"
 
 root=".github"
 payload="apps/github-repository-template/src/base-repo/.github"
-record=".repo-template.json"
+record_file=".repo-template.json"
 
 # Content that differs deliberately, by named path rather than by pattern, so a
 # second divergence cannot join it silently. Presence is still checked: the
@@ -42,7 +49,7 @@ record=".repo-template.json"
 # dependabot.yml is the one. The payload ships no pyproject.toml, so its copy
 # must not carry the root's pip entry -- an ecosystem naming a manifest that is
 # not there fails the run rather than being skipped.
-content_exceptions=(dependabot.yml)
+content_exceptions="dependabot.yml"
 
 # A payload file the root deliberately dropped. The record is
 # .repo-template.json's generation.features, where the resolution is already
@@ -56,24 +63,27 @@ feature_path() {
   esac
 }
 
-in_list() {
-  local needle="$1" item
-  shift
-  for item in "$@"; do
-    [[ "$item" == "$needle" ]] && return 0
-  done
-  return 1
+# Membership in a newline-joined list of paths. One predicate for every list
+# here, since each answers the same question about the same kind of value.
+holds() {
+  [[ $'\n'"$1"$'\n' == *$'\n'"$2"$'\n'* ]]
 }
 
-# The paths under each tree, relative to that tree, from the Git index rather
-# than the filesystem: a workflow added and staged is the case this check is
-# for, and an untracked scratch file in either tree is not.
+# The paths under each tree, relative to that tree. quotePath is off so a
+# non-ASCII filename arrives literally rather than C-quoted into a path that
+# does not exist.
 tree_paths() {
-  git ls-files "$1" 2>/dev/null | sed "s|^$1/||"
+  git -c core.quotePath=false ls-files "$1" | sed "s|^$1/||"
 }
 
 if ! command -v git > /dev/null 2>&1; then
   result github-parity unavailable "git is required to enumerate the two trees"
+  tally
+  exit
+fi
+
+if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+  result github-parity unavailable "$repo_root is not a Git repository; both trees are read from its index"
   tally
   exit
 fi
@@ -87,39 +97,40 @@ if [[ -z "$payload_paths" ]]; then
   exit
 fi
 
-# Which deliberate omissions the record accounts for, resolved once. Only a
-# payload file the root lacks needs this, so a host without jq is told the
-# check could not be made rather than failed on a question it could not ask.
+# The payload files the root does not hold. These are the only findings the
+# record can excuse, so resolving them first is what keeps the jq gate below
+# narrow: a root-only file and a content difference are both answerable without
+# jq, and reporting them unavailable would name the wrong reason.
+payload_only=""
+while IFS= read -r path; do
+  [[ -n "$path" ]] || continue
+  holds "$root_paths" "$path" || payload_only+="$path"$'\n'
+done <<< "$payload_paths"
+
+# Which of those omissions the record accounts for, resolved once.
 omitted=""
-if [[ "$root_paths" != "$payload_paths" && -f "$record" ]]; then
+if [[ -n "$payload_only" && -f "$record_file" ]]; then
   if ! command -v jq > /dev/null 2>&1; then
-    result github-parity unavailable "jq is required to read generation.features in $record"
+    result github-parity unavailable "jq is required to read generation.features in $record_file"
     tally
     exit
   fi
   while IFS= read -r feature; do
     path="$(feature_path "$feature")" || continue
     omitted+="$path"$'\n'
-  done < <(jq -r '.generation.features // {} | to_entries[] | select(.value == "omitted-by-choice") | .key' "$record")
+  done < <(jq -r '.generation.features // {} | to_entries[] | select(.value == "omitted-by-choice") | .key' "$record_file")
 fi
-
-# Membership is decided against the enumerated lists rather than the
-# filesystem, so the answer comes from where the paths did. A commit staging a
-# deletion has the file still on disk and already out of the index, and the
-# index is the tree being committed.
-holds() {
-  [[ $'\n'"$1"$'\n' == *$'\n'"$2"$'\n'* ]]
-}
 
 while IFS= read -r path; do
   [[ -n "$path" ]] || continue
 
   if ! holds "$payload_paths" "$path"; then
     record "$path is in $root and not in the payload; add it to $payload/"
-  elif ! holds "$root_paths" "$path"; then
+  elif holds "$payload_only" "$path"; then
     holds "$omitted" "$path" ||
-      record "$path is in the payload and not in $root; mirror it, or record the omission under generation.features in $record"
-  elif ! in_list "$path" "${content_exceptions[@]}" && ! cmp -s "$root/$path" "$payload/$path"; then
+      record "$path is in the payload and not in $root; mirror it, or record the omission under generation.features in $record_file"
+  elif ! holds "$content_exceptions" "$path" &&
+    ! cmp -s <(git show ":$root/$path") <(git show ":$payload/$path"); then
     record "$path differs between the two trees; mirror the change into the other"
   fi
 done < <(printf '%s\n%s\n' "$root_paths" "$payload_paths" | sort -u)
