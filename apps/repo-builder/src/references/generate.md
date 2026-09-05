@@ -67,7 +67,7 @@ Read [`lifecycle.md`](lifecycle.md) first — the manifest, ownership, check rep
 
    The probe is a commit on the default branch and a direct push to it, which is exactly what `no-commit-to-branch` and `protect-branch` exist to refuse. Step 4's note above applies to it unchanged, including the explicit confirmation that bypass needs: a resumed generate reaches this step with both hooks installed. Do not resolve a refusal by skipping the probe, which reports an unverified ruleset as verified.
 
-   Make the probe empty and rewind it with `update-ref` rather than `git reset --hard`. The materialized payload is sitting untracked in this worktree, and a hard reset against an empty base takes the working tree with the probe.
+   Make the probe empty and rewind it with `update-ref` rather than `git reset --hard`. The materialized payload is sitting untracked in the candidate's own worktree, and a hard reset against an empty base takes the working tree with the probe.
 
    That rewind is local, and it removes the probe only where the push was rejected. Where the push was accepted, `origin/<default-branch>` is the probe commit, so the rewind syncs to it rather than undoing it and the commit stays on the remote default branch. That is the finding, and it is a failed verification: stop under [Failure and recovery](lifecycle.md#failure-and-recovery), name the repository and say it carries the probe commit, and leave removing it to a decision at a gate. Removing it means force-pushing the default branch, which is not an operation to perform on the way past.
 
