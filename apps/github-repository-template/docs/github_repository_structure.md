@@ -45,7 +45,7 @@ The specific operating parameters for the AI agent.
 
 `.mcp.json`: Configures Model Context Protocol servers for this project. Ships empty.
 
-`CLAUDE.md`: The project's system prompt — conventions, commands, and context the AI needs to operate. Ships with the Layout rules `scripts/structure` enforces, since its failure messages point back at that section.
+`CLAUDE.md`: The project's system prompt — conventions, commands, and context the AI needs to operate. Ships small: a pointer at `scripts/CLAUDE.md` for the commands, the Git rules, the `## Agent skills` block, and a Child Index holding the instruction to scan the tree and build the rest of it. The Layout rules live in `scripts/structure` rather than here.
 
 `CLAUDE.local.md`: Personal, per-machine instructions loaded alongside `CLAUDE.md`, excluded by `.gitignore`. Not shipped.
 
@@ -57,19 +57,21 @@ The specific operating parameters for the AI agent.
 
 `apps/<name>/src/`: Source code for that unit.
 
-`apps/<name>/tests/`: Tests for that unit that don't touch other units.
+`apps/<name>/tests/`: Convention (not a shipped directory) for tests of that unit that don't touch other units.
 
-`apps/<name>/docs/specs/`: Specs describing that unit's own behavior and acceptance criteria.
+`apps/<name>/docs/specs/`: Convention (not a shipped directory) for specs describing that unit's own behavior and acceptance criteria.
 
-`libs/`: Shared internal libraries, schemas, and utilities used by apps.
+`libs/`: Convention (not a shipped directory) for shared internal libraries, schemas, and utilities used by several apps. Definitionally empty until a second app exists to share them.
 
-`tests/`: Repo-level tests spanning multiple apps or libraries.
+`tests/`: Convention (not a shipped directory) for repo-level tests spanning multiple apps or libraries. Definitionally empty until a second app exists to span.
 
 `scripts/`: Portable shell scripts, run locally or in CI, covering checks, releases, security audits, and branch protection.
 
+`scripts/CLAUDE.md`: The contract for `scripts/` — what each script is for, the four result states, the language-capabilities interface and its test harness, and what adding a language or a check requires. The root copy's counterpart, minus the one paragraph that only applies to the template.
+
 `scripts/libs/`: Shared shell libraries used by the `scripts/` entry points.
 
-`scripts/detect`: Reports which languages are present in the repository, for use by scripts and workflows.
+`scripts/detect`: Reports which languages are present in the repository and which capability adapters are wired, for use by scripts and workflows.
 
 `scripts/tests/`: Tests for the scripts themselves.
 
@@ -79,9 +81,11 @@ The specific operating parameters for the AI agent.
 
 `scripts/release`: Validates a version tag against the changelog, packages every unit under `apps/`, and cuts a GitHub release with whatever those units produced attached. Packaging runs before the tag, so a build that cannot be made publishes nothing; a repository where no unit ships a file still releases.
 
-`scripts/structure`: Audits where files sit against the Layout rules in the root `CLAUDE.md` — the root folder and file allowlists, the `apps/` unit-and-domain shape, `src/` placement, the leaf rule, and the Markdown-only rule for `docs/`. Called by `scripts/check` and by pre-commit on every commit. It reads the contents of exactly one file, a unit's `.unit.json`, whose whole purpose is to state what a tree cannot show; the three rules that turn on what any other file contains are reported `not-applicable` rather than guessed. Reading a declaration needs `jq`, and its absence is reported `unavailable` rather than passed over.
+`scripts/structure`: Audits where files sit against the Layout rules in the root `CLAUDE.md` — the root folder and file allowlists, the `apps/` unit-and-domain shape, the closed folder vocabulary under a domain, `src/` placement, the leaf rule, and the Markdown-only rule for `docs/`. Called by `scripts/check` and by pre-commit on every commit. It reads the contents of exactly one file, a unit's `.unit.json`, whose whole purpose is to state what a tree cannot show; the three rules that turn on what any other file contains are reported `not-applicable` rather than guessed. Reading a declaration needs `jq`, and its absence is reported `unavailable` rather than passed over.
 
-`.structure-allow`: Convention (not a shipped file) for the permission the Layout rules refer to — one path per line to allow a named exception, a trailing `/` to stop the audit descending into a vendored or fixture tree. Absent until a repository needs one.
+`scripts/github-parity`: Refuses a divergence between a repository's own `.github/` and the copy a template payload ships to generated repositories, reading both which paths exist and what each one holds from the Git index, since it runs at pre-commit and the index is the tree being committed. `dependabot.yml` is the one named content exception, since a payload copy must not carry an ecosystem entry for a manifest it does not ship; a payload file the root deliberately dropped is excused only where `generation.features` in `.repo-template.json` records the omission, which needs `jq` and is reported `unavailable` without it; a divergence the record cannot excuse is still named on a host without `jq`. Reports `not-applicable` in a repository with no payload, which is every repository generated from one. Called by `scripts/check` and by pre-commit on every commit.
+
+`.structure-allow`: Convention (not a shipped file) for the permission the Layout rules refer to — one path per line to allow a named exception, a trailing `/` to stop the audit descending into a vendored or fixture tree, save for one lookup that keeps a prefix over a domain's `src/` from failing the domain it defines. Absent until a repository needs one.
 
 `tools/`: Convention (not a shipped directory) for helpers that must be built before they run, one directory per program.
 
@@ -95,11 +99,13 @@ The specific operating parameters for the AI agent.
 
 `docs/adrs/`: Architectural Decision Records — why past decisions were made.
 
-`docs/specs/`: Specs for contracts spanning multiple apps.
+`docs/specs/`: Convention (not a shipped directory) for specs of contracts spanning multiple apps. The shipped `docs/agents/issue-tracker.md` puts specs on the issue tracker instead, so a repository keeping them as files creates this directory itself.
 
 `docs/LESSONS.md`: Repository-specific knowledge that prevents recurring mistakes.
 
 `docs/plans/`: Plans written in plan mode, tracked so they land in the diff with the code they describe.
+
+`docs/agents/`: How the engineering skills read the repository — `issue-tracker.md` names where issues live and how to work them, `triage-labels.md` the label vocabulary, `domain.md` the glossary and ADR layout. Shipped rather than collected, for the reasons `docs/adrs/0002-ship-agent-skill-configuration-in-the-payload.md` records; `apps/repo-builder/src/references/generate.md` step 6 confirms these files instead of running `/setup-matt-pocock-skills`, and creates the labels they name. Editable by hand afterwards. Reached through `CLAUDE.md`'s `## Agent skills` block rather than by path, which is why deleting that block silently disables all three.
 
 ### Root Configuration Files
 
@@ -113,7 +119,7 @@ The specific operating parameters for the AI agent.
 
 `.pre-commit-config.yaml`: Local checks that run automatically before a commit.
 
-`.commitlintrc.yaml`: Commit message rules (Conventional Commits).
+`.commitlintrc.yaml`: Commit message rules (Conventional Commits), plus a required `Generated-By:` trailer naming the model that wrote the commit. `scripts/attribute-commit` writes that trailer at `prepare-commit-msg` by rewriting an agent's `Co-Authored-By` line; the rule is what makes a commit fail when the hook is not installed rather than land unattributed, and a commit written by hand adds the trailer itself or is refused.
 
 ### Additions by Occasion
 
@@ -192,12 +198,6 @@ These live in `src/repository-addons/` and are never copied during generation �
 #### When a helper needs to be built before it runs
 
 `tools/CLAUDE.md`: Creates `tools/` and owns it as a documented boundary — each helper gets its own `tools/<name>/` with its own manifest and source, and a helper that's just a shell script belongs in `scripts/` instead. Copied in only when the project needs a helper that must be built before it runs: a linter, a code generator, a protobuf plugin. Its sections ship seeded with what the template can know, including the trap: `scripts/check` reads the manifests at the repository root, so a tool whose language has no root manifest is built and tested by nobody. Being a child document, it has to be added to the root `CLAUDE.md`'s Child Index when adopted, or nothing walking the tree reaches it.
-
-### Written During Generation
-
-Not part of the payload. `/repo-builder` writes these into the generated repository, so they appear in a generated tree and never in this inventory.
-
-`docs/agents/`: Written by invoking `/setup-matt-pocock-skills`, which records where the repository tracks its issues, its triage label vocabulary, and its domain-doc layout. The engineering skills read it; `/wayfinder` reads `issue-tracker.md` to decide where a map lives.
 
 ### Program Language Metadata
 

@@ -5,7 +5,7 @@ This repository builds other repositories. It holds two trees and they must not 
 - **Live configuration** — `scripts/`, `.github/`, `.claude/`, and the root dotfiles govern *this* repository, the same way they govern any other.
 - **Template payload** — `apps/github-repository-template/src/base-repo/` is the content copied into repositories generated from this one. Editing a file there changes every future generated repository and changes nothing here.
 
-The two trees hold near-identical files. Before editing, decide which one the change belongs to: a fix applied only at the root leaves the template shipping the bug, and a fix applied only in the payload leaves this repository running it. Editing under `src/` prompts for approval so the choice stays deliberate.
+The two trees hold near-identical files. Before editing, decide which one the change belongs to: a fix applied only at the root leaves the template shipping the bug, and a fix applied only in the payload leaves this repository running it. Editing under `apps/github-repository-template/src/` prompts for approval so the choice stays deliberate.
 
 This repository was generated from its own payload, so the root files are that payload plus repository-specific merges. `.repo-template.json` records the payload commit the root was last reconciled with, and marks `apps/**` as product so an update never overwrites the payload that produced it.
 
@@ -21,21 +21,23 @@ Use these instead of per-language tools; each detects the languages present and 
 - `scripts/fix` — rewrite formatting for every detected stack; the write half of `check`'s format check, no lint autofixes
 - `scripts/clean` — recursively delete build output and tool caches (`dist`, `build`, `coverage`, `__pycache__`, `.*_cache`, `*.pyc`)
 - `scripts/run [unit] [-- args…]` — start the unit, dispatching on the `run` fact it declared; requires the unit name when `apps/` holds several, since a run is one foreground process. Everything after `--` reaches the program unchanged
-- `scripts/package [unit]` — deliver what the unit declared it ships: an executable per declared target into the unit's `dist/`, or a `deploy/quadlet/` pair validated and nothing built. Not part of the gate: packaging is not a check
+- `scripts/package [unit]` — deliver what the unit declared it ships: an executable per declared target into the unit's `dist/`, or a `deploy/quadlet/` pair validated and nothing built. Where a language packages into `dist/`, that directory is this command's output and is emptied before the build refills it, so a binary from an earlier build cannot reach a release; where a language has no packaging adapter, `dist/` is left alone. Not part of the gate: packaging is not a check
 - `scripts/structure` — audit where files sit against the Layout rules below; called by `scripts/check` and by pre-commit on every commit
+- `scripts/github-parity` — refuse a divergence between `.github/` and the payload copy at `apps/github-repository-template/src/base-repo/.github/`; called by `scripts/check` and by pre-commit on every commit. It reports rather than repairs, so a Dependabot bump merged into the root only fails until it is mirrored
 
 Every check runs for every language present, not the first one detected. Results distinguish `pass`, `not-applicable`, `unavailable`, and `FAIL`, so an intentional no-op cannot look like a runner that executed. See `scripts/CLAUDE.md` before adding a language or a check.
 
-The only code this repository runs beyond shell is the Python under `.claude/skills/repo-builder/`, and detection reads a root manifest, so the root `pyproject.toml` exists to declare it — that is what puts ruff, ty, and pytest over the skill, and what makes `scripts/doctor` require `uv`. It configures two things. `testpaths`, because pytest's default `norecursedirs` skips `.*`; ruff and ty walk into a dot-directory unasked, so an `include` naming the skill would not widen what they see — it would narrow them to that path and drop any Python later added under `apps/` or `libs/`. And the formatter's `exclude = ["*.md"]`, because `*.md` is in ruff's own default include list and `ruff format` rewrites the Python fenced inside one, which would put `scripts/fix` in the business of editing the payload under `src/base-repo/` and the frozen plans in `docs/plans/`. The file is root-only and must never be mirrored into the payload: a generated repository has no repo-builder skill and would be declaring a language it does not have.
+The only code this repository runs beyond shell is the Python under `apps/repo-builder/`, and detection reads a root manifest, so the root `pyproject.toml` exists to declare it — that is what puts ruff, ty, and pytest over that unit, and what makes `scripts/doctor` require `uv`. It configures two things. `testpaths`, which bounds pytest to that unit's suite so a `.py` added under `src/base-repo/` is collected as the generated repository's file it is rather than as a test of this one; ruff and ty get no `include`, since one would not widen what they see — it would narrow them to that path and drop any Python later added under `apps/` or `libs/`. And the formatter's `exclude = ["*.md"]`, because `*.md` is in ruff's own default include list and `ruff format` rewrites the Python fenced inside one, which would put `scripts/fix` in the business of editing the payload under `src/base-repo/` and the frozen plans in `docs/plans/`. The file is root-only and must never be mirrored into the payload: a generated repository has no repo-builder unit and would be declaring a language it does not have.
 
 ## Git
 
 - Pre-commit blocks direct commits to `main` and `master`. Branch before you start; a commit attempted on either fails at the hook, not at review.
 - Run `scripts/check` before committing. It runs the same checks CI does, plus pre-commit across every file rather than the staged ones.
 - These prompt for approval and cannot be assumed: `git reset --hard`, `git clean`, `git rebase`, `rm` and `git rm`, and the `gh` commands that merge pull requests, cut releases, or delete the repository.
-- So do these paths, whether the change creates or modifies: any dotfile or dot-folder, anything under a `src/` directory, and anything directly in the repository root. Only the `src/` rule lives in this repository's `.claude/settings.json`, since it protects a boundary specific to this repo; the rest, and the `rm` rules above, come from the operator's global `~/.claude/settings.json`.
+- So do these paths, whether the change creates or modifies: any dotfile or dot-folder, anything under the payload's `src/`, and anything directly in the repository root. Only the payload rule lives in this repository's `.claude/settings.json`, since it protects a boundary specific to this repo; the rest, and the `rm` rules above, come from the operator's global `~/.claude/settings.json`. It names `apps/github-repository-template/src/**` rather than every `src/`: the prompt asks whether a change belongs to the payload or to the root, and `apps/repo-builder/src/` is a source tree where that question has no meaning.
 - Work reaches `main` through a pull request, where `.github/PULL_REQUEST_TEMPLATE.md` applies.
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/#specification): `type(optional scope): subject`, a blank line, then the body. commitlint enforces it at `commit-msg` and the rules live in `.commitlintrc.yaml`, so a malformed message fails at the hook rather than at review. The subject is lowercase after the type and takes no trailing period. A body is optional to the tool and expected here — the session that made the change ends with it, and the body is the only surviving record of why.
+- Every commit carries a `Generated-By: <model>` trailer, required by `trailer-exists` in `.commitlintrc.yaml`. `scripts/attribute-commit` writes it at `prepare-commit-msg`, rewriting Claude Code's `Co-Authored-By: <model> <noreply@anthropic.com>` — a tool is not a co-author, and the model name is the only per-commit record of what produced the change. A human co-author keeps their own `Co-Authored-By:` line. The script rewrites and never inserts, so a message with no agent trailer is refused at `commit-msg`: a commit written by hand adds its own `Generated-By:` line rather than passing unnoticed, and a clone that never ran `pre-commit install` fails loudly instead of committing unattributed.
 - Pull requests merge; they are neither squashed nor rebased. A merge subject is generated by GitHub and sits on commitlint's default ignore list, so it passes untouched and needs no second check in CI.
 - A changed `CHANGELOG.md` is structurally checked at `pre-push` and again for its pull-request range in CI. That validates an entry chosen for review; it does not decide whether a change owes one.
 - This repository keeps no `CHANGELOG.md` of its own — it is a repository addon, held back at `apps/github-repository-template/src/repository-addons/CHANGELOG.md` for a generated repository to adopt. The check still fires here when that addon template is edited, which is the only changelog this tree has.
@@ -44,7 +46,7 @@ The only code this repository runs beyond shell is the Python under `.claude/ski
 
 ## Layout
 
-Where a new file goes. `scripts/structure` enforces everything in this section that is a question about placement, plus the values in a unit's declaration, and reports the three rules that are neither.
+Where a new file goes, restated for a reader. Every rule here that is a question about placement is enforced by `scripts/structure`, which holds them as code rather than as a copy of this prose; it also checks the values in a unit's declaration and reports `not-applicable` for the three rules that are neither. The orphan-manifest rule at the end is `libs/detect.sh`'s, since it is the one that needs a language.
 
 **Root holds only these, and everything at root is repo-wide in scope.** `libs/`, `tests/`, `scripts/`, `tools/`, `deploy/`, and `assets/` here hold only what is shared across apps or operates on the whole repository; anything scoped to one app or domain belongs under that app.
 
@@ -67,7 +69,7 @@ Root *files* are permitted by name rather than by pattern: the eight the templat
 **`apps/` breaks the project into its smallest deployable units.** There may be only one.
 
 - Each unit is one folder under `apps/`: the smallest piece of this repository delivered on its own — deployed, installed, published, or copied. A file sitting directly in `apps/` belongs to no unit.
-- Split a unit into domains only when it spans distinct business areas that benefit from isolation. Each domain is one folder under its unit.
+- Split a unit into domains only when it spans distinct business areas that benefit from isolation. Each domain is one folder under its unit and holds its own `src/`. That `src/` is what tells a domain from a misspelled scoped folder — the unit level cannot be an allowlist, since a domain name is yours to choose — so a folder under a unit without one is a finding rather than a new domain. Below a domain the vocabulary does close: `src/`, a scoped folder, or the domain's own files. Domains do not nest.
 - `src/` sits under the unit when there are no domains, and under each domain when there are. Never both, and never `apps/src/`.
 - A unit or domain may hold its own `libs/`, `tests/`, `scripts/`, `docs/`, `tools/`, `deploy/`, or `assets/`, scoped strictly to it.
 
@@ -83,7 +85,7 @@ Root *files* are permitted by name rather than by pattern: the eight the templat
 
 The two facts vary independently, so every pairing is legal and the audit checks values alone. A scheduled job runs `oneshot` and ships a `quadlet`; a library runs `none` and still ships. A rule forbidding a combination is a rule nobody revisits when the exception arrives.
 
-Reading the file needs `jq`, which is why `scripts/doctor` requires it once a unit declares. Without it the audit reports `unavailable` and fails rather than passing over a file it never opened.
+Reading the file needs `jq`, which `scripts/doctor` requires. Without it the audit reports `unavailable` and fails rather than passing over a file it never opened, and the suites that exercise a unit skip every case.
 
 **Scoped folders are leaves for their own kind.** `libs/`, `tests/`, `scripts/`, `tools/`, `assets/`, `docs/`, and `deploy/` may nest a different kind — `scripts/tests/libs/` is fine — but never another of the same kind at any depth, and never a `src/`. Choose the folder whose scope matches the file's scope.
 
@@ -93,11 +95,11 @@ Reading the file needs `jq`, which is why `scripts/doctor` requires it once a un
 
 **`docs/` takes Markdown freely at every scope**; anything else needs permission. `.gitkeep` is exempt everywhere.
 
-**`.structure-allow` is where permission is recorded.** A bare path allows that one file. A path ending in `/` names a prefix the audit stops descending into, which is how a vendored dependency or a tracked test fixture keeps a shape that is not this repository's to decide, without the rules growing an exception clause that would hollow them out.
+**`.structure-allow` is where permission is recorded.** A bare path allows that one file. A path ending in `/` names a prefix the audit stops descending into, which is how a vendored dependency or a tracked test fixture keeps a shape that is not this repository's to decide, without the rules growing an exception clause that would hollow them out. The one place it still looks inside is a domain's own `src/`: without that lookup a prefix entry would turn the domain rule stricter rather than more lenient.
 
 Three rules are about content rather than placement and no script can settle them: whether `libs/` really holds what several apps share, whether `tests/` really spans them, and whether a file sits at the scope it belongs to. `scripts/structure` reports all three `not-applicable` rather than inferring them from paths.
 
-A package under `apps/` or `libs/` whose language has no root manifest fails the run rather than passing, because for the languages this rule covers the root manifest is what lists it: `go list -m` names the `use` entries in `go.work` and nothing else, and the Gradle settings file the same. Swift is excluded deliberately — it has no root manifest, so its packages are found by searching and nested ones are how a Swift repository is supposed to look. The failure names the root manifest to add.
+A package anywhere in the tree whose language has no root manifest fails the run rather than passing, because for the languages this rule covers the root manifest is what lists it: `go list -m` names the `use` entries in `go.work` and nothing else, and the Gradle settings file the same. Swift is excluded deliberately — it has no root manifest, so its packages are found by searching and nested ones are how a Swift repository is supposed to look. The failure names the root manifest to add.
 
 ## Repository settings
 
@@ -120,7 +122,7 @@ GitHub Issues on `possiblyneal/template`, via the `gh` CLI. See `docs/agents/iss
 
 ### Triage labels
 
-The five canonical labels, unrenamed. See `docs/agents/triage-labels.md`.
+The seven canonical roles, unrenamed. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
@@ -129,6 +131,7 @@ Single-context: `CONTEXT.md` at the root, ADRs in `docs/adrs/`. See `docs/agents
 ## Child Index
 
 - `apps/github-repository-template/CLAUDE.md` — the template payload and the reference docs explaining it
+- `apps/repo-builder/CLAUDE.md` — the `/repo-builder` skill, and how it is linked into a clone
 - `scripts/CLAUDE.md` — the language-capabilities interface, and what adding a language or check requires
 - `docs/CLAUDE.md` — ADRs, specs, plans, and lessons
 

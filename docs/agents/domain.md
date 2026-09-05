@@ -10,6 +10,8 @@ How the engineering skills should consume this repo's domain documentation when 
 
 If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
 
+A repository starts single-context, with one `CONTEXT.md` at the root, and that covers almost every repository. `CONTEXT-MAP.md` is what a repository grows into once `apps/` holds several units, or one unit is split into several domains, and a single glossary would have to define the same word twice. Nothing decides between the two shapes in advance: read whichever file is there.
+
 ## File structure
 
 ```

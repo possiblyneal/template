@@ -28,7 +28,11 @@ for test_script in "${test_scripts[@]}"; do
     echo "$test_script is missing or not executable."
     exit 1
   fi
-  "$test_script"
+  # Closed for the same reason libs/detect.sh closes it for a capability: a
+  # child that drains fd 0 blocks until the caller's stdin reaches EOF, which
+  # for a terminal or an agent harness is never, and the gate hangs with
+  # nothing printed. Nothing check runs is interactive.
+  "$test_script" </dev/null
 done
 
 # Where a file sits, checked before what is in it. A misplaced file passes every
@@ -39,7 +43,17 @@ if [[ ! -x scripts/structure ]]; then
   exit 1
 fi
 
-scripts/structure
+scripts/structure </dev/null
+
+# Whether this repository's own .github/ still matches the copy it ships to
+# generated repositories. Reports not-applicable where there is no payload,
+# which is every repository generated from one.
+if [[ ! -x scripts/github-parity ]]; then
+  echo "scripts/github-parity is missing or not executable."
+  exit 1
+fi
+
+scripts/github-parity </dev/null
 
 if [[ ! -x scripts/ci ]]; then
   echo "scripts/ci is missing or not executable."

@@ -14,10 +14,9 @@ source "$repo_root/scripts/tests/libs/harness.sh"
 cleanup_script="$repo_root/scripts/worktree-cleanup"
 
 fixture() {
+  scratch_repo
   current="$1"
-  work="$(mktemp -d)"
-  git -C "$work" init -q
-  git -C "$work" -c user.name=test -c user.email=test@example.com commit --allow-empty -qm initial
+  git -C "$work" commit --allow-empty -qm initial
 }
 
 stale_worktree() {
@@ -42,7 +41,6 @@ if [[ "$output" == Stale\ worktree\ metadata:* ]] && has_prunable_worktree; then
 else
   fail "report output or stale metadata was unexpected: '$output'"
 fi
-cleanup
 
 fixture "prunes stale metadata from hook arguments"
 stale_worktree
@@ -52,7 +50,6 @@ if [[ "$output" == Pruned\ stale\ worktree\ metadata:* ]] && ! has_prunable_work
 else
   fail "prune output or remaining metadata was unexpected: '$output'"
 fi
-cleanup
 
 fixture "is idempotent after pruning"
 stale_worktree
@@ -62,7 +59,6 @@ if output="$(cd "$work" && "$cleanup_script" old new)" && [[ -z "$output" ]]; th
 else
   fail "second prune returned '$output'"
 fi
-cleanup
 
 fixture "never removes a live worktree"
 live="$work/live"
@@ -72,6 +68,5 @@ if (cd "$work" && "$cleanup_script" old new 1) >/dev/null && [[ -f "$live/.git" 
 else
   fail "live worktree was removed or cleanup failed"
 fi
-cleanup
 
 report

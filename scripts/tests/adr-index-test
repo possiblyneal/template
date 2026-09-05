@@ -19,10 +19,9 @@ source "$repo_root/scripts/tests/libs/harness.sh"
 
 
 fixture() {
+  scratch_repo
   current="$1"
-  work="$(mktemp -d)"
-  mkdir -p "$work/scripts" "$work/docs/adrs"
-  cp "$repo_root/scripts/adr-index" "$work/scripts/"
+  mkdir -p "$work/docs/adrs"
   cp "$repo_root/docs/adrs/0000-template.md" "$work/docs/adrs/"
 }
 
@@ -39,9 +38,6 @@ record() {
     echo "---"
   } > "$work/docs/adrs/$1"
 }
-
-
-trap cleanup EXIT
 
 index="docs/adrs/index.md"
 
@@ -61,7 +57,6 @@ if grep -qxF '| [0001](0001-use-postgresql.md) | Use PostgreSQL for the Primary 
 else
   fail "a record did not produce its row, or the status carried the template's trailing comment"
 fi
-cleanup
 
 # The template ships `superseded_by:` with a trailing comment and no value. A
 # comment strip that runs after the leading trim leaves the "#" at the start of
@@ -82,7 +77,6 @@ if grep -qxF '| [0001](0001-a.md) | Use PostgreSQL | accepted |' "$work/$index" 
 else
   fail "a record copied from the template and filled in was rejected: $out"
 fi
-cleanup
 
 # A title is free text, and neither the table's column separator nor a "#"
 # inside a quoted value may be treated as syntax.
@@ -94,7 +88,6 @@ if grep -qxF '| [0001](0001-a.md) | Adopt Postgres # and drop Redis \| soon | ac
 else
   fail "a quoted title lost its hash, kept its quotes, or broke the table with a pipe"
 fi
-cleanup
 
 # The template holds placeholders rather than a decision, so listing it would
 # put an angle-bracket row in every generated repository. A supporting note
@@ -108,7 +101,6 @@ if ! grep -q '0000-template' "$work/$index" && ! grep -q 'notes.md' "$work/$inde
 else
   fail "the template or a non-record file was listed as a decision"
 fi
-cleanup
 
 # Regeneration is the check, so the script must report the rewrite itself. A
 # newly created index is untracked at that moment and pre-commit's own
@@ -122,7 +114,6 @@ if (( status != 0 )) && grep -q "Rewrote $index" <<<"$out"; then
 else
   fail "creating the index did not fail the run, so a commit lands without it"
 fi
-cleanup
 
 # Without this the hook fails forever: every commit touching an ADR would
 # rewrite an already-correct file.
@@ -137,7 +128,6 @@ if (( status == 0 )) && [[ -z "$out" ]] && [[ "$before" == "$(cat "$work/$index"
 else
   fail "a second run rewrote an index that was already correct"
 fi
-cleanup
 
 fixture "a hand edit does not survive"
 record 0001-a.md "A" accepted
@@ -151,7 +141,6 @@ if (( status != 0 )) && [[ "$expected" == "$(cat "$work/$index")" ]]; then
 else
   fail "an edit to the generated index was kept"
 fi
-cleanup
 
 # Every repository generated from this template starts with only the template
 # record, and a file listing nothing is worse than its absence.
@@ -163,7 +152,6 @@ if (( status == 0 )) && [[ ! -e "$work/$index" ]] && [[ -z "$out" ]]; then
 else
   fail "an index was written for a directory holding only the template"
 fi
-cleanup
 
 fixture "removing the last record removes the index"
 record 0001-a.md "A" accepted
@@ -176,7 +164,6 @@ if (( status != 0 )) && [[ ! -e "$work/$index" ]]; then
 else
   fail "a stale index survived the removal of the last record"
 fi
-cleanup
 
 # A typo here is invisible at review: both the right path and the wrong one
 # read as plausible, and the record claims to be settled either way.
@@ -189,7 +176,6 @@ if (( status != 0 )) && grep -q 'which does not exist' <<<"$out" && [[ ! -e "$wo
 else
   fail "a record was listed as superseded by an ADR that is not there"
 fi
-cleanup
 
 fixture "a bare replacement filename resolves in the ADR directory"
 record 0001-a.md "A" superseded 0002-b.md
@@ -200,7 +186,6 @@ if grep -qxF '| [0001](0001-a.md) | A | superseded by [0002](0002-b.md) |' "$wor
 else
   fail "a replacement named by filename alone was not resolved against docs/adrs"
 fi
-cleanup
 
 # docs/CLAUDE.md contemplates an app keeping its own adr directory once local
 # decisions would drown the repo-wide ones, so a replacement is not always a
@@ -215,7 +200,6 @@ if grep -qxF '| [0001](0001-a.md) | A | superseded by [0003](../../apps/billing/
 else
   fail "a replacement in another directory got a link relative to the wrong place"
 fi
-cleanup
 
 # The template's commented `sources:` block contains its own `title:` and the
 # `generated:` line carries a nested `{ by: ..., at: ... }`. Each decoy is
@@ -240,7 +224,6 @@ if grep -qxF '| [0001](0001-a.md) | A | accepted |' "$work/$index"; then
 else
   fail "an indented or commented frontmatter line was read as a record's field"
 fi
-cleanup
 
 # The directory is absent until a repository writes its first decision.
 fixture "a missing directory is not an error"
@@ -252,12 +235,11 @@ if (( status == 0 )) && [[ -z "$out" ]]; then
 else
   fail "a repository with no docs/adrs directory failed the run"
 fi
-cleanup
 
 # Everything above proves the script converges. These two prove pre-commit
 # actually runs it -- the gap that let a deletion commit a stale index while
 # every script-level case passed.
-if command -v pre-commit > /dev/null 2>&1 && command -v git > /dev/null 2>&1; then
+if command -v pre-commit > /dev/null 2>&1; then
   # Builds a repository wired exactly as a generated one is: this repo's own
   # hook definition, lifted from .pre-commit-config.yaml rather than restated,
   # so a change to the real config is what this asserts against.
@@ -269,13 +251,6 @@ if command -v pre-commit > /dev/null 2>&1 && command -v git > /dev/null 2>&1; th
          printing { print; seen = 1 }' \
       "$repo_root/.pre-commit-config.yaml" > "$work/hook.yaml"
     { echo "repos:"; cat "$work/hook.yaml"; } > "$work/.pre-commit-config.yaml"
-    (
-      cd "$work" || exit 1
-      git init -q .
-      git config user.email test@example.com
-      git config user.name test
-      git config commit.gpgsign false
-    ) > /dev/null 2>&1
   }
 
   hook_fixture "pre-commit runs the hook on a deleted record"
@@ -295,7 +270,6 @@ if command -v pre-commit > /dev/null 2>&1 && command -v git > /dev/null 2>&1; th
   else
     fail "deleting a record committed an index still listing it: $out"
   fi
-  cleanup
 
   hook_fixture "pre-commit blocks a first index that is not staged"
   record 0001-a.md "A" accepted
@@ -312,9 +286,9 @@ if command -v pre-commit > /dev/null 2>&1 && command -v git > /dev/null 2>&1; th
   else
     fail "a commit adding the first record landed without the index: $out"
   fi
-  cleanup
 else
-  echo "  SKIP  hook wiring: pre-commit or git is not installed"
+  current="hook wiring"
+  skip "pre-commit is not installed"
 fi
 
 report

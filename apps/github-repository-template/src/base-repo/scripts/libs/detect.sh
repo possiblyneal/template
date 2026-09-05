@@ -22,6 +22,12 @@
 # a detection function reads as "absent" — the one wrong answer that is silent
 # rather than loud.
 
+# Every result line here goes through the result library, so a caller that
+# sources this file has the layout and the tally without sourcing it twice.
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=result.sh
+source "$(dirname "${BASH_SOURCE[0]}")/result.sh"
+
 # The single place the supported set is written down. Callers iterate this
 # rather than keeping their own list.
 DETECT_LANGUAGES=(node python go rust swift kotlin)
@@ -236,20 +242,18 @@ has_npm_script() {
 # A nested manifest is not always named like the root one it belongs to: a Go
 # module is go.mod under a root go.work, and a Gradle project is build.gradle.kts
 # under a root settings.gradle.kts. Each pair is listed rather than assumed.
+#
+# One line per orphan on stdout, and exit 0 whether or not there were any:
+# each line is a finding for the caller to record under its own verdict, and
+# an empty list is that verdict's pass. No second channel carries the answer.
 _detect_orphan_report() {
   local nested="${1#./}" root="$2" noun="$3" fix="$4"
 
-  echo "Found $nested with no root $root."
-  echo
-  echo "  This repository's checks run from root workspace manifests, so this"
-  echo "  $noun is invisible to lint, test, and audit."
-  echo
-  echo "  Fix: $fix, or move the $noun under an existing workspace."
-  echo
+  echo "$nested has no root $root, so no check sees this $noun; $fix, or move it under an existing workspace"
 }
 
 detect_orphan_manifests() {
-  local lang root nested dir found=1
+  local lang root nested dir
 
   # language:nested manifest:root manifest:noun. Swift is absent deliberately:
   # it has no root manifest, so nested packages are how a Swift repository is
@@ -283,8 +287,6 @@ detect_orphan_manifests() {
       # without a workspace file, not a nested module missing one.
       [[ "$dir" != "." ]] || continue
 
-      found=0
-
       case "$lang" in
         go) _detect_orphan_report "$nested" "$root" "$noun" \
           "run 'go work init ./$dir' at the repository root" ;;
@@ -295,8 +297,17 @@ detect_orphan_manifests() {
       esac
     done < <(detect_find "$nested_name" -print)
   done
+}
 
-  return "$found"
+# The orphans as a check: each one recorded as a finding, then the detection
+# verdict. Every command that runs the capabilities calls this first, since an
+# orphan is a package none of them can see.
+judge_orphan_manifests() {
+  local orphan
+  while IFS= read -r orphan; do
+    record "$orphan"
+  done < <(detect_orphan_manifests)
+  verdict detection "every package has a root manifest"
 }
 
 # The module's external interface is `language_capabilities` below. Everything
@@ -414,14 +425,12 @@ _capability_format_write_kotlin() { gradle_has_task ktlintFormat || return "$NO_
 # program's own entry point and a dev server, which are different programs.
 # Delete the branch and a CLI starts a web server, or fails looking for one.
 #
-# Each is expanded with the `+` form so an adapter called with none of it set --
-# from a test, or from a caller that has no unit -- reads an absent array as
-# empty rather than tripping `set -u`.
-# Declared, never assigned, so this file names the context it depends on rather
-# than reading it out of nowhere. `declare -g` without a value creates nothing
-# and overwrites nothing, so it does not matter whether the caller fills them
-# before or after sourcing this file.
-declare -g unit_run unit_args unit_targets
+# All three are declared in libs/unit.sh, beside the reader that fills the
+# declared ones, and nowhere here: a caller with no unit leaves them empty, and
+# each adapter reads an empty value as the default -- the `${unit_run:-}` test
+# falls to the long-lived branch, the `+` expansion reads an absent array as
+# empty rather than tripping `set -u`. shellcheck reads each array's first use
+# below as unassigned, and the directive there names the declaration's home.
 
 # The paths `bin` names, one per line. A string names one and an object names
 # several; either way the field is the package's own declaration of what it is
@@ -443,6 +452,7 @@ _capability_run_node() {
 
   if [[ "${unit_run:-}" != oneshot ]]; then
     has_npm_script dev || return "$NO_RUNNER"
+    # shellcheck disable=SC2154 # declared in libs/unit.sh, filled by scripts/run
     npm run dev -- ${unit_args[@]+"${unit_args[@]}"}
     return
   fi
@@ -455,7 +465,29 @@ _capability_run_node() {
 
   case "${#paths[@]}" in
     0) has_npm_script start || return "$NO_RUNNER"; npm start -- ${unit_args[@]+"${unit_args[@]}"} ;;
-    1) node "${paths[0]}" ${unit_args[@]+"${unit_args[@]}"} ;;
+    1)
+      # A TypeScript bin conventionally names build output, which a fresh clone
+      # does not have. Node's own failure for that is a module-not-found trace
+      # naming a file rather than the build that was never run, and the unit is
+      # well-formed and the command correct, so the absence is caught here and
+      # what to do is named instead. The condition is a bin that is not on disk
+      # rather than anything about TypeScript, and a plain JavaScript unit --
+      # whose bin is a source file -- never reaches it.
+      if [[ ! -f "${paths[0]}" ]]; then
+        echo "package.json names bin ${paths[0]}, and there is no such file here." >&2
+        if has_npm_script build; then
+          echo "In TypeScript that path is build output rather than source. Build it first:" >&2
+          echo "  npm run build" >&2
+        elif command -v npm > /dev/null 2>&1; then
+          # Only with npm present is the absence of a build script a fact about
+          # the package. Without it has_npm_script is false for the tool rather
+          # than for package.json, and the line above is all this knows.
+          echo "This package names no build script either, so nothing here produces it." >&2
+        fi
+        return 1
+      fi
+      node "${paths[0]}" ${unit_args[@]+"${unit_args[@]}"}
+      ;;
     *)
       echo "Several bin entries here, and a run is one foreground process." >&2
       echo "Start the one meant by path:" >&2
@@ -536,7 +568,6 @@ _capability_run_go() {
   esac
 }
 _capability_run_rust() { cargo run -- ${unit_args[@]+"${unit_args[@]}"}; }
-_capability_run_swift() { return "$NO_RUNNER"; }
 # Gradle takes program arguments as one string rather than a list, so this is
 # the one adapter that cannot pass them through unchanged: an argument
 # containing a space arrives as two.
@@ -564,16 +595,12 @@ _package_rust_target() {
   esac
 }
 
-# One line per target, because a single per-language result cannot say that one
-# target built and another could not be reached from here. A target the
-# toolchain genuinely cannot reach is not-applicable with the reason named; an
-# unwired language is unavailable. They look alike and are different facts, and
-# reporting the first as the second makes an impossible build read as a broken
-# install.
-_package_target_result() {
-  printf '  %-14s %s: %s\n' "$1" "$2" "$3"
-}
-
+# A result line per target, because a single per-language result cannot say
+# that one target built and another could not be reached from here. A target
+# the toolchain genuinely cannot reach is not-applicable with the reason named;
+# an unwired language is unavailable. They look alike and are different facts,
+# and reporting the first as the second makes an impossible build read as a
+# broken install.
 _capability_package_go() {
   local target pair goos goarch package status=0
   local -a mains=()
@@ -586,14 +613,22 @@ _capability_package_go() {
   fi
 
   mkdir -p dist
+  # shellcheck disable=SC2154 # declared and filled in libs/unit.sh
   for target in ${unit_targets[@]+"${unit_targets[@]}"}; do
     if ! pair="$(_package_go_target "$target")"; then
-      _package_target_result not-applicable "$target" "no Go GOOS/GOARCH is named for it"
+      result "$target" not-applicable "no Go GOOS/GOARCH is named for it"
       continue
     fi
     read -r goos goarch <<< "$pair"
     for package in "${mains[@]}"; do
-      GOOS="$goos" GOARCH="$goarch" go build -o "dist/$(basename "$package")-$target" "$package" || status=1
+      # A packaged binary is one that leaves this machine: `release` uploads
+      # what lands in `dist/`. Without CGO_ENABLED=0 a cross target builds
+      # static anyway, for want of a cross C toolchain, and the host target
+      # does not -- so the one build that reaches a release is the one that
+      # fails wherever libc differs. -trimpath keeps the runner's own paths
+      # out of a published artifact.
+      CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
+        go build -trimpath -ldflags='-s -w' -o "dist/$(basename "$package")-$target" "$package" || status=1
     done
   done
   return "$status"
@@ -612,8 +647,8 @@ _capability_package_rust() {
   # Both absences are no runner, but they read differently to whoever is
   # holding the failure: cargo missing is the language not installed, and jq
   # missing is a Rust unit that would package if one more tool were here. The
-  # caller prints "no package command configured" for either, so this one says
-  # what is actually missing before it goes quiet.
+  # library reports either as unavailable, so this one says what is actually
+  # missing before it goes quiet.
   if ! command -v jq > /dev/null 2>&1; then
     echo "cargo is here but jq is not, and the binary names are read out of cargo metadata." >&2
     return "$NO_RUNNER"
@@ -622,7 +657,7 @@ _capability_package_rust() {
   mkdir -p dist
   for target in ${unit_targets[@]+"${unit_targets[@]}"}; do
     if ! triple="$(_package_rust_target "$target")"; then
-      _package_target_result not-applicable "$target" "no Rust target triple is named for it"
+      result "$target" not-applicable "no Rust target triple is named for it"
       continue
     fi
     # rustup is how a cross target is installed, so its list is the honest
@@ -631,7 +666,7 @@ _capability_package_rust() {
     # rather than a skip.
     if command -v rustup > /dev/null 2>&1 &&
       ! grep -qx "$triple" <<< "$(rustup target list --installed 2> /dev/null)"; then
-      _package_target_result not-applicable "$target" "the Rust target $triple is not installed (rustup target add $triple)"
+      result "$target" not-applicable "the Rust target $triple is not installed (rustup target add $triple)"
       continue
     fi
 
@@ -647,14 +682,30 @@ _capability_package_rust() {
   return "$status"
 }
 
-# No adapter yet, and the gap is a signpost rather than a mystery: a Node or
-# Python executable means bundling an interpreter, and a Swift or Kotlin one
-# means a toolchain decision this template has not made. Each is where that
-# adapter goes when the need arrives.
-_capability_package_node() { return "$NO_RUNNER"; }
-_capability_package_python() { return "$NO_RUNNER"; }
-_capability_package_swift() { return "$NO_RUNNER"; }
-_capability_package_kotlin() { return "$NO_RUNNER"; }
+# No packaging adapter for Node, Python, Swift, or Kotlin, and no run adapter
+# for Swift, and each gap is a signpost rather than a mystery: a Node or Python
+# executable means bundling an interpreter, and a Swift or Kotlin one means a
+# toolchain decision this template has not made. The dispatch reports each as
+# `unavailable` and `language_capabilities probe` reports it `absent`, so the
+# gap is visible without a function standing in for the adapter that is not
+# there.
+
+# Whether any of the languages named packages into the unit's dist/. Only the
+# adapters above that produce a file write there; a language with no adapter
+# writes nothing, so for a unit in one of those languages dist/ is not the packaging
+# command's output but whatever the unit's own build left -- which is what
+# scripts/ci produces before the release walk reads it. scripts/package empties
+# dist/ before dispatching, and asks this first so it empties only a directory
+# it is about to refill. Kept beside the adapters so the two move together.
+packaging_writes_dist() {
+  local lang
+  for lang in "$@"; do
+    case "$lang" in
+      go|rust) return 0 ;;
+    esac
+  done
+  return 1
+}
 
 _capability_is_not_applicable() {
   case "$1:$2" in
@@ -669,28 +720,21 @@ _capability_is_not_applicable() {
   esac
 }
 
-_capability_is_supported() {
-  case "$1" in
-    lint|format-check|typecheck|test|build|audit|toolchain|format-write|run|package) return 0 ;;
-    *) return 1 ;;
-  esac
-}
+DETECT_CAPABILITIES=(lint format-check typecheck test build audit toolchain format-write run package)
 
-_language_is_supported() {
-  local supported
-  for supported in "${DETECT_LANGUAGES[@]}"; do
-    [[ "$1" == "$supported" ]] && return 0
+# _in_list <word> <items…>: whether the word is one of the items.
+_in_list() {
+  local word="$1" item
+  shift
+  for item in "$@"; do
+    [[ "$word" == "$item" ]] && return 0
   done
   return 1
 }
 
-_capability_result() {
-  printf '%-14s %s %s\n' "$1" "$2" "$3"
-}
-
 _language_capabilities_run() {
   local dry_run="" selected="" cap lang function status
-  local failed=0 unavailable=0
+  local unavailable=0
   local -a capabilities=() languages=()
 
   while (( $# > 0 )); do
@@ -710,11 +754,11 @@ _language_capabilities_run() {
   capabilities=("$@")
 
   for cap in "${capabilities[@]}"; do
-    _capability_is_supported "$cap" || { echo "Unknown capability: $cap" >&2; return 2; }
+    _in_list "$cap" "${DETECT_CAPABILITIES[@]}" || { echo "Unknown capability: $cap" >&2; return 2; }
   done
 
   if [[ -n "$selected" ]]; then
-    _language_is_supported "$selected" || { echo "Unsupported language: $selected" >&2; return 2; }
+    _in_list "$selected" "${DETECT_LANGUAGES[@]}" || { echo "Unsupported language: $selected" >&2; return 2; }
     has_language "$selected" || { echo "Language is not present: $selected" >&2; return 2; }
     languages=("$selected")
   else
@@ -724,41 +768,52 @@ _language_capabilities_run() {
   for cap in "${capabilities[@]}"; do
     for lang in "${languages[@]}"; do
       if _capability_is_not_applicable "$cap" "$lang"; then
-        _capability_result not-applicable "$cap" "$lang"
+        result "$cap" not-applicable "$lang"
         continue
       fi
 
       function="_capability_${cap//-/_}_${lang}"
       if ! declare -F "$function" >/dev/null; then
-        _capability_result unavailable "$cap" "$lang"
+        result "$cap" unavailable "$lang"
         unavailable=1
         continue
       fi
 
       if [[ -n "$dry_run" ]]; then
-        _capability_result would-run "$cap" "$lang"
+        result "$cap" would-run "$lang"
         continue
       fi
 
+      # A check never reads stdin, and a check that inherits one holds the whole
+      # gate open: any tool that drains fd 0 -- swift test, gradle, npm test --
+      # blocks until the caller's stdin reaches EOF, which for a terminal or an
+      # agent harness is never, with no output to diagnose from. `run` is the
+      # one capability that starts the unit's own program in the foreground, so
+      # it is the one that keeps the stdin it was given.
       status=0
-      "$function" || status=$?
+      if [[ "$cap" == run ]]; then
+        "$function" || status=$?
+      else
+        "$function" </dev/null || status=$?
+      fi
       case "$status" in
-        0) _capability_result pass "$cap" "$lang" ;;
+        0) result "$cap" pass "$lang" ;;
         "$NO_RUNNER")
-          _capability_result unavailable "$cap" "$lang"
+          result "$cap" unavailable "$lang"
           unavailable=1
           ;;
-        *)
-          _capability_result "FAIL (exit $status)" "$cap" "$lang"
-          failed=1
-          ;;
+        *) result "$cap" FAIL "$lang (exit $status)" ;;
       esac
     done
   done
 
-  (( failed == 0 )) || return 1
-  (( unavailable == 0 )) || return "$NO_RUNNER"
-  return 0
+  # Said once, here, rather than decoded from the return value by each caller.
+  # The outcome is not returned at all: every line above went through result,
+  # so the tally holds it, and a second channel would be one more thing to keep
+  # agreeing with the first. Only a usage error returns non-zero.
+  if (( unavailable )); then
+    echo "Install the tool behind each unavailable line, or add its private adapter to scripts/libs/detect.sh."
+  fi
 }
 
 _codeql_entry() {
@@ -786,14 +841,6 @@ _language_capabilities_github_output() {
   if has_trivy_target; then echo "trivy=true"; else echo "trivy=false"; fi
 }
 
-_language_capabilities_check_orphans() {
-  local orphans
-  orphans="$(detect_orphan_manifests || true)"
-  [[ -n "$orphans" ]] || return 0
-  echo "$orphans"
-  return 1
-}
-
 _language_capabilities_codeql_matrix() {
   local lang entry language build_mode runner
   local -a entries=()
@@ -809,6 +856,22 @@ _language_capabilities_codeql_matrix() {
   printf 'matrix={"include":[%s]}\n' "$(IFS=,; echo "${entries[*]}")"
 }
 
+# One line per capability and language: `wired` when an adapter is defined for
+# the pair, `absent` when none is. Wiring alone -- no manifest is read and no
+# tool is looked for -- so the answer is the same on every machine, and a suite
+# can hold the whole table against the one this file is meant to have without
+# naming a private function.
+_language_capabilities_probe() {
+  local cap lang state
+  for cap in "${DETECT_CAPABILITIES[@]}"; do
+    for lang in "${DETECT_LANGUAGES[@]}"; do
+      state=absent
+      ! declare -F "_capability_${cap//-/_}_${lang}" >/dev/null || state=wired
+      result_line "$cap" "$state" "$lang"
+    done
+  done
+}
+
 language_capabilities() {
   local command="${1:-}"
   (( $# == 0 )) || shift
@@ -817,12 +880,12 @@ language_capabilities() {
     supported) printf '%s\n' "${DETECT_LANGUAGES[@]}" ;;
     present) detect_present_languages ;;
     has-any) has_any_manifest ;;
-    check-orphans) _language_capabilities_check_orphans ;;
     github-output) _language_capabilities_github_output ;;
     codeql-matrix) _language_capabilities_codeql_matrix ;;
+    probe) _language_capabilities_probe ;;
     run) _language_capabilities_run "$@" ;;
     ""|-h|--help|help)
-      echo "Usage: language_capabilities supported|present|has-any|check-orphans|github-output|codeql-matrix|run"
+      echo "Usage: language_capabilities supported|present|has-any|github-output|codeql-matrix|probe|run"
       ;;
     *) echo "Unknown language capabilities command: $command" >&2; return 2 ;;
   esac
