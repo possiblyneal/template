@@ -54,6 +54,17 @@ audit() {
   run_parity
 }
 
+# Replaces a path's stage-0 index entry with the numbered stages a conflicted
+# merge leaves behind. That is the one state git show cannot read a path out of,
+# and the only way to reach it here: a fixture has no history to merge.
+unmerge() {
+  local blob null="0000000000000000000000000000000000000000"
+  blob="$(git -C "$work" rev-parse ":$1")"
+  printf '0 %s\t%s\n100644 %s 2\t%s\n100644 %s 3\t%s\n' \
+    "$null" "$1" "$blob" "$1" "$blob" "$1" |
+    git -C "$work" update-index --index-info
+}
+
 assert_passes() {
   if (( parity_status == 0 )); then
     pass
@@ -187,5 +198,15 @@ write .github/workflows/release.yml
 stage
 run_parity env PATH="$(minimal_path bash dirname git sed sort cmp)"
 assert_fails "workflows/release.yml is in .github and not in the payload"
+
+# git show fails on an unmerged path and a process substitution's exit status
+# is invisible, so an unguarded cmp would compare the two empty streams that
+# leaves behind and call the trees identical.
+parity_fixture "an unreadable path is a finding rather than agreement"
+stage
+unmerge ".github/workflows/ci.yml"
+unmerge "$payload/workflows/ci.yml"
+run_parity
+assert_fails "workflows/ci.yml cannot be read from the index"
 
 report

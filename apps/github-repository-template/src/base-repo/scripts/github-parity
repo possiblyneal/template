@@ -129,9 +129,16 @@ while IFS= read -r path; do
   elif holds "$payload_only" "$path"; then
     holds "$omitted" "$path" ||
       record "$path is in the payload and not in $root; mirror it, or record the omission under generation.features in $record_file"
-  elif ! holds "$content_exceptions" "$path" &&
-    ! cmp -s <(git show ":$root/$path") <(git show ":$payload/$path"); then
-    record "$path differs between the two trees; mirror the change into the other"
+  elif ! holds "$content_exceptions" "$path"; then
+    # Readability is asked before content, because a process substitution's
+    # exit status is invisible: an unmerged path makes git show fail, and
+    # comparing the two empty streams it leaves behind would report agreement.
+    if ! git cat-file -e ":$root/$path" 2> /dev/null ||
+      ! git cat-file -e ":$payload/$path" 2> /dev/null; then
+      record "$path cannot be read from the index; finish the merge before asking whether the trees agree"
+    elif ! cmp -s <(git show ":$root/$path") <(git show ":$payload/$path"); then
+      record "$path differs between the two trees; mirror the change into the other"
+    fi
   fi
 done < <(printf '%s\n%s\n' "$root_paths" "$payload_paths" | sort -u)
 
