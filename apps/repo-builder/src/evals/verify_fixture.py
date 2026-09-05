@@ -225,7 +225,7 @@ def generation_multi(root: Path, fixture: dict[str, object]) -> list[Check]:
             "ADRs scoped to their app and language",
             all(f"apps/{name}" in adr_text for name in expected)
             and adr_text.count("lang:") >= 2,
-            "each ADR scopes to apps/<name> and a lang: tag",
+            "each ADR scopes to apps/<name> and lang:<name>",
         ),
         (
             "ADRs accepted, not proposed",
