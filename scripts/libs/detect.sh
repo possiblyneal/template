@@ -40,8 +40,11 @@ has_kotlin() { [[ -s settings.gradle.kts || -s build.gradle.kts ]]; }
 
 # Directories holding manifests that belong to a dependency or another
 # repository rather than to this one. Searching them reports another project's
-# packages as this project's.
-DETECT_PRUNE_DIRS=(.git node_modules .build target .venv venv vendor)
+# packages as this project's. `tmp` is here for the second reason: it is
+# gitignored scratch, so nothing in it is this repository's to check, and a
+# whole repository materialized there is the case that would otherwise fail
+# every check that walks the tree.
+DETECT_PRUNE_DIRS=(.git node_modules .build target .venv venv vendor tmp)
 
 # DETECT_PRUNE_DIRS as a find(1) `-name a -o -name b ...` expression, assigned
 # into the array named by $1. Its own copy of this list is the second copy
