@@ -13,6 +13,7 @@ One flat directory, not a `ci/` and a `scripts/` split. The boundary that split 
 - `repo-settings check` — hosted GitHub state, run explicitly
 - `adr-index` — called by pre-commit; regenerates `docs/adrs/index.md`
 - `structure` — called by `scripts/check` and by pre-commit; audits where files sit; the script itself holds the rules
+- `github-parity` — called by `scripts/check` and by pre-commit; refuses a divergence between `.github/` and the copy a template payload ships
 - `attribute-commit` — called by pre-commit at `prepare-commit-msg`; rewrites the agent's `Co-Authored-By` trailer to `Generated-By`, the trailer `.commitlintrc.yaml` then requires at `commit-msg`
 - `changelog-check` — called by pre-commit at `pre-push`, and by `ci.yml` over a pull-request range; validates `CHANGELOG.md` structure
 - `protect-branch` — called by pre-commit at `pre-push`; refuses a push whose destination ref is `main` or `master`
@@ -40,6 +41,7 @@ A helper that must be built before it runs belongs in `tools/`, not here.
 - **`libs/*.sh` and `harness.sh` are sourced, never executed** — no shebang, no executable bit, `.sh`. Every other script is extensionless and executable; pre-commit reads a shebang only on one.
 - **`harness.sh` owns the counting and the primitives**: `scratch_repo`, `fixture`, `declare_unit`, `quadlet_pair`, `stub`, `minimal_path`, `skip`. No suite changes directory, and only a case about `run` lets a stub read its stdin; `report` fails a suite that passed nothing and skipped something.
 - **`libs/precommit.sh` owns which git hooks are owed, and parses `default_install_hook_types` rather than grepping: three valid YAML forms.** `adr-index` and `structure` are hooks, not capabilities, and run `always_run` with no `files:` filter, since staged paths exclude deletions.
+- **`github-parity` compares two trees, not one file's placement**, which is why it is not folded into `structure`. Presence is read from the Git index and content with `cmp`; `dependabot.yml` is the one named content exception, a payload-only file is excused only where `generation.features` records the omission, and a repository with no payload is `not-applicable`.
 - **`structure` holds the layout rules as code**; the only file it opens is a `.unit.json`. Depth stops at the first `src/`; a domain is its `src/`, not its name. It enumerates with `git ls-files`, needs `jq`, and reports the three content rules `not-applicable`.
 - **`run` and `package` take their context as globals** from `libs/unit.sh`. `package` clears `dist/` before dispatch, only where `packaging_writes_dist` and never on a dry run, so a stale binary cannot satisfy `release`'s output guard.
 - **`release` is the only script here that writes to GitHub.** Changelog section or generated notes, never both; it packages first, checks an `executable` unit produced a file, and runs `ci`.
@@ -76,7 +78,8 @@ Each suite is `scripts/tests/<name>-test`, reports through the harness, and asse
 - `session-start-test` — the operator's global `session-start.sh`, `not-applicable` where it is absent
 - `changelog-check-test` — each structural rule, the shipped addon changelog, a missing file, a missing awk, an unrelated path
 - `precommit-hooks-test` — `libs/precommit.sh` against each YAML form. Needs no network, which is the point: this wiring fails silently
+- `github-parity-test` — each way the two trees can disagree, both documented exceptions, no payload at all, and the record unreadable without `jq`
 - `structure-test` — each layout rule in both directions, `.structure-allow` at a path and at a prefix, every declaration value, and `jq` absent. Each fixture is a real repository with the script copied in, since it resolves its own root from `BASH_SOURCE`
 - `protect-branch-test` — bare, qualified, near-miss, and unset destinations
 
-`scripts/check` runs all seventeen before the checks they guard, then `structure` before `ci`. `ci.yml` runs them before toolchain setup and installs `pre-commit` first, so the two hook-wiring suites do not skip every case. shellcheck runs via pre-commit with `-x`.
+`scripts/check` runs all eighteen before the checks they guard, then `structure` and `github-parity` before `ci`. `ci.yml` runs them before toolchain setup and installs `pre-commit` first, so the two hook-wiring suites do not skip every case. shellcheck runs via pre-commit with `-x`.

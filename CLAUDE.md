@@ -23,6 +23,7 @@ Use these instead of per-language tools; each detects the languages present and 
 - `scripts/run [unit] [-- args…]` — start the unit, dispatching on the `run` fact it declared; requires the unit name when `apps/` holds several, since a run is one foreground process. Everything after `--` reaches the program unchanged
 - `scripts/package [unit]` — deliver what the unit declared it ships: an executable per declared target into the unit's `dist/`, or a `deploy/quadlet/` pair validated and nothing built. Where a language packages into `dist/`, that directory is this command's output and is emptied before the build refills it, so a binary from an earlier build cannot reach a release; where a language has no packaging adapter, `dist/` is left alone. Not part of the gate: packaging is not a check
 - `scripts/structure` — audit where files sit against the Layout rules below; called by `scripts/check` and by pre-commit on every commit
+- `scripts/github-parity` — refuse a divergence between `.github/` and the payload copy at `apps/github-repository-template/src/base-repo/.github/`; called by `scripts/check` and by pre-commit on every commit. It reports rather than repairs, so a Dependabot bump merged into the root only fails until it is mirrored
 
 Every check runs for every language present, not the first one detected. Results distinguish `pass`, `not-applicable`, `unavailable`, and `FAIL`, so an intentional no-op cannot look like a runner that executed. See `scripts/CLAUDE.md` before adding a language or a check.
 

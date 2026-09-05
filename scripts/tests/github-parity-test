@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+# Exercises scripts/github-parity: every way the two .github/ trees can
+# disagree, the two documented exceptions, and the states it reports when it
+# cannot decide.
+#
+# Each fixture is a real Git repository with the scripts tree copied into it,
+# for the reason structure-test gives: the script resolves its own repository
+# root from BASH_SOURCE and cds there, so running this repository's copy
+# against a fixture directory would compare this repository's trees instead.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/harness.sh
+source "$repo_root/scripts/tests/libs/harness.sh"
+
+payload="apps/github-repository-template/src/base-repo/.github"
+
+write() {
+  mkdir -p "$work/$(dirname "$1")"
+  printf '%s\n' "${2-x}" > "$work/$1"
+}
+
+# The same file in both trees, which is what parity means.
+mirror() {
+  write ".github/$1" "${2-x}"
+  write "$payload/$1" "${2-x}"
+}
+
+# A record with the given features object, since a payload file the root lacks
+# is judged against it.
+record_file() {
+  write .repo-template.json "{\"schema_version\": 1, \"generation\": {\"features\": ${1-\{\}}}}"
+}
+
+# Staged, not committed: the script enumerates the index.
+audit() {
+  git -C "$work" add -A > /dev/null 2>&1
+  (cd "$work" && ./scripts/github-parity) > "$work/.audit-output" 2>&1
+}
+
+assert_passes() {
+  if audit; then
+    pass
+  else
+    fail "agreeing trees were rejected: $(grep -E '^ +' "$work/.audit-output" | head -1 | xargs)"
+  fi
+}
+
+# Asserts the run failed and that the finding names the given path, so a
+# fixture cannot pass by tripping the check for some other reason.
+assert_fails() {
+  if audit; then
+    fail "divergence was accepted"
+  elif ! grep -qE '^github-parity +FAIL' "$work/.audit-output"; then
+    fail "expected a FAIL; got: $(head -1 "$work/.audit-output")"
+  elif ! grep -qE "^ +$1" "$work/.audit-output"; then
+    fail "expected a finding naming $1; got: $(grep -E '^ +' "$work/.audit-output" | head -1 | xargs)"
+  else
+    pass
+  fi
+}
+
+# Reads the output the caller already produced, rather than auditing again:
+# one case runs the script on a reduced PATH, and a second run would be on the
+# full one.
+assert_state() {
+  if grep -qE "^github-parity +$1" "$work/.audit-output"; then
+    pass
+  else
+    fail "expected $1; got: $(head -1 "$work/.audit-output")"
+  fi
+}
+
+# A fixture holding one agreeing file in each tree, which every case then
+# breaks in exactly one way.
+parity_fixture() {
+  fixture "$1"
+  record_file
+  mirror workflows/ci.yml
+}
+
+echo "github-parity-test"
+
+parity_fixture "identical trees pass"
+assert_passes
+
+parity_fixture "a file whose content differs fails"
+write ".github/workflows/ci.yml" changed
+assert_fails "workflows/ci.yml differs"
+
+parity_fixture "a root file absent from the payload fails"
+write .github/workflows/release.yml
+assert_fails "workflows/release.yml is in .github and not in the payload"
+
+# The case the whole check exists for at the presence level: a new workflow
+# reaches root and never reaches the payload, and nothing else would say so.
+parity_fixture "a payload file absent from the root fails"
+write "$payload/workflows/codeql.yml"
+assert_fails "workflows/codeql.yml is in the payload and not in .github"
+
+# dependabot.yml is the one path allowed to differ, and it is allowed to differ
+# only in content.
+parity_fixture "the named content exception may differ"
+write .github/dependabot.yml root
+write "$payload/dependabot.yml" payload
+assert_passes
+
+parity_fixture "the named content exception may not go missing"
+write .github/dependabot.yml root
+assert_fails "dependabot.yml is in .github and not in the payload"
+
+# The resolution .repo-template.json already carries, read rather than
+# restated: a deliberate omission is accounted for, an undeclared one is not.
+parity_fixture "an omission recorded in generation.features is accounted for"
+record_file '{"codeql": "omitted-by-choice"}'
+write "$payload/workflows/codeql.yml"
+assert_passes
+
+parity_fixture "a feature recorded with any other value is not an omission"
+record_file '{"codeql": "enabled"}'
+write "$payload/workflows/codeql.yml"
+assert_fails "workflows/codeql.yml is in the payload and not in .github"
+
+# A feature can record a deliberate absence that is not a file at all, and one
+# of those must not excuse a missing workflow.
+parity_fixture "a feature naming no file excuses nothing"
+record_file '{"merge_settings": "omitted-by-choice"}'
+write "$payload/workflows/codeql.yml"
+assert_fails "workflows/codeql.yml is in the payload and not in .github"
+
+# The state every repository generated from the payload is in: it carries this
+# script and has no second tree, which is not-applicable rather than a pass.
+parity_fixture "a repository with no payload is not-applicable"
+rm -rf "${work:?}/apps"
+audit
+assert_state not-applicable
+
+# A comparison that could not be made is unavailable, not a pass.
+parity_fixture "the record cannot be read without jq"
+record_file '{"codeql": "omitted-by-choice"}'
+write "$payload/workflows/codeql.yml"
+git -C "$work" add -A > /dev/null 2>&1
+(cd "$work" && PATH="$(minimal_path bash dirname git sed sort cmp)" ./scripts/github-parity) \
+  > "$work/.audit-output" 2>&1
+assert_state unavailable
+
+report
