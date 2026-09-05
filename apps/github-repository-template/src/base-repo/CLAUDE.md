@@ -11,6 +11,20 @@ Located at `./scripts` Use these instead of per-language tools; each detects the
 - Pull requests merge; they are neither squashed nor rebased.
 - Plan mode writes to `docs/plans/`, which is tracked. A plan lands in the diff alongside the code it describes.
 
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on this repository, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The seven canonical roles, unrenamed. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` at the root once a glossary exists, ADRs in `docs/adrs/`. See `docs/agents/domain.md`.
+
 ## Child Index
 
 - `scripts/CLAUDE.md` — the language-capabilities interface, the result states, the test harness, and what adding a language or check requires
