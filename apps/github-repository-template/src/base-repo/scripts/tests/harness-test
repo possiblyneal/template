@@ -67,6 +67,16 @@ report
 SUITE
 assert_tally "0 passed, 0 failed, 1 skipped" 1
 
+# The same silent green reached the other way: a suite that returns before it
+# asserts anything -- a host gate taken early, a loop over an empty list --
+# reports the tally of a run that verified nothing.
+scratch_repo
+current="a suite that asserted nothing is unavailable, not green"
+suite <<'SUITE'
+report
+SUITE
+assert_tally "0 passed, 0 failed, 0 skipped" 1
+
 scratch_repo
 current="a skip beside a pass stays green and is counted"
 suite <<'SUITE'

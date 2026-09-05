@@ -38,7 +38,7 @@ A helper that must be built before it runs belongs in `tools/`, not here.
 - **Go capabilities run once per module** through `go_each`, which fails on an empty `go list -m`; gofmt stays at the root. `_go_main_packages` yields one program, `NO_RUNNER`, or a refusal.
 - **An adapter is honest about what it did.** Capture the tool's exit status, not only its output. No function stands in for an absent one: the probe reads `absent` off the function table, the dispatch reports `unavailable`, and `NO_RUNNER` never leaves it. Node's `run` refuses a missing `bin`.
 - **`libs/*.sh` and `harness.sh` are sourced, never executed** — no shebang, no executable bit, `.sh`. Every other script is extensionless and executable; pre-commit reads a shebang only on one.
-- **`harness.sh` owns the counting and the primitives**: `scratch_repo`, `fixture`, `declare_unit`, `quadlet_pair`, `stub`, `minimal_path`, `skip`. No suite changes directory, and only a case about `run` lets a stub read its stdin; `report` fails a suite that passed nothing and skipped something.
+- **`harness.sh` owns the counting and the primitives**: `scratch_repo`, `fixture`, `declare_unit`, `quadlet_pair`, `stub`, `minimal_path`, `skip`. No suite changes directory, and only a case about `run` lets a stub read its stdin; `report` fails a suite that passed nothing, whether it skipped every case or never reached one.
 - **`libs/precommit.sh` owns which git hooks are owed, and parses `default_install_hook_types` rather than grepping: three valid YAML forms.** `adr-index` and `structure` are hooks, not capabilities, and run `always_run` with no `files:` filter, since staged paths exclude deletions.
 - **`structure` holds the layout rules as code**; the only file it opens is a `.unit.json`. Depth stops at the first `src/`; a domain is its `src/`, not its name. It enumerates with `git ls-files`, needs `jq`, and reports the three content rules `not-applicable`.
 - **`run` and `package` take their context as globals** from `libs/unit.sh`. `package` clears `dist/` before dispatch, only where `packaging_writes_dist` and never on a dry run, so a stale binary cannot satisfy `release`'s output guard.
@@ -65,7 +65,7 @@ Each suite is `scripts/tests/<name>-test`, reports through the harness, and asse
 
 - `capabilities-test` — the ten-by-six probe table, dispatch under `CI_DRY_RUN=1`, and real runs of `ci`, `security`, `run`, and `package` against stubbed toolchains
 - `result-gate-test` — the four states are enforced and findings deduped, and every command ending in `tally` fails on an `unavailable` line or a recorded orphan
-- `harness-test` — the harness itself, run as a process: the tally line and exit status for all-pass, one-fail, all-skip, and skip-beside-pass, plus each fixture primitive
+- `harness-test` — the harness itself, run as a process: the tally line and exit status for all-pass, one-fail, all-skip, nothing-asserted, and skip-beside-pass, plus each fixture primitive
 - `clean-test` — `clean` prunes the directories `libs/detect.sh` names
 - `unit-commands-test` — unit resolution, `run: none` and `ships: none`, quadlet validation with no container runtime, arguments after `--`, and `dist/` cleared only where a language packages there. Skips without `jq`
 - `health-checks-test` — the offline boundary, with `gh` stubbed

@@ -160,9 +160,11 @@ skip() {
 
 # Prints the tally and returns the suite's exit status, so a caller ends with
 # `report` as its last line and the script's status is the suite's result. A
-# suite that passed nothing and skipped something is unavailable, not green.
+# suite that passed nothing is unavailable, not green: it verified nothing,
+# whether it skipped every case for a missing tool or returned before reaching
+# any of them.
 report() {
   echo
   echo "$passed passed, $failed failed, $skipped skipped"
-  (( failed == 0 )) && ! (( passed == 0 && skipped > 0 ))
+  (( failed == 0 && passed > 0 ))
 }
