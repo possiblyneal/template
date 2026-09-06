@@ -9,7 +9,7 @@ Develops the `/repo-builder` skill, which builds a repository from the payload a
 - `src/SKILL.md` — the entry point, and the only file Claude Code reads to decide the skill applies.
 - `src/references/` — the flows the entry point routes to: `lifecycle.md` first, then `generate.md`, `update.md`, `adopt.md`, `wayfinding.md`, `addon-adoption.md`, and the method `choosing_a_language.md` is a short path through.
 - `src/scripts/preflight.py` — validates and describes generate, update, and adopt inputs before any flow acts.
-- `src/scripts/tests/` — the pytest suite over `preflight.py`, plus `test_addon_adoption.py`, which is a check on the template payload rather than on this unit.
+- `src/scripts/tests/` — the pytest suite over `preflight.py`, plus two checks that are not about this unit's code: `test_addon_adoption.py`, on the template payload, and `test_reference_assertions.py`, on whether `src/references/` still describes a payload that exists.
 - `src/evals/` — `evals.json` and the fixture helpers the skill-eval tooling runs it against.
 - `scripts/install` — creates the link described below.
 
@@ -27,7 +27,9 @@ Develops the `/repo-builder` skill, which builds a repository from the payload a
 
 ## Work Guidance
 
-`test_addon_adoption.py` is stdlib-only, and the file says why: it runs under pytest and standalone from a pre-commit hook that resolves no dependencies. A pytest-only idiom added later passes the first and breaks the second.
+`test_addon_adoption.py` and `test_reference_assertions.py` are stdlib-only, and each file says why: both run under pytest and standalone from a pre-commit hook that resolves no dependencies. A pytest-only idiom added later passes the first and breaks the second.
+
+`test_reference_assertions.py` checks only mechanical claims — a destination path a reference names exists in the payload or in `repository-addons/`, and a Markdown heading a reference quotes exists in some payload file. Whether a sentence is right about a file it names is not decidable there, so widening it means finding another claim a script can settle, not loosening these two.
 
 Editing under this unit's `src/` does not prompt — `.claude/settings.json` asks only for `apps/github-repository-template/src/**`, where the prompt's question, payload or root, is a real one.
 
@@ -35,6 +37,7 @@ Editing under this unit's `src/` does not prompt — `.claude/settings.json` ask
 
 - `uv run pytest` — the suite, bounded here by the root `testpaths`. Runs inside `scripts/check` as the Python test capability.
 - `pre-commit run addon-adoption --all-files` — the payload manifest check, at this unit's path. Runs on every commit.
+- `pre-commit run reference-assertions --all-files` — the references-against-payload check. Runs on every commit.
 - `src/evals/` is run by the skill-eval tooling against the fixtures its helpers build. It is not part of `scripts/check`: an eval invokes the skill, which is a model run rather than a check.
 
 ## Child Index
