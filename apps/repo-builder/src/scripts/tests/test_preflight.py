@@ -132,6 +132,81 @@ class PreflightUnitTests(unittest.TestCase):
             )
 
 
+class GenerateTests(unittest.TestCase):
+    """The source commit a generate pins is the base every update diffs from."""
+
+    @staticmethod
+    def _generation_fixture(directory: str) -> dict[str, str]:
+        fixture_setup = MODULE_PATH.parents[1] / "evals" / "setup_fixture.py"
+        fixture_root = Path(directory) / "fixture"
+        subprocess.run(
+            ["python3", str(fixture_setup), "generation", str(fixture_root)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+        )
+        return json.loads((fixture_root / "fixture.json").read_text())
+
+    @staticmethod
+    def _preflight(fixture: dict[str, str], target: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "generate",
+                "--template-repo",
+                fixture["template_repo"],
+                "--target",
+                target,
+                "--subtree",
+                fixture["subtree"],
+                "--destination-repository",
+                fixture["destination_repository"],
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    def test_generate_accepts_a_commit_on_the_template_branch(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._generation_fixture(directory)
+            result = self._preflight(fixture, fixture["target_commit"])
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["template"]["branch"], "main")
+            self.assertEqual(report["template"]["branch_tip"], fixture["target_commit"])
+
+    def test_generate_rejects_a_commit_off_the_template_branch(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._generation_fixture(directory)
+            template = Path(fixture["template_repo"])
+            subprocess.run(
+                ["git", "checkout", "-q", "-b", "experiment"],
+                cwd=template,
+                check=True,
+            )
+            (template / "base-repo" / "SCRATCH.md").write_text("not on main\n")
+            subprocess.run(["git", "add", "-A"], cwd=template, check=True)
+            subprocess.run(
+                [*("git", *GIT_IDENTITY), "commit", "-q", "-m", "chore: experiment"],
+                cwd=template,
+                check=True,
+            )
+            off_branch = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=template,
+                check=True,
+                text=True,
+                stdout=subprocess.PIPE,
+            ).stdout.strip()
+
+            result = self._preflight(fixture, off_branch)
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("is not on main", result.stdout + result.stderr)
+
+
 class AdoptTests(unittest.TestCase):
     # The values are all `str` because the scenario below is the literal
     # "adopt", and setup_fixture.build_adopt returns six flat strings. The

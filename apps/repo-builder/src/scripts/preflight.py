@@ -105,6 +105,30 @@ def require_subtree(repository: Path, commit: str, subtree: str) -> None:
         )
 
 
+def require_on_branch(repository: Path, commit: str, branch: str) -> str:
+    """Refuse a source commit that is not on the template's own branch.
+
+    A generate records the source as `template.commit`, and that commit is the
+    base every later update diffs from -- `update` requires the recorded commit
+    be a strict ancestor of the requested target. Pinning a generate to a commit
+    off the template's mainline is therefore not a smaller mistake caught later:
+    it is a repository that can never be updated, because no mainline target has
+    the recorded commit in its history. Nothing in the generated repository says
+    so, and the failure surfaces months on, in a flow that cannot repair it.
+    """
+    tip = resolve_commit(repository, branch)
+    result = run_git(
+        repository, "merge-base", "--is-ancestor", commit, tip, check=False
+    )
+    if result.returncode != 0:
+        raise PreflightError(
+            f"source commit {commit} is not on {branch} ({tip}); a generate records "
+            "it as the base every later update diffs from, so a commit off the "
+            "template's own branch generates a repository no update can reach"
+        )
+    return tip
+
+
 def sibling_of_subtree(subtree: str, name: str) -> str:
     head = subtree.rsplit("/", 1)
     parent = head[0] if len(head) == 2 else ""
@@ -400,12 +424,15 @@ def generation_preflight(arguments: argparse.Namespace) -> dict[str, object]:
     target = resolve_commit(template_repo, arguments.target)
     subtree = normalize_relative_path(arguments.subtree, "template subtree")
     require_subtree(template_repo, target, subtree)
+    branch_tip = require_on_branch(template_repo, target, arguments.template_branch)
     return {
         "operation": "generate",
         "template": {
             "repository": repository_identity(template_repo),
             "subtree": subtree,
             "commit": target,
+            "branch": arguments.template_branch,
+            "branch_tip": branch_tip,
         },
         "destination": {
             "repository": arguments.destination_repository,
@@ -570,6 +597,11 @@ def build_parser() -> argparse.ArgumentParser:
     generate.add_argument("--subtree", required=True)
     generate.add_argument("--destination-repository", required=True, help="owner/name")
     generate.add_argument("--default-branch", default="main")
+    generate.add_argument(
+        "--template-branch",
+        default="main",
+        help="the template's own branch the source commit must be on (default: main)",
+    )
     generate.set_defaults(handler=generation_preflight)
 
     update = subparsers.add_parser(

@@ -32,6 +32,8 @@ python3 apps/repo-builder/src/scripts/preflight.py generate \
   --default-branch main
 ```
 
+`--default-branch` is the destination's; `--template-branch` is this template's own and defaults to `main`. Pass it only where the source genuinely lives on another branch, and expect a refusal for a commit on none of them: the commit recorded here is the base every later update diffs from, so one off the template's branch generates a repository no update can ever reach.
+
 `generate` validates the source only. It takes the destination as a name, never inspects it, and so cannot tell an empty repository from one with content. Establish that yourself before materializing.
 
 ### Step 2 — Collect the unresolved decisions

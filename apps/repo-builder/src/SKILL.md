@@ -36,7 +36,7 @@ When those two questions do not settle it, the rest is the full method in `refer
 
 Use `scripts/preflight.py` for deterministic validation and retain its JSON in the work record. `scripts/tests/test_preflight.py` and `scripts/tests/test_addon_adoption.py` cover them; run them after editing `preflight.py` or `addon-adoption.json`.
 
-- `generate` resolves the exact source commit and verifies its payload subtree. It never inspects the destination, so an occupied destination looks identical to an empty one; establish that yourself.
+- `generate` resolves the exact source commit, verifies its payload subtree, and requires that commit to be on the template's own branch — the commit it records is the base every later update diffs from. It never inspects the destination, so an occupied destination looks identical to an empty one; establish that yourself.
 - `update` validates provenance, repository identities, a clean destination, strict ancestry, and the bounded template delta.
 - `adopt` validates provenance, repository identities, a clean destination, and each requested addon at the recorded commit: it exists in `repository-addons/`, carries an `addon-adoption.json` entry, completes its pair, is not requested alongside the addon it excludes, and the destination holds neither it nor that addon.
 
