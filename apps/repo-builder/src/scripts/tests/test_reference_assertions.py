@@ -7,8 +7,9 @@ still reading as instruction -- and the skill acts on instruction. The failure
 mode is not a stale doc a reader shrugs at: a generate follows the reference,
 looks for what it was told is there, and improvises when it is missing.
 
-Only mechanical claims are checked. Whether a sentence is *right* about a file
-is not decidable here; whether the file exists is.
+Only mechanical claims are checked -- a named destination path exists, a cited
+decision record exists, a quoted heading exists. Whether a sentence is *right*
+about a file it names is not decidable here; whether the file exists is.
 
 STDLIB ONLY, for the same reason test_addon_adoption.py is: this runs under
 pytest and standalone from a pre-commit hook that resolves no dependencies.
@@ -26,17 +27,14 @@ SKILL = REPOSITORY_ROOT / "apps/repo-builder/src"
 # Prefixes whose meaning is unambiguous: a reference naming one of these is
 # naming a destination path, never a path in this repository. `scripts/` and
 # `libs/` are deliberately absent -- both trees have them, and a reference
-# naming `scripts/preflight.py` means this unit's copy.
-DESTINATION_PREFIXES = ("docs/agents/", "docs/adrs/", ".github/")
+# naming `scripts/preflight.py` means this unit's copy. So is `docs/adrs/`:
+# the payload ships only the template there, and a reference citing a record
+# is citing one of this repository's, checked separately below.
+DESTINATION_PREFIXES = ("docs/agents/", ".github/")
 
-# Paths a reference names as arriving at a destination without the payload
-# shipping them. Each needs a reason; a path with no reason is a defect, not an
-# entry.
-NOT_SHIPPED = {
-    # Written by the payload's own adr-index hook during a generate's checks,
-    # never copied. generate.md step 9 is where it appears.
-    "docs/adrs/index.md",
-}
+# This repository's own decision records, cited by the references for the
+# reasoning behind a rule rather than described as payload content.
+ADR = re.compile(r"^docs/adrs/\d{4}-[a-z0-9-]+\.md$")
 
 HEADING = re.compile(r"`(#{1,6} [^`]+)`")
 PATH = re.compile(r"`([A-Za-z0-9_.][A-Za-z0-9_./-]*)`")
@@ -66,13 +64,33 @@ class ReferenceAssertions(unittest.TestCase):
                 for token in PATH.findall(line):
                     if not token.startswith(DESTINATION_PREFIXES):
                         continue
-                    if token.endswith("/") or token in NOT_SHIPPED:
+                    if token.endswith("/"):
                         continue
                     if (PAYLOAD / token).exists() or (ADDONS / token).exists():
                         continue
                     unshipped.append(f"{reference.name}:{line_number} {token}")
         self.assertEqual(
             unshipped, [], f"references name paths no tree holds: {unshipped}"
+        )
+
+    def test_cited_decision_records_exist(self):
+        """A decision record a reference cites must be in this repository.
+
+        The references carry the rules; docs/adrs/ carries why each rule is the
+        way it is. A citation is the whole link between them, so a renamed or
+        renumbered record leaves the rule with no reasoning behind it and
+        nothing else notices.
+        """
+        absent = []
+        for reference in reference_files():
+            for line_number, line in enumerate(
+                reference.read_text().splitlines(), start=1
+            ):
+                for token in PATH.findall(line):
+                    if ADR.match(token) and not (REPOSITORY_ROOT / token).is_file():
+                        absent.append(f"{reference.name}:{line_number} {token}")
+        self.assertEqual(
+            absent, [], f"references cite records that do not exist: {absent}"
         )
 
     def test_named_payload_headings_exist(self):
