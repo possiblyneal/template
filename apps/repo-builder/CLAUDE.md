@@ -7,7 +7,7 @@ Develops the `/repo-builder` skill, which builds a repository from the payload a
 ## Ownership
 
 - `src/SKILL.md` — the entry point, and the only file Claude Code reads to decide the skill applies.
-- `src/references/` — the flows the entry point routes to: `lifecycle.md` first, then `generate.md`, `update.md`, `adopt.md`, `wayfinding.md`, `addon-adoption.md`, and the method `choosing_a_language.md` is a short path through.
+- `src/references/` — the flows the entry point routes to: `lifecycle.md` first, then `generate.md`, `update.md`, `adopt.md`, `wayfinding.md`, `addon-adoption.md`, and `reporting.md` at the end of any of them. `choosing_a_language.md` is the method wayfinding is a short path through.
 - `src/scripts/preflight.py` — validates and describes generate, update, and adopt inputs before any flow acts.
 - `src/scripts/tests/` — the pytest suite over `preflight.py`, plus two checks that are not about this unit's code: `test_addon_adoption.py`, on the template payload, and `test_reference_assertions.py`, on whether `src/references/` still describes a payload that exists.
 - `src/evals/` — `evals.json` and the fixture helpers the skill-eval tooling runs it against.
