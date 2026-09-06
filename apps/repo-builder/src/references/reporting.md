@@ -70,6 +70,8 @@ First prompt is a generate's only, and it is written for a reader this session n
 - Issue tracker: <GitHub | GitLab | local markdown | other>, recorded in `docs/agents/issue-tracker.md`, shipped by the payload | written by `/setup-matt-pocock-skills` | kept from the destination; triage labels: created (<names>) | already present | none created (<reason>)
 
 ### Verification
+One line per check, from `scripts/summarize <command>` rather than from a filter built for the occasion.
+
 - `<exact command>`: pass | fail | unavailable (<reason>)
 - Copied paths byte-identical to their source: <count>/<count>; the rest are the authored surface, under File list
 - Code review: skipped, as [Reviewing the pull request](#reviewing-the-pull-request) directs

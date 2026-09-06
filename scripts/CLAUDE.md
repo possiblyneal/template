@@ -9,6 +9,7 @@ Every portable shell script, whether a person runs it or a workflow does. Projec
 One flat directory, not a `ci/` and a `scripts/` split. The boundary that split would need does not hold: `check` calls `ci` and `security`, `release` calls `ci`, and every script sources the same detection library, so a file's caller is not a property that stays put.
 
 - `doctor`, `check`, `fix`, `clean`, `run`, `package` — run by a person
+- `summarize <command…>` — runs a check command and prints only its Result table, findings included, exiting with that command's status; the one consumer of the printed layout `libs/result.sh` documents
 - `ci`, `security`, `release`, `detect` — called by `.github/workflows/`
 - `repo-settings check` — hosted GitHub state, run explicitly
 - `adr-index` — called by pre-commit; regenerates `docs/adrs/index.md`
@@ -67,6 +68,7 @@ Each suite is `scripts/tests/<name>-test`, reports through the harness, and asse
 
 - `capabilities-test` — the ten-by-six probe table, dispatch under `CI_DRY_RUN=1`, and real runs of `ci`, `security`, `run`, and `package` against stubbed toolchains
 - `result-gate-test` — the four states are enforced and findings deduped, and every command ending in `tally` fails on an `unavailable` line or a recorded orphan
+- `summarize-test` — what the Result-table filter keeps, what it drops, and that it exits with the command's own status
 - `harness-test` — the harness itself, run as a process: the tally line and exit status for all-pass, one-fail, all-skip, skip-beside-pass, a declared not-applicable, and a suite that counted nothing, plus each fixture primitive
 - `clean-test` — `clean` prunes the directories `libs/detect.sh` names
 - `unit-commands-test` — unit resolution, `run: none` and `ships: none`, quadlet validation with no container runtime, arguments after `--`, and `dist/` cleared only where a language packages there. Skips without `jq`
