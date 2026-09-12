@@ -91,3 +91,8 @@ _Avoid_: optional file, extra
 The rule that governs an addon — it arrives when a repository has a reason for
 it, not at generation.
 _Avoid_: optional, as-needed
+
+**Retrofit**:
+Landing the payload in a repository that grew without it, which arrives with its
+own content and no record of the template.
+_Avoid_: convert, migrate, onboard, adopt, backfill
