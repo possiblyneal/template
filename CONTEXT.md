@@ -106,3 +106,8 @@ _Avoid_: journal, checkpoint, state file, progress file
 A write a flow cannot recognize as its own by reading the destination back, so
 repeating it duplicates rather than repeats.
 _Avoid_: keyless write, non-idempotent write
+
+**Hosted write**:
+A change to a destination's state on GitHub itself, which no pull request can
+carry and which takes effect the moment it is made.
+_Avoid_: remote write, settings change, API call
