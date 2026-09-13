@@ -96,3 +96,13 @@ _Avoid_: optional, as-needed
 Landing the payload in a repository that grew without it, which arrives with its
 own content and no record of the template.
 _Avoid_: convert, migrate, onboard, adopt, backfill
+
+**Resume record**:
+The account, held beside the candidate, of what a stopped flow decided and of the
+writes it made that cannot be observed back.
+_Avoid_: journal, checkpoint, state file, progress file
+
+**Unobservable write**:
+A write a flow cannot recognize as its own by reading the destination back, so
+repeating it duplicates rather than repeats.
+_Avoid_: keyless write, non-idempotent write
