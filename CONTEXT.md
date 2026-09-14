@@ -111,3 +111,9 @@ _Avoid_: keyless write, non-idempotent write
 A change to a destination's state on GitHub itself, which no pull request can
 carry and which takes effect the moment it is made.
 _Avoid_: remote write, settings change, API call
+
+**Authored surface**:
+The part of a candidate a flow wrote rather than copied, and so the only part a
+reader must read line by line. A file proved identical to what it was copied
+from, or proved unchanged by a move, is not on it.
+_Avoid_: custom content, hand-written files, non-template files, the diff
