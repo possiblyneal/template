@@ -75,6 +75,13 @@ The outcome of one capability against one language: `pass`, `not-applicable`,
 `unavailable`, or `FAIL`.
 _Avoid_: status, skipped, n/a
 
+**Tool declaration**:
+The entries in a repository's root manifest naming the tools its adapters run.
+The check surface reads the manifest and nothing else, so an undeclared tool
+reports `unavailable` rather than running from wherever it happens to be
+installed.
+_Avoid_: dev dependencies, dev group, tooling config, npm scripts
+
 ### Template
 
 **Payload**:
