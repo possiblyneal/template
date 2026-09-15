@@ -110,6 +110,12 @@ Landing the payload in a repository that grew without it, which arrives with its
 own content and no record of the template.
 _Avoid_: convert, migrate, onboard, adopt, backfill
 
+**Candidate**:
+The working copy of a destination a flow builds and measures before publishing
+anything, and the only place a flow edits. It is not the destination: the
+destination is what the pull request asks to change.
+_Avoid_: working copy, staging repo, draft, workspace
+
 **Resume record**:
 The account, held beside the candidate, of what a stopped flow decided and of the
 writes it made that cannot be observed back.
