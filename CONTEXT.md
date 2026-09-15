@@ -75,6 +75,12 @@ The outcome of one capability against one language: `pass`, `not-applicable`,
 `unavailable`, or `FAIL`.
 _Avoid_: status, skipped, n/a
 
+**Bar**:
+The destination's own `scripts/check` passing, measured on the candidate before
+it is published. `FAIL` and `unavailable` both fail it; `not-applicable` does
+not. One flow does not get a looser bar than another.
+_Avoid_: gate, green, verification, passing checks
+
 **Tool declaration**:
 The entries in a repository's root manifest naming the tools its adapters run.
 The check surface reads the manifest and nothing else, so an undeclared tool
