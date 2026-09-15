@@ -59,6 +59,54 @@ Deliberately not a term here: one word naming what a unit "is" collapses the run
 fact and the ship fact, which vary separately. ADR 0001 has the argument.
 _Avoid_: shape, kind, app type
 
+### Flows
+
+**Flow**:
+One of the four routes the payload takes into a repository: `generate`,
+`update`, `adopt`, `retrofit`.
+_Avoid_: mode, command, operation, run
+
+**Destination**:
+The repository a flow acts on. Never this repository, and never the candidate.
+_Avoid_: target, output repo, the repo
+
+**Retrofit**:
+Landing the payload in a repository that grew without it, which arrives with its
+own content and no record of the template.
+_Avoid_: convert, migrate, onboard, adopt, backfill
+
+**Overridden path**:
+A payload path a flow did not land, because the destination's own version was
+chosen over it.
+_Avoid_: skipped file, collision, exception
+
+**Candidate**:
+The working copy of a destination a flow builds and measures before publishing
+anything. It is not the destination: the destination is what the pull request
+asks to change.
+_Avoid_: working copy, staging repo, draft, workspace
+
+**Resume record**:
+The account, held beside the candidate, of what a stopped flow decided and of the
+writes it made that cannot be observed back.
+_Avoid_: journal, checkpoint, state file, progress file
+
+**Unobservable write**:
+A write a flow cannot recognize as its own by reading the destination back, so
+repeating it duplicates rather than repeats.
+_Avoid_: keyless write, non-idempotent write
+
+**Hosted write**:
+A change to a destination's state on GitHub itself, which no pull request can
+carry.
+_Avoid_: remote write, settings change, API call
+
+**Authored surface**:
+The part of a candidate a flow wrote rather than copied, and so the only part a
+reader must read line by line. A file proved identical to what it was copied
+from, or proved unchanged by a move, is not on it.
+_Avoid_: custom content, hand-written files, non-template files, the diff
+
 ### Checks
 
 **Capability**:
@@ -78,14 +126,11 @@ _Avoid_: status, skipped, n/a
 **Bar**:
 The destination's own `scripts/check` passing, measured on the candidate before
 it is published. `FAIL` and `unavailable` both fail it; `not-applicable` does
-not. One flow does not get a looser bar than another.
+not.
 _Avoid_: gate, green, verification, passing checks
 
 **Tool declaration**:
 The entries in a repository's root manifest naming the tools its adapters run.
-The check surface reads the manifest and nothing else, so an undeclared tool
-reports `unavailable` rather than running from wherever it happens to be
-installed.
 _Avoid_: dev dependencies, dev group, tooling config, npm scripts
 
 ### Template
@@ -104,35 +149,3 @@ _Avoid_: optional file, extra
 The rule that governs an addon — it arrives when a repository has a reason for
 it, not at generation.
 _Avoid_: optional, as-needed
-
-**Retrofit**:
-Landing the payload in a repository that grew without it, which arrives with its
-own content and no record of the template.
-_Avoid_: convert, migrate, onboard, adopt, backfill
-
-**Candidate**:
-The working copy of a destination a flow builds and measures before publishing
-anything, and the only place a flow edits. It is not the destination: the
-destination is what the pull request asks to change.
-_Avoid_: working copy, staging repo, draft, workspace
-
-**Resume record**:
-The account, held beside the candidate, of what a stopped flow decided and of the
-writes it made that cannot be observed back.
-_Avoid_: journal, checkpoint, state file, progress file
-
-**Unobservable write**:
-A write a flow cannot recognize as its own by reading the destination back, so
-repeating it duplicates rather than repeats.
-_Avoid_: keyless write, non-idempotent write
-
-**Hosted write**:
-A change to a destination's state on GitHub itself, which no pull request can
-carry and which takes effect the moment it is made.
-_Avoid_: remote write, settings change, API call
-
-**Authored surface**:
-The part of a candidate a flow wrote rather than copied, and so the only part a
-reader must read line by line. A file proved identical to what it was copied
-from, or proved unchanged by a move, is not on it.
-_Avoid_: custom content, hand-written files, non-template files, the diff
