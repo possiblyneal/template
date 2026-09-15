@@ -59,6 +59,23 @@ Deliberately not a term here: one word naming what a unit "is" collapses the run
 fact and the ship fact, which vary separately. ADR 0001 has the argument.
 _Avoid_: shape, kind, app type
 
+### Template
+
+**Payload**:
+The content copied into repositories generated from this one. Editing it changes
+every future generated repository and changes nothing here.
+_Avoid_: template files, source, boilerplate
+
+**Addon**:
+A file held back from the payload for a generated repository to adopt when the
+occasion arrives, rather than shipped to every repository by default.
+_Avoid_: optional file, extra
+
+**Addition by occasion**:
+The rule that governs an addon — it arrives when a repository has a reason for
+it, not at generation.
+_Avoid_: optional, as-needed
+
 ### Flows
 
 **Flow**:
@@ -132,20 +149,3 @@ _Avoid_: gate, green, verification, passing checks
 **Tool declaration**:
 The entries in a repository's root manifest naming the tools its adapters run.
 _Avoid_: dev dependencies, dev group, tooling config, npm scripts
-
-### Template
-
-**Payload**:
-The content copied into repositories generated from this one. Editing it changes
-every future generated repository and changes nothing here.
-_Avoid_: template files, source, boilerplate
-
-**Addon**:
-A file held back from the payload for a generated repository to adopt when the
-occasion arrives, rather than shipped to every repository by default.
-_Avoid_: optional file, extra
-
-**Addition by occasion**:
-The rule that governs an addon — it arrives when a repository has a reason for
-it, not at generation.
-_Avoid_: optional, as-needed
