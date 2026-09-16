@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate and describe repo-builder generation and update inputs."""
+"""Validate and describe repo-builder generate, update, adopt, and retrofit inputs."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import NoReturn
 from urllib.parse import urlparse
 
@@ -105,6 +105,34 @@ def require_subtree(repository: Path, commit: str, subtree: str) -> None:
         )
 
 
+def branch_tips(repository: Path, branch: str) -> list[tuple[str, str]]:
+    """Every ref a branch name legitimately means in a clone, remote first.
+
+    A clone is fetched far more often than it is checked out, so `main` and
+    `origin/main` routinely name different commits and neither is the wrong
+    answer. Reading only the local ref refuses a commit newer than the last
+    checkout, and refuses outright in a clone that fetched the branch without
+    ever checking it out -- neither of which is a commit off the mainline.
+    Reading only the remote ref would refuse a commit not yet pushed. Both are
+    offered, and the caller accepts a commit on either.
+
+    A plain branch name is the whole of the input, narrower than the arbitrary
+    rev an earlier `resolve_commit` call took: `origin/main`, a tag, and `HEAD`
+    are all refused here. A generate records its source as the base every later
+    update diffs from, and an update targets a branch, so a tag or a detached
+    `HEAD` names no lineage an update could follow back.
+    """
+    tips: list[tuple[str, str]] = []
+    for reference in (f"refs/remotes/origin/{branch}", f"refs/heads/{branch}"):
+        result = run_git(
+            repository, "rev-parse", "--verify", f"{reference}^{{commit}}", check=False
+        )
+        tip = result.stdout.strip()
+        if result.returncode == 0 and FULL_COMMIT.fullmatch(tip):
+            tips.append((reference, tip))
+    return tips
+
+
 def require_on_branch(repository: Path, commit: str, branch: str) -> str:
     """Refuse a source commit that is not on the template's own branch.
 
@@ -116,17 +144,38 @@ def require_on_branch(repository: Path, commit: str, branch: str) -> str:
     the recorded commit in its history. Nothing in the generated repository says
     so, and the failure surfaces months on, in a flow that cannot repair it.
     """
-    tip = resolve_commit(repository, branch)
-    result = run_git(
-        repository, "merge-base", "--is-ancestor", commit, tip, check=False
-    )
-    if result.returncode != 0:
+    tips = branch_tips(repository, branch)
+    if not tips:
         raise PreflightError(
-            f"source commit {commit} is not on {branch} ({tip}); a generate records "
-            "it as the base every later update diffs from, so a commit off the "
-            "template's own branch generates a repository no update can reach"
+            f"template branch {branch} resolves to no ref in {repository}; "
+            "fetch it before generating"
         )
-    return tip
+    declined: list[str] = []
+    for reference, tip in tips:
+        ancestry = run_git(
+            repository, "merge-base", "--is-ancestor", commit, tip, check=False
+        )
+        if ancestry.returncode == 0:
+            return tip
+        # Exit 1 is the answer "no"; anything else is git declining to answer,
+        # and reporting that as a commit off the branch sends the operator to
+        # re-pin a commit when the repository is what needs attention. The
+        # refusal waits until every ref has been tried: one ref git cannot read
+        # is not a reason to ignore another that answers.
+        if ancestry.returncode != 1:
+            detail = ancestry.stderr.strip() or "git could not determine ancestry"
+            declined.append(f"{reference}: {detail}")
+    if declined:
+        raise PreflightError(
+            f"git could not determine whether {commit} is on {branch} in "
+            f"{repository}: {'; '.join(declined)}"
+        )
+    resolved = ", ".join(f"{reference} {tip}" for reference, tip in tips)
+    raise PreflightError(
+        f"source commit {commit} is not on {branch} ({resolved}); a generate records "
+        "it as the base every later update diffs from, so a commit off the "
+        "template's own branch generates a repository no update can reach"
+    )
 
 
 def sibling_of_subtree(subtree: str, name: str) -> str:
@@ -585,6 +634,224 @@ def adopt_preflight(arguments: argparse.Namespace) -> dict[str, object]:
     }
 
 
+def require_named_origin(destination: Path, named: str) -> str:
+    """Refuse a destination whose origin is not the repository that was named.
+
+    Origin alone would do if a clone's directory always matched its repository,
+    and it does not: a retrofit is run against a checkout an operator already
+    had, under whatever name they gave it. Requiring the repository as an
+    argument and agreeing it with origin is what settles which repository is
+    about to be written to, before anything is written.
+    """
+    actual = origin_identity(destination)
+    expected = normalize_repository_identity(named)
+    if actual != expected:
+        raise PreflightError(
+            "destination origin differs from the named repository: "
+            f"named {expected!r}, origin {actual!r}"
+        )
+    return actual
+
+
+def require_tracked_clean(destination: Path) -> None:
+    """Refuse a destination holding uncommitted edits to tracked files.
+
+    Retrofit's own rule rather than `ensure_clean`, which counts untracked
+    files too. A destination that has been developed in normally keeps
+    untracked work deliberately -- a data directory, a scratch folder -- and
+    refusing those refuses the ordinary case. An edit to a tracked file is the
+    one that a retrofit's own writes would become indistinguishable from.
+    """
+    dirty = git_output(destination, "status", "--porcelain=v1", "--untracked-files=no")
+    if dirty:
+        first = dirty.splitlines()[0]
+        raise PreflightError(
+            f"destination has uncommitted changes to tracked files; first: {first}"
+        )
+    require_no_operation_in_progress(destination)
+
+
+# A paused operation is named by a path git keeps rather than by anything
+# `status --porcelain` prints, so `rev-parse --git-path` is what finds it.
+# `rebase-merge` covers an interactive rebase, `rebase-apply` a `git am` or a
+# non-interactive one.
+IN_PROGRESS_PATHS = {
+    "MERGE_HEAD": "a merge",
+    "CHERRY_PICK_HEAD": "a cherry-pick",
+    "REVERT_HEAD": "a revert",
+    "rebase-merge": "a rebase",
+    "rebase-apply": "a rebase or patch application",
+}
+
+
+def require_no_operation_in_progress(destination: Path) -> None:
+    """Refuse a destination holding a paused merge, rebase, cherry-pick, or revert.
+
+    A rebase stopped at an `edit` step has a clean index, so the tracked-files
+    check above passes it. The operator's sequence is still half-applied, and a
+    retrofit's commits would land inside it -- work that has to be unpicked
+    from someone else's rebase rather than dropped with a branch.
+    """
+    for name, operation in IN_PROGRESS_PATHS.items():
+        located = run_git(destination, "rev-parse", "--git-path", name, check=False)
+        if located.returncode != 0:
+            continue
+        path = Path(located.stdout.strip())
+        if not path.is_absolute():
+            path = destination / path
+        if path.exists():
+            raise PreflightError(
+                f"destination has {operation} in progress ({name} is present); "
+                "finish or abort it before retrofitting"
+            )
+
+
+def nul_fields(repository: Path, *arguments: str) -> list[str]:
+    """Read a `-z` listing without touching the paths it holds.
+
+    `git_output` strips the whole output, which eats a leading space off the
+    first path and a trailing one off the last. Only the empty field after the
+    final separator is dropped here, so a path that is itself whitespace
+    survives -- and a path git cannot name is a path a collision check must
+    still see.
+    """
+    output = run_git(repository, *arguments).stdout
+    return [entry for entry in output.split("\0") if entry]
+
+
+def tree_paths(repository: Path, commit: str, subtree: str) -> list[str]:
+    entries = nul_fields(
+        repository, "ls-tree", "-r", "--name-only", "-z", commit, "--", subtree
+    )
+    prefix = f"{subtree.rstrip('/')}/"
+    return sorted(entry.removeprefix(prefix) for entry in entries)
+
+
+def listed_paths(destination: Path, *arguments: str) -> list[str]:
+    return nul_fields(destination, "ls-files", "-z", *arguments)
+
+
+def default_branch(destination: Path) -> str:
+    """The branch a clone treats as its default, not the one it is sitting on.
+
+    A retrofit runs against a checkout the operator already had, so HEAD is
+    routinely a feature branch and reading it reports a rename is required for
+    a repository whose default branch is already the wanted one. `origin/HEAD`
+    is the local record of what the remote's default is. Only a clone writes
+    it, so a destination built with `git init` and given its remote afterwards
+    carries no such ref, and there the checked-out branch is the only answer
+    available.
+    """
+    symbolic = run_git(
+        destination, "symbolic-ref", "--short", "refs/remotes/origin/HEAD", check=False
+    )
+    recorded = symbolic.stdout.strip()
+    if symbolic.returncode == 0 and recorded.startswith("origin/"):
+        return recorded.removeprefix("origin/")
+    return git_output(destination, "rev-parse", "--abbrev-ref", "HEAD")
+
+
+def collision(
+    path: str, present: set[str], tracked: set[str]
+) -> dict[str, object] | None:
+    """What a payload path would overwrite in the destination, if anything.
+
+    A payload file does not only collide with a destination file of the same
+    name. `ls-files` names neither a directory nor anything inside a submodule,
+    so both escape a membership test and reach a retrofit that the preflight
+    called safe: the directory fails the write outright, and the submodule
+    takes it into a foreign repository. Both are the operator's to settle.
+    """
+    if path in present:
+        return {"path": path, "tracked": path in tracked}
+    for parent in PurePosixPath(path).parents:
+        ancestor = str(parent)
+        if ancestor in present:
+            return {"path": path, "tracked": ancestor in tracked}
+    under = [entry for entry in present if entry.startswith(f"{path}/")]
+    if under:
+        return {"path": path, "tracked": any(entry in tracked for entry in under)}
+    return None
+
+
+def retrofit_preflight(arguments: argparse.Namespace) -> dict[str, object]:
+    """Prove locally whether a destination can be retrofitted, and name the collisions.
+
+    Every check here reaches git and nothing else. A retrofit's hosted writes
+    are confirmed at the flow's own gate, where a failure can still be acted
+    on; a preflight that contacted GitHub would be reporting on state it cannot
+    hold still anyway.
+    """
+    template_repo = require_git_repository(
+        arguments.template_repo, "template repository"
+    )
+    target = resolve_commit(template_repo, arguments.target)
+    subtree = normalize_relative_path(arguments.subtree, "template subtree")
+    require_subtree(template_repo, target, subtree)
+
+    destination = require_git_repository(arguments.destination, "destination")
+    destination_identity = require_named_origin(
+        destination, arguments.destination_repository
+    )
+
+    manifest = normalize_relative_path(arguments.manifest, "manifest")
+    if (destination / manifest).exists():
+        raise PreflightError(
+            f"destination already carries a template record at {manifest}; "
+            "a repository with a record is updated rather than retrofitted"
+        )
+
+    require_tracked_clean(destination)
+
+    payload = tree_paths(template_repo, target, subtree)
+    tracked = set(listed_paths(destination))
+    # Ignored files are untracked for this purpose: git cannot restore one
+    # either, so landing the payload over it is the same unrecoverable
+    # overwrite. They stay out of the untracked finding below, which is about
+    # work the operator kept deliberately rather than build output.
+    present = tracked | set(listed_paths(destination, "--others"))
+
+    branch = default_branch(destination)
+    return {
+        "operation": "retrofit",
+        "template": {
+            "repository": repository_identity(template_repo),
+            "subtree": subtree,
+            "commit": target,
+        },
+        "destination": {
+            "path": str(destination),
+            "repository": destination_identity,
+            "default_branch": branch,
+            "rename_required": branch != arguments.default_branch,
+            "path_count": len(tracked),
+        },
+        # --no-empty-directory keeps a directory holding nothing but ignored
+        # files out of the finding. It is not work the operator kept, and
+        # reporting it sends them to look at build output.
+        "untracked": listed_paths(
+            destination,
+            "--others",
+            "--exclude-standard",
+            "--directory",
+            "--no-empty-directory",
+        ),
+        # The delivery check has nothing else deterministic to verify against,
+        # and absence has no runner: a payload file that never landed produces
+        # a green run unless something holds the list it should have landed.
+        "payload_paths": payload,
+        # Evidence, never a decision. Which side of a collision wins is read
+        # from ownership rules that live in a record a retrofit writes at the
+        # end, so there is nothing here to read them from.
+        "collisions": [
+            found
+            for found in (collision(path, present, tracked) for path in payload)
+            if found is not None
+        ],
+        "remote_actions_performed": False,
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -633,6 +900,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--manifest", default=".repo-template.json", help="path relative to destination"
     )
     adopt.set_defaults(handler=adopt_preflight)
+
+    retrofit = subparsers.add_parser(
+        "retrofit",
+        help="validate retrofitting a repository that was never generated",
+    )
+    retrofit.add_argument("--template-repo", type=Path, required=True)
+    retrofit.add_argument("--target", required=True, help="template ref or commit")
+    retrofit.add_argument("--subtree", required=True)
+    retrofit.add_argument("--destination", type=Path, required=True)
+    retrofit.add_argument(
+        "--destination-repository",
+        required=True,
+        help="owner/name; cross-checked against the destination's origin",
+    )
+    retrofit.add_argument("--default-branch", default="main")
+    retrofit.add_argument(
+        "--manifest", default=".repo-template.json", help="path relative to destination"
+    )
+    retrofit.set_defaults(handler=retrofit_preflight)
     return parser
 
 
