@@ -14,8 +14,9 @@ The shared mechanics stay in [`generate.md`](generate.md) and are cited by headi
 - **Step 4 — Provision the environment and the hooks**
 - **Step 5 — Read the destination's units**
 - **Step 6 — Reconcile the destination's layout**
+- **Step 7 — Write the record, decide the collisions, meet the bar**
 
-The steps after these — writing the record and deciding the remaining collisions, meeting the check bar, the hosted-write gate, and publishing — are not written yet. A run that reaches the end of step 6 stops there and reports the candidate it built, the unit map the operator confirmed, and the layout plan it applied, rather than improvising the rest against a real repository.
+The steps after these — the hosted-write gate and publishing — are not written yet. A run that reaches the end of step 7 stops there and reports the candidate it built, the unit map the operator confirmed, the layout plan it applied, and the bar it measured, rather than improvising the rest against a real repository.
 
 ### Step 1 — Resolve the source commit and preflight
 
@@ -139,6 +140,30 @@ The ignore file is replaced outright. A merged ignore file is the state where no
 The instruction file is merged, and it is re-established as one of the last steps of the whole retrofit rather than here. `CLAUDE.md` is what the destination's next agent session reads, and everything this run did — the units, the moves, the retirements, the reported rules nobody re-added — is what that session needs. Written now it describes the tree as it stood before the record and the collisions were settled, which makes it a bootstrap for work already done. So this step takes the merge as far as the layout facts and leaves the file's re-establishment to the end.
 
 **What this step promises.** For a checkable destination, `scripts/structure` passes on zero allowlist entries after it. Layout reconciliation is cheap and the check bar is expensive, and they fail for unrelated reasons, so a green audit here says nothing about whether the destination's own checks pass; that is the later step's to report.
+
+### Step 7 — Write the record, decide the collisions, meet the bar
+
+Nothing here reaches the network. This step settles everything that has to be true before the flow is allowed to publish, in the order that makes each part decidable: the collisions, then the record, then the tool declaration, then the bar measured on the result.
+
+**Every remaining collision is proposed and disposed, per file.** Diff the destination's version against the payload's, state what each one says, and let the operator pick payload, destination, or a merge. No path-matching rule can stand in for this. Across the reference repositories the same payload path was occupied by a copy differing in one word, by a genuinely different document with a stated reason for being different, by one naming five canonical roles where the payload names seven, and by one half again as long: four dispositions for one path, and nothing about the path predicts which.
+
+**Where this run invalidated the destination's own stated reason, propose the payload's version and name the step that invalidated it.** A document explaining that scripts live at the root is no longer describing the repository once step 6 moved them. The proposal is still the operator's to refuse, and naming the invalidating step is what lets them refuse it on the merits rather than on the flow's say-so.
+
+**A chosen destination version is an [overridden path](lifecycle.md#overridden-paths)**, recorded with the reason the destination's version won, so the next update does not re-raise a collision settled here.
+
+**The record's ownership array is the payload's default, with zero destination-specific entries.** This is only true because the moves came first: layout lifted foreign content out of every managed pattern, [the automation directory](lifecycle.md#the-automation-directory-is-replaced-not-reconciled) was replaced whole, and the ignore file was replaced outright. Every remaining destination file then falls on unmatched, which [Ownership](lifecycle.md#ownership) resolves to product. **A destination path still matching a managed pattern is a layout failure to fix in step 6**, never an ownership exception written here. A bespoke array would also make a retrofitted record distinguishable from a generated one, which is the opposite of what a retrofit is for.
+
+**No field records which flow ran.** Convergence is the whole point: a retrofitted repository and a generated one are the same repository from the moment the record exists, and a field an update can read is a field an update can branch on. Provenance is the pull request, which says everything a field would have said and more.
+
+**Layout moves are absent from the record.** An update inspects only paths the payload delta names, and a moved file is product-owned on both sides, so it never enters that comparison; a list of moves would be a field nothing reads, going stale from the first rename after the retrofit. The pull request is the record of the moves.
+
+**Unit names are recorded and nothing beside them**, as step 5 and [Manifest](lifecycle.md#manifest) both have it: the run and ship facts live in each unit's own declaration.
+
+**The tool declaration adds only what is missing**, at the template's floors, keeping any specifier the destination already declares. [Tools the first manifest must declare](lifecycle.md#tools-the-first-manifest-must-declare) is the list, per language. Tool lines only: making moved code build, import or resolve is configuration a move broke and belongs to step 6. This file is not a payload path, so it is not an overridden path either; its ownership is product, unlisted and unrecorded. Report each line added. Lockfiles the environment step produced are kept, since a resolved environment nobody can reproduce is what step 4 refused to accept. A rival tool is retired only where another fills its exact role in the flow, under [Retiring a covered gate script](lifecycle.md#retiring-a-covered-gate-script). The operator may decline the declaration outright, and the report then says which capability the bar cannot reach and why.
+
+**The bar is the destination's own check surface passing on the candidate**, run and read by [Running the destination's checks](lifecycle.md#running-the-destinations-checks). A `FAIL` blocks and so does an `unavailable`, for the reason that section already gives: a check whose runner was missing measured nothing, and a report calling it a pass claims a guarantee the run does not hold. A `not-applicable` does not block, because a language that is not present has nothing to prove.
+
+**An unmet bar is a failed retrofit and it stops before the pull request**, naming the capability that could not pass and why. No partial retrofit is published with the gap written into the description: the destination's existing debt is fixed by its operator, on its own default branch, through their own process, and the retrofit is re-run afterwards. The fix does not ride along in the candidate, where it would arrive as this flow's change to code this flow does not own. A run stopping here has performed zero hosted writes, which is what makes re-running it cheap.
 
 ## The retrofit adopts no addon
 

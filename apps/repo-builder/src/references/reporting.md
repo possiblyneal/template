@@ -87,6 +87,8 @@ One line per check, from `scripts/summarize <command>` rather than from a filter
 - `<exact command>`: pass | fail | unavailable (<reason>)
 - Hooks: installed at <scope> into <hooks directory>; `core.hooksPath` left pinned there (update and adopt) | global `core.hooksPath` set to <value>, worked around rather than unset | `extensions.worktreeConfig` set on <clone> and left set (retrofit)
 - Copied paths byte-identical to their source: <count>/<count>; the rest are the authored surface, under File list. An overridden path is in neither count, under Reconciliation instead
+- Tool declaration (retrofit): <manifest>: added <tool at the template's floor> | kept <the specifier the destination already declared> | declined by the operator, so <capability> cannot reach the bar | nothing missing
+- Bar (retrofit): met | UNMET: <capability>: fail | unavailable (<reason>); stopped before the pull request, zero hosted writes performed
 - Candidate (retrofit): left standing at <path>; remove it with `git -C <clone> worktree remove <path>`
 - Code review: skipped, as [Reviewing the pull request](#reviewing-the-pull-request) directs
 - Default branch after merge: <check-suite result> | n/a (nothing merged)
