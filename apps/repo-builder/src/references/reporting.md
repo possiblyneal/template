@@ -75,6 +75,7 @@ First prompt is a generate's only, and it is written for a reader this session n
 One line per check, from `scripts/summarize <command>` rather than from a filter built for the occasion.
 
 - `<exact command>`: pass | fail | unavailable (<reason>)
+- Hooks: installed at <scope> into <hooks directory>; `core.hooksPath` left pinned there (update and adopt) | global `core.hooksPath` set to <value>, worked around rather than unset | `extensions.worktreeConfig` set on <clone> and left set (retrofit)
 - Copied paths byte-identical to their source: <count>/<count>; the rest are the authored surface, under File list
 - Code review: skipped, as [Reviewing the pull request](#reviewing-the-pull-request) directs
 - Default branch after merge: <check-suite result> | n/a (nothing merged)
@@ -94,9 +95,11 @@ Present only on a run that re-entered a stopped flow, as [Resuming](lifecycle.md
 Generate only. Copy this into the first session opened in a clone of the new repository:
 
 ```text
-Work <owner/repository>. Clone it, run `pre-commit install` — nothing else installs the
-hooks, and without them commits land unattributed and unchecked — then read the root
-`CLAUDE.md` before touching anything.
+Work <owner/repository>. Clone it and install the hooks: `pre-commit install`, or, if that
+refuses because a `core.hooksPath` is already set on this machine, `pre-commit
+init-templatedir` into a directory of its own with `core.hooksPath` pointed at it. Nothing
+else installs them, and without them commits land unattributed and unchecked. Then read the
+root `CLAUDE.md` before touching anything.
 
 The plan of record is <the issue tracker named in docs/agents/issue-tracker.md>, not this
 message. Open tickets: <count>. First with no open blocker: <#n — title>. Start there.

@@ -194,6 +194,8 @@ pre-commit init-templatedir -t <each configured type> <hooksdir>
 git -C <tree> config <scope> core.hooksPath "<hooksdir>/hooks"
 ```
 
+`<hooksdir>` is a sibling of the tree in the scratch tree, beside the resume record, for the reason [Resuming](#resuming) gives for that record: inside the tree it enters the diff, the copy proof, and the structure audit as a directory the payload does not ship.
+
 Read the hook types from `pre_commit_hook_types` in `scripts/libs/precommit.sh`, against the `.pre-commit-config.yaml` the tree actually carries. That is the same helper `pre_commit_hooks_missing` grades against, so setting up from it is what makes setup and the check agree; a hand-written list of types passes the setup and fails the grade the first time `default_install_hook_types` changes.
 
 `<scope>` is the one thing that varies by flow, and only retrofit needs the unusual one:
@@ -201,6 +203,10 @@ Read the hook types from `pre_commit_hook_types` in `scripts/libs/precommit.sh`,
 - **Retrofit** — `--worktree`, with `git -C <clone> config extensions.worktreeConfig true` set first. Its candidate is a linked worktree, so `core.hooksPath` at local scope is the main clone's config and setting it there repoints the operator's own clone at a directory this flow created. The per-worktree scope is retrofit's alone because retrofit's candidate is the only one borrowing a hooks directory it does not own.
 - **Generate** — `--local`. The candidate is a dedicated clone with no parent to protect.
 - **Update and adopt** — `--local`. They run in the operator's own clone, where installing the hooks is the correct outcome rather than a side effect to contain.
+
+Setting the key is itself a change to a tree somebody else owns, in every scope but generate's, and two of those changes outlive the flow. Report both by name. `extensions.worktreeConfig` is written at local scope on the operator's main clone, because git offers `--worktree` nowhere else, and it stays: clearing it would strip per-worktree config from every other worktree of that clone, not just this one. And `core.hooksPath` is never unset at the end, because for update and adopt a working hook surface is the outcome the flow was for.
+
+What that key costs is that git stops reading `.git/hooks` entirely while it is set, so a hook the operator already had there silently stops firing. `pre-commit`'s shims chain only `<hooksdir>/hooks/<type>.legacy`, and `init-templatedir` into a fresh directory writes none, so in any tree that had its own hooks, link each of them in under that name before pinning the key. Generate's candidate is the one tree exempt: step 3 created it, so there is nothing there to chain.
 
 Verify by outcome before measuring the bar, never by the commands' exit status: `git -C <tree> rev-parse --git-path hooks` resolves inside `<hooksdir>` and every configured type is present there. A flow whose hooks are not working stops here and reports it as its own defect. Carrying on measures a destination against a check surface that cannot run and writes the result up as debt the destination owes, which is the worst available outcome: a real repository given a list of failures that are this skill's.
 
@@ -248,7 +254,7 @@ Stop before further remote actions when semantic intent conflicts or verificatio
 
 ### Resuming
 
-**Re-invoking the same command is the resume.** There is no second command and no `--resume` flag: a flow that stopped is re-entered by running the invocation that stopped, against the same destination. A separate resume path is a second implementation of every step, kept in step with the first by nobody.
+**Re-invoking the same command is the resume.** There is no second command and no `--resume` flag: a flow that stopped is re-entered by running the invocation that stopped, against the same destination. A separate resume path is a second implementation of every step, kept in step with the first by nobody. This binds all four flows and both halves of each: a local write and a hosted one are re-entered the same way, by reading what is there rather than by replaying what a record says was done.
 
 A resumed run **re-observes** rather than replays. Almost everything a flow does is readable back from live state at the moment the resume starts: the repository exists or it does not, the settings hold the values they hold, the branch is pushed or absent, the pull request is open, the candidate's files are on disk, the labels are on the repository. Read those and skip what is already done, rather than trusting a record of having done it — a record can be stale in a way the API cannot.
 
@@ -257,6 +263,7 @@ A resumed run **re-observes** rather than replays. Almost everything a flow does
 ```json
 {
   "invocation": "generate possiblyneal/example",
+  "source_commit": "0123456789abcdef0123456789abcdef01234567",
   "issues": [
     {"intent": "map: converting a repository", "created": 104},
     {"intent": "ticket: name the destination", "created": 105}
@@ -267,13 +274,15 @@ A resumed run **re-observes** rather than replays. Almost everything a flow does
 }
 ```
 
+`source_commit` is in the record for the same reason, though it looks derivable. The invocation may have named a branch, and re-resolving that branch on the resume gives whatever it points at now, which is a different commit from the one already materialized as the candidate on disk. Read the record's commit and resolve nothing.
+
 It is not a journal of everything the flow did. A record that grows a line per step is a second source of truth about state the API already answers, and the first time the two disagree the flow believes the wrong one.
 
 **The record lives beside the candidate, never inside it** — a sibling of the candidate directory, not a file within the tree. Inside, it would enter the candidate diff, reach the copy proof as an authored path, and fail the structure audit as a root file nobody permitted, and each of those is a defect reported against a destination that did not cause it.
 
 **Order the hosted writes so the unobservable ones come first**, wherever the ordering is free. Issues created before the content push means a run that dies at the push re-observes the push and reads the issues from its record; the reverse loses nothing but makes the record carry more. Where an ordering is not free — a repository must exist before its settings — leave it as it is.
 
-**Retry is bounded and fires on transient classes only**: a network failure, an HTTP 5xx, a 403 that is a secondary rate limit, a 409 on a ref that another write is still settling. Three attempts with exponential backoff, then stop and report. Nothing else retries — a 404, a 422, a permissions refusal, and a validation failure are all answers rather than noise, and repeating them turns one clear failure into three and a delay.
+**Retry is bounded and fires on transient classes only**: a network failure, an HTTP 5xx, a 403 that is a secondary rate limit. A 409 is not on the list: on a fresh destination it is the empty-repository answer, which is a state generate step 4 deliberately creates and no amount of waiting changes. Three attempts with exponential backoff, then stop and report. Nothing else retries — a 404, a 422, a permissions refusal, and a validation failure are all answers rather than noise, and repeating them turns one clear failure into three and a delay.
 
 ## Reviewing and reporting
 
