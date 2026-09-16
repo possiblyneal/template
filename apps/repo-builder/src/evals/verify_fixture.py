@@ -103,6 +103,29 @@ def setup_skill_checks(candidate: Path) -> list[Check]:
     ]
 
 
+def code_scanning_check(candidate: Path, generation_record: dict[str, object]) -> Check:
+    """`codeql.yml` lands or is stripped-and-recorded, never one without the other.
+
+    The generation evals build locally against no remote, so the live
+    visibility read the flow really makes has no answer here. What is still
+    checkable is that the two halves agree: a stripped workflow with no record
+    is indistinguishable from a workflow someone deleted, which is the whole
+    reason the record exists.
+    """
+    present = (candidate / ".github/workflows/codeql.yml").is_file()
+    features = generation_record.get("features", {})
+    features = features if isinstance(features, dict) else {}
+    # The value is matched, not just the key: `scripts/github-parity` excuses a
+    # payload-only workflow on `.value == "omitted-by-choice"` exactly, so a
+    # record carrying any other value is not the record that excuses it.
+    recorded_omission = features.get("codeql") == "omitted-by-choice"
+    return (
+        "code scanning coherent",
+        present != recorded_omission,
+        "codeql.yml present with no record, or stripped with the omission recorded",
+    )
+
+
 def generation(root: Path, fixture: dict[str, object]) -> list[Check]:
     candidate = root.parent / "candidate"
     report = root.parent / "report.md"
@@ -111,6 +134,9 @@ def generation(root: Path, fixture: dict[str, object]) -> list[Check]:
     template = manifest.get("template", {}) if isinstance(manifest, dict) else {}
     ownership = manifest.get("ownership", []) if isinstance(manifest, dict) else []
     ownership = ownership if isinstance(ownership, list) else []
+    generation_record = (
+        manifest.get("generation", {}) if isinstance(manifest, dict) else {}
+    )
     return [
         ("manifest exists", manifest_path.is_file(), str(manifest_path)),
         (
@@ -161,6 +187,7 @@ def generation(root: Path, fixture: dict[str, object]) -> list[Check]:
             ),
             "ownership reaches the root CLAUDE.md as managed",
         ),
+        code_scanning_check(candidate, generation_record),
         report_check(
             report,
             "manifest declarations handed over",
@@ -214,11 +241,10 @@ def generation_multi(root: Path, fixture: dict[str, object]) -> list[Check]:
     report = root.parent / "report.md"
     manifest_path = candidate / ".repo-template.json"
     manifest = json.loads(manifest_path.read_text()) if manifest_path.is_file() else {}
-    applications = (
-        manifest.get("generation", {}).get("applications", [])
-        if isinstance(manifest, dict)
-        else []
+    generation_record = (
+        manifest.get("generation", {}) if isinstance(manifest, dict) else {}
     )
+    applications = generation_record.get("applications", [])
     expected = ("recorder", "ingest-api")
     records = adr_records(candidate)
     adr_text = "\n".join(p.read_text(encoding="utf-8") for p in records)
@@ -237,6 +263,7 @@ def generation_multi(root: Path, fixture: dict[str, object]) -> list[Check]:
             ),
             "each app carries src and .unit.json",
         ),
+        code_scanning_check(candidate, generation_record),
         (
             "placeholder app removed",
             not (candidate / "apps/app-name").exists(),
