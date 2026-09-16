@@ -81,6 +81,8 @@ Do not record what the filesystem already answers. Language and package manager 
 
 `generation.applications` lists the deployable names [Wayfinding](wayfinding.md) established, and nothing else about them. It is recorded because an update has to know that `apps/app-name` was renamed rather than deleted, which the destination tree can no longer say. The choke point and the language behind each name are not recorded here: the language is answered by the manifests present under the rule above, and the choke point is an argument rather than a fact, so it belongs in the ADR that makes it. A manifest still recording the earlier single `application_name` is left as it is — it records what that generation chose, and an update rewriting it would claim a decision the update did not make.
 
+A retrofit writes the same field from the unit names the operator confirmed, and writes no field beside it. The run and ship facts belong to each unit's own `.unit.json`, and the evidence they were proposed from belongs to the architecture record; a copy of either here would be a third source of truth for a value the tree already answers. Units read out of a destination's own evidence and deployables established by wayfinding land in one field on purpose: an update reads unit names to tell a rename from a deletion, and that question is the same however the names were arrived at.
+
 ## Ownership
 
 Ownership answers whether a path participates in template updates:
@@ -154,6 +156,14 @@ The value is exactly the string `omitted-by-choice` and carries no reason: `scri
 Every flow that writes workflows follows this: [generate](generate.md), [update](update.md), and retrofit alike, each citing this section rather than restating the branch. [Adopt](adopt.md) is absent because it writes no workflow at all, landing only the addons `addon-adoption.json` names.
 
 `scripts/github-parity` reads the record the same way in this repository, which is the one place it runs against a payload: a payload-only workflow is excused exactly where `generation.features` records the omission, and a repository that simply lost `codeql.yml` is not. In a generated repository there is no payload tree to compare against and the check reports `not-applicable`, so nothing there enforces this and the record is read by the flows alone.
+
+## Architecture records live at the root documentation path
+
+Every architecture record the payload governs sits in `docs/adrs/` at the repository root, in every flow, whatever scope the decision has. A record about one unit is still a root record; its `scope` frontmatter field is what says which unit it is about, and `apps/<name>/docs/adrs/` is never where one goes.
+
+Two facts make this a rule rather than a convention. `scripts/adr-index` hardcodes the directory it rewrites the index from, so a record anywhere else is absent from the index the repository publishes. And `scripts/structure` has no rule for records at all: `docs/` takes Markdown freely at every scope, so a record under a unit passes the audit. The two together are what makes a misplaced record invisible instead of loud, which is the failure this rule is against. Whether the audit should enforce the location is a question for the audit and not for these flows.
+
+The rule binds [generate](generate.md), [update](update.md), [adopt](adopt.md), and retrofit alike. It is stated once here because only retrofit meets records already written somewhere else, and a rule stated only there would read as retrofit's own preference rather than as the repository-wide placement every flow writes to.
 
 ## Running the destination's checks
 
