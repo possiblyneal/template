@@ -51,6 +51,7 @@ First prompt is a generate's only, and it is written for a reader this session n
 - Conflicted: <paths and competing intents, or none>
 - Superseded: <path>: <what it did> -> <the payload path or check now carrying it> | retired, callers repointed (<caller paths>) | none
 - Partially covered, not cut: <script path>: <the parts the check surface already does> | none
+- Overridden: <path>: <the recorded reason the destination's version was chosen> | expired, payload landed and entry dropped (<paths>) | none
 
 ### Application boundaries
 - <deployable>: choke point <constraint, or "none bound; time-to-working-code"> -> <language>, <selected from list | reasoned from the seam contract | measured against it>
@@ -76,7 +77,7 @@ One line per check, from `scripts/summarize <command>` rather than from a filter
 
 - `<exact command>`: pass | fail | unavailable (<reason>)
 - Hooks: installed at <scope> into <hooks directory>; `core.hooksPath` left pinned there (update and adopt) | global `core.hooksPath` set to <value>, worked around rather than unset | `extensions.worktreeConfig` set on <clone> and left set (retrofit)
-- Copied paths byte-identical to their source: <count>/<count>; the rest are the authored surface, under File list
+- Copied paths byte-identical to their source: <count>/<count>; the rest are the authored surface, under File list. An overridden path is in neither count, under Reconciliation instead
 - Code review: skipped, as [Reviewing the pull request](#reviewing-the-pull-request) directs
 - Default branch after merge: <check-suite result> | n/a (nothing merged)
 
@@ -109,9 +110,11 @@ the workflow count a stripped codeql.yml leaves, per lifecycle.md "Code scanning
 visibility" | none>.
 
 The first root manifest owes the checks their tools: <the declarations for the selected
-language, from lifecycle.md "Tools the first manifest must declare" | none — <language>
+language, from lifecycle.md "Tools the first manifest must declare" | none, <language>
 declares no tools>. An undeclared tool reports `unavailable`, which fails the run.
 
 Branch before you commit; a commit made on `main` is refused at the hook.
 ```
 ````
+
+The manifest sentence's lead-in, `The first root manifest owes`, is what the generation eval reads the handover for; rewording it updates the eval in the same change.
