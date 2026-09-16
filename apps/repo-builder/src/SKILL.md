@@ -11,6 +11,7 @@ Read `references/lifecycle.md` before acting. It defines the manifest, ownership
 - `references/generate.md` — build a repository from the payload, including into a destination that already has content
 - `references/update.md` — carry a bounded template delta into a repository already generated from it
 - `references/adopt.md` — land a held-back repository addon whose condition has arrived
+- `references/retrofit.md` — bring a repository that was never generated from the payload under it
 - `references/wayfinding.md` — derive the application boundaries, read from `generate.md` step 7
 - `references/addon-adoption.md` — finish an addon after copying it, read from `generate.md` step 2 and `adopt.md` step 4
 - `references/reporting.md` — how the pull request is reviewed and the shape every flow ends in, read when a flow reaches its review
@@ -19,12 +20,13 @@ Read `references/lifecycle.md` before acting. It defines the manifest, ownership
 
 ## Choose the operation
 
-- **Generate:** The destination has no `.repo-template.json`; build it from `apps/github-repository-template/src/base-repo` at the requested template commit.
+- **Generate:** The destination has no `.repo-template.json` and no content; build it from `apps/github-repository-template/src/base-repo` at the requested template commit.
+- **Retrofit:** The destination has content and no `.repo-template.json`. It is a repository that grew without the template, so the payload is landed over work somebody is already shipping rather than into an empty tree. The flow is written only as far as the candidate and its working hooks; a run stops there and reports, so route here knowing the reconciliation is still unwritten.
 - **Update:** The destination has `.repo-template.json`; reconcile its recorded template commit with a requested descendant commit.
 - **Adopt:** The destination has `.repo-template.json` and the request is to add a held-back repository addon whose condition has arrived, not to carry a template delta. Read the addon from the recorded commit and do not advance the pin. Distinct from update: it adds a sibling file rather than reconciling a delta, and it moves no commit.
 - If the requested operation and destination state disagree, stop and explain the mismatch.
 
-Generation into a destination that already has content is still a generate, but its collisions are decided by hand and it never resolves one by deleting. `references/generate.md` carries those rules; read them before writing to a non-empty destination.
+A generate whose destination holds content is still a generate, but its collisions are decided by hand and it never resolves one by deleting. `references/generate.md` carries those rules; read them before writing to a non-empty destination. What separates it from the retrofit above is the record the destination is headed for: a generate writes the payload's own tree and its manifest as the repository's first template state, where a retrofit reconciles a tree somebody else laid out and writes the record at the end, around what it found.
 
 A generate derives its application boundaries rather than collecting them. How many `apps/<name>/` directories the repository gets, what each is called, and what each is written in come out of wayfinding, run with the user once the candidate is materialized and the destination repository exists — the repository being what the payload's `docs/agents/issue-tracker.md` resolves against — and before the candidate is personalized. It is two questions asked in one structured prompt — what ships separately, and what binds first for each — with your reading of the request as the options. Skip it entirely when the invocation already names every deployable and its language, and report that it was skipped.
 
@@ -39,6 +41,7 @@ Use `scripts/preflight.py` for deterministic validation and retain its JSON in t
 - `generate` resolves the exact source commit, verifies its payload subtree, and requires that commit to be on the template's own branch — the commit it records is the base every later update diffs from. It never inspects the destination, so an occupied destination looks identical to an empty one; establish that yourself.
 - `update` validates provenance, repository identities, a clean destination, strict ancestry, and the bounded template delta.
 - `adopt` validates provenance, repository identities, a clean destination, and each requested addon at the recorded commit: it exists in `repository-addons/`, carries an `addon-adoption.json` entry, completes its pair, is not requested alongside the addon it excludes, and the destination holds neither it nor that addon.
+- `retrofit` validates the source commit, the destination's identity against its origin, tracked cleanliness, and the absence of a record, then reports the payload path list and every collision. It reaches git and nothing else, so its collisions are evidence for a decision the flow makes later rather than a classification.
 
 The helper is read-only and only authorizes the next stage. Claude owns personalization and semantic reconciliation; do not replace judgment with a blind copy, overlay, or text merge. Keep provenance, ancestry, ownership, validation, and remote-action gates even when simplifying the work. Unless preflight rejects the operation or reconciliation finds a real conflict, continue through materialization, local edits, manifest advancement, and verification. A preflight report alone is not a completed build or update.
 
