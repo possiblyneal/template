@@ -431,6 +431,9 @@ def mark_overridden(
     carries two names and the record was written against the one the
     destination already held, so a rename's source counts as well: matching
     the new path alone would re-raise a collision settled under the old one.
+    The fallback reads a second name rather than a status, so it holds only
+    while the diff detects renames alone: a copy's source still exists, and
+    inheriting its entry would protect a file nothing is replacing.
     """
     for change in changes:
         reason = overrides.get(change["path"])
