@@ -27,6 +27,19 @@ Which files make up that surface differs by flow:
 - **Update** — every managed file the destination had also changed and this skill hand-merged, plus `.repo-template.json`.
 - **Generate** — everything step 8 personalized: the root `CLAUDE.md` Child Index, each `apps/<name>/` and its `.unit.json`, the ADRs, and `.repo-template.json`. This surface is larger than update's and it gets no second look, because a bootstrap generate merges its own pull request under [Generate](generate.md) step 12. Read it before that merge rather than after.
 - **Adopt** — every region `addon-adoption.json` names for the addons taken. Here differing paths are the expected result rather than the exception: an addon is adopted by editing it, so byte-identity would mean the adoption never happened. Confirm that what differs is the named regions and nothing besides.
+- **Retrofit** — the configuration a move broke and this run repaired, every path reference it rewrote, the merged instruction file, the tool declaration, any retired gate script's callers, and `.repo-template.json`. This is the one flow whose authored surface is edits to the destination's own code, written by this run and reviewed by nobody, which is why its pull request is offered a merge at a gate rather than merged on the way past.
+
+A retrofit runs a **second proof beside the copy proof**, over the paths it moved rather than the paths it wrote. Each moved file's blob must equal its pre-move blob, read from the destination's commit the candidate branched from:
+
+```bash
+git -C "<destination>" diff --cached --diff-filter=R --name-status |
+  while read -r _ old new; do
+    git -C "<destination>" cat-file -p "<base-commit>:$old" 2> /dev/null |
+      diff -q - "<destination>/$new" > /dev/null || echo "$new"
+  done
+```
+
+Report its count beside the copy proof's. A pilot retrofit moved 55 files, which is exactly the volume at which a content edit rides along inside a rename and no reader notices: a rename is the one diff people skim.
 
 Report the authored surface in **File list**, so the reader sees which lines were the template's and which were this run's.
 
@@ -99,6 +112,8 @@ One line per check, from `scripts/summarize <command>` rather than from a filter
 - `<exact command>`: pass | fail | unavailable (<reason>)
 - Hooks: installed at <scope> into <hooks directory>; `core.hooksPath` left pinned there (update and adopt) | global `core.hooksPath` set to <value>, worked around rather than unset | `extensions.worktreeConfig` set on <clone> and left set (retrofit)
 - Copied paths byte-identical to their source: <count>/<count>; the rest are the authored surface, under File list. An overridden path is in neither count, under Reconciliation instead
+- Moved paths byte-identical to their pre-move blob (retrofit): <count>/<count>
+- Workflows the pull-request event never ran: <names> | none
 - Tool declaration (retrofit): <manifest>: added <tool at the template's floor> | kept <the specifier the destination already declared> | declined by the operator, so <capability> cannot reach the bar | nothing missing
 - Bar (retrofit): met | UNMET: <capability>: fail | unavailable (<reason>); stopped before the pull request, zero hosted writes performed
 - Candidate (retrofit): left standing at <path>; remove it with `git -C <clone> worktree remove <path>`

@@ -16,8 +16,7 @@ The shared mechanics stay in [`generate.md`](generate.md) and are cited by headi
 - **Step 6 — Reconcile the destination's layout**
 - **Step 7 — Write the record, decide the collisions, meet the bar**
 - **Step 8 — The hosted-write gate**
-
-The step after these — publishing, and the offer of the merge — is not written yet. A run that reaches the end of step 8 stops there and reports the candidate it built, the unit map the operator confirmed, the layout plan it applied, the bar it measured, and every hosted write it performed, rather than improvising the rest against a real repository.
+- **Step 9 — Publish, prove, and offer the merge**
 
 ### Step 1 — Resolve the source commit and preflight
 
@@ -204,6 +203,24 @@ git remote set-head origin -a
 **Every post-write verification polls rather than reading once.** The rename, the dependency summary, and the protection endpoints were all observed returning the pre-write state immediately after a write the host had accepted. A single read is how a write that succeeded gets reported as a write that did nothing.
 
 **There is no undo mechanism, so the report carries the before-state of every hosted write** and lists the writes in **two separately named sections**: the reversible ones, each with the exact command that reverses it, and the irreversible ones, each with its cost. Never one section. A single copy-pasteable block of commands reads as though the whole gate can be walked back, and a closed pull request's review conversation cannot.
+
+### Step 9 — Publish, prove, and offer the merge
+
+**The head is the candidate's own branch.** Step 2 created it, every step since wrote into it, and nothing is re-materialized at publish time: a tree rebuilt here is a tree nobody checked.
+
+**The base is the default branch**, which step 8's rename has already made correct. A base rename retargets an open pull request, and the hazard that step named — the host closing rather than retargeting — applies to a renamed *head*, which this branch never is.
+
+**The body is always explicit, and it is filled against the pull-request template this same diff introduces.** The host renders a template from the base branch and an explicit body suppresses it entirely, so a body written freehand is the repository's first pull request ignoring the rule the same pull request is installing. Fill the payload template's own sections. [Generate](generate.md#step-11--publish-the-candidate) states the reason for an explicit body in general terms.
+
+The body carries what a reviewer of *this* pull request needs: the per-path dispositions, the layout moves, the per-write reverse commands from step 8, the workflows the pull-request event never exercised, and the fact that code review was skipped and why. It does not carry the session report. That is written for the operator who ran this flow, in the shape [Final report](reporting.md#final-report) fixes, and pasting it into a description aimed at the destination's collaborators serves neither reader.
+
+**Prove it twice before anything merges.** [Reviewing the pull request](reporting.md#reviewing-the-pull-request) runs the copy proof over the overlay set, every payload path written because it was absent, and a retrofit runs the rename-purity proof beside it over the moved set. Report both counts. What is left after the two is the authored surface, read line by line, and **grepping the destination for every path this flow deleted or renamed is not optional here**: it is the single highest-value line of the review, because a live reference in destination-owned prose is exactly what no check reads. Overridden paths are in neither proof, never having been written.
+
+**Every payload workflow except the release workflow runs on this pull request**, so it is a real exercise of the whole gating set rather than a sample. Read the check suites as [Step 12 — Verify the published repository](generate.md#step-12--verify-the-published-repository) reads them, keeping the same distinction between a failing run and no run dispatched and the same caveat about host status, then **state which workflows the pull-request event never ran**, so the green result is read for what it covers.
+
+**Then, optionally, the merge, at a second gate.** The first gate cannot carry it: the checks did not exist yet when it ran, and authorizing a merge against checks nobody has seen authorizes nothing. Poll until every required check is green, then offer exactly the merge and nothing beside it. **Declining is the default**, and it leaves an open pull request for the destination's own people to review and merge their own way. Taking it merges, then reads the default branch's check suites and fills the report's existing line, because a green pull request ran against a merge commit and the branch afterwards is a different commit with a different trigger.
+
+The offer exists because with step 7's bar the pull request only ever opens fully green, and merging is the only thing that verifies the default branch. It is an offer and not a step because the premise [Reviewing the pull request](reporting.md#reviewing-the-pull-request) rests on is false here: most of what it skips review for is already-reviewed template content, and a retrofit's authored surface is repaired configuration, rewritten path references, a merged instruction file and a retired gate script — edits to the destination's own code that nobody has reviewed. A destination also has collaborators with branches in flight that every rename conflicts with, and they are the ones who know when that lands well.
 
 ## The retrofit adopts no addon
 

@@ -175,7 +175,7 @@ Then prove the copied files are copies as [Reviewing the pull request](reporting
 
 ### Step 11 — Publish the candidate
 
-Publish the candidate, at the [remote action gate](lifecycle.md#remote-action-gates). Present the local diff, the file-list reconciliation, the check results, the settings state, and the exact pending commands. Then branch from the empty base, add the entire candidate and manifest, commit, push, and open a PR. Supply an explicit PR body, because the empty base does not yet contain the repository's PR template.
+Publish the candidate, at the [remote action gate](lifecycle.md#remote-action-gates). Present the local diff, the file-list reconciliation, the check results, the settings state, and the exact pending commands. Then branch from the empty base, add the entire candidate and manifest, commit, push, and open a PR. Supply an explicit PR body. The reason is that this flow already holds the content the body needs — the diff, the reconciliation, the check results — and not that the base lacks a template to render: that is true of a bootstrap generate alone, and reading it as the general reason gets the rule wrong for every flow whose base does carry one. The host renders `PULL_REQUEST_TEMPLATE.md` from the base branch, and an explicit body suppresses it entirely, so fill the body against that template's own sections wherever the base has one.
 
 ### Step 12 — Verify the published repository
 
