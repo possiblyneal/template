@@ -208,6 +208,8 @@ Setting the key is itself a change to a tree somebody else owns, in every scope 
 
 What that key costs is that git stops reading `.git/hooks` entirely while it is set, so a hook the operator already had there silently stops firing. `pre-commit`'s shims chain only `<hooksdir>/hooks/<type>.legacy`, and `init-templatedir` into a fresh directory writes none, so in any tree that had its own hooks, link each of them in under that name before pinning the key. Generate's candidate is the one tree exempt: step 3 created it, so there is nothing there to chain.
 
+Re-running the recipe is what a resume does, and it is not free here: `init-templatedir` installs with overwrite, which removes a `<type>.legacy` already sitting beside the shims. Re-link them after every run of it, not only the first.
+
 Verify by outcome before measuring the bar, never by the commands' exit status: `git -C <tree> rev-parse --git-path hooks` resolves inside `<hooksdir>` and every configured type is present there. A flow whose hooks are not working stops here and reports it as its own defect. Carrying on measures a destination against a check surface that cannot run and writes the result up as debt the destination owes, which is the worst available outcome: a real repository given a list of failures that are this skill's.
 
 A global `core.hooksPath` is reported with its key and its value, and it is not a stop. The recipe above works while it is set; naming it is what stops the next reader treating an unrelated editor integration as a defect. Removing and restoring the operator's global key around an install is not the shortcut it looks like: every other process on the machine reads the wrong config for the duration.
@@ -282,7 +284,7 @@ It is not a journal of everything the flow did. A record that grows a line per s
 
 **Order the hosted writes so the unobservable ones come first**, wherever the ordering is free. Issues created before the content push means a run that dies at the push re-observes the push and reads the issues from its record; the reverse loses nothing but makes the record carry more. Where an ordering is not free — a repository must exist before its settings — leave it as it is.
 
-**Retry is bounded and fires on transient classes only**: a network failure, an HTTP 5xx, a 403 that is a secondary rate limit. A 409 is not on the list: on a fresh destination it is the empty-repository answer, which is a state generate step 4 deliberately creates and no amount of waiting changes. Three attempts with exponential backoff, then stop and report. Nothing else retries — a 404, a 422, a permissions refusal, and a validation failure are all answers rather than noise, and repeating them turns one clear failure into three and a delay.
+**Retry is bounded and fires on transient classes only**: a network failure, an HTTP 5xx, a 403 or a 429 that is a rate limit. A 409 is not on the list: on a fresh destination it is the empty-repository answer, which is a state generate step 4 deliberately creates and no amount of waiting changes. Three attempts with exponential backoff, then stop and report. Nothing else retries — a 404, a 422, a permissions refusal, and a validation failure are all answers rather than noise, and repeating them turns one clear failure into three and a delay.
 
 ## Reviewing and reporting
 
