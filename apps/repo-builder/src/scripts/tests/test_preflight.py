@@ -91,6 +91,19 @@ class PreflightUnitTests(unittest.TestCase):
             ],
         )
 
+    def test_a_rename_is_overridden_under_the_name_the_record_holds(self) -> None:
+        """The record names the path the destination had, which a rename moves off."""
+        changes = preflight.parse_name_status(
+            "R100\0base-repo/scripts/legacy\0base-repo/scripts/preflight\0",
+            "base-repo",
+            [preflight.OwnershipRule("scripts/**", "managed", 0)],
+        )
+
+        preflight.mark_overridden(changes, {"scripts/legacy": "destination rewrote it"})
+
+        self.assertIs(changes[0]["overridden"], True)
+        self.assertEqual(changes[0]["override_reason"], "destination rewrote it")
+
     def test_overrides_are_optional_until_a_collision_is_resolved(self) -> None:
         self.assertEqual(preflight.validate_overrides({"generation": {}}), {})
 

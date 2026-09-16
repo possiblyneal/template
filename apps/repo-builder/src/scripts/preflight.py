@@ -420,6 +420,27 @@ def parse_name_status(
     return changes
 
 
+def mark_overridden(
+    changes: list[dict[str, object]], overrides: dict[str, str]
+) -> None:
+    """Mark each delta path the record already settled, reading both names.
+
+    A path settled once against the payload is not a change to reconcile
+    again, and marking it is what keeps it out of the managed tally the flow
+    works through; lifecycle.md "Overridden paths" is the rule. A rename
+    carries two names and the record was written against the one the
+    destination already held, so a rename's source counts as well: matching
+    the new path alone would re-raise a collision settled under the old one.
+    """
+    for change in changes:
+        reason = overrides.get(change["path"])
+        if reason is None and "old_path" in change:
+            reason = overrides.get(change["old_path"])
+        if reason is not None:
+            change["overridden"] = True
+            change["override_reason"] = reason
+
+
 def ensure_clean(repository: Path) -> None:
     dirty = git_output(repository, "status", "--porcelain=v1", "--untracked-files=all")
     if dirty:
@@ -567,14 +588,7 @@ def update_preflight(arguments: argparse.Namespace) -> dict[str, object]:
         subtree,
     ).stdout
     changes = parse_name_status(diff, subtree, rules)
-    # A path settled once against the payload is not a change to reconcile
-    # again. Marking it here is what keeps it out of the managed tally the
-    # flow works through; lifecycle.md "Overridden paths" is the rule.
-    for change in changes:
-        reason = provenance.overrides.get(change["path"])
-        if reason is not None:
-            change["overridden"] = True
-            change["override_reason"] = reason
+    mark_overridden(changes, provenance.overrides)
     return {
         "operation": "update",
         "template": {
@@ -599,7 +613,10 @@ def update_preflight(arguments: argparse.Namespace) -> dict[str, object]:
                 change["ownership"] == "managed" and not change.get("overridden")
                 for change in changes
             ),
-            "product": sum(change["ownership"] == "product" for change in changes),
+            "product": sum(
+                change["ownership"] == "product" and not change.get("overridden")
+                for change in changes
+            ),
             "overridden": sum(bool(change.get("overridden")) for change in changes),
         },
         "remote_actions_performed": False,
