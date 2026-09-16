@@ -231,7 +231,21 @@ def addon_payload(repo: Path) -> None:
     write(repo, "addon-adoption.json", json.dumps(index, indent=2) + "\n")
 
 
-def manifest(template: Path, remote: Path, old_commit: str) -> dict[str, object]:
+def manifest(
+    template: Path,
+    remote: Path,
+    old_commit: str,
+    overrides: list[dict[str, str]] | None = None,
+) -> dict[str, object]:
+    generation: dict[str, object] = {
+        "application_name": "billing-api",
+        "features": {"codeql": "omitted-by-choice"},
+    }
+    # Absent unless the scenario resolved a collision. An empty list would read
+    # as a decision nobody made, and preflight treats the missing key as the
+    # ordinary case rather than as an omission.
+    if overrides:
+        generation["overrides"] = overrides
     return {
         "schema_version": 1,
         "template": {
@@ -243,10 +257,7 @@ def manifest(template: Path, remote: Path, old_commit: str) -> dict[str, object]
             "repository": str(remote.resolve()),
             "default_branch": "main",
         },
-        "generation": {
-            "application_name": "billing-api",
-            "features": {"codeql": "omitted-by-choice"},
-        },
+        "generation": generation,
         "ownership": [
             {"path": ".repo-template.json", "mode": "managed"},
             {"path": "CLAUDE.md", "mode": "managed"},
@@ -269,14 +280,18 @@ def manifest(template: Path, remote: Path, old_commit: str) -> dict[str, object]
 
 
 def create_destination(
-    root: Path, template: Path, old_commit: str, conflict: bool
+    root: Path,
+    template: Path,
+    old_commit: str,
+    own_check: bool,
+    overrides: list[dict[str, str]] | None = None,
 ) -> tuple[Path, Path]:
     remote = root / "destination.git"
     destination = root / "destination"
     init_repo(remote, bare=True)
     init_repo(destination)
 
-    if conflict:
+    if own_check:
         check = """#!/usr/bin/env bash
 set -euo pipefail
 
@@ -315,7 +330,7 @@ echo "preflight ok"
     write(
         destination,
         ".repo-template.json",
-        json.dumps(manifest(template, remote, old_commit), indent=2) + "\n",
+        json.dumps(manifest(template, remote, old_commit, overrides), indent=2) + "\n",
     )
     commit(destination, "Initialize generated product repository")
     run(destination, "remote", "add", "origin", str(remote.resolve()))
@@ -371,6 +386,9 @@ echo "template policy: checks are always blocking"
         )
         target_commit = commit(template, "Make checks unconditionally blocking")
     else:
+        # clean-update and override take the same template delta. What differs
+        # is the destination: override's carries its own scripts/check and the
+        # record saying that collision was settled once, against the payload.
         run(template, "mv", "base-repo/scripts/legacy", "base-repo/scripts/preflight")
         write(
             template,
@@ -385,8 +403,22 @@ echo "check v2"
         )
         target_commit = commit(template, "Run preflight before repository checks")
 
+    overrides = (
+        [
+            {
+                "path": "scripts/check",
+                "reason": "destination runs checks advisory during incident response",
+            }
+        ]
+        if scenario == "override"
+        else None
+    )
     destination, remote = create_destination(
-        root, template, old_commit, scenario == "conflict"
+        root,
+        template,
+        old_commit,
+        own_check=scenario in ("conflict", "override"),
+        overrides=overrides,
     )
     return {
         "scenario": scenario,
@@ -412,7 +444,7 @@ def build_adopt(root: Path) -> dict[str, object]:
     addon_payload(template)
     recorded = commit(template, "Add base repository payload and repository addons")
 
-    destination, remote = create_destination(root, template, recorded, conflict=False)
+    destination, remote = create_destination(root, template, recorded, own_check=False)
     return {
         "scenario": "adopt",
         "template_repo": str(template),
@@ -432,6 +464,7 @@ def main() -> int:
             "generation-multi",
             "generation-handoff",
             "clean-update",
+            "override",
             "unrelated",
             "conflict",
             "adopt",

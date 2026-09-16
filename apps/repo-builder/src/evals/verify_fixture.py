@@ -474,6 +474,47 @@ def update(root: Path, fixture: dict[str, object], scenario: str) -> list[Check]
                 ),
             ]
         )
+    elif scenario == "override":
+        check_path = destination / "scripts/check"
+        check_text = (
+            check_path.read_text(encoding="utf-8") if check_path.is_file() else ""
+        )
+        overrides = manifest["generation"].get("overrides", [])
+        checks.extend(
+            [
+                (
+                    "manifest advanced",
+                    current_commit == fixture["target_commit"],
+                    "manifest records target commit",
+                ),
+                (
+                    "overridden path skipped",
+                    "product policy" in check_text and "check v2" not in check_text,
+                    "scripts/check is still the destination's version",
+                ),
+                (
+                    "override entry kept",
+                    [entry["path"] for entry in overrides] == ["scripts/check"],
+                    "the entry survives, its subject still being there",
+                ),
+                (
+                    "rest of the delta applied",
+                    (destination / "scripts/preflight").is_file()
+                    and not (destination / "scripts/legacy").exists(),
+                    "legacy renamed to preflight",
+                ),
+                report_check(
+                    report,
+                    "overridden rather than conflicted",
+                    lambda text: (
+                        "scripts/check" in text
+                        and "overridden" in text.lower()
+                        and "incident response" in text.lower()
+                    ),
+                    "report names scripts/check overridden, with the recorded reason",
+                ),
+            ]
+        )
     else:
         checks.extend(
             [

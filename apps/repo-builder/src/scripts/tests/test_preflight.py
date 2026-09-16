@@ -91,6 +91,96 @@ class PreflightUnitTests(unittest.TestCase):
             ],
         )
 
+    def test_a_rename_is_overridden_under_the_name_the_record_holds(self) -> None:
+        """The record names the path the destination had, which a rename moves off."""
+        changes = preflight.parse_name_status(
+            "R100\0base-repo/scripts/legacy\0base-repo/scripts/preflight\0",
+            "base-repo",
+            [preflight.OwnershipRule("scripts/**", "managed", 0)],
+        )
+
+        preflight.mark_overridden(changes, {"scripts/legacy": "destination rewrote it"})
+
+        self.assertIs(changes[0]["overridden"], True)
+        self.assertEqual(changes[0]["override_reason"], "destination rewrote it")
+
+    def test_an_overridden_path_leaves_its_ownership_bucket(self) -> None:
+        """Whichever bucket a settled path came from, the three still sum to total."""
+        changes = preflight.parse_name_status(
+            "M\0base-repo/scripts/check\0M\0base-repo/apps/api/main.py\0",
+            "base-repo",
+            [
+                preflight.OwnershipRule("scripts/**", "managed", 0),
+                preflight.OwnershipRule("apps/**", "product", 1),
+            ],
+        )
+        preflight.mark_overridden(
+            changes,
+            {"scripts/check": "destination policy", "apps/api/main.py": "its own app"},
+        )
+
+        self.assertEqual(
+            preflight.summarize_changes(changes),
+            {"total": 2, "managed": 0, "product": 0, "overridden": 2},
+        )
+
+    def test_overrides_are_optional_until_a_collision_is_resolved(self) -> None:
+        self.assertEqual(preflight.validate_overrides({"generation": {}}), {})
+
+    def test_valid_overrides_read_back_as_path_to_reason(self) -> None:
+        manifest = {
+            "generation": {
+                "overrides": [
+                    {
+                        "path": "docs/agents/issue-tracker.md",
+                        "reason": "tracks elsewhere",
+                    }
+                ]
+            }
+        }
+
+        self.assertEqual(
+            preflight.validate_overrides(manifest),
+            {"docs/agents/issue-tracker.md": "tracks elsewhere"},
+        )
+
+    def test_a_malformed_override_names_the_offending_entry(self) -> None:
+        cases = {
+            "manifest.generation.overrides must be an array": {"overrides": {}},
+            r"overrides\[0\] must be an object": {"overrides": ["CLAUDE.md"]},
+            r"overrides\[0\]\.path must be a non-empty string": {
+                "overrides": [{"reason": "kept"}]
+            },
+            r"overrides\[1\]\.path must be a non-empty string": {
+                "overrides": [
+                    {"path": "CLAUDE.md", "reason": "kept"},
+                    {"path": "  ", "reason": "kept"},
+                ]
+            },
+            r"overrides\[0\]\.reason must be a non-empty string": {
+                "overrides": [{"path": "CLAUDE.md"}]
+            },
+            r"overrides\[1\]\.reason must be a non-empty string": {
+                "overrides": [
+                    {"path": "CLAUDE.md", "reason": "kept"},
+                    {"path": "scripts/check", "reason": "   "},
+                ]
+            },
+            "duplicate path: CLAUDE.md": {
+                "overrides": [
+                    {"path": "CLAUDE.md", "reason": "kept"},
+                    {"path": "CLAUDE.md", "reason": "kept again"},
+                ]
+            },
+        }
+
+        for expected, generation in cases.items():
+            with (
+                self.subTest(expected),
+                self.assertRaisesRegex(preflight.PreflightError, expected),
+            ):
+                preflight.validate_overrides({"generation": generation})
+
     def test_validate_manifest_requires_full_commit(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / ".repo-template.json"

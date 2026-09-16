@@ -83,6 +83,19 @@
         "The report records Operation: stopped with no pull request created, names the trigger that fired, points at the map, and says to re-invoke /repo-builder against the same candidate once the map has no open tickets.",
         "No gh command, push, remote creation, or other network mutation occurs."
       ]
+    },
+    {
+      "id": 7,
+      "prompt": "Update the fixture destination from its recorded template commit to the supplied descendant target commit. The destination and the template changed the same operational behavior in scripts/check incompatibly, and the destination's record already carries that path in generation.overrides with the reason it was settled. Work locally only and do not push or open a pull request. Carry the rest of the delta, leave the overridden path alone, and write a report that classifies every delta path and names the overridden one with its recorded reason.",
+      "expected_output": "A locally updated candidate at the descendant template commit that applies the rest of the delta, leaves the overridden path as the destination's, keeps the entry, and reports the path as overridden rather than re-raising it as a conflict.",
+      "files": [],
+      "expectations": [
+        "scripts/check is still the destination's version: the template's new blocking policy did not land.",
+        "The overridden path is reported as overridden, with the reason the record carries, and not as a conflict needing a decision.",
+        "The rest of the delta applies: scripts/legacy is renamed to scripts/preflight.",
+        "The generation.overrides entry survives, the destination's own version of the path still being there.",
+        "The manifest advances to the exact descendant target commit and no remote mutation occurs."
+      ]
     }
   ]
 }
