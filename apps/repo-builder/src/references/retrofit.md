@@ -31,7 +31,7 @@ python3 apps/repo-builder/src/scripts/preflight.py retrofit \
 
 `--destination` is the operator's own clone and `--destination-repository` is what its origin must name; passing both is what settles a clone whose directory name and repository name differ. `--default-branch` is the payload's, and a destination on another name is reported rather than refused.
 
-Every check reaches git and nothing else, so the report is about the destination as it sits on disk. Five conditions are hard stops: not a git repository, no origin remote, an origin disagreeing with the named repository, uncommitted edits to tracked files, and a record already present — that last one means the caller wanted [update](update.md) or [adopt](adopt.md). Three are findings that never stop the run: untracked files, a default branch that is not the payload's, and every collision.
+Every check reaches git and nothing else, so the report is about the destination as it sits on disk. Six conditions are hard stops: not a git repository, no origin remote, an origin disagreeing with the named repository, uncommitted edits to tracked files, a paused merge, rebase, cherry-pick or revert, and a record already present — that last one means the caller wanted [update](update.md) or [adopt](adopt.md). A rebase stopped at an `edit` step has a clean index, which is why the paused operation is its own check rather than something the clean-tree check would catch. Three are findings that never stop the run: untracked files, a default branch that is not the payload's, and every collision.
 
 Retain the JSON. `payload_paths` is the delivery check's only deterministic ground truth and `collisions` is what step 3 writes against; recomputing either by hand later is how the two come to disagree.
 
@@ -47,8 +47,10 @@ Resolve the default branch from the API rather than from a local ref. Destinatio
 default_branch=$(gh repo view <owner/name> --json defaultBranchRef -q .defaultBranchRef.name)
 git -C <clone> fetch origin "$default_branch"
 git -C <clone> worktree add -b retrofit/<first 12 of the payload commit> \
-  tmp/<repository-name> "origin/$default_branch"
+  <absolute path to this repository>/tmp/<repository-name> "origin/$default_branch"
 ```
+
+The candidate path is absolute. `git -C` resolves a relative one against the clone, which would put the candidate inside the operator's working directory — the one thing this step promises to leave alone.
 
 The fetch is explicit because the worktree branches from `origin/<default-branch>`, and a stale remote-tracking ref silently retrofits an older tree than the one the pull request will target.
 
@@ -63,12 +65,12 @@ Write the payload paths preflight found absent, and write no colliding path at a
 The absent set is `payload_paths` minus the `path` of every collision, taken from the preflight JSON rather than recomputed:
 
 ```bash
-xargs -a <absent-paths> -d '\n' \
+xargs -r -a <absent-paths> -d '\n' \
   git -C <template-repo> archive --format=tar "<commit>:<subtree>" -- |
   tar -x -i -C <candidate>
 ```
 
-`git archive` is what carries the file mode across, so `scripts/check` lands executable. `-i` on tar is for the batching: a long path list makes `xargs` call `git archive` more than once, and without it tar stops at the first archive's end marker having silently extracted a prefix of the overlay. Count the extracted paths against the absent set before moving on.
+`-r` on `xargs` is what makes an empty absent set write nothing. Without it `xargs` still runs once, and `git archive <tree> --` with no pathspec after it archives the whole payload over every collision the flow has yet to decide. `git archive` is what carries the file mode across, so `scripts/check` lands executable. `-i` on tar is for the batching: a long path list makes `xargs` call `git archive` more than once, and without it tar stops at the first archive's end marker having silently extracted a prefix of the overlay. Count the extracted paths against the absent set before moving on.
 
 Untracked state in the operator's clone is deliberately left behind. A worktree is a fresh checkout, and step 4 rebuilds what the destination's tracked manifests describe. A tracked scratch directory comes along like any other tracked path.
 
@@ -76,16 +78,4 @@ Untracked state in the operator's clone is deliberately left behind. A worktree 
 
 Provision the candidate's environment from its tracked manifests — the lockfiles and manifests the destination commits, resolved by the destination's own toolchain. An environment that cannot be rebuilt from tracked files is a finding to report against the destination, never something to copy across from the operator's clone: a check surface that passes only against an environment nobody can reproduce measures nothing.
 
-Then install the hooks by the one recipe in [Working hooks in a candidate](lifecycle.md#working-hooks-in-a-candidate), at retrofit's own scope:
-
-```sh
-git -C <clone> config extensions.worktreeConfig true
-pre-commit init-templatedir -t <each configured type> <hooksdir>
-git -C <candidate> config --worktree core.hooksPath <hooksdir>/hooks
-```
-
-`--worktree` is retrofit's alone. The candidate is a linked worktree, so `core.hooksPath` at local scope is the main clone's config, and setting it there repoints the operator's own clone at a directory this flow created. `extensions.worktreeConfig` is written at local scope on that clone because git offers `--worktree` nowhere else, and it stays set afterwards; report it by name.
-
-`<hooksdir>` is a sibling of the candidate in `tmp/`, never inside it, where it would enter the diff and the copy proof as a directory the payload does not ship. The hook types are the ones the destination's own `.pre-commit-config.yaml` asks for, read from `pre_commit_hook_types` in the check surface's own pre-commit helper so that setup and the grade cannot disagree. The destination is a repository that already has hooks of its own more often than not: link each one in as `<hooksdir>/hooks/<type>.legacy` before pinning the key, and re-link them after every later run of `init-templatedir`, which installs with overwrite.
-
-Verify by outcome rather than by exit status, before anything measures the bar: `git -C <candidate> rev-parse --git-path hooks` resolves inside `<hooksdir>` and every configured type is present there. A candidate whose hooks are not working stops the flow and is reported as this skill's own defect, because carrying on writes a real repository a list of failures it does not owe.
+Then install the hooks by the shared recipe at [Working hooks in a candidate](lifecycle.md#working-hooks-in-a-candidate), which names retrofit's scope, where the hooks directory sits, what an already-hooked clone owes before the key is pinned, and how the result is verified. Retrofit's candidate is the only one borrowing a hooks directory it does not own, so read that section's scope table rather than assuming another flow's.
