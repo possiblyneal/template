@@ -104,6 +104,26 @@ class PreflightUnitTests(unittest.TestCase):
         self.assertIs(changes[0]["overridden"], True)
         self.assertEqual(changes[0]["override_reason"], "destination rewrote it")
 
+    def test_an_overridden_path_leaves_its_ownership_bucket(self) -> None:
+        """Whichever bucket a settled path came from, the three still sum to total."""
+        changes = preflight.parse_name_status(
+            "M\0base-repo/scripts/check\0M\0base-repo/apps/api/main.py\0",
+            "base-repo",
+            [
+                preflight.OwnershipRule("scripts/**", "managed", 0),
+                preflight.OwnershipRule("apps/**", "product", 1),
+            ],
+        )
+        preflight.mark_overridden(
+            changes,
+            {"scripts/check": "destination policy", "apps/api/main.py": "its own app"},
+        )
+
+        self.assertEqual(
+            preflight.summarize_changes(changes),
+            {"total": 2, "managed": 0, "product": 0, "overridden": 2},
+        )
+
     def test_overrides_are_optional_until_a_collision_is_resolved(self) -> None:
         self.assertEqual(preflight.validate_overrides({"generation": {}}), {})
 
