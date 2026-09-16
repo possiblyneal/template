@@ -668,6 +668,42 @@ def require_tracked_clean(destination: Path) -> None:
         raise PreflightError(
             f"destination has uncommitted changes to tracked files; first: {first}"
         )
+    require_no_operation_in_progress(destination)
+
+
+# A paused operation is named by a path git keeps rather than by anything
+# `status --porcelain` prints, so `rev-parse --git-path` is what finds it.
+# `rebase-merge` covers an interactive rebase, `rebase-apply` a `git am` or a
+# non-interactive one.
+IN_PROGRESS_PATHS = {
+    "MERGE_HEAD": "a merge",
+    "CHERRY_PICK_HEAD": "a cherry-pick",
+    "REVERT_HEAD": "a revert",
+    "rebase-merge": "a rebase",
+    "rebase-apply": "a rebase or patch application",
+}
+
+
+def require_no_operation_in_progress(destination: Path) -> None:
+    """Refuse a destination holding a paused merge, rebase, cherry-pick, or revert.
+
+    A rebase stopped at an `edit` step has a clean index, so the tracked-files
+    check above passes it. The operator's sequence is still half-applied, and a
+    retrofit's commits would land inside it -- work that has to be unpicked
+    from someone else's rebase rather than dropped with a branch.
+    """
+    for name, operation in IN_PROGRESS_PATHS.items():
+        located = run_git(destination, "rev-parse", "--git-path", name, check=False)
+        if located.returncode != 0:
+            continue
+        path = Path(located.stdout.strip())
+        if not path.is_absolute():
+            path = destination / path
+        if path.exists():
+            raise PreflightError(
+                f"destination has {operation} in progress ({name} is present); "
+                "finish or abort it before retrofitting"
+            )
 
 
 def nul_fields(repository: Path, *arguments: str) -> list[str]:
@@ -701,9 +737,10 @@ def default_branch(destination: Path) -> str:
     A retrofit runs against a checkout the operator already had, so HEAD is
     routinely a feature branch and reading it reports a rename is required for
     a repository whose default branch is already the wanted one. `origin/HEAD`
-    is the local record of what the remote's default is; a clone made with
-    `--single-branch`, or one whose remote HEAD was never fetched, does not
-    carry it, and there the checked-out branch is the only answer available.
+    is the local record of what the remote's default is. Only a clone writes
+    it, so a destination built with `git init` and given its remote afterwards
+    carries no such ref, and there the checked-out branch is the only answer
+    available.
     """
     symbolic = run_git(
         destination, "symbolic-ref", "--short", "refs/remotes/origin/HEAD", check=False

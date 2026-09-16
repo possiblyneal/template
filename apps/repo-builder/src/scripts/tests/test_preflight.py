@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -760,6 +761,44 @@ class RetrofitTests(unittest.TestCase):
             subprocess.run(["git", "add", "-A"], cwd=destination, check=True)
 
             self.assertEqual(preflight.listed_paths(destination), [" lead.txt"])
+
+    def test_retrofit_refuses_a_destination_with_a_rebase_in_progress(self) -> None:
+        """A rebase stopped at an `edit` step has a clean index.
+
+        `status --porcelain` says nothing about it, so the tracked-files check
+        passes and a retrofit's commits would land inside the operator's
+        half-applied sequence.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._fixture(directory)
+            destination = fixture["destination"]
+            (Path(destination) / "README.md").write_text("a second commit\n")
+            subprocess.run(
+                [*("git", *GIT_IDENTITY), "commit", "-qam", "chore: more work"],
+                cwd=destination,
+                check=True,
+            )
+            subprocess.run(
+                [*("git", *GIT_IDENTITY), "rebase", "-q", "-i", "HEAD~1"],
+                cwd=destination,
+                check=True,
+                env={**os.environ, "GIT_SEQUENCE_EDITOR": "sed -i '1s/^pick/edit/'"},
+            )
+            self.assertFalse(
+                subprocess.run(
+                    ["git", "status", "--porcelain=v1", "--untracked-files=no"],
+                    cwd=destination,
+                    check=True,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                ).stdout,
+                "the paused rebase must leave a clean index for this to be the gap",
+            )
+
+            result = self._preflight(fixture)
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("rebase in progress", result.stderr)
 
     def test_retrofit_refuses_a_destination_that_is_not_a_repository(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
