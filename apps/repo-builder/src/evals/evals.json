@@ -96,6 +96,32 @@
         "The generation.overrides entry survives, the destination's own version of the path still being there.",
         "The manifest advances to the exact descendant target commit and no remote mutation occurs."
       ]
+    },
+    {
+      "id": 8,
+      "prompt": "Update the fixture destination from its recorded template commit to the supplied descendant target commit. Both sides changed the root CLAUDE.md: the destination added a Deployment section and filled the Child Index, and the template's new commit documents another command in the Commands section. Work locally only and do not push or open a pull request. Carry the delta and write a report that classifies every delta path.",
+      "expected_output": "A locally updated candidate at the descendant template commit whose root CLAUDE.md carries both intents: the template's newly documented command and the destination's own sections, merged by hand with no conflict markers and nothing reverted to the payload's placeholders.",
+      "files": [],
+      "expectations": [
+        "The root CLAUDE.md documents the template's newly added scripts/fix command.",
+        "The destination's Deployment section, which the template never shipped, is still there.",
+        "The destination's filled Child Index survives: the payload's placeholder text does not come back.",
+        "The file holds no conflict markers; the two intents were merged rather than left to the reader.",
+        "The manifest advances to the exact descendant target commit and the report's Conflicted line reads none."
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Update the fixture destination from its recorded template commit to the supplied descendant target commit. Both sides rewrote the same instruction in the root CLAUDE.md: the destination's says the repository checks are advisory during an incident, and the template's new commit says they are never skipped. Work locally only and do not push or open a pull request. Stop on a real disagreement rather than choosing for the operator, and report what each side intends.",
+      "expected_output": "A stopped update: the destination is left exactly as it was, at its recorded commit, and the report names the root CLAUDE.md as conflicted with both competing intents stated.",
+      "files": [],
+      "expectations": [
+        "The report names CLAUDE.md as conflicted and states both intents: the destination's advisory checks and the template's never-skipped ones.",
+        "The manifest still records the old commit; it does not advance on an unresolved conflict.",
+        "The destination worktree is clean: no file was edited and no commit was made.",
+        "No remote mutation occurs.",
+        "No half-merged CLAUDE.md is left behind, with or without conflict markers."
+      ]
     }
   ]
 }

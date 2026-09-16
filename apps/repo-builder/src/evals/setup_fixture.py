@@ -58,14 +58,19 @@ def commit(repo: Path, message: str) -> str:
     return run(repo, "rev-parse", "HEAD", capture=True)
 
 
-def template_payload(repo: Path) -> None:
-    write(
-        repo,
-        "base-repo/CLAUDE.md",
-        """## Commands
+PAYLOAD_COMMANDS = "- `scripts/check` — run repository checks\n"
 
-- `scripts/check` — run repository checks
 
+def payload_instructions(commands: str) -> str:
+    """The payload's root instructions, varying only the Commands section.
+
+    A scenario that changes the root instructions on the template's side edits
+    that section, so the text around it is written once here rather than
+    restated per scenario and drifting out of step with the payload.
+    """
+    return f"""## Commands
+
+{commands}
 ## Apps
 
 An `apps/` entry is one deployable service.
@@ -75,7 +80,14 @@ An `apps/` entry is one deployable service.
 ## Child Index
 
 This project is not yet indexed. Replace this message with the actual index.
-""",
+"""
+
+
+def template_payload(repo: Path) -> None:
+    write(
+        repo,
+        "base-repo/CLAUDE.md",
+        payload_instructions(PAYLOAD_COMMANDS),
     )
     write(
         repo,
@@ -279,12 +291,38 @@ def manifest(
     }
 
 
+def destination_instructions(commands: str) -> str:
+    """The root instructions as a generated repository would carry them.
+
+    The payload's text, personalized the way a generate personalizes it -- the
+    placeholder app paragraph gone, the Child Index filled -- plus a Deployment
+    section the template never shipped. `commands` is the only part a scenario
+    varies, because it is the one both sides may reach for.
+    """
+    return f"""## Commands
+
+{commands}
+## Apps
+
+An `apps/` entry is one deployable service.
+
+## Deployment
+
+Deploy `apps/billing-api` from `main` only, and never during month-end close.
+
+## Child Index
+
+- `apps/billing-api/` — invoicing and dunning
+"""
+
+
 def create_destination(
     root: Path,
     template: Path,
     old_commit: str,
     conflict: bool,
     overrides: list[dict[str, str]] | None = None,
+    instructions: str | None = None,
 ) -> tuple[Path, Path]:
     remote = root / "destination.git"
     destination = root / "destination"
@@ -307,6 +345,11 @@ echo "check v1"
 """
 
     write(destination, "scripts/check", check, executable=True)
+    # Only the scenarios that exercise the root instructions write them. A
+    # destination with no CLAUDE.md leaves a template edit to that path an
+    # addition rather than the both-changed delta those scenarios need.
+    if instructions is not None:
+        write(destination, "CLAUDE.md", instructions)
     write(
         destination,
         "scripts/legacy",
@@ -385,6 +428,30 @@ echo "template policy: checks are always blocking"
             executable=True,
         )
         target_commit = commit(template, "Make checks unconditionally blocking")
+    elif scenario == "instructions-merge":
+        # A different section of the root instructions than the destination
+        # touched, so the path is a both-changed entry that reconciles rather
+        # than a disagreement.
+        write(
+            template,
+            "base-repo/CLAUDE.md",
+            payload_instructions(
+                PAYLOAD_COMMANDS
+                + "- `scripts/fix` — rewrite formatting for every detected stack\n"
+            ),
+        )
+        target_commit = commit(template, "Document the formatting command")
+    elif scenario == "instructions-conflict":
+        # The same instruction the destination rewrote, decided the other way.
+        write(
+            template,
+            "base-repo/CLAUDE.md",
+            payload_instructions(
+                "- `scripts/check` — run repository checks; never skipped,"
+                " including during an incident\n"
+            ),
+        )
+        target_commit = commit(template, "Make the check instruction unconditional")
     else:
         # clean-update and override take the same template delta. What differs
         # is the destination: override's carries its own scripts/check and the
@@ -413,12 +480,20 @@ echo "check v2"
         if scenario == "override"
         else None
     )
+    instructions = None
+    if scenario == "instructions-merge":
+        instructions = destination_instructions(PAYLOAD_COMMANDS)
+    elif scenario == "instructions-conflict":
+        instructions = destination_instructions(
+            "- `scripts/check` — run repository checks; advisory during an incident\n"
+        )
     destination, remote = create_destination(
         root,
         template,
         old_commit,
         scenario in ("conflict", "override"),
         overrides,
+        instructions,
     )
     return {
         "scenario": scenario,
@@ -465,6 +540,8 @@ def main() -> int:
             "generation-handoff",
             "clean-update",
             "override",
+            "instructions-merge",
+            "instructions-conflict",
             "unrelated",
             "conflict",
             "adopt",

@@ -64,6 +64,27 @@ def handover_declares_python_tools(text: str) -> bool:
     return all(re.search(rf"\b{tool}\b", sentence) for tool in ("ruff", "ty", "pytest"))
 
 
+def instructions_merged_without_conflict(text: str) -> bool:
+    """The report accounts for the root instructions and conflicts on nothing.
+
+    Read the Conflicted line rather than the whole report: the word `conflict`
+    appears in every reconciliation summary, as the name of a line that is
+    usually empty, so its presence says nothing about whether one was found.
+    """
+    if "CLAUDE.md" not in text:
+        return False
+    line = re.search(r"^[-*]\s*Conflicted:\s*(.+)$", text, re.MULTILINE)
+    return bool(line) and line.group(1).strip().lower().startswith("none")
+
+
+def instructions_conflict_reported(text: str) -> bool:
+    """The report names the root instructions and both sides' competing intents."""
+    lowered = text.lower()
+    return "claude.md" in lowered and all(
+        term in lowered for term in ("conflict", "advisory", "never skipped")
+    )
+
+
 def no_remote_check(candidate: Path) -> Check:
     """A generate forbidden from contacting GitHub stops at step 4's gate, so no remote is set."""
     return (
@@ -515,6 +536,53 @@ def update(root: Path, fixture: dict[str, object], scenario: str) -> list[Check]
                 ),
             ]
         )
+    elif scenario == "instructions-merge":
+        instructions = destination / "CLAUDE.md"
+        text = (
+            instructions.read_text(encoding="utf-8") if instructions.is_file() else ""
+        )
+        checks.extend(
+            [
+                (
+                    "manifest advanced",
+                    current_commit == fixture["target_commit"],
+                    "manifest records target commit",
+                ),
+                (
+                    "template instruction landed",
+                    "scripts/fix" in text,
+                    "the new command the template documented is in the root CLAUDE.md",
+                ),
+                (
+                    "destination section preserved",
+                    "## Deployment" in text and "month-end close" in text,
+                    "the section the template never shipped survives the merge",
+                ),
+                (
+                    "destination personalization preserved",
+                    "billing-api" in text
+                    and all(
+                        placeholder not in text
+                        for placeholder in ("apps/app-name", "not yet indexed")
+                    ),
+                    "the filled Child Index is not reverted to the payload's placeholder",
+                ),
+                (
+                    "no conflict markers",
+                    all(
+                        marker not in text
+                        for marker in ("<<<<<<<", "=======", ">>>>>>>")
+                    ),
+                    "the merge was made by hand, not left as markers",
+                ),
+                report_check(
+                    report,
+                    "root instructions reported merged",
+                    instructions_merged_without_conflict,
+                    "report accounts for CLAUDE.md and its Conflicted line reads none",
+                ),
+            ]
+        )
     else:
         checks.extend(
             [
@@ -542,6 +610,15 @@ def update(root: Path, fixture: dict[str, object], scenario: str) -> list[Check]
                     "ancestry rejection reported",
                     lambda text: "ancestor" in text.lower() and "not" in text.lower(),
                     "report says recorded commit is not an ancestor",
+                )
+            )
+        elif scenario == "instructions-conflict":
+            checks.append(
+                report_check(
+                    report,
+                    "instruction conflict reported",
+                    instructions_conflict_reported,
+                    "report explains both intents for the root CLAUDE.md",
                 )
             )
         else:
