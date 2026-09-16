@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate and describe repo-builder generation and update inputs."""
+"""Validate and describe repo-builder generate, update, adopt, and retrofit inputs."""
 
 from __future__ import annotations
 
@@ -623,6 +623,135 @@ def adopt_preflight(arguments: argparse.Namespace) -> dict[str, object]:
     }
 
 
+def require_named_origin(destination: Path, named: str) -> str:
+    """Refuse a destination whose origin is not the repository that was named.
+
+    Origin alone would do if a clone's directory always matched its repository,
+    and it does not: a retrofit is run against a checkout an operator already
+    had, under whatever name they gave it. Requiring the repository as an
+    argument and agreeing it with origin is what settles which repository is
+    about to be written to, before anything is written.
+    """
+    actual = origin_identity(destination)
+    expected = normalize_repository_identity(named)
+    if actual != expected:
+        raise PreflightError(
+            "destination origin differs from the named repository: "
+            f"named {expected!r}, origin {actual!r}"
+        )
+    return actual
+
+
+def require_tracked_clean(destination: Path) -> None:
+    """Refuse a destination holding uncommitted edits to tracked files.
+
+    Retrofit's own rule rather than `ensure_clean`, which counts untracked
+    files too. A destination that has been developed in normally keeps
+    untracked work deliberately -- a data directory, a scratch folder -- and
+    refusing those refuses the ordinary case. An edit to a tracked file is the
+    one that a retrofit's own writes would become indistinguishable from.
+    """
+    dirty = git_output(destination, "status", "--porcelain=v1", "--untracked-files=no")
+    if dirty:
+        first = dirty.splitlines()[0]
+        raise PreflightError(
+            f"destination has uncommitted changes to tracked files; first: {first}"
+        )
+
+
+def tree_paths(repository: Path, commit: str, subtree: str) -> list[str]:
+    output = git_output(
+        repository, "ls-tree", "-r", "--name-only", "-z", commit, "--", subtree
+    )
+    prefix = f"{subtree.rstrip('/')}/"
+    return sorted(
+        entry.removeprefix(prefix) for entry in output.split("\0") if entry.strip()
+    )
+
+
+def listed_paths(destination: Path, *arguments: str) -> list[str]:
+    output = git_output(destination, "ls-files", "-z", *arguments)
+    return [entry for entry in output.split("\0") if entry.strip()]
+
+
+def retrofit_preflight(arguments: argparse.Namespace) -> dict[str, object]:
+    """Prove locally whether a destination can be retrofitted, and name the collisions.
+
+    Every check here reaches git and nothing else. A retrofit's hosted writes
+    are confirmed at the flow's own gate, where a failure can still be acted
+    on; a preflight that contacted GitHub would be reporting on state it cannot
+    hold still anyway.
+    """
+    template_repo = require_git_repository(
+        arguments.template_repo, "template repository"
+    )
+    target = resolve_commit(template_repo, arguments.target)
+    subtree = normalize_relative_path(arguments.subtree, "template subtree")
+    require_subtree(template_repo, target, subtree)
+
+    destination = require_git_repository(arguments.destination, "destination")
+    destination_identity = require_named_origin(
+        destination, arguments.destination_repository
+    )
+
+    manifest = normalize_relative_path(arguments.manifest, "manifest")
+    if (destination / manifest).exists():
+        raise PreflightError(
+            f"destination already carries a template record at {manifest}; "
+            "a repository with a record is updated rather than retrofitted"
+        )
+
+    require_tracked_clean(destination)
+
+    payload = tree_paths(template_repo, target, subtree)
+    tracked = set(listed_paths(destination))
+    # Ignored files are untracked for this purpose: git cannot restore one
+    # either, so landing the payload over it is the same unrecoverable
+    # overwrite. They stay out of the untracked finding below, which is about
+    # work the operator kept deliberately rather than build output.
+    present = tracked | set(listed_paths(destination, "--others"))
+
+    default_branch = git_output(destination, "rev-parse", "--abbrev-ref", "HEAD")
+    return {
+        "operation": "retrofit",
+        "template": {
+            "repository": repository_identity(template_repo),
+            "subtree": subtree,
+            "commit": target,
+        },
+        "destination": {
+            "path": str(destination),
+            "repository": destination_identity,
+            "default_branch": default_branch,
+            "rename_required": default_branch != arguments.default_branch,
+            "path_count": len(tracked),
+        },
+        # --no-empty-directory keeps a directory holding nothing but ignored
+        # files out of the finding. It is not work the operator kept, and
+        # reporting it sends them to look at build output.
+        "untracked": listed_paths(
+            destination,
+            "--others",
+            "--exclude-standard",
+            "--directory",
+            "--no-empty-directory",
+        ),
+        # The delivery check has nothing else deterministic to verify against,
+        # and absence has no runner: a payload file that never landed produces
+        # a green run unless something holds the list it should have landed.
+        "payload_paths": payload,
+        # Evidence, never a decision. Which side of a collision wins is read
+        # from ownership rules that live in a record a retrofit writes at the
+        # end, so there is nothing here to read them from.
+        "collisions": [
+            {"path": path, "tracked": path in tracked}
+            for path in payload
+            if path in present
+        ],
+        "remote_actions_performed": False,
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -671,6 +800,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--manifest", default=".repo-template.json", help="path relative to destination"
     )
     adopt.set_defaults(handler=adopt_preflight)
+
+    retrofit = subparsers.add_parser(
+        "retrofit",
+        help="validate retrofitting a repository that was never generated",
+    )
+    retrofit.add_argument("--template-repo", type=Path, required=True)
+    retrofit.add_argument("--target", required=True, help="template ref or commit")
+    retrofit.add_argument("--subtree", required=True)
+    retrofit.add_argument("--destination", type=Path, required=True)
+    retrofit.add_argument(
+        "--destination-repository",
+        required=True,
+        help="owner/name; cross-checked against the destination's origin",
+    )
+    retrofit.add_argument("--default-branch", default="main")
+    retrofit.add_argument(
+        "--manifest", default=".repo-template.json", help="path relative to destination"
+    )
+    retrofit.set_defaults(handler=retrofit_preflight)
     return parser
 
 

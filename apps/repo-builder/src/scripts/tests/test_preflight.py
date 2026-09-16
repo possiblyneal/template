@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 MODULE_PATH = Path(__file__).parents[1] / "preflight.py"
@@ -293,24 +295,22 @@ class GenerateTests(unittest.TestCase):
         to re-pin a commit when the repository is what needs attention.
         """
         tip = "b" * 40
-        original = preflight.run_git
 
         def stubbed_git(target: Path, *arguments: str, check: bool = True):
             """A clone that resolves the branch and then cannot read the object."""
-            if arguments[:2] == ("rev-parse", "--verify"):
-                return subprocess.CompletedProcess(["git", *arguments], 0, tip, "")
             if arguments[:2] == ("merge-base", "--is-ancestor"):
                 return subprocess.CompletedProcess(
                     ["git", *arguments], 128, "", "fatal: bad object\n"
                 )
-            return original(target, *arguments, check=check)
+            return subprocess.CompletedProcess(["git", *arguments], 0, tip, "")
 
-        preflight.run_git = stubbed_git
-        try:
-            with self.assertRaisesRegex(preflight.PreflightError, "bad object"):
-                preflight.require_on_branch(Path("/unread-clone"), "a" * 40, "main")
-        finally:
-            preflight.run_git = original
+        # patch.object names the attribute as a string, which is what keeps the
+        # type checker from reading it off the importlib-loaded module above.
+        with (
+            unittest.mock.patch.object(preflight, "run_git", stubbed_git),
+            self.assertRaisesRegex(preflight.PreflightError, "bad object"),
+        ):
+            preflight.require_on_branch(Path("/unread-clone"), "a" * 40, "main")
 
 
 class AdoptTests(unittest.TestCase):
@@ -455,6 +455,229 @@ class AdoptTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             report = json.loads(result.stdout)
             self.assertEqual(report["addons"][0]["path"], "AUTHORS")
+
+
+class RetrofitTests(unittest.TestCase):
+    """A repository that was never generated, proved retrofittable without a network."""
+
+    NAMED = "https://github.com/acme/legacy-service.git"
+
+    def _fixture(self, directory: str) -> dict[str, str]:
+        """A template beside a destination developed on its own for years.
+
+        The destination collides with the payload three ways on purpose: a
+        tracked file git could restore, an untracked file it could not, and an
+        ignored file that is equally unrecoverable while staying out of the
+        untracked finding.
+        """
+        setup = MODULE_PATH.parents[1] / "evals" / "setup_fixture.py"
+        root = Path(directory) / "fixture"
+        subprocess.run(
+            ["python3", str(setup), "generation", str(root)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+        )
+        fixture = json.loads((root / "fixture.json").read_text())
+
+        destination = Path(directory) / "legacy-service"
+        (destination / "scripts").mkdir(parents=True)
+        (destination / "data").mkdir()
+        (destination / "docs").mkdir()
+        (destination / "CLAUDE.md").write_text("the destination's own contract\n")
+        (destination / "README.md").write_text("legacy service\n")
+        (destination / ".gitignore").write_text("docs/LESSONS.md\n")
+        (destination / "scripts" / "check").write_text("#!/bin/sh\nexit 0\n")
+        (destination / "data" / "notes.txt").write_text("kept deliberately\n")
+        (destination / "docs" / "LESSONS.md").write_text("ignored, still present\n")
+
+        subprocess.run(
+            ["git", "init", "-q", "--initial-branch=master", str(destination)],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "remote", "add", "origin", self.NAMED], cwd=destination, check=True
+        )
+        subprocess.run(
+            ["git", "add", "CLAUDE.md", "README.md", ".gitignore"],
+            cwd=destination,
+            check=True,
+        )
+        subprocess.run(
+            [*("git", *GIT_IDENTITY), "commit", "-q", "-m", "chore: years of work"],
+            cwd=destination,
+            check=True,
+        )
+        fixture["destination"] = str(destination)
+        return fixture
+
+    def _preflight(
+        self, fixture: dict[str, str], /, **overrides: str
+    ) -> subprocess.CompletedProcess:
+        arguments = {
+            "--template-repo": fixture["template_repo"],
+            "--target": fixture["target_commit"],
+            "--subtree": fixture["subtree"],
+            "--destination": fixture["destination"],
+            "--destination-repository": "acme/legacy-service",
+            **overrides,
+        }
+        return subprocess.run(
+            ["python3", str(MODULE_PATH), "retrofit", *sum(arguments.items(), ())],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    def test_retrofit_reports_collisions_without_deciding_them(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._fixture(directory)
+            result = self._preflight(fixture)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["operation"], "retrofit")
+            self.assertEqual(
+                report["collisions"],
+                [
+                    {"path": "CLAUDE.md", "tracked": True},
+                    {"path": "docs/LESSONS.md", "tracked": False},
+                    {"path": "scripts/check", "tracked": False},
+                ],
+            )
+            for collision in report["collisions"]:
+                self.assertNotIn("ownership", collision)
+
+    def test_retrofit_carries_the_full_payload_list_and_a_destination_count(
+        self,
+    ) -> None:
+        """Absence has no runner, so the list is what the delivery check reads."""
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._fixture(directory)
+            report = json.loads(self._preflight(fixture).stdout)
+
+            self.assertEqual(
+                report["payload_paths"],
+                [
+                    "CLAUDE.md",
+                    "apps/app-name/.unit.json",
+                    "apps/app-name/src/.gitkeep",
+                    "docs/LESSONS.md",
+                    "docs/adrs/0000-template.md",
+                    "scripts/check",
+                    "scripts/legacy",
+                ],
+            )
+            self.assertEqual(report["destination"]["path_count"], 3)
+            self.assertNotIn("paths", report["destination"])
+
+    def test_retrofit_reports_untracked_work_and_does_not_refuse(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._fixture(directory)
+            result = self._preflight(fixture)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["untracked"], ["data/", "scripts/"])
+            self.assertNotIn("docs/LESSONS.md", report["untracked"])
+
+    def test_retrofit_reports_a_foreign_default_branch_as_a_rename(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._fixture(directory)
+            report = json.loads(self._preflight(fixture).stdout)
+
+            self.assertEqual(report["destination"]["default_branch"], "master")
+            self.assertIs(report["destination"]["rename_required"], True)
+
+    def test_retrofit_needs_no_hosted_client_on_path(self) -> None:
+        """The discipline the three existing subcommands keep, asserted rather than trusted."""
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._fixture(directory)
+            only_git = Path(directory) / "bin"
+            only_git.mkdir()
+            git = shutil.which("git")
+            assert git, "git is required to run this suite"
+            (only_git / "git").symlink_to(git)
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(MODULE_PATH),
+                    "retrofit",
+                    "--template-repo",
+                    fixture["template_repo"],
+                    "--target",
+                    fixture["target_commit"],
+                    "--subtree",
+                    fixture["subtree"],
+                    "--destination",
+                    fixture["destination"],
+                    "--destination-repository",
+                    "acme/legacy-service",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+                env={"PATH": str(only_git), "HOME": directory},
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_retrofit_refuses_a_destination_that_is_not_a_repository(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._fixture(directory)
+            plain = Path(directory) / "plain"
+            plain.mkdir()
+
+            result = self._preflight(fixture, **{"--destination": str(plain)})
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("not a Git repository", result.stderr)
+
+    def test_retrofit_refuses_a_destination_with_no_origin(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._fixture(directory)
+            subprocess.run(
+                ["git", "remote", "remove", "origin"],
+                cwd=fixture["destination"],
+                check=True,
+            )
+
+            result = self._preflight(fixture)
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("origin remote", result.stderr)
+
+    def test_retrofit_refuses_an_origin_that_is_not_the_named_repository(self) -> None:
+        """The cross-check that settles a clone whose directory name is its own."""
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._fixture(directory)
+
+            result = self._preflight(
+                fixture, **{"--destination-repository": "acme/some-other-service"}
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("differs from the named repository", result.stderr)
+
+    def test_retrofit_refuses_uncommitted_edits_to_tracked_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._fixture(directory)
+            (Path(fixture["destination"]) / "README.md").write_text("edited\n")
+
+            result = self._preflight(fixture)
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("uncommitted changes to tracked files", result.stderr)
+
+    def test_retrofit_refuses_a_destination_that_already_has_a_record(self) -> None:
+        """A repository carrying a record is updated, not retrofitted."""
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._fixture(directory)
+            (Path(fixture["destination"]) / ".repo-template.json").write_text("{}\n")
+
+            result = self._preflight(fixture)
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("already carries a template record", result.stderr)
 
 
 if __name__ == "__main__":
