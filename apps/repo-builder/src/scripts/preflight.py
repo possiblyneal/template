@@ -248,7 +248,46 @@ def require_mapping(
     return value
 
 
-def validate_manifest(path: Path) -> tuple[dict[str, object], list[OwnershipRule]]:
+def validate_overrides(manifest: dict[str, object]) -> dict[str, str]:
+    """Read `generation.overrides` into path -> reason, refusing a malformed entry.
+
+    The record is optional: a destination that has resolved no collision has
+    no key at all, and that is not the same as an empty decision. What is
+    refused is an entry nobody can act on later -- a path with no reason is
+    not a decision anyone can review, and two entries for one path leave the
+    next update with no single answer to read.
+    """
+    generation = manifest.get("generation")
+    if not isinstance(generation, dict):
+        raise PreflightError("manifest.generation must be an object")
+    raw_overrides = generation.get("overrides")
+    if raw_overrides is None:
+        return {}
+    if not isinstance(raw_overrides, list):
+        raise PreflightError("manifest.generation.overrides must be an array")
+
+    reasons: dict[str, str] = {}
+    for index, raw_override in enumerate(raw_overrides):
+        field = f"manifest.generation.overrides[{index}]"
+        if not isinstance(raw_override, dict):
+            raise PreflightError(f"{field} must be an object")
+        override_path = normalize_relative_path(
+            raw_override.get("path"), f"{field}.path"
+        )
+        reason = raw_override.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            raise PreflightError(f"{field}.reason must be a non-empty string")
+        if override_path in reasons:
+            raise PreflightError(
+                f"manifest.generation.overrides contains duplicate path: {override_path}"
+            )
+        reasons[override_path] = reason
+    return reasons
+
+
+def validate_manifest(
+    path: Path,
+) -> tuple[dict[str, object], list[OwnershipRule], dict[str, str]]:
     try:
         manifest = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError as error:
@@ -276,8 +315,7 @@ def validate_manifest(path: Path) -> tuple[dict[str, object], list[OwnershipRule
         )
     require_string(destination, "repository", "manifest.destination")
     require_string(destination, "default_branch", "manifest.destination")
-    if not isinstance(manifest.get("generation"), dict):
-        raise PreflightError("manifest.generation must be an object")
+    overrides = validate_overrides(manifest)
 
     raw_rules = manifest.get("ownership")
     if not isinstance(raw_rules, list) or not raw_rules:
@@ -301,7 +339,7 @@ def validate_manifest(path: Path) -> tuple[dict[str, object], list[OwnershipRule
             )
         seen.add(pattern)
         rules.append(OwnershipRule(pattern, str(mode), index))
-    return manifest, rules
+    return manifest, rules, overrides
 
 
 def host_repository_identity(host: str, path: str) -> str:
@@ -405,6 +443,7 @@ class Provenance:
     recorded: str
     subtree: str
     rules: list[OwnershipRule]
+    overrides: dict[str, str]
     template_identity: str
     destination_identity: str
     destination_config: dict[str, object]
@@ -419,7 +458,7 @@ def load_provenance(arguments: argparse.Namespace) -> Provenance:
     destination = require_git_repository(arguments.destination, "destination")
     ensure_clean(destination)
     manifest_path = destination / arguments.manifest
-    manifest, rules = validate_manifest(manifest_path)
+    manifest, rules, overrides = validate_manifest(manifest_path)
     template = require_mapping(manifest, "template", "manifest")
     destination_config = require_mapping(manifest, "destination", "manifest")
 
@@ -460,6 +499,7 @@ def load_provenance(arguments: argparse.Namespace) -> Provenance:
         recorded=recorded,
         subtree=subtree,
         rules=rules,
+        overrides=overrides,
         template_identity=recorded_template_identity,
         destination_identity=actual_destination_identity,
         destination_config=destination_config,
@@ -527,6 +567,14 @@ def update_preflight(arguments: argparse.Namespace) -> dict[str, object]:
         subtree,
     ).stdout
     changes = parse_name_status(diff, subtree, rules)
+    # A path settled once against the payload is not a change to reconcile
+    # again. Marking it here is what keeps it out of the managed tally the
+    # flow works through; lifecycle.md "Overridden paths" is the rule.
+    for change in changes:
+        reason = provenance.overrides.get(change["path"])
+        if reason is not None:
+            change["overridden"] = True
+            change["override_reason"] = reason
     return {
         "operation": "update",
         "template": {
@@ -547,8 +595,12 @@ def update_preflight(arguments: argparse.Namespace) -> dict[str, object]:
         "changes": changes,
         "summary": {
             "total": len(changes),
-            "managed": sum(change["ownership"] == "managed" for change in changes),
+            "managed": sum(
+                change["ownership"] == "managed" and not change.get("overridden")
+                for change in changes
+            ),
             "product": sum(change["ownership"] == "product" for change in changes),
+            "overridden": sum(bool(change.get("overridden")) for change in changes),
         },
         "remote_actions_performed": False,
     }
