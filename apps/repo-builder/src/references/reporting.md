@@ -68,6 +68,7 @@ First prompt is a generate's only, and it is written for a reader this session n
 ### Addon adoption
 - <addon taken>: <slot token, review section, or external step>: filled | reviewed | done | OUTSTANDING (<what remains>)
 - <addons offered and not taken, on one line>
+- Already held (retrofit): <addon-shaped paths the destination brought with it, on one line> | none. A retrofit takes none, so this is the whole of its block
 
 ### Repository settings
 - <setting>: enabled | unavailable (<reason>) | not requested

@@ -9,6 +9,7 @@ import json
 import re
 import subprocess
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import NoReturn
@@ -184,22 +185,20 @@ def sibling_of_subtree(subtree: str, name: str) -> str:
     return f"{parent}/{name}" if parent else name
 
 
-def require_addon(
-    repository: Path, commit: str, subtree: str, addon: str
+def addon_manifest_files(
+    repository: Path, commit: str, subtree: str
 ) -> dict[str, object]:
-    addons_root = sibling_of_subtree(subtree, "repository-addons")
-    blob = f"{addons_root}/{addon}"
-    existence = run_git(repository, "cat-file", "-e", f"{commit}:{blob}", check=False)
-    if existence.returncode != 0:
-        raise PreflightError(f"addon does not exist at {commit}: {blob}")
-    kind = git_output(repository, "cat-file", "-t", f"{commit}:{blob}")
-    if kind != "blob":
-        raise PreflightError(f"addon is not a file at {commit}: {blob}")
+    """Read `addon-adoption.json`'s file map at a commit.
+
+    The manifest is the only list of what the template holds back, so every
+    flow asking which paths are addons asks it rather than carrying a copy
+    that goes stale the next time an addon is added.
+    """
     manifest_rel = sibling_of_subtree(subtree, "addon-adoption.json")
-    manifest_existence = run_git(
+    existence = run_git(
         repository, "cat-file", "-e", f"{commit}:{manifest_rel}", check=False
     )
-    if manifest_existence.returncode != 0:
+    if existence.returncode != 0:
         raise PreflightError(
             f"addon manifest does not exist at {commit}: {manifest_rel}"
         )
@@ -211,7 +210,37 @@ def require_addon(
             f"addon manifest is invalid JSON at {commit}: {error.msg}"
         ) from error
     files = index.get("files") if isinstance(index, dict) else None
-    if not isinstance(files, dict) or addon not in files:
+    if not isinstance(files, dict):
+        raise PreflightError(
+            f"addon manifest has no files object at {commit}: {manifest_rel}"
+        )
+    return files
+
+
+def addons_present(destination: Path, addons: Iterable[str]) -> list[str]:
+    """Name every addon-shaped path the destination already holds.
+
+    A finding and never a decision. A retrofit adopts no addon, so what this
+    answers is whether the operator already solved by hand what adopt would
+    have offered; sorted so two runs over the same destination report the
+    same line.
+    """
+    return sorted(addon for addon in addons if (destination / addon).exists())
+
+
+def require_addon(
+    repository: Path, commit: str, subtree: str, addon: str
+) -> dict[str, object]:
+    addons_root = sibling_of_subtree(subtree, "repository-addons")
+    blob = f"{addons_root}/{addon}"
+    existence = run_git(repository, "cat-file", "-e", f"{commit}:{blob}", check=False)
+    if existence.returncode != 0:
+        raise PreflightError(f"addon does not exist at {commit}: {blob}")
+    kind = git_output(repository, "cat-file", "-t", f"{commit}:{blob}")
+    if kind != "blob":
+        raise PreflightError(f"addon is not a file at {commit}: {blob}")
+    files = addon_manifest_files(repository, commit, subtree)
+    if addon not in files:
         raise PreflightError(f"addon has no addon-adoption.json entry: {addon}")
     entry = files[addon]
     if not isinstance(entry, dict):
@@ -922,6 +951,13 @@ def retrofit_preflight(arguments: argparse.Namespace) -> dict[str, object]:
         # and absence has no runner: a payload file that never landed produces
         # a green run unless something holds the list it should have landed.
         "payload_paths": payload,
+        # Findings only, and never a stop. Addons live in a sibling tree
+        # rather than under the payload subtree, so a destination's own
+        # readme never reaches `collisions` and nothing here is a path the
+        # retrofit intends to land: the retrofit adopts no addon.
+        "addons_present": addons_present(
+            destination, addon_manifest_files(template_repo, target, subtree)
+        ),
         # Evidence, never a decision. Which side of a collision wins is read
         # from ownership rules that live in a record a retrofit writes at the
         # end, so there is nothing here to read them from.

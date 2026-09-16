@@ -389,7 +389,12 @@ def build_generation(root: Path, scenario: str = "generation") -> dict[str, obje
     template = root / "template"
     init_repo(template)
     template_payload(template)
-    target = commit(template, "Add base repository payload")
+    # The held-back tree comes with the payload, as it does in the real
+    # template. Without it a flow asking which paths are addons reads a
+    # template shape that does not exist, and a destination's own readme
+    # cannot be shown to stay out of the payload's collision list.
+    addon_payload(template)
+    target = commit(template, "Add base repository payload and repository addons")
     return {
         "scenario": scenario,
         "template_repo": str(template),

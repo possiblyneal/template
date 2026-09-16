@@ -972,6 +972,26 @@ class RetrofitTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("already carries a template record", result.stderr)
 
+    def test_retrofit_reports_an_addon_the_destination_already_holds(self) -> None:
+        """A finding and never a stop: a retrofit adopts no addon.
+
+        The fixture destination carries its own `README.md`, which the
+        template holds back as an addon. Reporting it is worth a line; doing
+        anything about it is the adopt flow's business, not this one's.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._fixture(directory)
+
+            result = self._preflight(fixture)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["addons_present"], ["README.md"])
+            self.assertNotIn(
+                "README.md", [found["path"] for found in report["collisions"]]
+            )
+            self.assertNotIn("README.md", report["payload_paths"])
+
 
 if __name__ == "__main__":
     unittest.main()
