@@ -1,6 +1,6 @@
 # Repo Builder Lifecycle Contract
 
-This file holds what is true regardless of operation: the manifest, ownership, how checks are run and reported, the remote gates, failure behavior, and the report shape. Read it, then read the one flow being performed.
+This file holds what is true regardless of operation: the manifest, ownership, how checks are run and reported, the remote gates, and failure behavior. Reviewing and reporting are a third sub-contract, held back in [`reporting.md`](reporting.md) and read at the end of a flow. Read this file, then read the one flow being performed.
 
 - [`generate.md`](generate.md) — build a repository from the payload, including into a destination that already has content
 - [`update.md`](update.md) — carry a bounded template delta into a repository already generated from it

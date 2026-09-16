@@ -93,16 +93,23 @@ class ReferenceAssertions(unittest.TestCase):
             absent, [], f"references cite records that do not exist: {absent}"
         )
 
-    def test_named_payload_headings_exist(self):
-        """A Markdown heading a reference quotes must exist in the payload.
+    def test_named_headings_exist(self):
+        """A Markdown heading a reference quotes must exist somewhere readable.
 
         A reference quoting `## Foo` is telling the skill to find, preserve, or
-        rewrite that block. When the payload drops the heading the instruction
-        does not become a no-op -- it becomes a search that fails partway
-        through an operation.
+        rewrite that block. When the block is gone the instruction does not
+        become a no-op -- it becomes a search that fails partway through an
+        operation.
+
+        Two trees answer, because a quoted heading is one of two claims. A
+        payload heading is content the flow acts on. A reference heading is an
+        address one reference cites in another -- `generate.md`'s steps are
+        headings so that a flow needing one step can extract it rather than
+        read 30 KB, and a reference citing a step that no longer exists is the
+        same broken search. Neither tree alone covers both.
         """
         headings = set()
-        for path in PAYLOAD.rglob("*.md"):
+        for path in list(PAYLOAD.rglob("*.md")) + reference_files():
             headings.update(
                 line.strip()
                 for line in path.read_text().splitlines()
@@ -117,7 +124,9 @@ class ReferenceAssertions(unittest.TestCase):
                     if token not in headings:
                         absent.append(f"{reference.name}:{line_number} {token}")
         self.assertEqual(
-            absent, [], f"references quote headings the payload lacks: {absent}"
+            absent,
+            [],
+            f"references quote headings no payload or reference file holds: {absent}",
         )
 
 

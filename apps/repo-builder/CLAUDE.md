@@ -29,7 +29,7 @@ Develops the `/repo-builder` skill, which builds a repository from the payload a
 
 `test_addon_adoption.py` and `test_reference_assertions.py` are stdlib-only, and each file says why: both run under pytest and standalone from a pre-commit hook that resolves no dependencies. A pytest-only idiom added later passes the first and breaks the second.
 
-`test_reference_assertions.py` checks only mechanical claims — a destination path a reference names exists in the payload or in `repository-addons/`, a decision record it cites exists under `docs/adrs/`, and a Markdown heading it quotes exists in some payload file. Whether a sentence is right about a file it names is not decidable there, so widening it means finding another claim a script can settle, not loosening these three.
+`test_reference_assertions.py` checks only mechanical claims — a destination path a reference names exists in the payload or in `repository-addons/`, a decision record it cites exists under `docs/adrs/`, and a Markdown heading it quotes exists in some payload file or in `src/references/` itself. The heading set spans both trees because a quoted heading is one of two claims: payload content a flow acts on, or an address one reference cites in another, which is what `generate.md`'s `### Step N` headings are for. Whether a sentence is right about a file it names is not decidable there, so widening it means finding another claim a script can settle, not loosening these three.
 
 Editing under this unit's `src/` does not prompt — `.claude/settings.json` asks only for `apps/github-repository-template/src/**`, where the prompt's question, payload or root, is a real one.
 

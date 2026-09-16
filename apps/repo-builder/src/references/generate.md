@@ -17,7 +17,7 @@ Read [`lifecycle.md`](lifecycle.md) first — the manifest, ownership, check rep
 - **Step 11 — Publish the candidate**
 - **Step 12 — Verify the published repository**
 
-A generate runs them in order and reads them in order. A flow needing one step alone — `update.md` and `adopt.md` each cite one — reads it with `sed -n '/^### Step 12 /,/^### /p'` rather than opening the whole file. The headings are addresses so that a citation does not cost 30 KB to follow.
+A generate runs them in order and reads them in order. A reader needing one step alone — `SKILL.md`, `lifecycle.md`, `wayfinding.md` and `reporting.md` each cite one — reads it with `sed -n '/^### Step 12 /,/^### /p'` rather than opening the whole file. The headings are addresses so that a citation does not cost 30 KB to follow.
 
 ### Step 1 — Resolve the source commit and preflight
 

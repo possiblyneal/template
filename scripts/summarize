@@ -40,13 +40,15 @@ awk '
   { under = 0 }
   END { exit failed ? 0 : 1 }
 ' <<< "$output"
-table_failed=$?
+# grep's convention: 0 means the table held a failing state, not that awk
+# succeeded. Named for what it answers, since every read below is negated.
+table_reported_failure=$?
 
 # Not everything a check command runs reports through the Result table: the
 # script suites print their own tally, and pre-commit prints its own hook list.
 # A table of nothing but passes above a failing exit reads as a contradiction,
 # so say where the failure was instead of leaving the reader to find it.
-if (( status != 0 && table_failed != 0 )); then
+if (( status != 0 && table_reported_failure != 0 )); then
   echo
   echo "$1 exited $status with no failing result line: the failure is outside the"
   echo "Result table. Re-run it directly to see what failed."
