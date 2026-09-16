@@ -312,6 +312,65 @@ class GenerateTests(unittest.TestCase):
         ):
             preflight.require_on_branch(Path("/unread-clone"), "a" * 40, "main")
 
+    def test_generate_tries_every_ref_before_reporting_git_declined(self) -> None:
+        """One ref git cannot read is no reason to ignore another that answers."""
+        remote_tip = "b" * 40
+        local_tip = "c" * 40
+
+        def stubbed_git(target: Path, *arguments: str, check: bool = True):
+            """A clone whose remote ref is unreadable and whose local ref is not."""
+            if arguments[:2] == ("merge-base", "--is-ancestor"):
+                if arguments[3] == remote_tip:
+                    return subprocess.CompletedProcess(
+                        ["git", *arguments], 128, "", "fatal: bad object\n"
+                    )
+                return subprocess.CompletedProcess(["git", *arguments], 0, "", "")
+            tip = remote_tip if "remotes" in arguments[2] else local_tip
+            return subprocess.CompletedProcess(["git", *arguments], 0, tip, "")
+
+        with unittest.mock.patch.object(preflight, "run_git", stubbed_git):
+            resolved = preflight.require_on_branch(
+                Path("/half-read-clone"), "a" * 40, "main"
+            )
+
+        self.assertEqual(resolved, local_tip)
+
+    def test_generate_refuses_a_branch_argument_that_is_not_a_branch_name(self) -> None:
+        """The input narrowed to a plain branch name, and the refusal says so.
+
+        An update targets a branch and diffs back to the recorded commit, so a
+        tag or a detached `HEAD` names no lineage an update could follow.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._generation_fixture(directory)
+            subprocess.run(
+                ["git", "tag", "v1"], cwd=fixture["template_repo"], check=True
+            )
+
+            result = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "generate",
+                    "--template-repo",
+                    fixture["template_repo"],
+                    "--target",
+                    fixture["target_commit"],
+                    "--subtree",
+                    fixture["subtree"],
+                    "--destination-repository",
+                    fixture["destination_repository"],
+                    "--template-branch",
+                    "v1",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("resolves to no ref", result.stderr)
+
 
 class AdoptTests(unittest.TestCase):
     # The values are all `str` because the scenario below is the literal
@@ -620,6 +679,87 @@ class RetrofitTests(unittest.TestCase):
             )
 
             self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_retrofit_reads_the_default_branch_not_the_checked_out_one(self) -> None:
+        """A retrofit runs on a checkout the operator already had.
+
+        Sitting on a feature branch is the ordinary case, so reading HEAD
+        reports a rename is required for a repository whose default branch is
+        already the wanted one.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._fixture(directory)
+            destination = fixture["destination"]
+            head = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=destination,
+                check=True,
+                text=True,
+                stdout=subprocess.PIPE,
+            ).stdout.strip()
+            for arguments in (
+                ("update-ref", "refs/remotes/origin/main", head),
+                (
+                    "symbolic-ref",
+                    "refs/remotes/origin/HEAD",
+                    "refs/remotes/origin/main",
+                ),
+                ("checkout", "-q", "-b", "feature/work"),
+            ):
+                subprocess.run(["git", *arguments], cwd=destination, check=True)
+
+            report = json.loads(self._preflight(fixture).stdout)
+
+            self.assertEqual(report["destination"]["default_branch"], "main")
+            self.assertIs(report["destination"]["rename_required"], False)
+
+    def test_retrofit_reports_a_payload_path_held_as_a_directory(self) -> None:
+        """`ls-files` names no directory, so a membership test alone misses this.
+
+        The payload ships `scripts/legacy` as a file. A destination holding a
+        directory there fails the write outright, and a preflight that called
+        it safe sends the operator into a retrofit that cannot finish.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._fixture(directory)
+            destination = Path(fixture["destination"])
+            (destination / "scripts" / "legacy").mkdir()
+            (destination / "scripts" / "legacy" / "run.sh").write_text("exit 0\n")
+            subprocess.run(
+                ["git", "add", "scripts/legacy/run.sh"], cwd=destination, check=True
+            )
+            subprocess.run(
+                [
+                    *("git", *GIT_IDENTITY),
+                    "commit",
+                    "-q",
+                    "-m",
+                    "chore: legacy scripts",
+                ],
+                cwd=destination,
+                check=True,
+            )
+
+            report = json.loads(self._preflight(fixture).stdout)
+
+            self.assertIn(
+                {"path": "scripts/legacy", "tracked": True}, report["collisions"]
+            )
+
+    def test_retrofit_keeps_a_path_whose_name_begins_with_a_space(self) -> None:
+        """Stripping a `-z` listing eats the first path's leading whitespace.
+
+        A path git itself cannot name unquoted is exactly the one a collision
+        check must still see, so the listing is read without being trimmed.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "spaced"
+            destination.mkdir()
+            subprocess.run(["git", "init", "-q", str(destination)], check=True)
+            (destination / " lead.txt").write_text("first when sorted\n")
+            subprocess.run(["git", "add", "-A"], cwd=destination, check=True)
+
+            self.assertEqual(preflight.listed_paths(destination), [" lead.txt"])
 
     def test_retrofit_refuses_a_destination_that_is_not_a_repository(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

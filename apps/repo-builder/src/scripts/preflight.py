@@ -10,7 +10,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import NoReturn
 from urllib.parse import urlparse
 
@@ -115,6 +115,12 @@ def branch_tips(repository: Path, branch: str) -> list[tuple[str, str]]:
     ever checking it out -- neither of which is a commit off the mainline.
     Reading only the remote ref would refuse a commit not yet pushed. Both are
     offered, and the caller accepts a commit on either.
+
+    A plain branch name is the whole of the input, narrower than the arbitrary
+    rev an earlier `resolve_commit` call took: `origin/main`, a tag, and `HEAD`
+    are all refused here. A generate records its source as the base every later
+    update diffs from, and an update targets a branch, so a tag or a detached
+    `HEAD` names no lineage an update could follow back.
     """
     tips: list[tuple[str, str]] = []
     for reference in (f"refs/remotes/origin/{branch}", f"refs/heads/{branch}"):
@@ -144,6 +150,7 @@ def require_on_branch(repository: Path, commit: str, branch: str) -> str:
             f"template branch {branch} resolves to no ref in {repository}; "
             "fetch it before generating"
         )
+    declined: list[str] = []
     for reference, tip in tips:
         ancestry = run_git(
             repository, "merge-base", "--is-ancestor", commit, tip, check=False
@@ -152,13 +159,17 @@ def require_on_branch(repository: Path, commit: str, branch: str) -> str:
             return tip
         # Exit 1 is the answer "no"; anything else is git declining to answer,
         # and reporting that as a commit off the branch sends the operator to
-        # re-pin a commit when the repository is what needs attention.
+        # re-pin a commit when the repository is what needs attention. The
+        # refusal waits until every ref has been tried: one ref git cannot read
+        # is not a reason to ignore another that answers.
         if ancestry.returncode != 1:
             detail = ancestry.stderr.strip() or "git could not determine ancestry"
-            raise PreflightError(
-                f"git could not determine whether {commit} is on {reference} "
-                f"in {repository}: {detail}"
-            )
+            declined.append(f"{reference}: {detail}")
+    if declined:
+        raise PreflightError(
+            f"git could not determine whether {commit} is on {branch} in "
+            f"{repository}: {'; '.join(declined)}"
+        )
     resolved = ", ".join(f"{reference} {tip}" for reference, tip in tips)
     raise PreflightError(
         f"source commit {commit} is not on {branch} ({resolved}); a generate records "
@@ -659,19 +670,71 @@ def require_tracked_clean(destination: Path) -> None:
         )
 
 
+def nul_fields(repository: Path, *arguments: str) -> list[str]:
+    """Read a `-z` listing without touching the paths it holds.
+
+    `git_output` strips the whole output, which eats a leading space off the
+    first path and a trailing one off the last. Only the empty field after the
+    final separator is dropped here, so a path that is itself whitespace
+    survives -- and a path git cannot name is a path a collision check must
+    still see.
+    """
+    output = run_git(repository, *arguments).stdout
+    return [entry for entry in output.split("\0") if entry]
+
+
 def tree_paths(repository: Path, commit: str, subtree: str) -> list[str]:
-    output = git_output(
+    entries = nul_fields(
         repository, "ls-tree", "-r", "--name-only", "-z", commit, "--", subtree
     )
     prefix = f"{subtree.rstrip('/')}/"
-    return sorted(
-        entry.removeprefix(prefix) for entry in output.split("\0") if entry.strip()
-    )
+    return sorted(entry.removeprefix(prefix) for entry in entries)
 
 
 def listed_paths(destination: Path, *arguments: str) -> list[str]:
-    output = git_output(destination, "ls-files", "-z", *arguments)
-    return [entry for entry in output.split("\0") if entry.strip()]
+    return nul_fields(destination, "ls-files", "-z", *arguments)
+
+
+def default_branch(destination: Path) -> str:
+    """The branch a clone treats as its default, not the one it is sitting on.
+
+    A retrofit runs against a checkout the operator already had, so HEAD is
+    routinely a feature branch and reading it reports a rename is required for
+    a repository whose default branch is already the wanted one. `origin/HEAD`
+    is the local record of what the remote's default is; a clone made with
+    `--single-branch`, or one whose remote HEAD was never fetched, does not
+    carry it, and there the checked-out branch is the only answer available.
+    """
+    symbolic = run_git(
+        destination, "symbolic-ref", "--short", "refs/remotes/origin/HEAD", check=False
+    )
+    recorded = symbolic.stdout.strip()
+    if symbolic.returncode == 0 and recorded.startswith("origin/"):
+        return recorded.removeprefix("origin/")
+    return git_output(destination, "rev-parse", "--abbrev-ref", "HEAD")
+
+
+def collision(
+    path: str, present: set[str], tracked: set[str]
+) -> dict[str, object] | None:
+    """What a payload path would overwrite in the destination, if anything.
+
+    A payload file does not only collide with a destination file of the same
+    name. `ls-files` names neither a directory nor anything inside a submodule,
+    so both escape a membership test and reach a retrofit that the preflight
+    called safe: the directory fails the write outright, and the submodule
+    takes it into a foreign repository. Both are the operator's to settle.
+    """
+    if path in present:
+        return {"path": path, "tracked": path in tracked}
+    for parent in PurePosixPath(path).parents:
+        ancestor = str(parent)
+        if ancestor in present:
+            return {"path": path, "tracked": ancestor in tracked}
+    under = [entry for entry in present if entry.startswith(f"{path}/")]
+    if under:
+        return {"path": path, "tracked": any(entry in tracked for entry in under)}
+    return None
 
 
 def retrofit_preflight(arguments: argparse.Namespace) -> dict[str, object]:
@@ -711,7 +774,7 @@ def retrofit_preflight(arguments: argparse.Namespace) -> dict[str, object]:
     # work the operator kept deliberately rather than build output.
     present = tracked | set(listed_paths(destination, "--others"))
 
-    default_branch = git_output(destination, "rev-parse", "--abbrev-ref", "HEAD")
+    branch = default_branch(destination)
     return {
         "operation": "retrofit",
         "template": {
@@ -722,8 +785,8 @@ def retrofit_preflight(arguments: argparse.Namespace) -> dict[str, object]:
         "destination": {
             "path": str(destination),
             "repository": destination_identity,
-            "default_branch": default_branch,
-            "rename_required": default_branch != arguments.default_branch,
+            "default_branch": branch,
+            "rename_required": branch != arguments.default_branch,
             "path_count": len(tracked),
         },
         # --no-empty-directory keeps a directory holding nothing but ignored
@@ -744,9 +807,9 @@ def retrofit_preflight(arguments: argparse.Namespace) -> dict[str, object]:
         # from ownership rules that live in a record a retrofit writes at the
         # end, so there is nothing here to read them from.
         "collisions": [
-            {"path": path, "tracked": path in tracked}
-            for path in payload
-            if path in present
+            found
+            for found in (collision(path, present, tracked) for path in payload)
+            if found is not None
         ],
         "remote_actions_performed": False,
     }
