@@ -49,6 +49,7 @@ First prompt is a generate's only, and it is written for a reader this session n
 - Preserved: <paths or none>
 - Renamed/deleted: <paths or none>
 - Conflicted: <paths and competing intents, or none>
+- Overridden: <path>: <the recorded reason the destination's version was chosen> | expired, payload landed and entry dropped (<paths>) | none
 
 ### Application boundaries
 - <deployable>: choke point <constraint, or "none bound; time-to-working-code"> -> <language>, <selected from list | reasoned from the seam contract | measured against it>
@@ -73,7 +74,7 @@ First prompt is a generate's only, and it is written for a reader this session n
 One line per check, from `scripts/summarize <command>` rather than from a filter built for the occasion.
 
 - `<exact command>`: pass | fail | unavailable (<reason>)
-- Copied paths byte-identical to their source: <count>/<count>; the rest are the authored surface, under File list
+- Copied paths byte-identical to their source: <count>/<count>; the rest are the authored surface, under File list. An overridden path is in neither count, since the flow never wrote it; it is named under Reconciliation with its reason
 - Code review: skipped, as [Reviewing the pull request](#reviewing-the-pull-request) directs
 - Default branch after merge: <check-suite result> | n/a (nothing merged)
 
