@@ -97,6 +97,17 @@ A payload path a flow did not land, because the destination's own version was
 chosen over it.
 _Avoid_: skipped file, collision, exception
 
+**Superseded path**:
+A destination path a flow removed because the payload now carries what it did.
+The inverse of an overridden path: there the destination's version won, here the
+payload's did and the destination's is gone.
+_Avoid_: replaced file, deleted file, clobbered
+
+**Retired**:
+Of a superseded gate script: deleted with its callers repointed at the payload
+command covering it, so the behaviour survives under a different name.
+_Avoid_: removed, dropped, deprecated
+
 **Candidate**:
 The working copy of a destination a flow builds and measures before publishing
 anything. It is not the destination: the destination is what the pull request

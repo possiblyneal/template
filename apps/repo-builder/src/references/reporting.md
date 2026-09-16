@@ -49,6 +49,8 @@ First prompt is a generate's only, and it is written for a reader this session n
 - Preserved: <paths or none>
 - Renamed/deleted: <paths or none>
 - Conflicted: <paths and competing intents, or none>
+- Superseded (generate into existing content only): <path>: <what it did> -> <the payload path or check now carrying it> | retired, callers repointed (<caller paths>) | none
+- Partially covered, not cut: <script path>: <the parts the check surface already does> | none
 
 ### Application boundaries
 - <deployable>: choke point <constraint, or "none bound; time-to-working-code"> -> <language>, <selected from list | reasoned from the seam contract | measured against it>
@@ -67,7 +69,7 @@ First prompt is a generate's only, and it is written for a reader this session n
 - <setting>: enabled | unavailable (<reason>) | not requested
 - Drift (update and adopt): <setting>: <current> -> <proposed>: patched | declined by user | none found | not checked (<reason>)
 - Merge settings overwritten (generate into existing content only): <setting>: <prior value> -> <applied value> | declined by user, recorded in `generation.features`
-- Issue tracker: <GitHub | GitLab | local markdown | other>, recorded in `docs/agents/issue-tracker.md`, shipped by the payload | written by `/setup-matt-pocock-skills` | kept from the destination; triage labels: created (<names>) | already present | none created (<reason>)
+- Issue tracker: <GitHub | GitLab | local markdown | other>, recorded in `docs/agents/issue-tracker.md`, shipped by the payload | written by `/setup-matt-pocock-skills` | kept from the destination; labels: created (<names>) | renamed to the payload's spelling (<old -> new>; label search is case-sensitive, so anything pinned to the old string stops matching) | already present | none created (<reason>)
 
 ### Verification
 One line per check, from `scripts/summarize <command>` rather than from a filter built for the occasion.
@@ -91,8 +93,9 @@ hooks, and without them commits land unattributed and unchecked — then read th
 The plan of record is <the issue tracker named in docs/agents/issue-tracker.md>, not this
 message. Open tickets: <count>. First with no open blocker: <#n — title>. Start there.
 
-Expected initial state, not defects: <the red codeql run on a private repository | the
-absent root manifest scripts/doctor fails on | none>.
+Expected initial state, not defects: <the absent root manifest scripts/doctor fails on |
+the three workflow files a private repository takes, codeql.yml stripped and recorded |
+none>.
 
 The first root manifest owes the checks their tools: <the declarations for the selected
 language, from lifecycle.md "Tools the first manifest must declare" | none — <language>

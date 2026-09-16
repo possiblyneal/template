@@ -38,6 +38,10 @@ Every built repository tracks `.repo-template.json`:
     },
     "overrides": [
       {"path": "docs/agents/issue-tracker.md", "reason": "destination tracks issues outside GitHub"}
+    ],
+    "superseded": [
+      {"path": ".github/workflows/lint.yml", "did": "ran eslint on push", "by": "ci.yml"},
+      {"path": "scripts/lint.sh", "did": "eslint over src/", "by": "scripts/check", "retired": true}
     ]
   },
   "ownership": [
@@ -110,6 +114,42 @@ An **overridden path** is a payload path a flow did not land, because the destin
 - **An entry expires with the thing it records.** Where the destination has deleted its own version of an overridden path, the override has nothing left to protect: the update lands the payload's copy and drops the entry, both in the same pull request. A record outliving its subject is how the payload's file stays permanently absent for a reason nobody holds any more.
 - An overridden path was never written, so it is absent from the copy proof [Reviewing the pull request](reporting.md#reviewing-the-pull-request) runs, and belongs to neither the copied set nor the authored surface. Name it as overridden in the report instead, with its reason.
 
+## The automation directory is replaced, not reconciled
+
+The payload's automation is a guarantee the template makes about every repository built from it, so it is not a collision to decide per file. `.github/` is replaced whole — `workflows/`, `actions/`, `dependabot.yml`, `zizmor.yml`, `ISSUE_TEMPLATE/`, and `PULL_REQUEST_TEMPLATE.md` — and the destination's version of that tree does not survive the flow. Reconciling it per file produces a repository whose CI is half the template's and half something else, which is the one state no later update can reason about: the template's guarantee is that these files are the payload's, and a merged `ci.yml` satisfies nothing.
+
+It follows that the replacement is not declinable, and there is no `features` entry for an owner who says no. A refusal is a refusal of the flow, not of one directory, and a record of it would describe a repository this skill did not build.
+
+**The carve-out is exactly that path prefix.** Rule 4 of [Into a repository that already has content](generate.md#into-a-repository-that-already-has-content) — never delete destination content to resolve a collision — still binds absolutely everywhere else, because nothing here is resolved as a collision. `docs/agents/` in particular is untouched by this: a destination's own agent documentation is decided per file under the collision rules the same as before, and a destination's `issue-tracker.md` still wins.
+
+The deliberate consequence, stated because it is wider than the guarantee motivating it: a destination's own `PULL_REQUEST_TEMPLATE.md` and `ISSUE_TEMPLATE/` go too. They are not CI and nothing about provenance requires replacing them; they are inside the directory the rule names, and a rule that stopped short of them would need a second exception list nobody would keep current. Name them in the report as the loss they are.
+
+Superseded content is reported, never silently dropped. Every replaced path is named with what it did, and recorded in `generation.superseded` as `{path, did, by}`:
+
+- `path` — the destination path that no longer exists.
+- `did` — what it did, in the words of whoever reads the report, so a later reader can tell a duplicate of `ci.yml` from the deploy job nobody replaced.
+- `by` — the payload path that now carries it, or the check that does.
+
+An update reads this list before treating an absent destination path as a deletion to reconcile, which is what stops it re-litigating the replacement on the next run.
+
+### Retiring a covered gate script
+
+A destination's gate scripts are not in `.github/`, so they are not replaced. They are still where duplication collects: the payload ships `scripts/check` and the six per-language capabilities behind it, and a destination that had CI has scripts doing some of the same work.
+
+- **Fully covered** — everything the script does is a capability the payload's check surface already dispatches. Retire it: delete the script, repoint every caller at the payload command, and record it in `generation.superseded` with `"retired": true`. It is a retirement rather than a deletion because the behaviour survives under a different name, which is what makes it exempt from rule 4; a caller left pointing at the old path is a broken retirement, so report the callers by path with the retirement.
+- **Partially covered** — the script does something the check surface does not, a deploy step or a repository-specific probe. It survives, and the overlap is a conflict to report: name the duplicated parts specifically, so whoever owns the script can cut them, and do not cut them here. Deciding which half of somebody's script is redundant is the policy decision this skill escalates rather than makes.
+
+## Code scanning follows visibility
+
+Code scanning is free on a public repository and unavailable on a private one. `codeql.yml` is therefore the one payload workflow whose landing is conditional, and the condition is the destination's visibility read live — `gh api "repos/<owner>/<repository>" --jq .visibility` at the moment the flow decides. No record answers this: a repository that went public after it was built has a record still saying private, and a flow reading that record strips a workflow the repository can now run.
+
+- **Public destination**: `codeql.yml` lands with the other three workflows and its run goes green. Nothing is recorded — the payload's default needs no note.
+- **Private destination**: `codeql.yml` is stripped, so the destination takes three workflow files rather than four, and `generation.features` records `"codeql": "omitted-by-choice"` with the reason inline. An omitted file and a deleted one look identical on disk; the record is the only thing that can say which it was, and it is what a later flow reads before concluding the destination dropped a workflow the template ships.
+
+Every flow that writes workflows follows this — [generate](generate.md), [update](update.md), and retrofit alike — and each cites this section rather than restating the branch.
+
+`scripts/github-parity` already reads the record the same way: a payload-only workflow is excused exactly where `generation.features` records the omission, so a private destination passes parity with three files and a destination that simply lost `codeql.yml` does not.
+
 ## Running the destination's checks
 
 Every flow runs the candidate's or the destination's own documented checks before it publishes anything. Three rules hold across all of them.
@@ -159,7 +199,7 @@ Remote execution
 - settings: Dependabot alerts/updates; push protection if available; the merge commit as the only merge method; automatic head branch deletion; main ruleset
 - settings drift: on an update or an adopt, one line per setting `scripts/repo-settings check` reported missing — current value, proposed value, exact `gh api` command — authorized separately from the push below
 - push: throwaway ruleset probe -> main, only where ruleset creation returned 201; rejection is what proves the ruleset binds, so a ruleset that was accepted without binding leaves that commit on the remote default branch
-- labels: created by step 6 — the roles `docs/agents/triage-labels.md` records plus `wayfinder:map`, and only those the repository does not already carry
+- labels: created by step 6 — the twelve `docs/agents/` names, being the roles `docs/agents/triage-labels.md` records plus `wayfinder:map` and the four `wayfinder:<type>` labels, and only those the repository does not already carry; a label the repository carries under a different case is renamed to the payload's spelling rather than created, and the rename is its own line
 - issues: map and tickets from `/wayfinder`, if the tracker doc records a hosted tracker
 - push: repo-builder/<short-target> -> generated content or template update
 - open PR: repo-builder/<short-target> -> main

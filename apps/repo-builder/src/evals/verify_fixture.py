@@ -84,6 +84,30 @@ def setup_skill_checks(candidate: Path) -> list[Check]:
     ]
 
 
+def code_scanning_check(candidate: Path, manifest: object) -> Check:
+    """`codeql.yml` lands or is stripped-and-recorded, never one without the other.
+
+    The generation evals build locally against no remote, so the live
+    visibility read the flow really makes has no answer here. What is still
+    checkable is that the two halves agree: a stripped workflow with no record
+    is indistinguishable from a workflow someone deleted, which is the whole
+    reason the record exists.
+    """
+    present = (candidate / ".github/workflows/codeql.yml").is_file()
+    features = {}
+    if isinstance(manifest, dict):
+        generation_record = manifest.get("generation", {})
+        if isinstance(generation_record, dict):
+            recorded = generation_record.get("features", {})
+            features = recorded if isinstance(recorded, dict) else {}
+    recorded_omission = "codeql" in features
+    return (
+        "code scanning coherent",
+        present != recorded_omission,
+        "codeql.yml present with no record, or stripped with the omission recorded",
+    )
+
+
 def generation(root: Path, fixture: dict[str, object]) -> list[Check]:
     candidate = root.parent / "candidate"
     report = root.parent / "report.md"
@@ -142,6 +166,7 @@ def generation(root: Path, fixture: dict[str, object]) -> list[Check]:
             ),
             "ownership reaches the root CLAUDE.md as managed",
         ),
+        code_scanning_check(candidate, manifest),
         report_check(
             report,
             "manifest declarations handed over",
@@ -233,6 +258,7 @@ def generation_multi(root: Path, fixture: dict[str, object]) -> list[Check]:
             ),
             "each app carries src and .unit.json",
         ),
+        code_scanning_check(candidate, manifest),
         (
             "placeholder app removed",
             not (candidate / "apps/app-name").exists(),
