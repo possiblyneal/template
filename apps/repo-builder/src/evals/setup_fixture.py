@@ -443,6 +443,10 @@ echo "template policy: checks are always blocking"
         target_commit = commit(template, "Document the formatting command")
     elif scenario == "instructions-conflict":
         # The same instruction the destination rewrote, decided the other way.
+        # The conflicted path is the whole delta here, so "the destination is
+        # left exactly as it was" is what a stop looks like. Adding a second,
+        # appliable path to this scenario would make that expectation wrong:
+        # a stop reports every path's classification, applied ones included.
         write(
             template,
             "base-repo/CLAUDE.md",

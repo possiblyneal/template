@@ -71,18 +71,44 @@ def instructions_merged_without_conflict(text: str) -> bool:
     appears in every reconciliation summary, as the name of a line that is
     usually empty, so its presence says nothing about whether one was found.
     """
-    if "CLAUDE.md" not in text:
+    if "claude.md" not in text.lower():
         return False
-    line = re.search(r"^[-*]\s*Conflicted:\s*(.+)$", text, re.MULTILINE)
-    return bool(line) and line.group(1).strip().lower().startswith("none")
+    line = conflicted_line(text)
+    return line is not None and line.lower().startswith("none")
+
+
+def conflicted_line(text: str) -> str | None:
+    """What the report's Conflicted line lists, or None where it has none.
+
+    The label carries optional emphasis in practice, so the pattern reads
+    through it rather than anchoring on the bare word.
+    """
+    line = re.search(r"^[-*]\s*\**Conflicted:?\**:?\s*(.+)$", text, re.MULTILINE)
+    return line.group(1).strip() if line else None
 
 
 def instructions_conflict_reported(text: str) -> bool:
-    """The report names the root instructions and both sides' competing intents."""
+    """The report conflicts on the root instructions and gives both intents.
+
+    Every term here has to discriminate, because this is the only check in the
+    scenario a run that did nothing would fail. So the Conflicted line must
+    name the file rather than merely exist -- the word `conflict` appears in
+    any reconciliation summary -- and the two intents are matched loosely
+    enough that a faithful paraphrase of either still counts.
+    """
+    line = conflicted_line(text)
+    if line is None or "claude.md" not in line.lower():
+        return False
     lowered = text.lower()
-    return "claude.md" in lowered and all(
-        term in lowered for term in ("conflict", "advisory", "never skipped")
+    return "advisory" in lowered and bool(
+        re.search(r"never\s+(?:\w+\s+){0,2}skip", lowered)
     )
+
+
+def decision_requested(text: str) -> bool:
+    """The report asks for the policy decision, which is what a stop is for."""
+    lowered = text.lower()
+    return "decision" in lowered or "decide" in lowered
 
 
 def no_remote_check(candidate: Path) -> Check:
@@ -569,7 +595,8 @@ def update(root: Path, fixture: dict[str, object], scenario: str) -> list[Check]
                 ),
                 (
                     "no conflict markers",
-                    all(
+                    instructions.is_file()
+                    and all(
                         marker not in text
                         for marker in ("<<<<<<<", "=======", ">>>>>>>")
                     ),
@@ -613,13 +640,21 @@ def update(root: Path, fixture: dict[str, object], scenario: str) -> list[Check]
                 )
             )
         elif scenario == "instructions-conflict":
-            checks.append(
-                report_check(
-                    report,
-                    "instruction conflict reported",
-                    instructions_conflict_reported,
-                    "report explains both intents for the root CLAUDE.md",
-                )
+            checks.extend(
+                [
+                    report_check(
+                        report,
+                        "instruction conflict reported",
+                        instructions_conflict_reported,
+                        "report explains both intents for the root CLAUDE.md",
+                    ),
+                    report_check(
+                        report,
+                        "policy decision requested",
+                        decision_requested,
+                        "report asks for the decision that resolves the conflict",
+                    ),
+                ]
             )
         else:
             checks.extend(
