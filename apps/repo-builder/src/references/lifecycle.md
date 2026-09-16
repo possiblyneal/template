@@ -118,6 +118,8 @@ An **overridden path** is a payload path a flow did not land, because the destin
 
 The payload's automation is a guarantee the template makes about every repository built from it, so it is not a collision to decide per file. `.github/` is replaced whole (`workflows/`, `actions/`, `dependabot.yml`, `zizmor.yml`, `ISSUE_TEMPLATE/`, and `PULL_REQUEST_TEMPLATE.md`), and the destination's version of that tree does not survive the flow. Reconciling it per file produces a repository whose CI is half the template's and half something else, which is the one state no later update can reason about: the template's guarantee is that these files are the payload's, and a merged `ci.yml` satisfies nothing.
 
+`codeql.yml` is the one path inside the prefix that this does not settle: whether it lands at all is decided by [Code scanning follows visibility](#code-scanning-follows-visibility), and only then is it replaced like the rest.
+
 It follows that the replacement is not declinable, and there is no `features` entry for an owner who says no. A refusal is a refusal of the flow, not of one directory, and a record of it would describe a repository this skill did not build.
 
 **The carve-out is exactly that path prefix.** Rule 4 of [Into a repository that already has content](generate.md#into-a-repository-that-already-has-content), never delete destination content to resolve a collision, still binds absolutely everywhere else, because nothing here is resolved as a collision. `docs/agents/` in particular is untouched by this: a destination's own agent documentation is decided per file under the collision rules the same as before, and a destination's `issue-tracker.md` still wins.
@@ -201,7 +203,7 @@ Remote execution
 - settings: Dependabot alerts/updates; push protection if available; the merge commit as the only merge method; automatic head branch deletion; main ruleset
 - settings drift: on an update or an adopt, one line per setting `scripts/repo-settings check` reported missing — current value, proposed value, exact `gh api` command — authorized separately from the push below
 - push: throwaway ruleset probe -> main, only where ruleset creation returned 201; rejection is what proves the ruleset binds, so a ruleset that was accepted without binding leaves that commit on the remote default branch
-- labels: created by step 6 — the twelve `docs/agents/` names, being the roles `docs/agents/triage-labels.md` records plus `wayfinder:map` and the four `wayfinder:<type>` labels, and only those the repository does not already carry; a label the repository carries under a different case is renamed to the payload's spelling rather than created, and the rename is its own line
+- labels: created by step 6 — the twelve `docs/agents/` names, being the roles `docs/agents/triage-labels.md` records plus `wayfinder:map` and the four `wayfinder:<type>` labels, and only those the repository does not already carry; where the payload's file is the one in force, a label the repository carries under a different case is renamed to the payload's spelling rather than created, and the rename is its own line
 - issues: map and tickets from `/wayfinder`, if the tracker doc records a hosted tracker
 - push: repo-builder/<short-target> -> generated content or template update
 - open PR: repo-builder/<short-target> -> main
