@@ -23,6 +23,8 @@ Develops the `/repo-builder` skill, which builds a repository from the payload a
 
 **`ships.kind` is `none` because the vocabulary has no word for this.** The three kinds are `executable`, `quadlet`, and `none`, and a symlinked skill is none of them. Adding a fourth means editing `scripts/structure`, which is mirrored into the payload, so every generated repository would gain a kind it has no unit to use; `docs/adrs/0001-declare-unit-delivery-as-two-facts.md` gates the declaration's shape. `none` here reads as "nothing this repository's packaging adapters build", which is accurate — `scripts/install` is what delivers it.
 
+**The retrofit fixture copies the payload's real layout audit.** `src/evals/setup_fixture.py` reads `scripts/structure` and `scripts/libs/result.sh` out of `apps/github-repository-template/src/base-repo/` rather than writing a stand-in, because a retrofit is scored on its destination's own check surface and a hand-written audit would prove nothing about the rules this template actually enforces. Moving either payload path breaks the two retrofit scenarios.
+
 **Two root-level checks name paths inside this unit**, and moving a file here breaks them silently rather than loudly: the `addon-adoption` pre-commit hook's `entry`, and `testpaths` in the root `pyproject.toml`. The root `pyproject.toml` exists for this unit's Python; it is root-only and never mirrored into the payload.
 
 ## Work Guidance

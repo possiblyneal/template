@@ -159,6 +159,65 @@ echo "preflight ok"
     )
 
 
+TEMPLATE_ROOT = Path(__file__).resolve().parents[4]
+PAYLOAD_ROOT = TEMPLATE_ROOT / "apps/github-repository-template/src/base-repo"
+
+RETROFIT_CHECK = """#!/usr/bin/env bash
+set -euo pipefail
+
+# The fixture's whole check surface: the layout audit, then the tests, in the
+# Result shape scripts/libs/result.sh defines. A retrofit's bar is this file,
+# so it is the real audit and the real suite rather than an echo.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+# shellcheck source=libs/result.sh
+source "$repo_root/scripts/libs/result.sh"
+
+scripts/structure || result_failed=1
+
+tests=()
+while IFS= read -r path; do
+  tests+=("$path")
+done < <(git ls-files 'test_*.py' '*/test_*.py')
+
+if (( ${#tests[@]} == 0 )); then
+  result test not-applicable "no test file"
+elif ! grep -q '^test = "unittest"$' pyproject.toml 2> /dev/null; then
+  # A tool the root manifest never declared did not run, and a check that did
+  # not run is not a check that passed.
+  result test unavailable "the root manifest declares no test tool"
+else
+  for path in "${tests[@]}"; do
+    python3 "$path" > /dev/null 2>&1 || record "$path: the suite failed"
+  done
+  verdict test "every test file passes"
+fi
+
+tally
+"""
+
+
+def retrofit_payload(repo: Path) -> None:
+    """The payload additions that make a retrofit fixture checkable.
+
+    The real layout audit and the result library it sources, copied from the
+    payload this repository ships, plus a check surface that runs them. A
+    hand-written stand-in would audit a shape nobody enforces, and then "the
+    audit fails before the moves and passes after" would prove nothing.
+    """
+    for relative in ("scripts/structure", "scripts/libs/result.sh"):
+        source = PAYLOAD_ROOT / relative
+        write(
+            repo,
+            f"base-repo/{relative}",
+            source.read_text(encoding="utf-8"),
+            executable=source.stat().st_mode & 0o100 != 0,
+        )
+    write(repo, "base-repo/scripts/check", RETROFIT_CHECK, executable=True)
+
+
 def addon_payload(repo: Path) -> None:
     write(
         repo,
@@ -539,6 +598,124 @@ def build_adopt(root: Path) -> dict[str, object]:
     }
 
 
+RATES_SOURCE = '''"""Interest rates, as the ledger states them."""
+
+
+def monthly_rate(annual: float) -> float:
+    """The annual rate spread across the twelve months that charge it."""
+    return annual / {divisor}
+'''
+
+RATES_TEST = '''"""The ledger's own suite, run from wherever the file sits.
+
+The source tree is found relative to this file rather than from the repository
+root, so the suite passes both before the retrofit moves it and after.
+"""
+
+import sys
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from ledger.rates import monthly_rate  # noqa: E402
+
+
+class MonthlyRateTests(unittest.TestCase):
+    def test_spreads_the_annual_rate_across_twelve_months(self) -> None:
+        self.assertAlmostEqual(monthly_rate(0.12), 0.01)
+
+
+if __name__ == "__main__":
+    unittest.main()
+'''
+
+
+def create_retrofit_destination(root: Path, red: bool) -> tuple[Path, Path]:
+    """A repository that grew without the template: foreign, and checkable.
+
+    Foreign in the ways the flow has to reconcile -- source and tests at the
+    root, a root folder nobody granted, a script in the wrong language, records
+    at the singular path, and a manifest declaring no tools -- and checkable in
+    that its suite really passes and the layout audit really has something to
+    fail on. `red` adds the debt the layout work does not fix: a root file that
+    cannot move anywhere, and arithmetic that was wrong before this flow
+    arrived and is wrong after it.
+    """
+    remote = root / "destination.git"
+    destination = root / "destination"
+    init_repo(remote, bare=True)
+    init_repo(destination)
+
+    write(destination, "src/ledger/__init__.py", "")
+    write(
+        destination,
+        "src/ledger/rates.py",
+        RATES_SOURCE.format(divisor=10 if red else 12),
+    )
+    write(destination, "tests/test_rates.py", RATES_TEST)
+    write(
+        destination,
+        "scripts/build.py",
+        '#!/usr/bin/env python3\n"""Build the ledger wheel."""\n\nprint("built")\n',
+        executable=True,
+    )
+    write(
+        destination,
+        "pyproject.toml",
+        '[project]\nname = "ledger"\nversion = "0.1.0"\n',
+    )
+    write(
+        destination,
+        "docs/adr/0001-one-ledger-per-currency.md",
+        "# One ledger per currency\n\nEvery currency keeps its own ledger.\n",
+    )
+    write(
+        destination,
+        "notes/architecture.md",
+        "# Architecture\n\nThe scripts live at the repository root, beside the"
+        " source tree they build.\n",
+    )
+    write(destination, "README.md", "# ledger\n\nInterest and dunning.\n")
+    if red:
+        write(
+            destination,
+            "Makefile",
+            "build:\n\tpython3 scripts/build.py\n",
+        )
+    commit(destination, "Initialize the ledger")
+    run(destination, "remote", "add", "origin", str(remote.resolve()))
+    run(destination, "push", "-u", "origin", "main")
+    return destination, remote
+
+
+def build_retrofit(root: Path, scenario: str) -> dict[str, object]:
+    template = root / "template"
+    init_repo(template)
+    template_payload(template)
+    retrofit_payload(template)
+    addon_payload(template)
+    target = commit(template, "Add base repository payload and repository addons")
+
+    destination, remote = create_retrofit_destination(
+        root, red=scenario == "retrofit-red"
+    )
+    return {
+        "scenario": scenario,
+        "template_repo": str(template),
+        "subtree": "base-repo",
+        "target_commit": target,
+        "destination": str(destination),
+        "destination_remote": str(remote),
+        # The blobs the layout step moves rather than writes. A retrofit proves
+        # a move is a move, so the scorer needs what the file was beforehand.
+        "moved_hashes": {
+            "src/ledger/rates.py": sha256(destination / "src/ledger/rates.py"),
+            "tests/test_rates.py": sha256(destination / "tests/test_rates.py"),
+        },
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -554,6 +731,8 @@ def main() -> int:
             "unrelated",
             "conflict",
             "adopt",
+            "retrofit",
+            "retrofit-red",
         ),
     )
     parser.add_argument("output", type=Path)
@@ -574,6 +753,8 @@ def main() -> int:
             details = build_generation(output, args.scenario)
         elif args.scenario == "adopt":
             details = build_adopt(output)
+        elif args.scenario in ("retrofit", "retrofit-red"):
+            details = build_retrofit(output, args.scenario)
         else:
             details = build_update(output, args.scenario)
     except subprocess.CalledProcessError as error:
