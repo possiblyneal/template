@@ -18,7 +18,7 @@ Read [`lifecycle.md`](lifecycle.md) first — the manifest, ownership, check rep
 3. Copy each addon from the recorded commit out of `repository-addons/` — a sibling of the subtree, not inside it — into the candidate at its destination-relative path. Every pair is satisfied the same way, alongside the addon or already in the destination: `CONTRIBUTORS.md` with `.all-contributorsrc`, `CHANGELOG.md` with `.claude/rules/changelog.md`, and `AUTHORS` with `LICENSE`. The first two are two-way, so either half asks for the other; `AUTHORS` asks for `LICENSE` and not the reverse.
 4. Run the [Addon adoption](addon-adoption.md) walkthrough for every addon taken: ask each distinct `value_key` once, fill every slot, surface each review judgement, and list each external step. Report each region as done or outstanding.
 5. Do not advance `template.commit` and do not record the addon in the manifest. Ownership already treats a later-seen adopted file as destination-added rather than a template deletion, so a subsequent update leaves it alone.
-6. Stage the candidate and run the destination's documented checks as [Running the destination's checks](lifecycle.md#running-the-destinations-checks) directs. Then prove the copied files are copies as [Reviewing the pull request](lifecycle.md#reviewing-the-pull-request) directs, and read the authored surface it leaves.
+6. Stage the candidate and run the destination's documented checks as [Running the destination's checks](lifecycle.md#running-the-destinations-checks) directs. Then prove the copied files are copies as [Reviewing the pull request](reporting.md#reviewing-the-pull-request) directs, and read the authored surface it leaves.
 
    Then run the settings check, which reports rather than gates:
 

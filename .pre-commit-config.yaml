@@ -87,6 +87,23 @@ repos:
         always_run: true
         pass_filenames: false
 
+  # The repo-builder references are prose about the payload, a tree they do not
+  # live in. Nothing links the two, so a payload edit leaves the sentences
+  # describing the old shape still reading as instruction -- and the skill acts
+  # on instruction, improvising when it looks for what it was told is there.
+  #
+  # always_run for the same reason as the hook above: the failing commit is
+  # usually the one that deleted a payload file, and a files filter never sees a
+  # deletion. Stdlib-only, so it runs here without resolving dependencies.
+  - repo: local
+    hooks:
+      - id: reference-assertions
+        name: check repo-builder references against the payload
+        entry: apps/repo-builder/src/scripts/tests/test_reference_assertions.py
+        language: script
+        always_run: true
+        pass_filenames: false
+
   - repo: local
     hooks:
       # .github/ can exist twice: a repository that ships a template payload

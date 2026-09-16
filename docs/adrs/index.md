@@ -6,3 +6,4 @@
 | --- | --- | --- |
 | [0001](0001-declare-unit-delivery-as-two-facts.md) | Declare Unit Delivery as Two Independent Facts Rather Than One Shape Name | accepted |
 | [0002](0002-ship-agent-skill-configuration-in-the-payload.md) | Ship Agent Skill Configuration in the Template Payload | accepted |
+| [0003](0003-order-the-repository-ahead-of-wayfinding.md) | Create the Destination Repository Before Wayfinding Runs, and End the Generate at Charting | accepted |

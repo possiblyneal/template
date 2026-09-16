@@ -1,6 +1,6 @@
 # Repo Builder Lifecycle Contract
 
-This file holds what is true regardless of operation: the manifest, ownership, how checks are run and reported, the remote gates, failure behavior, and the report shape. Read it, then read the one flow being performed.
+This file holds what is true regardless of operation: the manifest, ownership, how checks are run and reported, the remote gates, and failure behavior. Reviewing and reporting are a third sub-contract, held back in [`reporting.md`](reporting.md) and read at the end of a flow. Read this file, then read the one flow being performed.
 
 - [`generate.md`](generate.md) — build a repository from the payload, including into a destination that already has content
 - [`update.md`](update.md) — carry a bounded template delta into a repository already generated from it
@@ -96,6 +96,8 @@ Every flow runs the candidate's or the destination's own documented checks befor
 
 Stage the work first. A bare `pre-commit run --all-files` enumerates through the Git index, so unstaged work is checked as the empty set and reports a pass over nothing. The repository's own `scripts/check` sweeps untracked files by path after that command, but only if the payload it was built from carries that second pass — verify rather than assume it.
 
+Read the run through the repository's own `scripts/summarize`, which takes the command and prints only its Result table — `scripts/summarize scripts/check`. A filter built by hand for the occasion answers a different question than "what did every check do": `grep -iE "FAIL|error"` is the usual improvisation and it misses `unavailable`, which is equally a failing state and the one most often written into a report as a pass. It exits with the command's own status and says so when a failing exit came from something outside the table, so it stands in for the command rather than only summarizing it. A payload old enough not to ship it is the case for reading the raw output; check before assuming.
+
 Report a check by what it did, and keep the four outcomes distinct: a check that passed, one that reported nothing to do, one whose runner was missing, and one that never ran. Report a skipped or unavailable check as skipped or unavailable; do not call it a pass. The repository's own scripts make that distinction, and collapsing it in the report discards the thing they were built to preserve. A run reporting no project manifest checked nothing; a green pull request with no workflow runs verified nothing; a file that was never written cannot fail. Tools a script looks up on `PATH` may also run inside pre-commit's pinned environments, so a tool reported unavailable by a script and passing under pre-commit in the same run was not skipped; report what each surface actually did.
 
 A machine-wide `core.hooksPath` set for an unrelated purpose (an editor's own git integration, another agent's attribution hook) makes `pre-commit install` refuse outright, and breaks it again inside any throwaway fixture repository the repository's own tests spin up to exercise hook installation — fixtures inherit the same global config. Check `git config --global core.hooksPath` before treating either failure as a defect in the repository under test; a control run of the same checks against the template repository's own current HEAD reproduces an identical failure when this is the cause.
@@ -147,77 +149,6 @@ The [Wayfinding](wayfinding.md) handoff is also a stop, and the one that is not 
 
 Stop before further remote actions when semantic intent conflicts or verification fails. On a [generate](generate.md) that no longer means before any remote action at all: steps 4 and 5 have already created the repository and applied its settings, so a failure at any step from 5 to 10 leaves a real repository whose content was never published. Its default branch is the empty root commit, except after a failure at step 5 where the probe ran and was not rejected: its commit stays there. Name it, say what it already carries, and say whether resuming against it or deleting it is the next action — a stop reported as though nothing was created sends the user looking for a repository they already own. Keep `template.commit` at the previous version. Report exact paths, Git evidence, checks, and a recoverable next action. Do not approximate a missing old version, rebase unrelated template histories, reset/clean the destination, or claim a partial update succeeded.
 
-## Reviewing the pull request
+## Reviewing and reporting
 
-A pull request this skill opens is not code-reviewed. Almost all of it is the payload at the target commit, copied byte for byte, and that content was reviewed in the template repository before it merged there; reviewing it again in every generated repository re-reviews the same lines once per destination and reports the template's own judgments as findings against a repository that did not make them. Where a hook or a reviewer asks for a review of this pull request, this section is the answer to give, and the final report says the review was skipped so that a green result is not read as a review that passed.
-
-What replaces it is the check the copies actually need, which no reviewer was doing anyway: prove they are copies. Each flow runs it before its publish gate, because a check that runs once the pull request is open can no longer stop anything.
-
-For every path in the candidate diff, compare the candidate blob against the blob it was copied from and collect the paths that differ. Read the diff from the index rather than from a commit range: every flow runs this before the step that commits, so a range against `HEAD` is empty here and would report a clean `0/0` over nothing at all.
-
-```bash
-git -C "<destination>" diff --cached --name-only --diff-filter=d |
-  while read -r path; do
-    git -C "<template>" cat-file -p "<commit>:<prefix>/$path" 2> /dev/null |
-      diff -q - "<destination>/$path" > /dev/null || echo "$path"
-  done
-```
-
-`<commit>` and `<prefix>` are each flow's own. Generate and update read the payload subtree at the target commit; adopt reads `repository-addons/` at the recorded commit, which is a sibling of the subtree rather than inside it. Where the template renamed a file its two names are two paths, so read the destination path against the payload's new one. A path `cat-file` cannot find was never a copy, and belongs to the authored surface instead.
-
-What matches is the template's, already reviewed, and closed. What is left is the authored surface, short enough to read line by line. Read it that way, because it is where this skill's own mistakes land: a merge that keeps both intents can still leave a document asserting something the merge just made false, and a file the payload deletes can leave a live reference behind in destination-owned prose that no check reads. Grep the destination for every path the flow deletes or renames before calling the candidate verified.
-
-Which files make up that surface differs by flow:
-
-- **Update** — every managed file the destination had also changed and this skill hand-merged, plus `.repo-template.json`.
-- **Generate** — everything step 8 personalized: the root `CLAUDE.md` Child Index, each `apps/<name>/` and its `.unit.json`, the ADRs, and `.repo-template.json`. This surface is larger than update's and it gets no second look, because a bootstrap generate merges its own pull request under [Generate](generate.md) step 12. Read it before that merge rather than after.
-- **Adopt** — every region `addon-adoption.json` names for the addons taken. Here differing paths are the expected result rather than the exception: an addon is adopted by editing it, so byte-identity would mean the adoption never happened. Confirm that what differs is the named regions and nothing besides.
-
-Report the authored surface in **File list**, so the reader sees which lines were the template's and which were this run's.
-
-## Final report
-
-Use this stable shape. On a generate the Reconciliation lines are empty or trivially everything, and File list carries the weight — it is the only section reporting a file the payload ships and the candidate lacks, which no check can fail on. On an adopt the Template line shows the recorded commit on both sides because the pin does not move, and the Addon adoption block carries the weight. On a generate stopped at the wayfinding handoff there are no Application boundaries to report — that absence is the result; the Wayfinding line names the trigger and the map, Repository settings still reports the repository that exists, and Pending action carries the resume.
-
-```md
-## Repo Builder Result
-
-- Operation: generate | update | adopt | stopped
-- Pull request: <URL or "not created">
-- Template: <old full commit, or "not previously generated"> -> <target full commit>
-- Destination: <owner/repository>
-
-### Reconciliation
-- Applied: <paths or none>
-- Preserved: <paths or none>
-- Renamed/deleted: <paths or none>
-- Conflicted: <paths and competing intents, or none>
-
-### Application boundaries
-- <deployable>: choke point <constraint, or "none bound; time-to-working-code"> -> <language>, <selected from list | reasoned from the seam contract | measured against it>
-- Wayfinding: short form settled it | handed off to `/wayfinder` (<which trigger>), map at <URL or path> | skipped, supplied in the invocation
-- ADRs written: <paths, or none>
-
-### File list
-- <payload paths accounted for, and every difference named as intended or as a defect>
-- Authored surface: <paths whose candidate blob differs from the blob it was copied from, or none>
-
-### Addon adoption
-- <addon taken>: <slot token, review section, or external step>: filled | reviewed | done | OUTSTANDING (<what remains>)
-- <addons offered and not taken, on one line>
-
-### Repository settings
-- <setting>: enabled | unavailable (<reason>) | not requested
-- Drift (update and adopt): <setting>: <current> -> <proposed>: patched | declined by user | none found | not checked (<reason>)
-- Merge settings overwritten (generate into existing content only): <setting>: <prior value> -> <applied value> | declined by user, recorded in `generation.features`
-- Issue tracker: <GitHub | GitLab | local markdown | other>, recorded in `docs/agents/issue-tracker.md`, shipped by the payload | written by `/setup-matt-pocock-skills` | kept from the destination; triage labels: created (<names>) | already present | none created (<reason>)
-
-### Verification
-- `<exact command>`: pass | fail | unavailable (<reason>)
-- Copied paths byte-identical to their source: <count>/<count>; the rest are the authored surface, under File list
-- Code review: skipped, as [Reviewing the pull request](#reviewing-the-pull-request) directs
-- Default branch after merge: <check-suite result> | n/a (nothing merged)
-
-### Pending action
-<none, or the exact decision/authorization needed>
-```
+Both belong to the end of a flow and both are in [`reporting.md`](reporting.md): [Reviewing the pull request](reporting.md#reviewing-the-pull-request), which is how a candidate is proved to be a copy rather than code-reviewed, and [Final report](reporting.md#final-report), the shape every flow ends in. Read that file when a flow reaches its review, not before — it is a third of this contract by size and none of it bears on anything earlier.

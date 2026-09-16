@@ -5,28 +5,9 @@ Located at `./scripts` Use these instead of per-language tools; each detects the
 ## Git
 
 - Pre-commit blocks direct commits to `main` and `master`. Branch before making changes.
-- Run `scripts/check` before committing. It runs the same checks CI does, plus pre-commit across every file rather than the staged ones.
-- Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/#specification), and carry a `Generated-By: <model>` trailer. `scripts/attribute-commit` writes it at `prepare-commit-msg` by rewriting an agent's `Co-Authored-By` line; it never inserts one, so a message with no agent trailer is refused and a hand-written commit adds its own.
-- This repo adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-- Pull requests merge; they are neither squashed nor rebased.
-- Plan mode writes to `docs/plans/`, which is tracked. A plan lands in the diff alongside the code it describes.
-
-## Agent skills
-
-### Issue tracker
-
-GitHub Issues on this repository, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-The seven canonical roles, unrenamed. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context: one `CONTEXT.md` at the root once a glossary exists, ADRs in `docs/adrs/`. See `docs/agents/domain.md`.
 
 ## Child Index
 
 - `scripts/CLAUDE.md` — the language-capabilities interface, the result states, the test harness, and what adding a language or check requires
 
-The rest of this project is not yet indexed. Before continuing you must read `~/.claude/rules/documentation.md`, scan the project, build the `CLAUDE.md` tree and replace this message with the actual child index, keeping the entry above. Go deep and scan files recursively to properly evaluate complexity and create nested `CLAUDE.md` files where needed. Do not create `CLAUDE.md` files in dot folders.
+The rest of this project is not yet indexed. Before continuing you must read `~/.claude/rules/documentation.md`, scan the project, build the `CLAUDE.md` tree and replace this message with the actual child index as a bulleted list, keeping the entry above. Go deep and scan files recursively to properly evaluate complexity and create nested `CLAUDE.md` files where needed. Do not create `CLAUDE.md` files in dot folders.

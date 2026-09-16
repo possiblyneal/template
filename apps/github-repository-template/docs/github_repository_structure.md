@@ -45,7 +45,7 @@ The specific operating parameters for the AI agent.
 
 `.mcp.json`: Configures Model Context Protocol servers for this project. Ships empty.
 
-`CLAUDE.md`: The project's system prompt — conventions, commands, and context the AI needs to operate. Ships small: a pointer at `scripts/CLAUDE.md` for the commands, the Git rules, the `## Agent skills` block, and a Child Index holding the instruction to scan the tree and build the rest of it. The Layout rules live in `scripts/structure` rather than here.
+`CLAUDE.md`: The project's system prompt — conventions, commands, and context the AI needs to operate. Ships small: a pointer at `scripts/CLAUDE.md` for the commands, the branch rule, and a Child Index holding the instruction to scan the tree and build the rest of it. The Layout rules live in `scripts/structure` rather than here.
 
 `CLAUDE.local.md`: Personal, per-machine instructions loaded alongside `CLAUDE.md`, excluded by `.gitignore`. Not shipped.
 
@@ -74,6 +74,8 @@ The specific operating parameters for the AI agent.
 `scripts/detect`: Reports which languages are present in the repository and which capability adapters are wired, for use by scripts and workflows.
 
 `scripts/tests/`: Tests for the scripts themselves.
+
+`scripts/summarize`: Runs a check command and prints only its Result table — one line per check, the findings under any that failed — dropping every other thing the command wrote. Exits with that command's status, so it can stand in for the command rather than only report on it. It is the one consumer of the printed layout `scripts/libs/result.sh` documents, which is where a change to the column widths has to be reflected.
 
 `scripts/run`: Starts a unit, dispatching on the `run` fact its `.unit.json` declares — a one-shot runs the program's own entry point, a long-lived one runs the dev server, `none` exits saying there is nothing to run. Names the unit when `apps/` holds several, since a run is one foreground process; everything after `--` reaches the program unchanged.
 
