@@ -81,6 +81,18 @@ First prompt is a generate's only, and it is written for a reader this session n
 - Merge settings overwritten (generate into existing content only): <setting>: <prior value> -> <applied value> | declined by user, recorded in `generation.features`
 - Issue tracker: <GitHub | GitLab | local markdown | other>, recorded in `docs/agents/issue-tracker.md`, shipped by the payload | written by `/setup-matt-pocock-skills` | kept from the destination; labels: created (<names>) | renamed to the payload's spelling (<old -> new>; label search is case-sensitive, so anything pinned to the old string stops matching) | already present | none created (<reason>)
 
+### Hosted writes, reversible (retrofit)
+One line per write the gate authorized and performed, with the state it replaced and the command that puts it back.
+
+- <write>: was <before-state> -> <applied value>; reverse with `<exact command>` | declined by the operator (<reason>), recorded in `generation.features`
+
+### Hosted writes, irreversible (retrofit)
+Named apart from the section above, because a single block of reversal commands reads as though the whole gate can be walked back.
+
+- <write>: was <before-state> -> <applied value>; no command reverses it, and <the cost of having made it>
+- Ruleset enforcement: unproven; the probe is not performed against a live default branch, as [retrofit](retrofit.md#step-8--the-hosted-write-gate) directs
+- Permissions gap: <write>: refused without the host's upgrade message, so the credential and not the plan is the limit | none
+
 ### Verification
 One line per check, from `scripts/summarize <command>` rather than from a filter built for the occasion.
 

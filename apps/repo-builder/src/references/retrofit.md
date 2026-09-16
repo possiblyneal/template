@@ -15,8 +15,9 @@ The shared mechanics stay in [`generate.md`](generate.md) and are cited by headi
 - **Step 5 — Read the destination's units**
 - **Step 6 — Reconcile the destination's layout**
 - **Step 7 — Write the record, decide the collisions, meet the bar**
+- **Step 8 — The hosted-write gate**
 
-The steps after these — the hosted-write gate and publishing — are not written yet. A run that reaches the end of step 7 stops there and reports the candidate it built, the unit map the operator confirmed, the layout plan it applied, and the bar it measured, rather than improvising the rest against a real repository.
+The step after these — publishing, and the offer of the merge — is not written yet. A run that reaches the end of step 8 stops there and reports the candidate it built, the unit map the operator confirmed, the layout plan it applied, the bar it measured, and every hosted write it performed, rather than improvising the rest against a real repository.
 
 ### Step 1 — Resolve the source commit and preflight
 
@@ -164,6 +165,45 @@ Nothing here reaches the network. This step settles everything that has to be tr
 **The bar is the destination's own check surface passing on the candidate**, run and read by [Running the destination's checks](lifecycle.md#running-the-destinations-checks). A `FAIL` blocks and so does an `unavailable`, for the reason that section already gives: a check whose runner was missing measured nothing, and a report calling it a pass claims a guarantee the run does not hold. A `not-applicable` does not block, because a language that is not present has nothing to prove.
 
 **An unmet bar is a failed retrofit and it stops before the pull request**, naming the capability that could not pass and why. No partial retrofit is published with the gap written into the description: the destination's existing debt is fixed by its operator, on its own default branch, through their own process, and the retrofit is re-run afterwards. The fix does not ride along in the candidate, where it would arrive as this flow's change to code this flow does not own. A run stopping here has performed zero hosted writes, which is what makes re-running it cheap.
+
+### Step 8 — The hosted-write gate
+
+A **hosted write** is a change to the destination's state on the host that no pull request can carry: a repository setting, a branch name, a label, a ruleset. Every one the retrofit makes happens here, at one gate, immediately before publishing and only after step 7's bar passed. The placement is the point: a destination whose bar could not be met has had nothing done to it on the host, so re-running after the operator clears the debt costs nothing and undoes nothing.
+
+This is a deliberate divergence from [generate](generate.md), which reaches [Remote action gates](lifecycle.md#remote-action-gates) early because the repository has to exist before the map and the tracker have anywhere to live. A retrofit has no such forcing: the repository exists, the tracker is the destination's own, and nothing before this step needs the host.
+
+**The gate creates nothing.** It confirms the identity preflight already proved against the origin, and it authorizes each write by naming the exact command that performs it. **No write is performed that the gate did not list**, which is the rule the whole step is built to keep: a write discovered mid-run is a write nobody authorized.
+
+**Generate's ruleset probe is not performed.** It puts a throwaway commit on the live default branch and pushes it directly, and [Step 5 — Configure the repository settings](generate.md#step-5--configure-the-repository-settings) says what happens where the branch does not reject it: the commit becomes the default-branch tip and only a force-push removes it. Against an empty repository that is a contained risk. Against a repository with other people's clones fetching it, it is not. So existence is read back and enforcement is reported as **unproven**, which is an honest outcome; a probe reporting `verified` on a branch other people work on is not worth what it costs to get.
+
+Four writes, in this order.
+
+**1. Merge settings, in one call.** `allow_merge_commit`, `allow_squash_merge`, `allow_rebase_merge`, and `delete_branch_on_merge` go in a single `PATCH`, for the reason generate's step 5 gives: sent separately the second call can be refused after the first has landed, and a half-applied merge policy is worse than one never started. State the destination's four current values out loud before overwriting them, since this is somebody's deliberate choice being replaced. Declinable, and a refusal is recorded in `generation.features` with its reason.
+
+**2. The default-branch rename.** **Declining is a hard stop.** The payload's workflows pin the branch name literally and [the automation directory](lifecycle.md#the-automation-directory-is-replaced-not-reconciled) is replaced whole, so a destination left on the old name receives CI that never fires: green by absence, which is the one failure mode the check surface cannot report. The bar cannot be met that way, so there is nothing to publish.
+
+**An open pull request whose head is the branch being renamed is a hard stop before any write at all.** The host closes such a pull request rather than retargeting it, and the head ref is gone afterwards. Enumerate **by head ref as well as by base ref** — a list filtered on base alone misses exactly these. The stop names the real remedies and no others: merge it, close it deliberately, or copy the branch and open a fresh pull request, where the commits survive and the review conversation does not. Retargeting is not among them, because a base can be changed and a head cannot.
+
+A ruleset naming the old branch literally is **repaired in place**, rewriting the name to the new one. Switching it to a dynamic condition such as the default-branch target is rejected: it substitutes a rule the owner did not write for the one they did, under cover of fixing it.
+
+Every existing clone needs repairing too, and the gate presents the four commands rather than leaving each collaborator to work them out:
+
+```bash
+git branch -m <old> <new>
+git fetch origin
+git branch -u "origin/<new>" <new>
+git remote set-head origin -a
+```
+
+**3. Labels**, with the case-insensitive guard and the payload-spelling rename that [Remote action gates](lifecycle.md#remote-action-gates) already specifies for a generate: a label the destination carries under a different case is renamed to the payload's spelling rather than created beside it, and the rename is its own line, because label search is case-sensitive and anything pinned to the old string stops matching.
+
+**4. Security settings and the branch ruleset** — dependency alerts, security updates, push protection, and the ruleset generate creates. Declinable and recorded. Push protection refused on a private destination on a free plan is reported rather than failed, exactly as `scripts/repo-settings check` already separates the two.
+
+**A refusal carrying the host's upgrade message means the feature is not offered**, so there is nothing to repair and `not offered for the plan` is the whole finding. The same refusal **without** that message is a permissions gap, and that is a finding at the gate rather than a line in the report: it says the credential this run holds cannot do what the gate just authorized.
+
+**Every post-write verification polls rather than reading once.** The rename, the dependency summary, and the protection endpoints were all observed returning the pre-write state immediately after a write the host had accepted. A single read is how a write that succeeded gets reported as a write that did nothing.
+
+**There is no undo mechanism, so the report carries the before-state of every hosted write** and lists the writes in **two separately named sections**: the reversible ones, each with the exact command that reverses it, and the irreversible ones, each with its cost. Never one section. A single copy-pasteable block of commands reads as though the whole gate can be walked back, and a closed pull request's review conversation cannot.
 
 ## The retrofit adopts no addon
 
