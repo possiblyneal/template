@@ -52,6 +52,11 @@ First prompt is a generate's only, and it is written for a reader this session n
 - Superseded: <path>: <what it did> -> <the payload path or check now carrying it> | retired, callers repointed (<caller paths>) | none
 - Partially covered, not cut: <script path>: <the parts the check surface already does> | none
 - Overridden: <path>: <the recorded reason the destination's version was chosen> | expired, payload landed and entry dropped (<paths>) | none
+- Layout plan (retrofit): <old path> -> <new path>: moved | corrected by the operator to <path> | declined | none
+- Unmovable (retrofit): <path>: <why it could not move>; no allowlist entry written | none
+- References repaired (retrofit): <file>: <the moved path rewritten> | none
+- References reported, not rewritten (retrofit): <file>: <the prose describing the old structure> | none
+- Ignore rules not re-added (retrofit): <rule>: <what it ignored> | none
 
 ### Application boundaries
 - <deployable>: choke point <constraint, or "none bound; time-to-working-code"> -> <language>, <selected from list | reasoned from the seam contract | measured against it>

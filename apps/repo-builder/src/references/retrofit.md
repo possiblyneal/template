@@ -13,8 +13,9 @@ The shared mechanics stay in [`generate.md`](generate.md) and are cited by headi
 - **Step 3 — Overlay the payload's absent paths**
 - **Step 4 — Provision the environment and the hooks**
 - **Step 5 — Read the destination's units**
+- **Step 6 — Reconcile the destination's layout**
 
-The steps after these — reconciling the destination's layout, writing the record and deciding the collisions, the hosted-write gate, and publishing — are not written yet. A run that reaches the end of step 5 stops there and reports the candidate it built and the unit map the operator confirmed, rather than improvising the rest against a real repository.
+The steps after these — writing the record and deciding the remaining collisions, meeting the check bar, the hosted-write gate, and publishing — are not written yet. A run that reaches the end of step 6 stops there and reports the candidate it built, the unit map the operator confirmed, and the layout plan it applied, rather than improvising the rest against a real repository.
 
 ### Step 1 — Resolve the source commit and preflight
 
@@ -112,6 +113,32 @@ Written after layout settles the paths, not here, but specified here because thi
 **Existing architecture records are normalized to the payload's frontmatter**, carrying the destination's own fields across wherever they correspond to one of the payload's. The `generated` field is left empty: filling it would claim the retrofit authored a decision it only relocated, and the retrofit's own authorship is recorded in the record it writes. Records already at the payload's path are normalized the same way; the location is a separate question, settled by [Architecture records live at the root documentation path](lifecycle.md#architecture-records-live-at-the-root-documentation-path), which binds every flow and is where a record under a unit is refused.
 
 **The manifest records unit names and nothing else**, as [Manifest](lifecycle.md#manifest) directs. The run and ship facts live in the unit declarations and the evidence lives in this record; no new field is added for either.
+
+### Step 6 — Reconcile the destination's layout
+
+Step 5 produced the map and moved nothing. This step is where the destination's tree becomes the template's layout, and it has three instruments: **move** a path to where the rules put it, **repair** the configuration a move broke, and **retire** a destination artifact the payload already covers. Retiring is not a fourth thing a retrofit does to be tidy; it is part of what bringing a repository under the template means.
+
+**The complete plan is presented before a single file moves.** Every path, its destination, and which instrument applies, in one list. The operator disposes per path, and a rejection with no correction stops the retrofit exactly as a rejected unit map does: a partial layout is the one state no later run can reason about, since the audit cannot tell a move nobody wanted from a move nobody got to.
+
+**Every root scoped folder the unit map claims moves to its unit.** `libs/`, `tests/`, `scripts/`, `tools/`, `deploy/`, and `assets/` at the root mean repository-wide, and a destination that never had units put everything there by default rather than by decision. This is the only instrument that closes the scope rule, which `scripts/structure` reports `not-applicable` because whether a file sits at its own scope is a judgement about content. The audit cannot make this move and cannot check it; the unit map is what makes it decidable at all.
+
+**Documentation stays repository-wide**, even where there is exactly one unit and every other scoped folder moved under it. `scripts/adr-index` rewrites the index from a root path, so a `docs/` that followed its unit takes the records with it and out of the index, which is the failure [Architecture records live at the root documentation path](lifecycle.md#architecture-records-live-at-the-root-documentation-path) names. The records migration to that path is performed here, with the moves, rather than left to the step that writes the new record.
+
+**A readme below the root is documentation and moves with it.** It lands in the nearest owning `docs/` under a name describing what it is about, because a `README.md` inside a documentation folder is a filename that tells a reader nothing and collides with the next one that moves. The repository's own root readme is not this: it stays at the root, where it is an addon the destination already holds.
+
+**The flow writes no `.structure-allow` entry.** Across the reference repositories nothing was genuinely immovable, so an entry written by the flow would almost always be a move it declined to make, recorded as permission nobody asked for. A path that cannot be moved is reported with the reason; the operator may write the entry themselves afterwards, outside the flow, which keeps the allowlist a record of human decisions rather than of the flow's difficulties.
+
+**Configuration a move broke, the flow repairs, in the same change.** A test path, a build target, a workflow's working directory, a lint or coverage root: these are broken by the move and by nothing else, and the flow is the only party holding the mapping from old path to new. A path reference that is **exactly** a path the flow moved is rewritten. Prose describing the old structure is reported and left alone, because a sentence about where things live is a claim a rewrite cannot make true and a reader has to re-make.
+
+**An artifact is retired only when the payload covers its whole role**, judged by what the thing does in the flow it belongs to rather than by matching features off a list. [Retiring a covered gate script](lifecycle.md#retiring-a-covered-gate-script) governs the gate scripts and this step follows it for every artifact: fully covered is retired, with its callers repointed and `generation.superseded` recording it; partially covered survives as a reported conflict naming the duplicated parts specifically. The flow never leaves a destination with a capability it had before the retrofit and lacks after.
+
+**Two collisions the overlay skipped are settled here**, and both are files a destination always has.
+
+The ignore file is replaced outright. A merged ignore file is the state where nobody can say which rules the repository actually promises, and the payload's is a guarantee in the same sense the automation directory is. Destination rules the payload does not cover are **reported rather than re-added**, with the consequence stated plainly: un-ignoring a generated directory can make the candidate fail its own check surface, and where it does, the flow stops and the operator decides which rule survives. That stop is the point of reporting rather than re-adding, since a rule quietly carried across hides exactly this.
+
+The instruction file is merged, and it is re-established as one of the last steps of the whole retrofit rather than here. `CLAUDE.md` is what the destination's next agent session reads, and everything this run did — the units, the moves, the retirements, the reported rules nobody re-added — is what that session needs. Written now it describes the tree as it stood before the record and the collisions were settled, which makes it a bootstrap for work already done. So this step takes the merge as far as the layout facts and leaves the file's re-establishment to the end.
+
+**What this step promises.** For a checkable destination, `scripts/structure` passes on zero allowlist entries after it. Layout reconciliation is cheap and the check bar is expensive, and they fail for unrelated reasons, so a green audit here says nothing about whether the destination's own checks pass; that is the later step's to report.
 
 ## The retrofit adopts no addon
 
