@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from collections.abc import Callable
@@ -43,6 +44,24 @@ def report_check(
         return name, False, f"missing {report}"
     text = report.read_text(encoding="utf-8")
     return name, predicate(text), expected
+
+
+def handover_declares_python_tools(text: str) -> bool:
+    """The handover's manifest sentence names the tools, and names the right ones.
+
+    Scoped to that sentence on purpose. `"manifest"` anywhere in the report is
+    already guaranteed by the handover's own expected-initial-state line about
+    the absent root manifest, and an answer of "declares no tools" is what a
+    language owing none says -- neither could fail here, where the invocation
+    names Python. Read the sentence and require Python's own three.
+    """
+    lowered = text.lower()
+    start = lowered.find("first root manifest owes")
+    if start == -1:
+        return False
+    end = lowered.find("undeclared tool", start)
+    sentence = lowered[start : end if end != -1 else len(lowered)]
+    return all(re.search(rf"\b{tool}\b", sentence) for tool in ("ruff", "ty", "pytest"))
 
 
 def no_remote_check(candidate: Path) -> Check:
@@ -90,6 +109,8 @@ def generation(root: Path, fixture: dict[str, object]) -> list[Check]:
     manifest_path = candidate / ".repo-template.json"
     manifest = json.loads(manifest_path.read_text()) if manifest_path.is_file() else {}
     template = manifest.get("template", {}) if isinstance(manifest, dict) else {}
+    ownership = manifest.get("ownership", []) if isinstance(manifest, dict) else []
+    ownership = ownership if isinstance(ownership, list) else []
     return [
         ("manifest exists", manifest_path.is_file(), str(manifest_path)),
         (
@@ -130,6 +151,24 @@ def generation(root: Path, fixture: dict[str, object]) -> list[Check]:
             and "type: Template"
             in (candidate / "docs/adrs/0000-template.md").read_text(encoding="utf-8"),
             "docs/adrs/0000-template.md remains a template",
+        ),
+        (
+            "root instructions managed",
+            any(
+                rule.get("path") == "CLAUDE.md" and rule.get("mode") == "managed"
+                for rule in ownership
+                if isinstance(rule, dict)
+            ),
+            "ownership reaches the root CLAUDE.md as managed",
+        ),
+        report_check(
+            report,
+            "manifest declarations handed over",
+            # The candidate carries no root manifest -- generate leaves it to
+            # the first real commit -- so the obligation can only be asserted
+            # where it is stated: the handover.
+            handover_declares_python_tools,
+            "handover's manifest line names ruff, ty and pytest, the tools Python owes",
         ),
         report_check(
             report,

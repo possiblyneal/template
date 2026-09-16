@@ -25,7 +25,9 @@ Read [`lifecycle.md`](lifecycle.md) first — the manifest, ownership, check rep
    - destination changed, template did not: preserve the destination;
    - both changed in non-overlapping ways: combine both intents and verify;
    - both changed the same behavior, a changed file was deleted/renamed, or a new template path collides with product content: report the conflict and request the specific policy decision.
-5. Classify every delta path as `applied`, `preserved`, `renamed/deleted`, or `conflicted`. Do not leave conflict markers.
+
+   A delta path listed in `generation.overrides` takes none of the four, and every entry is read for expiry whether or not its path is in the delta. Both rules and the reasons behind them are at [Overridden paths](lifecycle.md#overridden-paths); this step does what that section says and adds nothing.
+5. Classify every delta path as `applied`, `preserved`, `renamed/deleted`, `overridden`, or `conflicted`. Do not leave conflict markers. Report an `overridden` path as [Overridden paths](lifecycle.md#overridden-paths) directs. A path whose override expired above is `applied`.
 6. Run the destination's documented checks as [Running the destination's checks](lifecycle.md#running-the-destinations-checks) directs. If they fail, keep the recorded commit unchanged and report the candidate diff for recovery. Then prove the copied files are copies as [Reviewing the pull request](reporting.md#reviewing-the-pull-request) directs, and read the authored surface it leaves.
 
    Then run the reconciled settings check, which reports rather than gates:

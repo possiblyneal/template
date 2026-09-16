@@ -67,9 +67,9 @@ Both walk the whole tree unasked, so an `include` naming where the Python happen
 
 ## Root dotfiles are unowned, so updates never reach them
 
-The ownership rules in `.repo-template.json` match `scripts/**`, `.github/**`, and parts of `.claude/`. No rule matches a root dotfile, and an unmatched path defaults to product.
+The ownership rules in `.repo-template.json` match `scripts/**`, `.github/**`, and parts of `.claude/`. A directory pattern reaches nothing at the root, so no rule matches a root dotfile, and an unmatched path defaults to product. `CLAUDE.md` is the one root file out of it: it carries its own named rule, because the instructions every agent session reads are worth a rule of their own.
 
-**Do:** When reconciling a template update, check `.pre-commit-config.yaml`, `.gitattributes`, `.gitignore`, `.mcp.json`, and `.worktreeinclude` by hand. Confirm a path's ownership with `preflight.classify_path` rather than assuming a broad rule covers it.
+**Do:** When reconciling a template update, check `.pre-commit-config.yaml`, `.gitattributes`, `.gitignore`, `.mcp.json`, and `.worktreeinclude` by hand. Confirm a path's ownership with `preflight.classify_path` rather than assuming a broad rule covers it. Naming a root file is what makes it managed, one rule per file.
 
 **Why:** These are the files enforcing the template's guarantees — the hook revisions carrying the secret scanner, the merge policy stopping a lockfile from being line-merged. A defect fixed in the payload silently never lands in any generated repository, and the update reports success.
 

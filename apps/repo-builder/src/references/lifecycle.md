@@ -33,13 +33,16 @@ Every built repository tracks `.repo-template.json`:
   },
   "generation": {
     "applications": ["billing-api"],
-    "visibility": "private",
     "features": {
       "codeql": "omitted-by-choice"
-    }
+    },
+    "overrides": [
+      {"path": "docs/agents/issue-tracker.md", "reason": "destination tracks issues outside GitHub"}
+    ]
   },
   "ownership": [
     {"path": ".repo-template.json", "mode": "managed"},
+    {"path": "CLAUDE.md", "mode": "managed"},
     {"path": "scripts/**", "mode": "managed"},
     {"path": ".github/**", "mode": "managed"},
     {"path": ".claude/settings.json", "mode": "managed"},
@@ -70,7 +73,7 @@ Use a full lowercase 40-character commit. `template.commit` is the last template
 
 Record generation choices that change rendered files or repository settings. Do not record timestamps, a pending target commit, destination HEAD, or duplicate file contents.
 
-Do not record what the filesystem already answers. Language and package manager are read from the manifests present, so a recorded copy is a second source of truth that only goes stale — `libs/detect.sh` answers the question at any moment and a manifest added later never updates a field. `visibility` is recorded despite being live-readable because it is an argument to repository creation, and `features` because it records which absences were deliberate: an omitted `codeql.yml` and a dropped one look identical on disk.
+Do not record what the filesystem already answers. Language and package manager are read from the manifests present, so a recorded copy is a second source of truth that only goes stale; `libs/detect.sh` answers the question at any moment and a manifest added later never updates a field. Visibility is live-readable the same way and is recorded by no flow: a repository that goes public leaves the record saying private, and every decision that turns on visibility reads it from the API at the moment it decides. `features` is the exception, because it records which absences were deliberate: an omitted `codeql.yml` and a dropped one look identical on disk.
 
 `generation.applications` lists the deployable names [Wayfinding](wayfinding.md) established, and nothing else about them. It is recorded because an update has to know that `apps/app-name` was renamed rather than deleted, which the destination tree can no longer say. The choke point and the language behind each name are not recorded here: the language is answered by the manifests present under the rule above, and the choke point is an argument rather than a fact, so it belongs in the ADR that makes it. A manifest still recording the earlier single `application_name` is left as it is — it records what that generation chose, and an update rewriting it would claim a decision the update did not make.
 
@@ -82,13 +85,31 @@ Ownership answers whether a path participates in template updates:
 - `product`: preserve automatically. If a new template path collides with product content, report the collision and stop.
 - unmatched: product-owned by default.
 
-The longest matching path wins; equal patterns are invalid. The old-to-new template delta bounds update scope. Do not edit an unrelated destination path merely because a broad ownership rule matches it.
+The longest matching path wins; equal patterns are invalid. The old-to-new template delta bounds update scope. Do not edit an unrelated destination path merely because a broad ownership rule matches it. An expired override is the one write outside that bound, and [Overridden paths](#overridden-paths) is where it is settled.
 
-Unmatched defaulting to product is the safe direction for a path the template does not ship, and the wrong one for a path it does. A file at the repository root matches no directory pattern, so `.pre-commit-config.yaml`, `.commitlintrc.yaml`, `.gitattributes`, and `.gitignore` fall through to product unless named individually — and those files carry the pinned hook revisions behind the secret scanner, the commit-message rules, and the merge policy keeping a lockfile from being line-merged. The list grows: every root file the payload adds needs a line here, or a payload fix to it lands nowhere while the update reports success. Every path the template ships needs an ownership rule that reaches it; verify with `classify_path` rather than assuming a directory pattern covers a file at the root.
+Unmatched defaulting to product is the safe direction for a path the template does not ship, and the wrong one for a path it does. A file at the repository root matches no directory pattern, so `CLAUDE.md`, `.pre-commit-config.yaml`, `.commitlintrc.yaml`, `.gitattributes`, and `.gitignore` fall through to product unless named individually, and those files carry the instructions every agent session in the destination reads, the pinned hook revisions behind the secret scanner, the commit-message rules, and the merge policy keeping a lockfile from being line-merged. The list grows: every root file the payload adds needs a line here, or a payload fix to it lands nowhere while the update reports success. Every path the template ships needs an ownership rule that reaches it; verify with `classify_path` rather than assuming a directory pattern covers a file at the root.
+
+The root `CLAUDE.md` is managed for that reason and merged rather than overwritten, which is what `managed` already means: the destination writes its own project instructions into the same file the template ships, so an update reconciles the template's change with what the destination wrote and stops only where the two say different things about the same rule.
 
 A rename or delete of a destination-modified managed file needs semantic review. Product-created files under managed directories remain untouched unless the new template introduces the same path.
 
 An adopted addon is one of those files. `CHANGELOG.md` matches no pattern and defaults to product; `.claude/rules/changelog.md` falls under the product-owned `.claude/rules/**`. Neither is a deletion to reconcile. The template never having shipped a path is not the template having removed it, and an update that reads it that way deletes a record the destination chose to keep.
+
+### Overridden paths
+
+An **overridden path** is a payload path a flow did not land, because the destination's own version was chosen over it. Ownership says whether a path participates in updates at all; an override says this particular managed path was settled once, against the payload, and the answer stands. Every flow that resolves a collision records it, in `generation.overrides`:
+
+```json
+"overrides": [
+  {"path": "docs/agents/issue-tracker.md", "reason": "destination tracks issues outside GitHub"}
+]
+```
+
+- One entry per path, with the reason the destination's version was chosen. A path with no reason is not a decision anyone can review later, and the next update has nothing to weigh the entry against.
+- An update skips a delta path listed here rather than reporting it as a conflict. That is the whole point: without the record every update re-raises the same collision and asks for a policy decision that was made once already.
+- **An entry expires with the thing it records.** Where the destination has deleted its own version of an overridden path, the override has nothing left to protect: the update lands the payload's copy and drops the entry, both in the same pull request. A record outliving its subject is how the payload's file stays permanently absent for a reason nobody holds any more. Expiry is read from the entries, not from the update's delta: a destination deleting its own version changes nothing on the template's side, so the path the rule is for is the one no delta lists.
+- Adopt neither writes nor reads an entry. It lands an addon the destination does not have, at the recorded commit, and resolves no collision, so it never meets an override. Generate and update are the flows this section binds.
+- An overridden path was never written, so it is absent from the copy proof [Reviewing the pull request](reporting.md#reviewing-the-pull-request) runs, and belongs to neither the copied set nor the authored surface. Name it as overridden in the report instead, with its reason.
 
 ## Running the destination's checks
 
@@ -99,6 +120,25 @@ Stage the work first. A bare `pre-commit run --all-files` enumerates through the
 Read the run through the repository's own `scripts/summarize`, which takes the command and prints only its Result table — `scripts/summarize scripts/check`. A filter built by hand for the occasion answers a different question than "what did every check do": `grep -iE "FAIL|error"` is the usual improvisation and it misses `unavailable`, which is equally a failing state and the one most often written into a report as a pass. It exits with the command's own status and says so when a failing exit came from something outside the table, so it stands in for the command rather than only summarizing it. A payload old enough not to ship it is the case for reading the raw output; check before assuming.
 
 Report a check by what it did, and keep the four outcomes distinct: a check that passed, one that reported nothing to do, one whose runner was missing, and one that never ran. Report a skipped or unavailable check as skipped or unavailable; do not call it a pass. The repository's own scripts make that distinction, and collapsing it in the report discards the thing they were built to preserve. A run reporting no project manifest checked nothing; a green pull request with no workflow runs verified nothing; a file that was never written cannot fail. Tools a script looks up on `PATH` may also run inside pre-commit's pinned environments, so a tool reported unavailable by a script and passing under pre-commit in the same run was not skipped; report what each surface actually did.
+
+### Tools the first manifest must declare
+
+The check surface names capabilities and dispatches per language; it reads no record and holds no exemption list beyond the template-wide one it already ships, so a repository cannot silence a check by editing a manifest field. What it does mean is that a manifest which does not declare the tool an adapter reaches for produces `NO_RUNNER`, reported as `unavailable` and failed exactly as a real failure is. The first real commit brings the root manifest and owes these declarations with it. Name them in the flow's handover, per language, including the empty ones:
+
+- **python** — `ruff`, `ty`, and `pytest`, as dependencies in `pyproject.toml`. Every one of them runs through `uv run`, so an undeclared tool is not on the resolved environment's path.
+- **node** — six `package.json` scripts rather than tools: `lint`, `format:check`, `typecheck`, `test`, `build`, `format`. The adapter checks for the script name, not for what it invokes, so the choice of linter is the repository's.
+- **kotlin** — a `ktlint` or `detekt` Gradle plugin in the build file, for lint and formatting. `test` and `build` need only the wrapper.
+- **go** — none. `go vet`, `gofmt`, `go test`, and `go build` ship with the toolchain.
+- **rust** — none. `cargo clippy`, `cargo fmt`, `cargo test`, and `cargo build` come from the toolchain and its rustup components.
+- **swift** — none. `swift format`, `swift test`, and `swift build` are the compiler's own subcommands.
+
+The empty three are stated rather than omitted: a language missing from the list reads as an oversight, and the next reader re-derives it from `libs/detect.sh`.
+
+The adapters under `scripts/libs/` are the source of truth and this list follows them; nothing checks that it still does. A renamed tool drifts here silently, so read the adapter for the language before trusting a name, and correct this list when the two disagree. It is written out anyway because the reader it is for has no repository to read the adapters in yet.
+
+Separately, the security scanners and toolchain probes are `PATH` lookups and open no manifest, so declaring them there does nothing: `govulncheck`, `cargo-audit`, `trivy`, `gitleaks`, `uv` itself, and `npm`/`pnpm`/`yarn`. Absent, they report `unavailable` whatever a manifest says.
+
+An update owes nothing here. The root manifest is product-owned and never enters an update's delta.
 
 A machine-wide `core.hooksPath` set for an unrelated purpose (an editor's own git integration, another agent's attribution hook) makes `pre-commit install` refuse outright, and breaks it again inside any throwaway fixture repository the repository's own tests spin up to exercise hook installation — fixtures inherit the same global config. Check `git config --global core.hooksPath` before treating either failure as a defect in the repository under test; a control run of the same checks against the template repository's own current HEAD reproduces an identical failure when this is the cause.
 

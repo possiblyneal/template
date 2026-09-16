@@ -44,6 +44,30 @@ class PreflightUnitTests(unittest.TestCase):
             ("product", ".claude/skills/**"),
         )
 
+    def test_a_root_file_needs_its_own_rule_to_be_managed(self) -> None:
+        """No directory pattern reaches a bare root file.
+
+        `CLAUDE.md` is the instructions every agent session in a destination
+        reads, and the broadest managed patterns the manifest carries leave it
+        product-owned -- so an update skips it and reports success, and the
+        template can never correct it anywhere. Naming it is the whole fix.
+        """
+        directories = [
+            preflight.OwnershipRule("scripts/**", "managed", 0),
+            preflight.OwnershipRule(".github/**", "managed", 1),
+        ]
+
+        self.assertEqual(
+            preflight.classify_path("CLAUDE.md", directories), ("product", None)
+        )
+        self.assertEqual(
+            preflight.classify_path(
+                "CLAUDE.md",
+                [*directories, preflight.OwnershipRule("CLAUDE.md", "managed", 2)],
+            ),
+            ("managed", "CLAUDE.md"),
+        )
+
     def test_unmatched_path_is_product_owned(self) -> None:
         self.assertEqual(
             preflight.classify_path("apps/api/main.py", []), ("product", None)
