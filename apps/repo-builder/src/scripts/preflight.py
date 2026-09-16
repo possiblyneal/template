@@ -314,6 +314,36 @@ def validate_overrides(manifest: dict[str, object]) -> dict[str, str]:
     return reasons
 
 
+def require_managed_overrides(
+    overrides: dict[str, str], rules: list[OwnershipRule]
+) -> None:
+    """Refuse an override on a path the ownership rules resolve as product.
+
+    An override records that a *managed* collision was settled in the
+    destination's favour, so an entry on a product path asserts nothing the
+    rules did not already grant. It is not merely redundant: an overridden
+    path leaves the product tally as well as the managed one, so the delta
+    summary would under-report the destination's own files with no way for a
+    reader to see why. Ownership resolves here exactly as it does in the
+    delta, unmatched path included, so the two cannot disagree about which
+    entries are legal.
+    """
+    for override_path in sorted(overrides):
+        mode, rule = classify_path(override_path, rules)
+        if mode == "managed":
+            continue
+        matched = (
+            f"ownership rule {rule} (product)"
+            if rule is not None
+            else "no ownership rule, so it is product-owned"
+        )
+        raise PreflightError(
+            f"manifest.generation.overrides names a product-owned path: "
+            f"{override_path}, matched by {matched}; an override settles a "
+            "managed collision, and a product path is the destination's already"
+        )
+
+
 def validate_manifest(
     path: Path,
 ) -> tuple[dict[str, object], list[OwnershipRule], dict[str, str]]:
@@ -368,6 +398,7 @@ def validate_manifest(
             )
         seen.add(pattern)
         rules.append(OwnershipRule(pattern, str(mode), index))
+    require_managed_overrides(overrides, rules)
     return manifest, rules, overrides
 
 
@@ -471,6 +502,43 @@ def mark_overridden(
         if reason is not None:
             change["overridden"] = True
             change["override_reason"] = reason
+
+
+def unmatched_overrides(
+    changes: list[dict[str, object]],
+    overrides: dict[str, str],
+    destination_paths: set[str],
+) -> list[dict[str, str]]:
+    """Report each recorded override the bounded delta does not reach.
+
+    An entry the delta touches is the ordinary case and is marked on the
+    change itself. What is left is an entry this update has nothing to say
+    about, and the two reasons for that are worth telling apart, because only
+    one of them ends the entry: `expired` where the destination no longer
+    holds the path, so the record is settling a collision that cannot recur
+    and the payload's version should land like any other managed delta;
+    `unreached` where the file is still there and this delta simply passed it
+    by. Both are settled from git alone -- the destination's tracked paths --
+    so neither asks the flow to re-read the manifest by hand.
+
+    A rename carries two names, and the record holds the one the destination
+    had, so both are read here for the same reason `mark_overridden` reads
+    them.
+    """
+    reached: set[str] = set()
+    for change in changes:
+        reached.add(str(change["path"]))
+        if "old_path" in change:
+            reached.add(str(change["old_path"]))
+    return [
+        {
+            "path": override_path,
+            "reason": reason,
+            "state": "unreached" if override_path in destination_paths else "expired",
+        }
+        for override_path, reason in sorted(overrides.items())
+        if override_path not in reached
+    ]
 
 
 def summarize_changes(changes: list[dict[str, object]]) -> dict[str, int]:
@@ -661,6 +729,9 @@ def update_preflight(arguments: argparse.Namespace) -> dict[str, object]:
         },
         "changes": changes,
         "summary": summarize_changes(changes),
+        "unmatched_overrides": unmatched_overrides(
+            changes, provenance.overrides, set(listed_paths(destination))
+        ),
         "remote_actions_performed": False,
     }
 

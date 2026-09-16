@@ -124,6 +124,77 @@ class PreflightUnitTests(unittest.TestCase):
             {"total": 2, "managed": 0, "product": 0, "overridden": 2},
         )
 
+    def test_an_override_on_a_managed_path_is_accepted(self) -> None:
+        rules = [preflight.OwnershipRule("scripts/**", "managed", 0)]
+
+        preflight.require_managed_overrides({"scripts/check": "kept"}, rules)
+
+    def test_an_override_on_a_product_path_names_the_rule(self) -> None:
+        rules = [
+            preflight.OwnershipRule("scripts/**", "managed", 0),
+            preflight.OwnershipRule("apps/**", "product", 1),
+        ]
+
+        with self.assertRaisesRegex(
+            preflight.PreflightError, r"apps/api/main\.py.*apps/\*\*"
+        ):
+            preflight.require_managed_overrides({"apps/api/main.py": "ours"}, rules)
+
+    def test_an_override_on_an_unmatched_path_reads_as_product_too(self) -> None:
+        """A path no rule matches is product-owned, here as it is in the delta."""
+        with self.assertRaisesRegex(preflight.PreflightError, "no ownership rule"):
+            preflight.require_managed_overrides({"README.md": "ours"}, [])
+
+    def test_an_override_the_delta_reaches_is_not_reported_as_unmatched(self) -> None:
+        changes = preflight.parse_name_status(
+            "M\0base-repo/scripts/check\0",
+            "base-repo",
+            [preflight.OwnershipRule("scripts/**", "managed", 0)],
+        )
+
+        self.assertEqual(
+            preflight.unmatched_overrides(
+                changes, {"scripts/check": "kept"}, {"scripts/check"}
+            ),
+            [],
+        )
+
+    def test_an_override_the_delta_never_reaches_is_reported_with_its_state(
+        self,
+    ) -> None:
+        """Expired where the destination dropped its version, unreached otherwise."""
+        changes = preflight.parse_name_status(
+            "M\0base-repo/scripts/check\0",
+            "base-repo",
+            [preflight.OwnershipRule("scripts/**", "managed", 0)],
+        )
+
+        self.assertEqual(
+            preflight.unmatched_overrides(
+                changes,
+                {"scripts/legacy": "kept", "CLAUDE.md": "kept"},
+                {"scripts/check", "scripts/legacy"},
+            ),
+            [
+                {"path": "CLAUDE.md", "reason": "kept", "state": "expired"},
+                {"path": "scripts/legacy", "reason": "kept", "state": "unreached"},
+            ],
+        )
+
+    def test_an_override_on_a_renamed_path_is_reached_under_its_old_name(self) -> None:
+        changes = preflight.parse_name_status(
+            "R100\0base-repo/scripts/legacy\0base-repo/scripts/preflight\0",
+            "base-repo",
+            [preflight.OwnershipRule("scripts/**", "managed", 0)],
+        )
+
+        self.assertEqual(
+            preflight.unmatched_overrides(
+                changes, {"scripts/legacy": "kept"}, {"scripts/legacy"}
+            ),
+            [],
+        )
+
     def test_overrides_are_optional_until_a_collision_is_resolved(self) -> None:
         self.assertEqual(preflight.validate_overrides({"generation": {}}), {})
 
