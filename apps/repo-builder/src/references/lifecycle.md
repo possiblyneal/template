@@ -116,15 +116,17 @@ An **overridden path** is a payload path a flow did not land, because the destin
 
 ## The automation directory is replaced, not reconciled
 
-The payload's automation is a guarantee the template makes about every repository built from it, so it is not a collision to decide per file. `.github/` is replaced whole — `workflows/`, `actions/`, `dependabot.yml`, `zizmor.yml`, `ISSUE_TEMPLATE/`, and `PULL_REQUEST_TEMPLATE.md` — and the destination's version of that tree does not survive the flow. Reconciling it per file produces a repository whose CI is half the template's and half something else, which is the one state no later update can reason about: the template's guarantee is that these files are the payload's, and a merged `ci.yml` satisfies nothing.
+The payload's automation is a guarantee the template makes about every repository built from it, so it is not a collision to decide per file. `.github/` is replaced whole (`workflows/`, `actions/`, `dependabot.yml`, `zizmor.yml`, `ISSUE_TEMPLATE/`, and `PULL_REQUEST_TEMPLATE.md`), and the destination's version of that tree does not survive the flow. Reconciling it per file produces a repository whose CI is half the template's and half something else, which is the one state no later update can reason about: the template's guarantee is that these files are the payload's, and a merged `ci.yml` satisfies nothing.
+
+`codeql.yml` is the one path inside the prefix that this does not settle: whether it lands at all is decided by [Code scanning follows visibility](#code-scanning-follows-visibility), and only then is it replaced like the rest.
 
 It follows that the replacement is not declinable, and there is no `features` entry for an owner who says no. A refusal is a refusal of the flow, not of one directory, and a record of it would describe a repository this skill did not build.
 
-**The carve-out is exactly that path prefix.** Rule 4 of [Into a repository that already has content](generate.md#into-a-repository-that-already-has-content) — never delete destination content to resolve a collision — still binds absolutely everywhere else, because nothing here is resolved as a collision. `docs/agents/` in particular is untouched by this: a destination's own agent documentation is decided per file under the collision rules the same as before, and a destination's `issue-tracker.md` still wins.
+**The carve-out is exactly that path prefix.** Rule 4 of [Into a repository that already has content](generate.md#into-a-repository-that-already-has-content), never delete destination content to resolve a collision, still binds absolutely everywhere else, because nothing here is resolved as a collision. `docs/agents/` in particular is untouched by this: a destination's own agent documentation is decided per file under the collision rules the same as before, and a destination's `issue-tracker.md` still wins.
 
-The deliberate consequence, stated because it is wider than the guarantee motivating it: a destination's own `PULL_REQUEST_TEMPLATE.md` and `ISSUE_TEMPLATE/` go too. They are not CI and nothing about provenance requires replacing them; they are inside the directory the rule names, and a rule that stopped short of them would need a second exception list nobody would keep current. Name them in the report as the loss they are.
+The deliberate consequence, stated because it is wider than the guarantee motivating it: a destination's own `PULL_REQUEST_TEMPLATE.md` and `ISSUE_TEMPLATE/` go too. They are not CI and nothing about provenance requires replacing them; they are inside the directory the rule names, and a rule that stopped short of them would need a second exception list nobody would keep current. Name them in the report as the loss they are. Where the destination had a `.github/PULL_REQUEST_TEMPLATE/` directory of its own, [addon adoption](addon-adoption.md) offers the payload's `release.md` and `hotfix.md` back afterwards; say so in the same report line, so the loss and the offer are read together rather than as two unrelated events.
 
-Superseded content is reported, never silently dropped. Every replaced path is named with what it did, and recorded in `generation.superseded` as `{path, did, by}`:
+Superseded content is reported, never silently dropped. Every superseded path is named with what it did, and recorded in `generation.superseded` as `{path, did, by}`:
 
 - `path` — the destination path that no longer exists.
 - `did` — what it did, in the words of whoever reads the report, so a later reader can tell a duplicate of `ci.yml` from the deploy job nobody replaced.
@@ -141,14 +143,16 @@ A destination's gate scripts are not in `.github/`, so they are not replaced. Th
 
 ## Code scanning follows visibility
 
-Code scanning is free on a public repository and unavailable on a private one. `codeql.yml` is therefore the one payload workflow whose landing is conditional, and the condition is the destination's visibility read live — `gh api "repos/<owner>/<repository>" --jq .visibility` at the moment the flow decides. No record answers this: a repository that went public after it was built has a record still saying private, and a flow reading that record strips a workflow the repository can now run.
+Code scanning is free on a public repository and unavailable on a private one. `codeql.yml` is therefore the one payload workflow whose landing is conditional, and the condition is the destination's visibility read live with `gh api "repos/<owner>/<repository>" --jq .visibility` at the moment the flow decides. No record answers this: a repository that went public after it was built has a record still saying private, and a flow reading that record strips a workflow the repository can now run.
 
-- **Public destination**: `codeql.yml` lands with the other three workflows and its run goes green. Nothing is recorded — the payload's default needs no note.
-- **Private destination**: `codeql.yml` is stripped, so the destination takes three workflow files rather than four, and `generation.features` records `"codeql": "omitted-by-choice"` with the reason inline. An omitted file and a deleted one look identical on disk; the record is the only thing that can say which it was, and it is what a later flow reads before concluding the destination dropped a workflow the template ships.
+- **Public destination**: `codeql.yml` lands with the other three workflows and its run goes green. Nothing is recorded; the payload's default needs no note.
+- **Private destination**: `codeql.yml` is stripped, so the destination takes one workflow file fewer than the payload ships, and `generation.features` records `"codeql": "omitted-by-choice"`. An omitted file and a deleted one look identical on disk; the record is the only thing that can say which it was, and it is what a later flow reads before concluding the destination dropped a workflow the template ships.
 
-Every flow that writes workflows follows this — [generate](generate.md), [update](update.md), and retrofit alike — and each cites this section rather than restating the branch.
+The value is exactly the string `omitted-by-choice` and carries no reason: `scripts/github-parity` selects on `.value == "omitted-by-choice"`, so a reason folded into the value fails that match silently and the omission stops being excused. The reason goes in the report instead.
 
-`scripts/github-parity` already reads the record the same way: a payload-only workflow is excused exactly where `generation.features` records the omission, so a private destination passes parity with three files and a destination that simply lost `codeql.yml` does not.
+Every flow that writes workflows follows this: [generate](generate.md), [update](update.md), and retrofit alike, each citing this section rather than restating the branch. [Adopt](adopt.md) is absent because it writes no workflow at all, landing only the addons `addon-adoption.json` names.
+
+`scripts/github-parity` reads the record the same way in this repository, which is the one place it runs against a payload: a payload-only workflow is excused exactly where `generation.features` records the omission, and a repository that simply lost `codeql.yml` is not. In a generated repository there is no payload tree to compare against and the check reports `not-applicable`, so nothing there enforces this and the record is read by the flows alone.
 
 ## Running the destination's checks
 
@@ -213,7 +217,7 @@ Remote execution
 - settings: Dependabot alerts/updates; push protection if available; the merge commit as the only merge method; automatic head branch deletion; main ruleset
 - settings drift: on an update or an adopt, one line per setting `scripts/repo-settings check` reported missing — current value, proposed value, exact `gh api` command — authorized separately from the push below
 - push: throwaway ruleset probe -> main, only where ruleset creation returned 201; rejection is what proves the ruleset binds, so a ruleset that was accepted without binding leaves that commit on the remote default branch
-- labels: created by step 6 — the twelve `docs/agents/` names, being the roles `docs/agents/triage-labels.md` records plus `wayfinder:map` and the four `wayfinder:<type>` labels, and only those the repository does not already carry; a label the repository carries under a different case is renamed to the payload's spelling rather than created, and the rename is its own line
+- labels: created by step 6 — the twelve `docs/agents/` names, being the roles `docs/agents/triage-labels.md` records plus `wayfinder:map` and the four `wayfinder:<type>` labels, and only those the repository does not already carry; where the payload's file is the one in force, a label the repository carries under a different case is renamed to the payload's spelling rather than created, and the rename is its own line
 - issues: map and tickets from `/wayfinder`, if the tracker doc records a hosted tracker
 - push: repo-builder/<short-target> -> generated content or template update
 - open PR: repo-builder/<short-target> -> main

@@ -32,7 +32,7 @@ Report the authored surface in **File list**, so the reader sees which lines wer
 
 ## Final report
 
-Use this stable shape. On a generate the Reconciliation lines are empty or trivially everything, and File list carries the weight — it is the only section reporting a file the payload ships and the candidate lacks, which no check can fail on. On an adopt the Template line shows the recorded commit on both sides because the pin does not move, and the Addon adoption block carries the weight. On a generate stopped at the wayfinding handoff there are no Application boundaries to report — that absence is the result; the Wayfinding line names the trigger and the map, Repository settings still reports the repository that exists, and Pending action carries the resume.
+Use this stable shape. On a generate into an empty destination the Reconciliation lines are empty or trivially everything, and File list carries the weight; a generate into a destination that already has content fills them like any other flow, Superseded included, since it is the only section reporting a file the payload ships and the candidate lacks, which no check can fail on. On an adopt the Template line shows the recorded commit on both sides because the pin does not move, and the Addon adoption block carries the weight. On a generate stopped at the wayfinding handoff there are no Application boundaries to report — that absence is the result; the Wayfinding line names the trigger and the map, Repository settings still reports the repository that exists, and Pending action carries the resume.
 
 First prompt is a generate's only, and it is written for a reader this session never speaks to: whoever opens the first working session in a fresh clone of the new repository. Everything this session knows about that repository's initial state dies with it otherwise — which checks are red on purpose, what the tracker holds, what a clone still has to install — and the next session rediscovers each one as a defect. Emit it as a fenced block so it can be copied whole, fill every placeholder from what actually happened rather than from this shape, and drop a line whose condition did not arise rather than shipping it empty. On an update or an adopt the destination already has working sessions and there is no first prompt to write; omit the section. On a generate stopped at the wayfinding handoff the resume belongs to the operator of this session, not to a new one, so Pending action carries it and this section is still omitted.
 
@@ -49,7 +49,7 @@ First prompt is a generate's only, and it is written for a reader this session n
 - Preserved: <paths or none>
 - Renamed/deleted: <paths or none>
 - Conflicted: <paths and competing intents, or none>
-- Superseded (generate into existing content only): <path>: <what it did> -> <the payload path or check now carrying it> | retired, callers repointed (<caller paths>) | none
+- Superseded: <path>: <what it did> -> <the payload path or check now carrying it> | retired, callers repointed (<caller paths>) | none
 - Partially covered, not cut: <script path>: <the parts the check surface already does> | none
 
 ### Application boundaries
@@ -102,8 +102,8 @@ The plan of record is <the issue tracker named in docs/agents/issue-tracker.md>,
 message. Open tickets: <count>. First with no open blocker: <#n — title>. Start there.
 
 Expected initial state, not defects: <the absent root manifest scripts/doctor fails on |
-the three workflow files a private repository takes, codeql.yml stripped and recorded |
-none>.
+the workflow count a stripped codeql.yml leaves, per lifecycle.md "Code scanning follows
+visibility" | none>.
 
 The first root manifest owes the checks their tools: <the declarations for the selected
 language, from lifecycle.md "Tools the first manifest must declare" | none — <language>
