@@ -105,6 +105,28 @@ def require_subtree(repository: Path, commit: str, subtree: str) -> None:
         )
 
 
+def branch_tips(repository: Path, branch: str) -> list[tuple[str, str]]:
+    """Every ref a branch name legitimately means in a clone, remote first.
+
+    A clone is fetched far more often than it is checked out, so `main` and
+    `origin/main` routinely name different commits and neither is the wrong
+    answer. Reading only the local ref refuses a commit newer than the last
+    checkout, and refuses outright in a clone that fetched the branch without
+    ever checking it out -- neither of which is a commit off the mainline.
+    Reading only the remote ref would refuse a commit not yet pushed. Both are
+    offered, and the caller accepts a commit on either.
+    """
+    tips: list[tuple[str, str]] = []
+    for reference in (f"refs/remotes/origin/{branch}", f"refs/heads/{branch}"):
+        result = run_git(
+            repository, "rev-parse", "--verify", f"{reference}^{{commit}}", check=False
+        )
+        tip = result.stdout.strip()
+        if result.returncode == 0 and FULL_COMMIT.fullmatch(tip):
+            tips.append((reference, tip))
+    return tips
+
+
 def require_on_branch(repository: Path, commit: str, branch: str) -> str:
     """Refuse a source commit that is not on the template's own branch.
 
@@ -116,17 +138,33 @@ def require_on_branch(repository: Path, commit: str, branch: str) -> str:
     the recorded commit in its history. Nothing in the generated repository says
     so, and the failure surfaces months on, in a flow that cannot repair it.
     """
-    tip = resolve_commit(repository, branch)
-    result = run_git(
-        repository, "merge-base", "--is-ancestor", commit, tip, check=False
-    )
-    if result.returncode != 0:
+    tips = branch_tips(repository, branch)
+    if not tips:
         raise PreflightError(
-            f"source commit {commit} is not on {branch} ({tip}); a generate records "
-            "it as the base every later update diffs from, so a commit off the "
-            "template's own branch generates a repository no update can reach"
+            f"template branch {branch} resolves to no ref in {repository}; "
+            "fetch it before generating"
         )
-    return tip
+    for reference, tip in tips:
+        ancestry = run_git(
+            repository, "merge-base", "--is-ancestor", commit, tip, check=False
+        )
+        if ancestry.returncode == 0:
+            return tip
+        # Exit 1 is the answer "no"; anything else is git declining to answer,
+        # and reporting that as a commit off the branch sends the operator to
+        # re-pin a commit when the repository is what needs attention.
+        if ancestry.returncode != 1:
+            detail = ancestry.stderr.strip() or "git could not determine ancestry"
+            raise PreflightError(
+                f"git could not determine whether {commit} is on {reference} "
+                f"in {repository}: {detail}"
+            )
+    resolved = ", ".join(f"{reference} {tip}" for reference, tip in tips)
+    raise PreflightError(
+        f"source commit {commit} is not on {branch} ({resolved}); a generate records "
+        "it as the base every later update diffs from, so a commit off the "
+        "template's own branch generates a repository no update can reach"
+    )
 
 
 def sibling_of_subtree(subtree: str, name: str) -> str:

@@ -147,6 +147,23 @@ class GenerateTests(unittest.TestCase):
         return json.loads((fixture_root / "fixture.json").read_text())
 
     @staticmethod
+    def _commit_onto_main(template: Path, name: str) -> str:
+        (template / "base-repo" / name).write_text(f"{name}\n")
+        subprocess.run(["git", "add", "-A"], cwd=template, check=True)
+        subprocess.run(
+            [*("git", *GIT_IDENTITY), "commit", "-q", "-m", f"chore: {name}"],
+            cwd=template,
+            check=True,
+        )
+        return subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=template,
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE,
+        ).stdout.strip()
+
+    @staticmethod
     def _preflight(fixture: dict[str, str], target: str) -> subprocess.CompletedProcess:
         return subprocess.run(
             [
@@ -205,6 +222,95 @@ class GenerateTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 2)
             self.assertIn("is not on main", result.stdout + result.stderr)
+
+    def test_generate_accepts_a_commit_ahead_of_a_stale_local_branch(self) -> None:
+        """A clone whose local main trails origin/main is stale, not off-branch.
+
+        The operator's clone is fetched far more often than it is checked out,
+        so a local `main` behind `origin/main` is the ordinary state rather than
+        a broken one. Reading the branch as the local ref refuses a commit that
+        is on the template's branch, for a reason that has nothing to do with
+        the mainline the check exists to enforce.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._generation_fixture(directory)
+            upstream = Path(fixture["template_repo"])
+            clone = Path(directory) / "clone"
+            subprocess.run(
+                ["git", "clone", "-q", str(upstream), str(clone)], check=True
+            )
+            ahead = self._commit_onto_main(upstream, "AHEAD.md")
+            subprocess.run(["git", "fetch", "-q", "origin"], cwd=clone, check=True)
+
+            result = self._preflight({**fixture, "template_repo": str(clone)}, ahead)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout)["template"]["branch_tip"], ahead)
+
+    def test_generate_resolves_a_branch_the_clone_never_checked_out(self) -> None:
+        """A fetched branch with no local ref is resolvable, not absent.
+
+        A clone made for the generate alone has every remote ref and only the
+        one local branch it checked out. Refusing because `main` does not
+        resolve reports the clone's shape as a pinning mistake.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._generation_fixture(directory)
+            upstream = Path(fixture["template_repo"])
+            clone = Path(directory) / "fetched"
+            clone.mkdir()
+            subprocess.run(["git", "init", "-q"], cwd=clone, check=True)
+            subprocess.run(
+                ["git", "remote", "add", "origin", str(upstream)], cwd=clone, check=True
+            )
+            subprocess.run(["git", "fetch", "-q", "origin"], cwd=clone, check=True)
+            self.assertEqual(
+                subprocess.run(
+                    ["git", "rev-parse", "--verify", "--quiet", "refs/heads/main"],
+                    cwd=clone,
+                    check=False,
+                    stdout=subprocess.DEVNULL,
+                ).returncode,
+                1,
+                "the fixture must hold no local main for this test to mean anything",
+            )
+
+            result = self._preflight(
+                {**fixture, "template_repo": str(clone)}, fixture["target_commit"]
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                json.loads(result.stdout)["template"]["branch_tip"],
+                fixture["target_commit"],
+            )
+
+    def test_generate_reports_git_failing_apart_from_a_refusal(self) -> None:
+        """Git unable to answer is a repository fault, not a commit off-branch.
+
+        `merge-base --is-ancestor` exits 1 for a genuine negative and 128 when
+        it cannot read what it was given. Collapsing the two sends the operator
+        to re-pin a commit when the repository is what needs attention.
+        """
+        tip = "b" * 40
+        original = preflight.run_git
+
+        def stubbed_git(target: Path, *arguments: str, check: bool = True):
+            """A clone that resolves the branch and then cannot read the object."""
+            if arguments[:2] == ("rev-parse", "--verify"):
+                return subprocess.CompletedProcess(["git", *arguments], 0, tip, "")
+            if arguments[:2] == ("merge-base", "--is-ancestor"):
+                return subprocess.CompletedProcess(
+                    ["git", *arguments], 128, "", "fatal: bad object\n"
+                )
+            return original(target, *arguments, check=check)
+
+        preflight.run_git = stubbed_git
+        try:
+            with self.assertRaisesRegex(preflight.PreflightError, "bad object"):
+                preflight.require_on_branch(Path("/unread-clone"), "a" * 40, "main")
+        finally:
+            preflight.run_git = original
 
 
 class AdoptTests(unittest.TestCase):
