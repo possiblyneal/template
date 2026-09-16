@@ -7,7 +7,7 @@ This repository builds other repositories. It holds two trees and they must not 
 
 The two trees hold near-identical files. Before editing, decide which one the change belongs to: a fix applied only at the root leaves the template shipping the bug, and a fix applied only in the payload leaves this repository running it. Editing under `apps/github-repository-template/src/` prompts for approval so the choice stays deliberate.
 
-This repository was generated from its own payload, so the root files are that payload plus repository-specific merges. `.repo-template.json` records the payload commit the root was last reconciled with, and marks `apps/**` as product so an update never overwrites the payload that produced it.
+This repository was generated from its own payload, so the root files are that payload plus repository-specific merges. `.repo-template.json` records the payload commit the root was last reconciled with, and marks `apps/**` as product so an update never overwrites the payload that produced it. It names this file managed, since a directory pattern reaches no root file and an unmatched path is product-owned, which would put the repository's own instructions beyond every update.
 
 `apps/github-repository-template/docs/github_repository_structure.md` is the structure and bill of materials for the payload, naming briefly what each file and folder is for. Read it before changing what the template ships, to see where a file belongs and what it is there to do.
 
