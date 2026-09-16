@@ -441,6 +441,27 @@ def mark_overridden(
             change["override_reason"] = reason
 
 
+def summarize_changes(changes: list[dict[str, object]]) -> dict[str, int]:
+    """Count the delta three ways, each path in exactly one bucket.
+
+    Overridden wins over ownership, so a settled path leaves the tally the
+    flow works through rather than being counted twice. The three add up to
+    `total`, and a reader treating `managed` as the work left depends on that.
+    """
+    return {
+        "total": len(changes),
+        "managed": sum(
+            change["ownership"] == "managed" and not change.get("overridden")
+            for change in changes
+        ),
+        "product": sum(
+            change["ownership"] == "product" and not change.get("overridden")
+            for change in changes
+        ),
+        "overridden": sum(bool(change.get("overridden")) for change in changes),
+    }
+
+
 def ensure_clean(repository: Path) -> None:
     dirty = git_output(repository, "status", "--porcelain=v1", "--untracked-files=all")
     if dirty:
@@ -607,18 +628,7 @@ def update_preflight(arguments: argparse.Namespace) -> dict[str, object]:
             "clean": True,
         },
         "changes": changes,
-        "summary": {
-            "total": len(changes),
-            "managed": sum(
-                change["ownership"] == "managed" and not change.get("overridden")
-                for change in changes
-            ),
-            "product": sum(
-                change["ownership"] == "product" and not change.get("overridden")
-                for change in changes
-            ),
-            "overridden": sum(bool(change.get("overridden")) for change in changes),
-        },
+        "summary": summarize_changes(changes),
         "remote_actions_performed": False,
     }
 
