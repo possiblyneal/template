@@ -283,7 +283,7 @@ def create_destination(
     root: Path,
     template: Path,
     old_commit: str,
-    conflict: bool,
+    own_check: bool,
     overrides: list[dict[str, str]] | None = None,
 ) -> tuple[Path, Path]:
     remote = root / "destination.git"
@@ -291,7 +291,7 @@ def create_destination(
     init_repo(remote, bare=True)
     init_repo(destination)
 
-    if conflict:
+    if own_check:
         check = """#!/usr/bin/env bash
 set -euo pipefail
 
@@ -417,8 +417,8 @@ echo "check v2"
         root,
         template,
         old_commit,
-        scenario in ("conflict", "override"),
-        overrides,
+        own_check=scenario in ("conflict", "override"),
+        overrides=overrides,
     )
     return {
         "scenario": scenario,
@@ -444,7 +444,7 @@ def build_adopt(root: Path) -> dict[str, object]:
     addon_payload(template)
     recorded = commit(template, "Add base repository payload and repository addons")
 
-    destination, remote = create_destination(root, template, recorded, conflict=False)
+    destination, remote = create_destination(root, template, recorded, own_check=False)
     return {
         "scenario": "adopt",
         "template_repo": str(template),
