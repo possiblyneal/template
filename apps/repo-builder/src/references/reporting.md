@@ -94,6 +94,10 @@ message. Open tickets: <count>. First with no open blocker: <#n — title>. Star
 Expected initial state, not defects: <the red codeql run on a private repository | the
 absent root manifest scripts/doctor fails on | none>.
 
+The first root manifest owes the checks their tools: <the declarations for the selected
+language, from lifecycle.md "Tools the first manifest must declare" | none — <language>
+declares no tools>. An undeclared tool reports `unavailable`, which fails the run.
+
 Branch before you commit; a commit made on `main` is refused at the hook.
 ```
 ````

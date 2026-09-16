@@ -90,6 +90,8 @@ def generation(root: Path, fixture: dict[str, object]) -> list[Check]:
     manifest_path = candidate / ".repo-template.json"
     manifest = json.loads(manifest_path.read_text()) if manifest_path.is_file() else {}
     template = manifest.get("template", {}) if isinstance(manifest, dict) else {}
+    ownership = manifest.get("ownership", []) if isinstance(manifest, dict) else []
+    ownership = ownership if isinstance(ownership, list) else []
     return [
         ("manifest exists", manifest_path.is_file(), str(manifest_path)),
         (
@@ -130,6 +132,39 @@ def generation(root: Path, fixture: dict[str, object]) -> list[Check]:
             and "type: Template"
             in (candidate / "docs/adrs/0000-template.md").read_text(encoding="utf-8"),
             "docs/adrs/0000-template.md remains a template",
+        ),
+        (
+            "root instructions managed",
+            any(
+                rule.get("path") == "CLAUDE.md" and rule.get("mode") == "managed"
+                for rule in ownership
+                if isinstance(rule, dict)
+            ),
+            "ownership reaches the root CLAUDE.md as managed",
+        ),
+        report_check(
+            report,
+            "manifest declarations handed over",
+            # The candidate carries no root manifest -- generate leaves it to
+            # the first real commit -- so the obligation can only be asserted
+            # where it is stated: the handover. Either specific declarations
+            # for the selected language, or the explicit empty answer.
+            lambda text: (
+                "manifest" in text.lower()
+                and any(
+                    term in text.lower()
+                    for term in (
+                        "ruff",
+                        "pytest",
+                        "format:check",
+                        "ktlint",
+                        "detekt",
+                        "declares no tools",
+                        "no tools",
+                    )
+                )
+            ),
+            "handover names the tools the first manifest owes, or says the language owes none",
         ),
         report_check(
             report,

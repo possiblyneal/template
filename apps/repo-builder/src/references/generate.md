@@ -131,6 +131,8 @@ Do not render a root manifest, even for a language wayfinding selected. Wayfindi
 
 Say so in the handover: the root manifest is what makes a package visible to the checks, and a manifest nested under `apps/` instead is invisible to all of them. `scripts/doctor` fails on that shape rather than passing over it.
 
+Name in the same handover what that manifest owes, from [Tools the first manifest must declare](lifecycle.md#tools-the-first-manifest-must-declare) — the tools the adapters dispatch for the language wayfinding selected, and the three languages that owe nothing. An undeclared tool is not a quieter check: it reports `unavailable`, which fails the run the way a real failure does.
+
 ### Step 8 — Personalize the candidate
 
 Personalize the candidate:
@@ -141,7 +143,7 @@ Personalize the candidate:
 - initialize `docs/LESSONS.md` metadata and remove generation placeholders while retaining its durable writing guidance. Set `generated.by` to the actual author — the repo-builder agent, not the operator on whose behalf it ran — and capture `generated.at` from the real clock (e.g. `date -u +%Y-%m-%dT%H:%M:%SZ`) at the moment of writing rather than composing a plausible-looking value; a rounded time such as midnight is a placeholder wearing a valid format, not a captured one;
 - keep `docs/adrs/0000-template.md` as the reusable ADR template;
 - create `.repo-template.json`;
-- render visibility and feature choices honestly. Keep `codeql.yml` for a private repository rather than omitting it. Its `scanning` job fails in seconds naming the reason, which is accurate — the repository has no static analysis coverage — and it turns green by itself when the repository goes public, where omitting the file leaves nothing to restore and nothing to say so. Report that red check as an expected initial state when handing the repository over; do not describe it as a passing build. Record an omission under `features` only when deliberately stripping the workflow, which is now a choice rather than the private-repository default.
+- render feature choices honestly, and record no visibility: it is live-readable and every decision turning on it reads the API, as [Manifest](lifecycle.md#manifest) directs. Keep `codeql.yml` for a private repository rather than omitting it. Its `scanning` job fails in seconds naming the reason, which is accurate — the repository has no static analysis coverage — and it turns green by itself when the repository goes public, where omitting the file leaves nothing to restore and nothing to say so. Report that red check as an expected initial state when handing the repository over; do not describe it as a passing build. Record an omission under `features` only when deliberately stripping the workflow, which is now a choice rather than the private-repository default.
 
 ### Step 9 — Run the candidate's checks
 
@@ -193,7 +195,7 @@ Step 6 is where a destination's own `docs/agents/` is a collision like any other
 2. Apply non-colliding payload files as ordinary additions.
 3. For each collision, decide between the payload version, the destination version, and a merge — then state the decision and the reason per file. Verify afterwards that no destination-only content was dropped, naming what was preserved.
 4. Never delete destination content to resolve a collision. A payload path that cannot be reconciled is a conflict to report, not a file to overwrite.
-5. Record the collision decisions in `generation`, since they are choices a later update has to respect rather than re-litigate.
+5. Record every collision the destination's version won in `generation.overrides`, one `{path, reason}` entry each, as [Overridden paths](lifecycle.md#overridden-paths) specifies. They are choices a later update has to respect rather than re-litigate, and without the record it re-raises each one as a fresh conflict. A collision the payload's version won landed the payload file and is an ordinary copy; it takes no entry.
 6. Do not create the placeholder application when the destination already has its own application boundaries. Record the real ones in `generation.applications`. Wayfinding still runs, but against what is there: it names the choke point each existing deployable already answers to rather than proposing a new decomposition, and it writes an ADR only where the repository has none for that deployable. A generation is not the occasion to re-cut boundaries someone is already shipping against.
 
 Ownership still governs what a later update may touch, and a hand-merged file is managed content whose destination edits are real intent. Classify deliberately: marking a whole tree product to protect it also freezes it.

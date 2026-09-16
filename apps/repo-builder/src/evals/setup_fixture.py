@@ -245,11 +245,11 @@ def manifest(template: Path, remote: Path, old_commit: str) -> dict[str, object]
         },
         "generation": {
             "application_name": "billing-api",
-            "visibility": "private",
             "features": {"codeql": "omitted-by-choice"},
         },
         "ownership": [
             {"path": ".repo-template.json", "mode": "managed"},
+            {"path": "CLAUDE.md", "mode": "managed"},
             {"path": "scripts/**", "mode": "managed"},
             {"path": ".github/**", "mode": "managed"},
             {"path": ".claude/settings.json", "mode": "managed"},
