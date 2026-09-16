@@ -108,6 +108,11 @@ Of a superseded gate script: deleted with its callers repointed at the payload
 command covering it, so the behaviour survives under a different name.
 _Avoid_: removed, dropped, deprecated
 
+**Resume record**:
+The file beside a candidate holding what a re-invocation cannot observe back
+from live state: issues created, and decisions the operator already made.
+_Avoid_: journal, state file, checkpoint, log
+
 **Candidate**:
 The working copy of a destination a flow builds and measures before publishing
 anything. It is not the destination: the destination is what the pull request

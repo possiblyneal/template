@@ -79,6 +79,14 @@ One line per check, from `scripts/summarize <command>` rather than from a filter
 - Code review: skipped, as [Reviewing the pull request](#reviewing-the-pull-request) directs
 - Default branch after merge: <check-suite result> | n/a (nothing merged)
 
+### Resumption
+Present only on a run that re-entered a stopped flow, as [Resuming](lifecycle.md#resuming) directs.
+
+- Re-observed as already done: <what live state showed complete, so this run skipped it>
+- Taken from the resume record: <the issues and decisions read back rather than repeated>
+- Redone: <anything this run performed again, and why live state did not answer it>
+- Retries: <the transient failures retried and their outcomes, or none>
+
 ### Pending action
 <none, or the exact decision/authorization needed>
 

@@ -177,16 +177,30 @@ Separately, the security scanners and toolchain probes are `PATH` lookups and op
 
 An update owes nothing here. The root manifest is product-owned and never enters an update's delta.
 
+### Working hooks in a candidate
+
+Every flow measures a tree against the check surface, and the surface's first gate fails when the hooks git will consult are missing. So every flow installs them first, by one recipe.
+
 A machine-wide `core.hooksPath` set for an unrelated purpose (an editor's own git integration, another agent's attribution hook) makes `pre-commit install` refuse outright, and breaks it again inside any throwaway fixture repository the repository's own tests spin up to exercise hook installation — fixtures inherit the same global config. Check `git config --global core.hooksPath` before treating either failure as a defect in the repository under test; a control run of the same checks against the template repository's own current HEAD reproduces an identical failure when this is the cause.
 
-The two halves have different remedies and neither is to unset the operator's key. A fixture is fixed by isolation, which the repository's own `scripts/tests/libs/harness.sh` already applies. A destination clone is fixed by installing under a neutralized global config and then pinning the key locally, so the hooks land in the clone and git is looking where they landed:
+The two halves have different remedies and neither is to unset the operator's key. A fixture is fixed by isolation, which the repository's own `scripts/tests/libs/harness.sh` already applies. A working tree is fixed by writing the shims into a directory of its own and pointing git at that directory, which is what `pre-commit init-templatedir` is for. Unlike `pre-commit install` it does not refuse while `core.hooksPath` is set at any scope, and the shims it writes are repository-independent, so the same directory serves whatever tree points at it:
 
 ```sh
-GIT_CONFIG_GLOBAL=/dev/null pre-commit install
-git config --local core.hooksPath "$(git rev-parse --path-format=absolute --git-common-dir)/hooks"
+pre-commit init-templatedir -t <each configured type> <hooksdir>
+git -C <tree> config <scope> core.hooksPath "<hooksdir>/hooks"
 ```
 
-Both lines are needed and neither suffices alone. The first installs the files; without the second git keeps reading the shared directory and every installed hook is a silent no-op, which is why `scripts/doctor` asks `git rev-parse --git-path hooks` rather than looking in `.git/hooks`. The pin then shadows whatever the shared directory held, so link each of those hooks back into the clone before pinning: as `<type>.legacy` where pre-commit installed a hook of its own, since `pre-commit hook-impl` runs that file first, and under its own name where pre-commit installed nothing there to chain from. Removing and restoring the operator's global key around the install is not the shortcut it looks like: every other process on the machine reads the wrong config for the duration.
+Read the hook types from `pre_commit_hook_types` in `scripts/libs/precommit.sh`, against the `.pre-commit-config.yaml` the tree actually carries. That is the same helper `pre_commit_hooks_missing` grades against, so setting up from it is what makes setup and the check agree; a hand-written list of types passes the setup and fails the grade the first time `default_install_hook_types` changes.
+
+`<scope>` is the one thing that varies by flow, and only retrofit needs the unusual one:
+
+- **Retrofit** — `--worktree`, with `git -C <clone> config extensions.worktreeConfig true` set first. Its candidate is a linked worktree, so `core.hooksPath` at local scope is the main clone's config and setting it there repoints the operator's own clone at a directory this flow created. The per-worktree scope is retrofit's alone because retrofit's candidate is the only one borrowing a hooks directory it does not own.
+- **Generate** — `--local`. The candidate is a dedicated clone with no parent to protect.
+- **Update and adopt** — `--local`. They run in the operator's own clone, where installing the hooks is the correct outcome rather than a side effect to contain.
+
+Verify by outcome before measuring the bar, never by the commands' exit status: `git -C <tree> rev-parse --git-path hooks` resolves inside `<hooksdir>` and every configured type is present there. A flow whose hooks are not working stops here and reports it as its own defect. Carrying on measures a destination against a check surface that cannot run and writes the result up as debt the destination owes, which is the worst available outcome: a real repository given a list of failures that are this skill's.
+
+A global `core.hooksPath` is reported with its key and its value, and it is not a stop. The recipe above works while it is set; naming it is what stops the next reader treating an unrelated editor integration as a defect. Removing and restoring the operator's global key around an install is not the shortcut it looks like: every other process on the machine reads the wrong config for the duration.
 
 ## Remote action gates
 
@@ -224,7 +238,38 @@ Stop before editing when:
 
 The [Wayfinding](wayfinding.md) handoff is also a stop, and the one that is not a failure: nothing is wrong, the decomposition is simply not this skill's to settle. Report it as `stopped` like any other, but do not report it as a defect in the candidate or the request, and do not discard the materialized candidate — it is what the resumed session re-enters at. By this point the destination repository exists, configured, with its default branch still the empty root commit and its map on its tracker. That is the state to leave and to describe, not a half-finished generate to roll back; the repository is where the map lives, so deleting it discards the only thing the stop produced.
 
+A stop is not an undo. There is no rollback here and none is being added: automated undo is rollback under another name, and a flow that half-reverses its own hosted writes leaves a state neither it nor the operator can describe. What a stop leaves is a state to resume from, and the rules for resuming are below.
+
 Stop before further remote actions when semantic intent conflicts or verification fails. On a [generate](generate.md) that no longer means before any remote action at all: steps 4 and 5 have already created the repository and applied its settings, so a failure at any step from 5 to 10 leaves a real repository whose content was never published. Its default branch is the empty root commit, except after a failure at step 5 where the probe ran and was not rejected: its commit stays there. Name it, say what it already carries, and say whether resuming against it or deleting it is the next action — a stop reported as though nothing was created sends the user looking for a repository they already own. Keep `template.commit` at the previous version. Report exact paths, Git evidence, checks, and a recoverable next action. Do not approximate a missing old version, rebase unrelated template histories, reset/clean the destination, or claim a partial update succeeded.
+
+### Resuming
+
+**Re-invoking the same command is the resume.** There is no second command and no `--resume` flag: a flow that stopped is re-entered by running the invocation that stopped, against the same destination. A separate resume path is a second implementation of every step, kept in step with the first by nobody.
+
+A resumed run **re-observes** rather than replays. Almost everything a flow does is readable back from live state at the moment the resume starts: the repository exists or it does not, the settings hold the values they hold, the branch is pushed or absent, the pull request is open, the candidate's files are on disk, the labels are on the repository. Read those and skip what is already done, rather than trusting a record of having done it — a record can be stale in a way the API cannot.
+
+**The resume record holds only what cannot be observed back**, plus decisions the operator made that would otherwise be asked again. Issue creation is the case that forces it to exist: an issue has no natural key, so a second pass with nothing recorded creates a duplicate map and a duplicate ticket for every one it already created, and there is no query that distinguishes them afterwards. The record maps each thing the flow meant to create to what it became:
+
+```json
+{
+  "invocation": "generate possiblyneal/example",
+  "issues": [
+    {"intent": "map: converting a repository", "created": 104},
+    {"intent": "ticket: name the destination", "created": 105}
+  ],
+  "decisions": [
+    {"question": "merge settings overwritten", "answer": "declined"}
+  ]
+}
+```
+
+It is not a journal of everything the flow did. A record that grows a line per step is a second source of truth about state the API already answers, and the first time the two disagree the flow believes the wrong one.
+
+**The record lives beside the candidate, never inside it** — a sibling of the candidate directory, not a file within the tree. Inside, it would enter the candidate diff, reach the copy proof as an authored path, and fail the structure audit as a root file nobody permitted, and each of those is a defect reported against a destination that did not cause it.
+
+**Order the hosted writes so the unobservable ones come first**, wherever the ordering is free. Issues created before the content push means a run that dies at the push re-observes the push and reads the issues from its record; the reverse loses nothing but makes the record carry more. Where an ordering is not free — a repository must exist before its settings — leave it as it is.
+
+**Retry is bounded and fires on transient classes only**: a network failure, an HTTP 5xx, a 403 that is a secondary rate limit, a 409 on a ref that another write is still settling. Three attempts with exponential backoff, then stop and report. Nothing else retries — a 404, a 422, a permissions refusal, and a validation failure are all answers rather than noise, and repeating them turns one clear failure into three and a delay.
 
 ## Reviewing and reporting
 
