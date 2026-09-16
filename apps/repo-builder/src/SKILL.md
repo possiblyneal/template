@@ -21,7 +21,7 @@ Read `references/lifecycle.md` before acting. It defines the manifest, ownership
 ## Choose the operation
 
 - **Generate:** The destination has no `.repo-template.json` and no content; build it from `apps/github-repository-template/src/base-repo` at the requested template commit.
-- **Retrofit:** The destination has content and no `.repo-template.json`. It is a repository that grew without the template, so the payload is landed over work somebody is already shipping rather than into an empty tree.
+- **Retrofit:** The destination has content and no `.repo-template.json`. It is a repository that grew without the template, so the payload is landed over work somebody is already shipping rather than into an empty tree. The flow is written only as far as the candidate and its working hooks; a run stops there and reports, so route here knowing the reconciliation is still unwritten.
 - **Update:** The destination has `.repo-template.json`; reconcile its recorded template commit with a requested descendant commit.
 - **Adopt:** The destination has `.repo-template.json` and the request is to add a held-back repository addon whose condition has arrived, not to carry a template delta. Read the addon from the recorded commit and do not advance the pin. Distinct from update: it adds a sibling file rather than reconciling a delta, and it moves no commit.
 - If the requested operation and destination state disagree, stop and explain the mismatch.
