@@ -149,7 +149,7 @@ Nothing here reaches the network. This step settles everything that has to be tr
 
 **Where this run invalidated the destination's own stated reason, propose the payload's version and name the step that invalidated it.** A document explaining that scripts live at the root is no longer describing the repository once step 6 moved them. The proposal is still the operator's to refuse, and naming the invalidating step is what lets them refuse it on the merits rather than on the flow's say-so.
 
-**A chosen destination version is an [overridden path](lifecycle.md#overridden-paths)**, recorded with the reason the destination's version won, so the next update does not re-raise a collision settled here.
+**A chosen destination version at a managed path is an [overridden path](lifecycle.md#overridden-paths)**, recorded with the reason the destination's version won, so the next update does not re-raise a collision settled here. A destination version that wins at a product path is already the destination's by ownership: report it with its reason and record nothing, which is what preflight requires of the record this step writes.
 
 **The record's ownership array is the payload's default, with zero destination-specific entries.** This is only true because the moves came first: layout lifted foreign content out of every managed pattern, [the automation directory](lifecycle.md#the-automation-directory-is-replaced-not-reconciled) was replaced whole, and the ignore file was replaced outright. Every remaining destination file then falls on unmatched, which [Ownership](lifecycle.md#ownership) resolves to product. **A destination path still matching a managed pattern is a layout failure to fix in step 6**, never an ownership exception written here. A bespoke array would also make a retrofitted record distinguishable from a generated one, which is the opposite of what a retrofit is for.
 
@@ -207,6 +207,8 @@ git remote set-head origin -a
 ### Step 9 — Publish, prove, and offer the merge
 
 **The head is the candidate's own branch.** Step 2 created it, every step since wrote into it, and nothing is re-materialized at publish time: a tree rebuilt here is a tree nobody checked.
+
+**Every push goes to the candidate's feature branch, with the destination's hooks running.** The push guard the payload installs allows a feature branch and refuses the default branch, so nothing here needs `--no-verify`: the bypass [generate](generate.md#step-3--materialize-the-candidate) confirms for its own bootstrap commit is an exception for pushing straight to the default branch of an empty repository, and a retrofit never does that. A push a hook refuses is a finding to report, never a push to repeat with the hook turned off.
 
 **The base is the default branch**, which step 8's rename has already made correct. A base rename retargets an open pull request, and the hazard that step named — the host closing rather than retargeting — applies to a renamed *head*, which this branch never is.
 

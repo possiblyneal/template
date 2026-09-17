@@ -64,7 +64,7 @@ First prompt is a generate's only, and it is written for a reader this session n
 - Conflicted: <paths and competing intents, or none>
 - Superseded: <path>: <what it did> -> <the payload path or check now carrying it> | retired, callers repointed (<caller paths>) | none
 - Partially covered, not cut: <script path>: <the parts the check surface already does> | none
-- Overridden: <path>: <the recorded reason the destination's version was chosen> | expired, payload landed and entry dropped (<paths>) | none
+- Overridden: <path>: <the recorded reason the destination's version was chosen> | expired, payload landed and entry dropped (<paths>, each read from preflight's `override_expired` marks and the `expired` half of `unmatched_overrides`) | kept by ownership, no entry recorded (<product paths and reasons>) | none
 - Layout plan (retrofit): <old path> -> <new path>: moved | corrected by the operator to <path> | declined | none
 - Unmovable (retrofit): <path>: <why it could not move>; no allowlist entry written | none
 - References repaired (retrofit): <file>: <the moved path rewritten> | none

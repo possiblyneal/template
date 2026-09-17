@@ -217,15 +217,20 @@ def addon_manifest_files(
     return files
 
 
-def addons_present(destination: Path, addons: Iterable[str]) -> list[str]:
+def addons_already_held(present: set[str], addons: Iterable[str]) -> list[str]:
     """Name every addon-shaped path the destination already holds.
 
     A finding and never a decision. A retrofit adopts no addon, so what this
     answers is whether the operator already solved by hand what adopt would
     have offered; sorted so two runs over the same destination report the
     same line.
+
+    Read from the paths git lists rather than from the filesystem, as every
+    other retrofit finding is. An addon is a file the destination holds, and
+    a bare existence test answers yes for a directory that shares the name,
+    which is not an addon anyone wrote.
     """
-    return sorted(addon for addon in addons if (destination / addon).exists())
+    return sorted(addon for addon in addons if addon in present)
 
 
 def require_addon(
@@ -481,7 +486,9 @@ def parse_name_status(
 
 
 def mark_overridden(
-    changes: list[dict[str, object]], overrides: dict[str, str]
+    changes: list[dict[str, object]],
+    overrides: dict[str, str],
+    destination_paths: set[str],
 ) -> None:
     """Mark each delta path the record already settled, reading both names.
 
@@ -494,14 +501,29 @@ def mark_overridden(
     The fallback reads a second name rather than a status, so it holds only
     while the diff detects renames alone: a copy's source still exists, and
     inheriting its entry would protect a file nothing is replacing.
+
+    An entry whose path the destination no longer holds is expired, and
+    expiry is decided here as well as in `unmatched_overrides` because the
+    payload is as free to change an expired path as to leave it alone:
+    marking such a delta path overridden would skip the payload's copy on
+    behalf of a destination file that is gone. So it is marked expired
+    instead, which leaves it an ordinary managed change to apply while
+    naming the entry this update drops.
     """
     for change in changes:
-        reason = overrides.get(change["path"])
+        path = str(change["path"])
+        reason = overrides.get(path)
+        recorded_path = path
         if reason is None and "old_path" in change:
-            reason = overrides.get(change["old_path"])
-        if reason is not None:
+            recorded_path = str(change["old_path"])
+            reason = overrides.get(recorded_path)
+        if reason is None:
+            continue
+        if recorded_path in destination_paths:
             change["overridden"] = True
-            change["override_reason"] = reason
+        else:
+            change["override_expired"] = True
+        change["override_reason"] = reason
 
 
 def unmatched_overrides(
@@ -512,8 +534,8 @@ def unmatched_overrides(
     """Report each recorded override the bounded delta does not reach.
 
     An entry the delta touches is the ordinary case and is marked on the
-    change itself. What is left is an entry this update has nothing to say
-    about, and the two reasons for that are worth telling apart, because only
+    change itself, overridden or expired as `mark_overridden` reads it.
+    What is left is an entry this update has nothing to say about, and the two reasons for that are worth telling apart, because only
     one of them ends the entry: `expired` where the destination no longer
     holds the path, so the record is settling a collision that cannot recur
     and the payload's version should land like any other managed delta;
@@ -709,7 +731,8 @@ def update_preflight(arguments: argparse.Namespace) -> dict[str, object]:
         subtree,
     ).stdout
     changes = parse_name_status(diff, subtree, rules)
-    mark_overridden(changes, provenance.overrides)
+    destination_paths = set(listed_paths(destination))
+    mark_overridden(changes, provenance.overrides, destination_paths)
     return {
         "operation": "update",
         "template": {
@@ -730,7 +753,7 @@ def update_preflight(arguments: argparse.Namespace) -> dict[str, object]:
         "changes": changes,
         "summary": summarize_changes(changes),
         "unmatched_overrides": unmatched_overrides(
-            changes, provenance.overrides, set(listed_paths(destination))
+            changes, provenance.overrides, destination_paths
         ),
         "remote_actions_performed": False,
     }
@@ -1026,8 +1049,8 @@ def retrofit_preflight(arguments: argparse.Namespace) -> dict[str, object]:
         # rather than under the payload subtree, so a destination's own
         # readme never reaches `collisions` and nothing here is a path the
         # retrofit intends to land: the retrofit adopts no addon.
-        "addons_present": addons_present(
-            destination, addon_manifest_files(template_repo, target, subtree)
+        "addons_present": addons_already_held(
+            present, addon_manifest_files(template_repo, target, subtree)
         ),
         # Evidence, never a decision. Which side of a collision wins is read
         # from ownership rules that live in a record a retrofit writes at the

@@ -37,7 +37,7 @@ Every built repository tracks `.repo-template.json`:
       "codeql": "omitted-by-choice"
     },
     "overrides": [
-      {"path": "docs/agents/issue-tracker.md", "reason": "destination tracks issues outside GitHub"}
+      {"path": "CLAUDE.md", "reason": "destination keeps its own instruction file"}
     ],
     "superseded": [
       {"path": ".github/workflows/lint.yml", "did": "ran eslint on push", "by": "ci.yml"},
@@ -107,15 +107,15 @@ An **overridden path** is a payload path a flow did not land, because the destin
 
 ```json
 "overrides": [
-  {"path": "docs/agents/issue-tracker.md", "reason": "destination tracks issues outside GitHub"}
+  {"path": "CLAUDE.md", "reason": "destination keeps its own instruction file"}
 ]
 ```
 
 - One entry per path, with the reason the destination's version was chosen. A path with no reason is not a decision anyone can review later, and the next update has nothing to weigh the entry against. `preflight.py` refuses a malformed record before a flow acts on it: a non-list, an entry that is not an object, a missing or empty `path` or `reason`, and two entries naming one path.
-- **An entry is only ever about a managed path.** Ownership already grants the destination every product-owned path, so an entry on one asserts nothing, and it is not merely redundant: an overridden path leaves the product tally as well as the managed one, so the delta summary under-reports the destination's own files. `preflight.py` refuses it, naming the path and the ownership rule that made it product-owned, and resolving ownership exactly as the delta does, an unmatched path included.
+- **An entry is only ever about a managed path.** Ownership already grants the destination every product-owned path, so an entry on one asserts nothing, and it is not merely redundant: an overridden path leaves the product tally as well as the managed one, so the delta summary under-reports the destination's own files. `preflight.py` refuses it, naming the path and the ownership rule that made it product-owned, and resolving ownership exactly as the delta does, an unmatched path included. A collision a product-owned destination file won is still reported by name with the reason it won, under Reconciliation: ownership is what makes that version stand, so there is a line to write and no entry to record.
 - An update skips a delta path listed here rather than reporting it as a conflict. That is the whole point: without the record every update re-raises the same collision and asks for a policy decision that was made once already. A delta renaming the path is still that path: the entry names what the destination held, so a rename is matched under its source name as well as its destination one.
-- **An entry expires with the thing it records.** Where the destination has deleted its own version of an overridden path, the override has nothing left to protect: the update lands the payload's copy and drops the entry, both in the same pull request. A record outliving its subject is how the payload's file stays permanently absent for a reason nobody holds any more. Expiry is read from the entries, not from the update's delta: a destination deleting its own version changes nothing on the template's side, so the path the rule is for is the one no delta lists. `preflight.py update` reports every entry the bounded delta does not reach, in `unmatched_overrides`, and tells the two cases apart from the destination's tracked paths alone: `expired` where the destination no longer holds the path, and `unreached` where it still does and this delta simply passed it by. Only the first ends the entry.
-- Adopt neither writes nor reads an entry. It lands an addon the destination does not have, at the recorded commit, and resolves no collision, so it never meets an override. Generate and update are the flows this section binds.
+- **An entry expires with the thing it records.** Where the destination has deleted its own version of an overridden path, the override has nothing left to protect: the update lands the payload's copy and drops the entry, both in the same pull request. A record outliving its subject is how the payload's file stays permanently absent for a reason nobody holds any more. Expiry is read from the entries against the destination rather than from the update's delta: a destination deleting its own version changes nothing on the template's side, so an expired entry sits inside the delta as readily as outside it. `preflight.py update` settles both halves from the destination's tracked paths alone. A delta path whose entry the destination no longer holds is marked `override_expired` rather than overridden, so it stays an ordinary managed change to apply. Every entry the delta does not reach is listed in `unmatched_overrides`, `expired` where the destination no longer holds the path and `unreached` where it still does and this delta simply passed it by. Only expiry ends the entry.
+- Adopt neither writes nor reads an entry. It lands an addon the destination does not have, at the recorded commit, and resolves no collision, so it never meets an override. Generate, retrofit, and update are the flows this section binds.
 - An overridden path was never written, so it is absent from the copy proof [Reviewing the pull request](reporting.md#reviewing-the-pull-request) runs, and belongs to neither the copied set nor the authored surface. Name it as overridden in the report instead, with its reason.
 
 ## The automation directory is replaced, not reconciled

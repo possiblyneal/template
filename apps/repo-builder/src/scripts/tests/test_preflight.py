@@ -99,10 +99,32 @@ class PreflightUnitTests(unittest.TestCase):
             [preflight.OwnershipRule("scripts/**", "managed", 0)],
         )
 
-        preflight.mark_overridden(changes, {"scripts/legacy": "destination rewrote it"})
+        preflight.mark_overridden(
+            changes, {"scripts/legacy": "destination rewrote it"}, {"scripts/legacy"}
+        )
 
         self.assertIs(changes[0]["overridden"], True)
         self.assertEqual(changes[0]["override_reason"], "destination rewrote it")
+
+    def test_a_delta_path_whose_destination_version_is_gone_reads_expired(self) -> None:
+        """The entry has nothing left to protect, so the payload's copy lands."""
+        changes = preflight.parse_name_status(
+            "M\0base-repo/scripts/check\0",
+            "base-repo",
+            [preflight.OwnershipRule("scripts/**", "managed", 0)],
+        )
+
+        preflight.mark_overridden(
+            changes, {"scripts/check": "destination policy"}, set()
+        )
+
+        self.assertIs(changes[0]["override_expired"], True)
+        self.assertNotIn("overridden", changes[0])
+        self.assertEqual(changes[0]["override_reason"], "destination policy")
+        self.assertEqual(
+            preflight.summarize_changes(changes),
+            {"total": 1, "managed": 1, "product": 0, "overridden": 0},
+        )
 
     def test_an_overridden_path_leaves_its_ownership_bucket(self) -> None:
         """Whichever bucket a settled path came from, the three still sum to total."""
@@ -117,6 +139,7 @@ class PreflightUnitTests(unittest.TestCase):
         preflight.mark_overridden(
             changes,
             {"scripts/check": "destination policy", "apps/api/main.py": "its own app"},
+            {"scripts/check", "apps/api/main.py"},
         )
 
         self.assertEqual(
