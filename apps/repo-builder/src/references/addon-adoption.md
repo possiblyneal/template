@@ -27,3 +27,9 @@ Walk its entry for every addon taken, and for nothing else. It sorts each region
 Ask each distinct `value_key` once, not once per file. The repository owner is spelled `REPO-OWNER` in two addons, `<owner>` in a third, and `[REPLACE: owner]` in a fourth; asking in each file's own vocabulary asks the same question four times and invites four answers. No addon ships empty: each carries its own guidance in it, so a copy explains itself before a single region is filled, and `test_addon_adoption.py` fails on a zero-byte addon. An entry with no regions at all — `.claude/rules/changelog.md` is one — is a file to copy and read, not a file to write.
 
 Report every region as done or as outstanding. An addon left with an unfilled slot is worse than one not taken, because the repository now carries a document that reads as finished.
+
+## This reference binds adopt alone
+
+Everything above is the [adopt](adopt.md) flow's, and no other flow reads it as an instruction to take an addon. [Generate](generate.md) holds every addon back by definition, since the condition each answers has not arrived in a repository that does not exist yet; an [update](update.md) carries a template delta and an addon is not in one; and a [retrofit](retrofit.md) adopts none, for the reasons that reference gives. Each of those may still *offer* an addon afterwards by invoking adopt, which is a separate run against a destination that now exists.
+
+Stated because the file otherwise reads as the repository's whole addon policy, and a flow meeting a destination that already holds an addon-shaped file would find its instructions here and follow them.

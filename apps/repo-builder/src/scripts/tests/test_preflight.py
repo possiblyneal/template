@@ -99,10 +99,32 @@ class PreflightUnitTests(unittest.TestCase):
             [preflight.OwnershipRule("scripts/**", "managed", 0)],
         )
 
-        preflight.mark_overridden(changes, {"scripts/legacy": "destination rewrote it"})
+        preflight.mark_overridden(
+            changes, {"scripts/legacy": "destination rewrote it"}, {"scripts/legacy"}
+        )
 
         self.assertIs(changes[0]["overridden"], True)
         self.assertEqual(changes[0]["override_reason"], "destination rewrote it")
+
+    def test_a_delta_path_whose_destination_version_is_gone_reads_expired(self) -> None:
+        """The entry has nothing left to protect, so the payload's copy lands."""
+        changes = preflight.parse_name_status(
+            "M\0base-repo/scripts/check\0",
+            "base-repo",
+            [preflight.OwnershipRule("scripts/**", "managed", 0)],
+        )
+
+        preflight.mark_overridden(
+            changes, {"scripts/check": "destination policy"}, set()
+        )
+
+        self.assertIs(changes[0]["override_expired"], True)
+        self.assertNotIn("overridden", changes[0])
+        self.assertEqual(changes[0]["override_reason"], "destination policy")
+        self.assertEqual(
+            preflight.summarize_changes(changes),
+            {"total": 1, "managed": 1, "product": 0, "overridden": 0},
+        )
 
     def test_an_overridden_path_leaves_its_ownership_bucket(self) -> None:
         """Whichever bucket a settled path came from, the three still sum to total."""
@@ -117,11 +139,83 @@ class PreflightUnitTests(unittest.TestCase):
         preflight.mark_overridden(
             changes,
             {"scripts/check": "destination policy", "apps/api/main.py": "its own app"},
+            {"scripts/check", "apps/api/main.py"},
         )
 
         self.assertEqual(
             preflight.summarize_changes(changes),
             {"total": 2, "managed": 0, "product": 0, "overridden": 2},
+        )
+
+    def test_an_override_on_a_managed_path_is_accepted(self) -> None:
+        rules = [preflight.OwnershipRule("scripts/**", "managed", 0)]
+
+        preflight.require_managed_overrides({"scripts/check": "kept"}, rules)
+
+    def test_an_override_on_a_product_path_names_the_rule(self) -> None:
+        rules = [
+            preflight.OwnershipRule("scripts/**", "managed", 0),
+            preflight.OwnershipRule("apps/**", "product", 1),
+        ]
+
+        with self.assertRaisesRegex(
+            preflight.PreflightError, r"apps/api/main\.py.*apps/\*\*"
+        ):
+            preflight.require_managed_overrides({"apps/api/main.py": "ours"}, rules)
+
+    def test_an_override_on_an_unmatched_path_reads_as_product_too(self) -> None:
+        """A path no rule matches is product-owned, here as it is in the delta."""
+        with self.assertRaisesRegex(preflight.PreflightError, "no ownership rule"):
+            preflight.require_managed_overrides({"README.md": "ours"}, [])
+
+    def test_an_override_the_delta_reaches_is_not_reported_as_unmatched(self) -> None:
+        changes = preflight.parse_name_status(
+            "M\0base-repo/scripts/check\0",
+            "base-repo",
+            [preflight.OwnershipRule("scripts/**", "managed", 0)],
+        )
+
+        self.assertEqual(
+            preflight.unmatched_overrides(
+                changes, {"scripts/check": "kept"}, {"scripts/check"}
+            ),
+            [],
+        )
+
+    def test_an_override_the_delta_never_reaches_is_reported_with_its_state(
+        self,
+    ) -> None:
+        """Expired where the destination dropped its version, unreached otherwise."""
+        changes = preflight.parse_name_status(
+            "M\0base-repo/scripts/check\0",
+            "base-repo",
+            [preflight.OwnershipRule("scripts/**", "managed", 0)],
+        )
+
+        self.assertEqual(
+            preflight.unmatched_overrides(
+                changes,
+                {"scripts/legacy": "kept", "CLAUDE.md": "kept"},
+                {"scripts/check", "scripts/legacy"},
+            ),
+            [
+                {"path": "CLAUDE.md", "reason": "kept", "state": "expired"},
+                {"path": "scripts/legacy", "reason": "kept", "state": "unreached"},
+            ],
+        )
+
+    def test_an_override_on_a_renamed_path_is_reached_under_its_old_name(self) -> None:
+        changes = preflight.parse_name_status(
+            "R100\0base-repo/scripts/legacy\0base-repo/scripts/preflight\0",
+            "base-repo",
+            [preflight.OwnershipRule("scripts/**", "managed", 0)],
+        )
+
+        self.assertEqual(
+            preflight.unmatched_overrides(
+                changes, {"scripts/legacy": "kept"}, {"scripts/legacy"}
+            ),
+            [],
         )
 
     def test_overrides_are_optional_until_a_collision_is_resolved(self) -> None:
@@ -971,6 +1065,26 @@ class RetrofitTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 2)
             self.assertIn("already carries a template record", result.stderr)
+
+    def test_retrofit_reports_an_addon_the_destination_already_holds(self) -> None:
+        """A finding and never a stop: a retrofit adopts no addon.
+
+        The fixture destination carries its own `README.md`, which the
+        template holds back as an addon. Reporting it is worth a line; doing
+        anything about it is the adopt flow's business, not this one's.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._fixture(directory)
+
+            result = self._preflight(fixture)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["addons_present"], ["README.md"])
+            self.assertNotIn(
+                "README.md", [found["path"] for found in report["collisions"]]
+            )
+            self.assertNotIn("README.md", report["payload_paths"])
 
 
 if __name__ == "__main__":

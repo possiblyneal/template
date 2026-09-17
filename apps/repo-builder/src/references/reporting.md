@@ -27,12 +27,25 @@ Which files make up that surface differs by flow:
 - **Update** — every managed file the destination had also changed and this skill hand-merged, plus `.repo-template.json`.
 - **Generate** — everything step 8 personalized: the root `CLAUDE.md` Child Index, each `apps/<name>/` and its `.unit.json`, the ADRs, and `.repo-template.json`. This surface is larger than update's and it gets no second look, because a bootstrap generate merges its own pull request under [Generate](generate.md) step 12. Read it before that merge rather than after.
 - **Adopt** — every region `addon-adoption.json` names for the addons taken. Here differing paths are the expected result rather than the exception: an addon is adopted by editing it, so byte-identity would mean the adoption never happened. Confirm that what differs is the named regions and nothing besides.
+- **Retrofit** — the configuration a move broke and this run repaired, every path reference it rewrote, the merged instruction file, the tool declaration, any retired gate script's callers, and `.repo-template.json`. This is the one flow whose authored surface is edits to the destination's own code, written by this run and reviewed by nobody, which is why its pull request is offered a merge at a gate rather than merged on the way past.
+
+A retrofit runs a **second proof beside the copy proof**, over the paths it moved rather than the paths it wrote. Each moved file's blob must equal its pre-move blob, read from the destination's commit the candidate branched from:
+
+```bash
+git -C "<destination>" diff --cached --diff-filter=R --name-status |
+  while read -r _ old new; do
+    git -C "<destination>" cat-file -p "<base-commit>:$old" 2> /dev/null |
+      diff -q - "<destination>/$new" > /dev/null || echo "$new"
+  done
+```
+
+Report its count beside the copy proof's. A pilot retrofit moved 55 files, which is exactly the volume at which a content edit rides along inside a rename and no reader notices: a rename is the one diff people skim.
 
 Report the authored surface in **File list**, so the reader sees which lines were the template's and which were this run's.
 
 ## Final report
 
-Use this stable shape. On a generate into an empty destination the Reconciliation lines are empty or trivially everything, and File list carries the weight; a generate into a destination that already has content fills them like any other flow, Superseded included, since it is the only section reporting a file the payload ships and the candidate lacks, which no check can fail on. On an adopt the Template line shows the recorded commit on both sides because the pin does not move, and the Addon adoption block carries the weight. On a generate stopped at the wayfinding handoff there are no Application boundaries to report — that absence is the result; the Wayfinding line names the trigger and the map, Repository settings still reports the repository that exists, and Pending action carries the resume.
+Use this stable shape. On a generate into an empty destination the Reconciliation lines are empty or trivially everything, and File list carries the weight; a generate into a destination that already has content fills them like any other flow, Superseded included, since it is the only section reporting a file the payload ships and the candidate lacks, which no check can fail on. On an adopt the Template line shows the recorded commit on both sides because the pin does not move, and the Addon adoption block carries the weight. On a generate stopped at the wayfinding handoff there are no Application boundaries to report — that absence is the result; the Wayfinding line names the trigger and the map, Repository settings still reports the repository that exists, and Pending action carries the resume. On a retrofit the choke-point and Wayfinding lines are absent and the Unit map carries the section: a retrofit observes languages the destination already committed to rather than choosing one, and it derives units from that destination's own evidence rather than wayfinding them. A retrofit whose unit map the operator rejected with no correction reports the proposal and the rejection here, and Pending action carries the correction the flow is stopped for.
 
 First prompt is a generate's only, and it is written for a reader this session never speaks to: whoever opens the first working session in a fresh clone of the new repository. Everything this session knows about that repository's initial state dies with it otherwise — which checks are red on purpose, what the tracker holds, what a clone still has to install — and the next session rediscovers each one as a defect. Emit it as a fenced block so it can be copied whole, fill every placeholder from what actually happened rather than from this shape, and drop a line whose condition did not arise rather than shipping it empty. On an update or an adopt the destination already has working sessions and there is no first prompt to write; omit the section. On a generate stopped at the wayfinding handoff the resume belongs to the operator of this session, not to a new one, so Pending action carries it and this section is still omitted.
 
@@ -51,11 +64,19 @@ First prompt is a generate's only, and it is written for a reader this session n
 - Conflicted: <paths and competing intents, or none>
 - Superseded: <path>: <what it did> -> <the payload path or check now carrying it> | retired, callers repointed (<caller paths>) | none
 - Partially covered, not cut: <script path>: <the parts the check surface already does> | none
-- Overridden: <path>: <the recorded reason the destination's version was chosen> | expired, payload landed and entry dropped (<paths>) | none
+- Overridden: <path>: <the recorded reason the destination's version was chosen> | expired, payload landed and entry dropped (<paths>, each read from preflight's `override_expired` marks and the `expired` half of `unmatched_overrides`) | kept by ownership, no entry recorded (<product paths and reasons>) | none
+- Layout plan (retrofit): <old path> -> <new path>: moved | corrected by the operator to <path> | declined | none
+- Unmovable (retrofit): <path>: <why it could not move>; no allowlist entry written | none
+- References repaired (retrofit): <file>: <the moved path rewritten> | none
+- References reported, not rewritten (retrofit): <file>: <the prose describing the old structure> | none
+- Ignore rules not re-added (retrofit): <rule>: <what it ignored> | none
 
 ### Application boundaries
 - <deployable>: choke point <constraint, or "none bound; time-to-working-code"> -> <language>, <selected from list | reasoned from the seam contract | measured against it>
 - Wayfinding: short form settled it | handed off to `/wayfinder` (<which trigger>), map at <URL or path> | skipped, supplied in the invocation
+- Unit map (retrofit): <unit>: name from <the source it came from>, built by <evidence>, installed by <evidence>; run <value> and ships <value>, each <proposed from <evidence>, confirmed | corrected by the operator>; domains <names and the boundary the destination draws for each, or none>
+- Ships nothing for want of an adapter (retrofit): <unit>: <language> has no packaging adapter | none
+- Declared but not built (retrofit): <deployable>: declared by <the descriptor naming it>, filed under <the owning unit> | none
 - ADRs written: <paths, or none>
 
 ### File list
@@ -65,6 +86,7 @@ First prompt is a generate's only, and it is written for a reader this session n
 ### Addon adoption
 - <addon taken>: <slot token, review section, or external step>: filled | reviewed | done | OUTSTANDING (<what remains>)
 - <addons offered and not taken, on one line>
+- Already held (retrofit): <addon-shaped paths the destination brought with it, on one line> | none. A retrofit takes none, so this is the whole of its block
 
 ### Repository settings
 - <setting>: enabled | unavailable (<reason>) | not requested
@@ -72,12 +94,28 @@ First prompt is a generate's only, and it is written for a reader this session n
 - Merge settings overwritten (generate into existing content only): <setting>: <prior value> -> <applied value> | declined by user, recorded in `generation.features`
 - Issue tracker: <GitHub | GitLab | local markdown | other>, recorded in `docs/agents/issue-tracker.md`, shipped by the payload | written by `/setup-matt-pocock-skills` | kept from the destination; labels: created (<names>) | renamed to the payload's spelling (<old -> new>; label search is case-sensitive, so anything pinned to the old string stops matching) | already present | none created (<reason>)
 
+### Hosted writes, reversible (retrofit)
+One line per write the gate authorized and performed, with the state it replaced and the command that puts it back.
+
+- <write>: was <before-state> -> <applied value>; reverse with `<exact command>` | declined by the operator (<reason>), recorded in `generation.features`
+
+### Hosted writes, irreversible (retrofit)
+Named apart from the section above, because a single block of reversal commands reads as though the whole gate can be walked back.
+
+- <write>: was <before-state> -> <applied value>; no command reverses it, and <the cost of having made it>
+- Ruleset enforcement: unproven; the probe is not performed against a live default branch, as [retrofit](retrofit.md#step-8--the-hosted-write-gate) directs
+- Permissions gap: <write>: refused without the host's upgrade message, so the credential and not the plan is the limit | none
+
 ### Verification
 One line per check, from `scripts/summarize <command>` rather than from a filter built for the occasion.
 
 - `<exact command>`: pass | fail | unavailable (<reason>)
 - Hooks: installed at <scope> into <hooks directory>; `core.hooksPath` left pinned there (update and adopt) | global `core.hooksPath` set to <value>, worked around rather than unset | `extensions.worktreeConfig` set on <clone> and left set (retrofit)
 - Copied paths byte-identical to their source: <count>/<count>; the rest are the authored surface, under File list. An overridden path is in neither count, under Reconciliation instead
+- Moved paths byte-identical to their pre-move blob (retrofit): <count>/<count>
+- Workflows the pull-request event never ran: <names> | none
+- Tool declaration (retrofit): <manifest>: added <tool at the template's floor> | kept <the specifier the destination already declared> | declined by the operator, so <capability> cannot reach the bar | nothing missing
+- Bar (retrofit): met | UNMET: <capability>: fail | unavailable (<reason>); stopped before the pull request, zero hosted writes performed
 - Candidate (retrofit): left standing at <path>; remove it with `git -C <clone> worktree remove <path>`
 - Code review: skipped, as [Reviewing the pull request](#reviewing-the-pull-request) directs
 - Default branch after merge: <check-suite result> | n/a (nothing merged)

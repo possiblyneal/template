@@ -37,7 +37,7 @@ Every built repository tracks `.repo-template.json`:
       "codeql": "omitted-by-choice"
     },
     "overrides": [
-      {"path": "docs/agents/issue-tracker.md", "reason": "destination tracks issues outside GitHub"}
+      {"path": "CLAUDE.md", "reason": "destination keeps its own instruction file"}
     ],
     "superseded": [
       {"path": ".github/workflows/lint.yml", "did": "ran eslint on push", "by": "ci.yml"},
@@ -81,6 +81,8 @@ Do not record what the filesystem already answers. Language and package manager 
 
 `generation.applications` lists the deployable names [Wayfinding](wayfinding.md) established, and nothing else about them. It is recorded because an update has to know that `apps/app-name` was renamed rather than deleted, which the destination tree can no longer say. The choke point and the language behind each name are not recorded here: the language is answered by the manifests present under the rule above, and the choke point is an argument rather than a fact, so it belongs in the ADR that makes it. A manifest still recording the earlier single `application_name` is left as it is — it records what that generation chose, and an update rewriting it would claim a decision the update did not make.
 
+A retrofit writes the same field from the unit names the operator confirmed, and writes no field beside it. The run and ship facts belong to each unit's own `.unit.json`, and the evidence they were proposed from belongs to the architecture record; a copy of either here would be a third source of truth for a value the tree already answers. Units read out of a destination's own evidence and deployables established by wayfinding land in one field on purpose: an update reads unit names to tell a rename from a deletion, and that question is the same however the names were arrived at.
+
 ## Ownership
 
 Ownership answers whether a path participates in template updates:
@@ -105,14 +107,15 @@ An **overridden path** is a payload path a flow did not land, because the destin
 
 ```json
 "overrides": [
-  {"path": "docs/agents/issue-tracker.md", "reason": "destination tracks issues outside GitHub"}
+  {"path": "CLAUDE.md", "reason": "destination keeps its own instruction file"}
 ]
 ```
 
 - One entry per path, with the reason the destination's version was chosen. A path with no reason is not a decision anyone can review later, and the next update has nothing to weigh the entry against. `preflight.py` refuses a malformed record before a flow acts on it: a non-list, an entry that is not an object, a missing or empty `path` or `reason`, and two entries naming one path.
+- **An entry is only ever about a managed path.** Ownership already grants the destination every product-owned path, so an entry on one asserts nothing, and it is not merely redundant: an overridden path leaves the product tally as well as the managed one, so the delta summary under-reports the destination's own files. `preflight.py` refuses it, naming the path and the ownership rule that made it product-owned, and resolving ownership exactly as the delta does, an unmatched path included. A collision a product-owned destination file won is still reported by name with the reason it won, under Reconciliation: ownership is what makes that version stand, so there is a line to write and no entry to record.
 - An update skips a delta path listed here rather than reporting it as a conflict. That is the whole point: without the record every update re-raises the same collision and asks for a policy decision that was made once already. A delta renaming the path is still that path: the entry names what the destination held, so a rename is matched under its source name as well as its destination one.
-- **An entry expires with the thing it records.** Where the destination has deleted its own version of an overridden path, the override has nothing left to protect: the update lands the payload's copy and drops the entry, both in the same pull request. A record outliving its subject is how the payload's file stays permanently absent for a reason nobody holds any more. Expiry is read from the entries, not from the update's delta: a destination deleting its own version changes nothing on the template's side, so the path the rule is for is the one no delta lists.
-- Adopt neither writes nor reads an entry. It lands an addon the destination does not have, at the recorded commit, and resolves no collision, so it never meets an override. Generate and update are the flows this section binds.
+- **An entry expires with the thing it records.** Where the destination has deleted its own version of an overridden path, the override has nothing left to protect: the update lands the payload's copy and drops the entry, both in the same pull request. A record outliving its subject is how the payload's file stays permanently absent for a reason nobody holds any more. Expiry is read from the entries against the destination rather than from the update's delta: a destination deleting its own version changes nothing on the template's side, so an expired entry sits inside the delta as readily as outside it. `preflight.py update` settles both halves from the destination's tracked paths alone. A delta path whose entry the destination no longer holds is marked `override_expired` rather than overridden, so it stays an ordinary managed change to apply. Every entry the delta does not reach is listed in `unmatched_overrides`, `expired` where the destination no longer holds the path and `unreached` where it still does and this delta simply passed it by. Only expiry ends the entry.
+- Adopt neither writes nor reads an entry. It lands an addon the destination does not have, at the recorded commit, and resolves no collision, so it never meets an override. Generate, retrofit, and update are the flows this section binds.
 - An overridden path was never written, so it is absent from the copy proof [Reviewing the pull request](reporting.md#reviewing-the-pull-request) runs, and belongs to neither the copied set nor the authored surface. Name it as overridden in the report instead, with its reason.
 
 ## The automation directory is replaced, not reconciled
@@ -154,6 +157,14 @@ The value is exactly the string `omitted-by-choice` and carries no reason: `scri
 Every flow that writes workflows follows this: [generate](generate.md), [update](update.md), and retrofit alike, each citing this section rather than restating the branch. [Adopt](adopt.md) is absent because it writes no workflow at all, landing only the addons `addon-adoption.json` names.
 
 `scripts/github-parity` reads the record the same way in this repository, which is the one place it runs against a payload: a payload-only workflow is excused exactly where `generation.features` records the omission, and a repository that simply lost `codeql.yml` is not. In a generated repository there is no payload tree to compare against and the check reports `not-applicable`, so nothing there enforces this and the record is read by the flows alone.
+
+## Architecture records live at the root documentation path
+
+Every architecture record the payload governs sits in `docs/adrs/` at the repository root, in every flow, whatever scope the decision has. A record about one unit is still a root record; its `scope` frontmatter field is what says which unit it is about, and `apps/<name>/docs/adrs/` is never where one goes.
+
+Two facts make this a rule rather than a convention. `scripts/adr-index` hardcodes the directory it rewrites the index from, so a record anywhere else is absent from the index the repository publishes. And `scripts/structure` has no rule for records at all: `docs/` takes Markdown freely at every scope, so a record under a unit passes the audit. The two together are what makes a misplaced record invisible instead of loud, which is the failure this rule is against. Whether the audit should enforce the location is a question for the audit and not for these flows.
+
+The rule binds [generate](generate.md), [update](update.md), [adopt](adopt.md), and retrofit alike. It is stated once here because only retrofit meets records already written somewhere else, and a rule stated only there would read as retrofit's own preference rather than as the repository-wide placement every flow writes to.
 
 ## Running the destination's checks
 
@@ -233,13 +244,14 @@ Remote execution
 - push: repo-builder/<short-target> -> generated content or template update
 - open PR: repo-builder/<short-target> -> main
 - merge: repo-builder/<short-target> -> main (bootstrap generate only, see Generate step 12)
+- merge: retrofit/<short-target> -> <default branch> (retrofit's second gate, offered once every required check polls green; declining is the default and leaves the pull request open)
 ```
 
 Read the block as a menu rather than a sequence — no gate shows every line. Settings drift is raised by an update and an adopt and never by a generate, since a generate applies the settings it just listed and nothing has drifted from anything. A generate into a repository that already has content is still a generate here: it applies the merge settings rather than reporting them as drift, and states their current values on the gate, because it is the one flow that overwrites a hosted setting someone deliberately chose.
 
 A generate reaches this twice, and the two gates authorize different things. The first, at [Generate](generate.md) step 4, covers every line through `issues` except settings drift: an empty repository, its settings, the probe that proves those settings bind, and the tracker writes steps 6 and 7 make against it — with no diff and no check result to show, because nothing has been built yet. Present them together even though steps 5 through 7 perform them later, since returning for a second authorization between each is noise; what the gate may not do is perform a remote write it did not list. The labels and issues lines carry their condition in their own text rather than being dropped, because which labels are missing and which tickets the map holds are not known until steps 6 and 7 run; a destination whose own tracker doc records local markdown makes neither write, and that authorization simply goes unused. The second, at step 11, covers the rest against a candidate that has been personalized, checked, and file-list reconciled. Show only the lines the gate is actually asking for. Presenting the whole block at step 4 takes authorization for a content push that does not exist yet.
 
-Ask for confirmation unless the invocation already authorizes these exact actions against this exact repository. Authorization for repository creation does not imply settings changes or a later merge. Never merge as part of this skill, except the bootstrap-generate case documented under [Generate](generate.md) step 12: that PR may be merged, gated the same as every other remote action here.
+Ask for confirmation unless the invocation already authorizes these exact actions against this exact repository. Authorization for repository creation does not imply settings changes or a later merge. Never merge as part of this skill, except two cases, each gated the same as every other remote action here: the bootstrap-generate case documented under [Generate](generate.md) step 12, and the offer a retrofit makes at its own second gate, under [Step 9 — Publish, prove, and offer the merge](retrofit.md#step-9--publish-prove-and-offer-the-merge). The retrofit case is an offer rather than a step, declined by default, and it is asked only there: a generate into a populated destination arguably owes the same one, and nothing has established that, so it is not asserted.
 
 ## Failure and recovery
 

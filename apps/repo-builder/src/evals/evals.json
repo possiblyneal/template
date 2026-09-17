@@ -10,7 +10,7 @@
         "The candidate records the exact full template commit, repository, and base-repo subtree in .repo-template.json.",
         "apps/billing-api exists, while apps/app-name and the root CLAUDE.md bootstrap placeholders do not remain.",
         "docs/adrs/0000-template.md remains available as an ADR template and docs/LESSONS.md has initialized non-placeholder metadata.",
-        "/setup-matt-pocock-skills ran: docs/agents/issue-tracker.md and docs/agents/domain.md exist, the root CLAUDE.md carries an ## Agent skills block that personalization did not overwrite, and docs/agents/triage-labels.md is present exactly when that block carries a ### Triage labels sub-block — the skill writes the pair only where the triage skill is installed.",
+        "/setup-matt-pocock-skills ran: docs/agents/issue-tracker.md and docs/agents/domain.md exist, the root CLAUDE.md carries an ## Agent skills block that personalization did not overwrite, and docs/agents/triage-labels.md is present exactly when that block carries a ### Triage labels sub-block \u2014 the skill writes the pair only where the triage skill is installed.",
         "The report records that the application boundaries were supplied in the invocation rather than derived, so no wayfinding session was opened and no language ADR was written.",
         "The report identifies an empty root commit on main followed by a generated-content branch and pull request.",
         "No gh command, push, remote creation, or other network mutation occurs."
@@ -55,7 +55,7 @@
     },
     {
       "id": 5,
-      "prompt": "Generate a local candidate for acme/session-replay from the fixture template's base-repo subtree at the exact target commit, private visibility, main as the default branch. The invocation does not name the applications, so derive them. The system captures a user's browser session and ships the captured frames to a server that fans them out to live subscribers. Answering the wayfinding questions: two things ship separately — a recorder that runs inside the browser page, and an ingest-api that holds the long-lived subscriber streams. What binds first is a runtime constraint for the recorder, since it can only execute where the browser executes, and network concurrency for the ingest-api, since its cost is thousands of idle open connections. That settles the recorder as TypeScript and the ingest-api as Go. Answering whatever /setup-matt-pocock-skills asks: local markdown for the issue tracker, since this invocation forbids contacting GitHub, and keep whatever defaults it offers for anything else. Work locally only: do not contact GitHub or mutate any remote. Create both application directories, record each choke point in its own ADR, preserve the ADR template, replace the CLAUDE.md bootstrap placeholders, initialize lessons metadata, record provenance in .repo-template.json, and write a report.",
+      "prompt": "Generate a local candidate for acme/session-replay from the fixture template's base-repo subtree at the exact target commit, private visibility, main as the default branch. The invocation does not name the applications, so derive them. The system captures a user's browser session and ships the captured frames to a server that fans them out to live subscribers. Answering the wayfinding questions: two things ship separately \u2014 a recorder that runs inside the browser page, and an ingest-api that holds the long-lived subscriber streams. What binds first is a runtime constraint for the recorder, since it can only execute where the browser executes, and network concurrency for the ingest-api, since its cost is thousands of idle open connections. That settles the recorder as TypeScript and the ingest-api as Go. Answering whatever /setup-matt-pocock-skills asks: local markdown for the issue tracker, since this invocation forbids contacting GitHub, and keep whatever defaults it offers for anything else. Work locally only: do not contact GitHub or mutate any remote. Create both application directories, record each choke point in its own ADR, preserve the ADR template, replace the CLAUDE.md bootstrap placeholders, initialize lessons metadata, record provenance in .repo-template.json, and write a report.",
       "expected_output": "A local candidate carrying two application directories derived from the wayfinding answers, one ADR per deployable recording its choke point and language, and a report that names both boundaries and stops before remote operations.",
       "files": [],
       "expectations": [
@@ -63,14 +63,14 @@
         "docs/adrs holds one accepted ADR per deployable, numbered from 0001, each scoped to its apps/<name> path and a lang:<name> token, with docs/adrs/0000-template.md left as a template.",
         "No root language manifest, toolchain, or package file is rendered for either language.",
         "generation.applications in .repo-template.json lists both names and records no language.",
-        "/setup-matt-pocock-skills ran: docs/agents/issue-tracker.md and docs/agents/domain.md exist, the root CLAUDE.md carries an ## Agent skills block that personalization did not overwrite, and docs/agents/triage-labels.md is present exactly when that block carries a ### Triage labels sub-block — the skill writes the pair only where the triage skill is installed.",
+        "/setup-matt-pocock-skills ran: docs/agents/issue-tracker.md and docs/agents/domain.md exist, the root CLAUDE.md carries an ## Agent skills block that personalization did not overwrite, and docs/agents/triage-labels.md is present exactly when that block carries a ### Triage labels sub-block \u2014 the skill writes the pair only where the triage skill is installed.",
         "The root CLAUDE.md names both deployables and what each is for, and the report states each choke point and how it was established.",
         "No gh command, push, remote creation, or other network mutation occurs."
       ]
     },
     {
       "id": 6,
-      "prompt": "Generate a local candidate for acme/atlas from the fixture template's base-repo subtree at the exact target commit, private visibility, main as the default branch. The invocation does not name the applications, so derive them. What the software should do: teams keep meeting notes, decisions, and the people who made them, and can ask questions across all of it later. Answering the wayfinding questions: the user cannot say what ships separately — every split you offer is rejected and the one described back does not follow from the request, because the repository is being designed rather than described. Answering whatever /setup-matt-pocock-skills asks: local markdown for the issue tracker, since this invocation forbids contacting GitHub, and keep whatever defaults it offers for anything else. Work locally only: do not contact GitHub or mutate any remote.",
+      "prompt": "Generate a local candidate for acme/atlas from the fixture template's base-repo subtree at the exact target commit, private visibility, main as the default branch. The invocation does not name the applications, so derive them. What the software should do: teams keep meeting notes, decisions, and the people who made them, and can ask questions across all of it later. Answering the wayfinding questions: the user cannot say what ships separately \u2014 every split you offer is rejected and the one described back does not follow from the request, because the repository is being designed rather than described. Answering whatever /setup-matt-pocock-skills asks: local markdown for the issue tracker, since this invocation forbids contacting GitHub, and keep whatever defaults it offers for anything else. Work locally only: do not contact GitHub or mutate any remote.",
       "expected_output": "A materialized but unpersonalized candidate whose issue tracker is already configured, a /wayfinder map charted where that tracker says with every ticket still open, and a report of a stopped generate that names the trigger and the resume.",
       "files": [],
       "expectations": [
@@ -122,6 +122,40 @@
         "The destination worktree is clean: no file was edited and no commit was made.",
         "No remote mutation occurs.",
         "No half-merged CLAUDE.md is left behind, with or without conflict markers."
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "Retrofit the fixture destination onto the fixture template's base-repo subtree at the exact target commit. The destination grew without the template: it has content, no .repo-template.json, and a layout of its own. Every disposition is supplied here, so ask for none of them. The unit map: one unit, ledger, run none and ships kind none, with no domains. The layout: the root src/ and tests/ move under that unit, scripts/build.py moves to the unit's own scripts/ because it builds only that unit, docs/adr/ migrates to the payload's docs/adrs/, and notes/architecture.md moves into docs/ under a descriptive name. Its sentence about the scripts living at the root is prose: report it, do not rewrite it. Every collision is decided in favor of the payload. Accept the tool declaration the check surface needs in the root manifest, keeping the specifiers already there. Work locally only: do not contact GitHub, create or configure a repository, push, or open a pull request. Stop at the hosted-write gate with the candidate built, checked, and reported.",
+      "expected_output": "A retrofit candidate whose layout the destination's own check surface passes, whose record is written around what was found, and a report that stops at the hosted-write gate having performed no hosted write.",
+      "files": [],
+      "expectations": [
+        "The destination's own check surface runs and every capability it reports is pass or not-applicable: no FAIL and no unavailable result.",
+        "The layout audit passes with no .structure-allow entry written by the run.",
+        "The moved files are byte-identical to their pre-move blobs: apps/ledger/src/ledger/rates.py and apps/ledger/tests/test_rates.py match the recorded hashes.",
+        "docs/adr/ no longer exists and its record sits under docs/adrs/ beside the payload's template.",
+        ".repo-template.json records the target commit, the base-repo subtree, and an ownership array that is the payload default with zero destination-specific entries; the root CLAUDE.md is managed.",
+        "apps/ledger/.unit.json exists, one declaration for the one unit, carrying run none and ships kind none exactly as disposed, and the payload's apps/app-name placeholder does not remain.",
+        "The root manifest declares the test tool the check surface needs, and the specifiers it already carried are unchanged.",
+        "The report stops at the hosted-write gate: it names the writes that would follow and records that none was performed.",
+        "The report names notes/architecture.md's claim about root-level scripts as prose reported rather than rewritten.",
+        "The report records that the addon-shaped README.md the destination already held was left where it sits and no addon was adopted.",
+        "No gh command, push, remote creation, or other network mutation occurs."
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "Retrofit the fixture destination onto the fixture template's base-repo subtree at the exact target commit. This destination carries debt the layout work does not fix. Every disposition is supplied here, so ask for none of them. The unit map: one unit, ledger, run none and ships kind none, with no domains. The layout: the root src/ and tests/ move under that unit, scripts/build.py moves to the unit's own scripts/ because it builds only that unit, docs/adr/ migrates to the payload's docs/adrs/, and notes/architecture.md moves into docs/ under a descriptive name. Its sentence about the scripts living at the root is prose: report it, do not rewrite it. Every collision is decided in favor of the payload. Accept the tool declaration the check surface needs in the root manifest, keeping the specifiers already there. Work locally only: do not contact GitHub, create or configure a repository, push, or open a pull request. If the destination's own check surface cannot come back green, stop before the pull request rather than proposing a fix for the debt.",
+      "expected_output": "A stopped retrofit: the bar is unmet, no pull request exists, no hosted write was made, the destination's recorded state did not advance, and the report names each failing result state.",
+      "files": [],
+      "expectations": [
+        "The report records the bar as unmet and names each failing check with its state: the layout audit and the test capability.",
+        "The report names the root Makefile as unmovable and records that no .structure-allow entry was written for it.",
+        "No pull request is created and no hosted write is performed.",
+        "The destination repository is left at its original commit with a clean worktree: the candidate is the only tree the run wrote to.",
+        "No .repo-template.json is added to the destination repository itself.",
+        "The run does not edit the failing test or the source it exercises in order to reach the bar.",
+        "No gh command, push, remote creation, or other network mutation occurs."
       ]
     }
   ]

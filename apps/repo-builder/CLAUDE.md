@@ -8,7 +8,7 @@ Develops the `/repo-builder` skill, which builds a repository from the payload a
 
 - `src/SKILL.md` — the entry point, and the only file Claude Code reads to decide the skill applies.
 - `src/references/` — the flows the entry point routes to: `lifecycle.md` first, then `generate.md`, `update.md`, `adopt.md`, `retrofit.md`, `wayfinding.md`, `addon-adoption.md`, and `reporting.md` at the end of any of them. `choosing_a_language.md` is the method wayfinding is a short path through.
-- `src/scripts/preflight.py` — validates and describes a flow's inputs before it acts. Retrofit shares the git helpers and none of the manifest ones: every check in `load_provenance` reads a record a retrofit has not written yet.
+- `src/scripts/preflight.py` — validates and describes a flow's inputs before it acts. Retrofit shares the git helpers and the addon manifest reader, and none of the record ones: every check in `load_provenance` reads a `.repo-template.json` a retrofit has not written yet.
 - `src/scripts/tests/` — the pytest suite over `preflight.py`, plus two checks that are not about this unit's code: `test_addon_adoption.py`, on the template payload, and `test_reference_assertions.py`, on whether `src/references/` still describes a payload that exists.
 - `src/evals/` — `evals.json` and the fixture helpers the skill-eval tooling runs it against.
 - `scripts/install` — creates the link described below.
@@ -22,6 +22,8 @@ Develops the `/repo-builder` skill, which builds a repository from the payload a
 **The skill runs from this repository.** Its paths are repository-root-relative — `apps/github-repository-template/src/base-repo`, `src/addon-adoption.json` — and the destination is an argument rather than the working directory. A session that invokes it from somewhere else resolves those paths against the wrong tree. A generate's candidate is repository-root-relative too, under the gitignored `tmp/`, so it cannot be committed here and materializing a whole tree needs no approval for a path outside the repository. `references/generate.md` step 3 names it and `SKILL.md` repeats it for routing; a third copy of the path is one more than can be kept in step.
 
 **`ships.kind` is `none` because the vocabulary has no word for this.** The three kinds are `executable`, `quadlet`, and `none`, and a symlinked skill is none of them. Adding a fourth means editing `scripts/structure`, which is mirrored into the payload, so every generated repository would gain a kind it has no unit to use; `docs/adrs/0001-declare-unit-delivery-as-two-facts.md` gates the declaration's shape. `none` here reads as "nothing this repository's packaging adapters build", which is accurate — `scripts/install` is what delivers it.
+
+**The retrofit fixture copies the payload's real layout audit.** `src/evals/setup_fixture.py` reads `scripts/structure` and `scripts/libs/result.sh` out of `apps/github-repository-template/src/base-repo/` rather than writing a stand-in, because a retrofit is scored on its destination's own check surface and a hand-written audit would prove nothing about the rules this template actually enforces. Moving either payload path breaks the two retrofit scenarios.
 
 **Two root-level checks name paths inside this unit**, and moving a file here breaks them silently rather than loudly: the `addon-adoption` pre-commit hook's `entry`, and `testpaths` in the root `pyproject.toml`. The root `pyproject.toml` exists for this unit's Python; it is root-only and never mirrored into the payload.
 

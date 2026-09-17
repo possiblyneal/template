@@ -9,6 +9,7 @@ import json
 import re
 import subprocess
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import NoReturn
@@ -184,22 +185,20 @@ def sibling_of_subtree(subtree: str, name: str) -> str:
     return f"{parent}/{name}" if parent else name
 
 
-def require_addon(
-    repository: Path, commit: str, subtree: str, addon: str
+def addon_manifest_files(
+    repository: Path, commit: str, subtree: str
 ) -> dict[str, object]:
-    addons_root = sibling_of_subtree(subtree, "repository-addons")
-    blob = f"{addons_root}/{addon}"
-    existence = run_git(repository, "cat-file", "-e", f"{commit}:{blob}", check=False)
-    if existence.returncode != 0:
-        raise PreflightError(f"addon does not exist at {commit}: {blob}")
-    kind = git_output(repository, "cat-file", "-t", f"{commit}:{blob}")
-    if kind != "blob":
-        raise PreflightError(f"addon is not a file at {commit}: {blob}")
+    """Read `addon-adoption.json`'s file map at a commit.
+
+    The manifest is the only list of what the template holds back, so every
+    flow asking which paths are addons asks it rather than carrying a copy
+    that goes stale the next time an addon is added.
+    """
     manifest_rel = sibling_of_subtree(subtree, "addon-adoption.json")
-    manifest_existence = run_git(
+    existence = run_git(
         repository, "cat-file", "-e", f"{commit}:{manifest_rel}", check=False
     )
-    if manifest_existence.returncode != 0:
+    if existence.returncode != 0:
         raise PreflightError(
             f"addon manifest does not exist at {commit}: {manifest_rel}"
         )
@@ -211,7 +210,42 @@ def require_addon(
             f"addon manifest is invalid JSON at {commit}: {error.msg}"
         ) from error
     files = index.get("files") if isinstance(index, dict) else None
-    if not isinstance(files, dict) or addon not in files:
+    if not isinstance(files, dict):
+        raise PreflightError(
+            f"addon manifest has no files object at {commit}: {manifest_rel}"
+        )
+    return files
+
+
+def addons_already_held(present: set[str], addons: Iterable[str]) -> list[str]:
+    """Name every addon-shaped path the destination already holds.
+
+    A finding and never a decision. A retrofit adopts no addon, so what this
+    answers is whether the operator already solved by hand what adopt would
+    have offered; sorted so two runs over the same destination report the
+    same line.
+
+    Read from the paths git lists rather than from the filesystem, as every
+    other retrofit finding is. An addon is a file the destination holds, and
+    a bare existence test answers yes for a directory that shares the name,
+    which is not an addon anyone wrote.
+    """
+    return sorted(addon for addon in addons if addon in present)
+
+
+def require_addon(
+    repository: Path, commit: str, subtree: str, addon: str
+) -> dict[str, object]:
+    addons_root = sibling_of_subtree(subtree, "repository-addons")
+    blob = f"{addons_root}/{addon}"
+    existence = run_git(repository, "cat-file", "-e", f"{commit}:{blob}", check=False)
+    if existence.returncode != 0:
+        raise PreflightError(f"addon does not exist at {commit}: {blob}")
+    kind = git_output(repository, "cat-file", "-t", f"{commit}:{blob}")
+    if kind != "blob":
+        raise PreflightError(f"addon is not a file at {commit}: {blob}")
+    files = addon_manifest_files(repository, commit, subtree)
+    if addon not in files:
         raise PreflightError(f"addon has no addon-adoption.json entry: {addon}")
     entry = files[addon]
     if not isinstance(entry, dict):
@@ -285,6 +319,36 @@ def validate_overrides(manifest: dict[str, object]) -> dict[str, str]:
     return reasons
 
 
+def require_managed_overrides(
+    overrides: dict[str, str], rules: list[OwnershipRule]
+) -> None:
+    """Refuse an override on a path the ownership rules resolve as product.
+
+    An override records that a *managed* collision was settled in the
+    destination's favour, so an entry on a product path asserts nothing the
+    rules did not already grant. It is not merely redundant: an overridden
+    path leaves the product tally as well as the managed one, so the delta
+    summary would under-report the destination's own files with no way for a
+    reader to see why. Ownership resolves here exactly as it does in the
+    delta, unmatched path included, so the two cannot disagree about which
+    entries are legal.
+    """
+    for override_path in sorted(overrides):
+        mode, rule = classify_path(override_path, rules)
+        if mode == "managed":
+            continue
+        matched = (
+            f"ownership rule {rule} (product)"
+            if rule is not None
+            else "no ownership rule, so it is product-owned"
+        )
+        raise PreflightError(
+            f"manifest.generation.overrides names a product-owned path: "
+            f"{override_path}, matched by {matched}; an override settles a "
+            "managed collision, and a product path is the destination's already"
+        )
+
+
 def validate_manifest(
     path: Path,
 ) -> tuple[dict[str, object], list[OwnershipRule], dict[str, str]]:
@@ -339,6 +403,7 @@ def validate_manifest(
             )
         seen.add(pattern)
         rules.append(OwnershipRule(pattern, str(mode), index))
+    require_managed_overrides(overrides, rules)
     return manifest, rules, overrides
 
 
@@ -421,7 +486,9 @@ def parse_name_status(
 
 
 def mark_overridden(
-    changes: list[dict[str, object]], overrides: dict[str, str]
+    changes: list[dict[str, object]],
+    overrides: dict[str, str],
+    destination_paths: set[str],
 ) -> None:
     """Mark each delta path the record already settled, reading both names.
 
@@ -434,14 +501,66 @@ def mark_overridden(
     The fallback reads a second name rather than a status, so it holds only
     while the diff detects renames alone: a copy's source still exists, and
     inheriting its entry would protect a file nothing is replacing.
+
+    An entry whose path the destination no longer holds is expired, and
+    expiry is decided here as well as in `unmatched_overrides` because the
+    payload is as free to change an expired path as to leave it alone:
+    marking such a delta path overridden would skip the payload's copy on
+    behalf of a destination file that is gone. So it is marked expired
+    instead, which leaves it an ordinary managed change to apply while
+    naming the entry this update drops.
     """
     for change in changes:
-        reason = overrides.get(change["path"])
+        path = str(change["path"])
+        reason = overrides.get(path)
+        recorded_path = path
         if reason is None and "old_path" in change:
-            reason = overrides.get(change["old_path"])
-        if reason is not None:
+            recorded_path = str(change["old_path"])
+            reason = overrides.get(recorded_path)
+        if reason is None:
+            continue
+        if recorded_path in destination_paths:
             change["overridden"] = True
-            change["override_reason"] = reason
+        else:
+            change["override_expired"] = True
+        change["override_reason"] = reason
+
+
+def unmatched_overrides(
+    changes: list[dict[str, object]],
+    overrides: dict[str, str],
+    destination_paths: set[str],
+) -> list[dict[str, str]]:
+    """Report each recorded override the bounded delta does not reach.
+
+    An entry the delta touches is the ordinary case and is marked on the
+    change itself, overridden or expired as `mark_overridden` reads it.
+    What is left is an entry this update has nothing to say about, and the two reasons for that are worth telling apart, because only
+    one of them ends the entry: `expired` where the destination no longer
+    holds the path, so the record is settling a collision that cannot recur
+    and the payload's version should land like any other managed delta;
+    `unreached` where the file is still there and this delta simply passed it
+    by. Both are settled from git alone -- the destination's tracked paths --
+    so neither asks the flow to re-read the manifest by hand.
+
+    A rename carries two names, and the record holds the one the destination
+    had, so both are read here for the same reason `mark_overridden` reads
+    them.
+    """
+    reached: set[str] = set()
+    for change in changes:
+        reached.add(str(change["path"]))
+        if "old_path" in change:
+            reached.add(str(change["old_path"]))
+    return [
+        {
+            "path": override_path,
+            "reason": reason,
+            "state": "unreached" if override_path in destination_paths else "expired",
+        }
+        for override_path, reason in sorted(overrides.items())
+        if override_path not in reached
+    ]
 
 
 def summarize_changes(changes: list[dict[str, object]]) -> dict[str, int]:
@@ -612,7 +731,8 @@ def update_preflight(arguments: argparse.Namespace) -> dict[str, object]:
         subtree,
     ).stdout
     changes = parse_name_status(diff, subtree, rules)
-    mark_overridden(changes, provenance.overrides)
+    destination_paths = set(listed_paths(destination))
+    mark_overridden(changes, provenance.overrides, destination_paths)
     return {
         "operation": "update",
         "template": {
@@ -632,6 +752,9 @@ def update_preflight(arguments: argparse.Namespace) -> dict[str, object]:
         },
         "changes": changes,
         "summary": summarize_changes(changes),
+        "unmatched_overrides": unmatched_overrides(
+            changes, provenance.overrides, destination_paths
+        ),
         "remote_actions_performed": False,
     }
 
@@ -922,6 +1045,13 @@ def retrofit_preflight(arguments: argparse.Namespace) -> dict[str, object]:
         # and absence has no runner: a payload file that never landed produces
         # a green run unless something holds the list it should have landed.
         "payload_paths": payload,
+        # Findings only, and never a stop. Addons live in a sibling tree
+        # rather than under the payload subtree, so a destination's own
+        # readme never reaches `collisions` and nothing here is a path the
+        # retrofit intends to land: the retrofit adopts no addon.
+        "addons_present": addons_already_held(
+            present, addon_manifest_files(template_repo, target, subtree)
+        ),
         # Evidence, never a decision. Which side of a collision wins is read
         # from ownership rules that live in a record a retrofit writes at the
         # end, so there is nothing here to read them from.
