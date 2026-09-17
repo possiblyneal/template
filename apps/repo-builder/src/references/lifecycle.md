@@ -158,6 +158,33 @@ Every flow that writes workflows follows this: [generate](generate.md), [update]
 
 `scripts/github-parity` reads the record the same way in this repository, which is the one place it runs against a payload: a payload-only workflow is excused exactly where `generation.features` records the omission, and a repository that simply lost `codeql.yml` is not. In a generated repository there is no payload tree to compare against and the check reports `not-applicable`, so nothing there enforces this and the record is read by the flows alone.
 
+## Dependabot entries follow the manifests present
+
+`.github/dependabot.yml` sits inside the directory [replaced, not reconciled](#the-automation-directory-is-replaced-not-reconciled), and the payload's copy lists only the two ecosystems whose manifests the template itself ships: `github-actions` and `pre-commit`. It cannot list any of the language ecosystems ahead of the manifest that would justify one, because an entry naming a manifest that is not there fails the whole run with `dependency_file_not_found` rather than being skipped — the second entry does not get its bump.
+
+So every flow that writes the file **derives the language entries from the manifests the destination actually holds** and appends them to the two the payload ships. The file's header states the mapping for a human reader, and that is not the mechanism: an instruction addressed to nobody is how a destination ends up with a manifest Dependabot never watches, which is a whole class of silent gap rather than one repository's missing line.
+
+**The list is re-derived every run, never preserved.** The file is managed and replaced whole, so an entry added by hand does not survive the next update — this repository's own `pip` entry carries a comment saying exactly that. Recomputing from what is on disk makes the entry survive by being rebuilt rather than by being carried, which is why this is not an [override](#overridden-paths), not one of update's four reconciliation rules, and not a per-destination exception anybody has to remember. It runs in the other direction too: a manifest deleted since the last run loses its entry without anyone removing it, and that removal is not cosmetic — the stale entry is what would fail the run.
+
+**One entry per manifest, at the manifest's own directory.** `directory` takes the directory holding the manifest — `/apps/glydr`, not `/` — so an entry cannot be derived from the ecosystem name alone, and a repository whose only module sits under `apps/` is the ordinary case rather than the exotic one. Where one ecosystem has manifests in several directories, put them in the plural `directories` list, the form the payload's `github-actions` entry already uses; repeating the ecosystem is also accepted, and splits one ecosystem's cooldown and group across two places that then drift.
+
+| Manifest | `package-ecosystem` |
+|---|---|
+| `package.json` | `npm` |
+| `pyproject.toml` | `pip` |
+| `go.mod` | `gomod` |
+| `Cargo.toml` | `cargo` |
+| `build.gradle.kts` | `gradle` |
+| `Package.swift` | `swift` |
+
+**A workspace file is not a manifest.** `go.work` and `settings.gradle.kts` say where the modules are; they are not what Dependabot reads. A destination with a root `go.work` and one `apps/<name>/go.mod` takes a single `gomod` entry at `/apps/<name>` and none at `/`, and an entry at `/` there fails the run for the same reason any absent manifest does. Search for the manifests themselves rather than reading `has_<lang>` from `scripts/libs/detect.sh`, which answers only whether a *root* manifest is present; skip the directories `DETECT_PRUNE_DIRS` names, since a manifest belonging to a dependency or to a whole repository materialized under `tmp/` is not this repository's to watch.
+
+**A derived entry carries the policy the payload's own entries carry** — `interval: weekly`, `cooldown.default-days: 7`, and one group matching `*` named for the ecosystem — so where it came from is the only thing about it that differs from a shipped one. The cooldown in particular is the reason a bump is reviewed rather than noise: a derived entry without it is the one difference a reader would have to account for.
+
+**Verification is the file's own check run.** GitHub validates `.github/dependabot.yml` on push and reports it as a check named for the path, so a malformed or unsatisfiable entry is visible on the pull request rather than as a Dependabot that quietly opens nothing. Poll it with the rest and read it as part of the publish: `dependency_file_not_found` is the failure this rule exists to prevent and the one it can still cause.
+
+The rule binds [generate](generate.md), [update](update.md), and retrofit alike. [Adopt](adopt.md) is absent because it writes no `.github/` path at all.
+
 ## Architecture records live at the root documentation path
 
 Every architecture record the payload governs sits in `docs/adrs/` at the repository root, in every flow, whatever scope the decision has. A record about one unit is still a root record; its `scope` frontmatter field is what says which unit it is about, and `apps/<name>/docs/adrs/` is never where one goes.
