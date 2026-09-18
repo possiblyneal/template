@@ -56,6 +56,8 @@ Every built repository tracks `.repo-template.json`:
     {"path": ".gitignore", "mode": "managed"},
     {"path": ".worktreeinclude", "mode": "managed"},
     {"path": ".mcp.json", "mode": "managed"},
+    {"path": "tmp/.gitkeep", "mode": "managed"},
+    {"path": ".env", "mode": "product"},
     {"path": "apps/**", "mode": "product"},
     {"path": "libs/**", "mode": "product"},
     {"path": "tests/**", "mode": "product"},
@@ -93,7 +95,9 @@ Ownership answers whether a path participates in template updates:
 
 The longest matching path wins; equal patterns are invalid. The old-to-new template delta bounds update scope. Do not edit an unrelated destination path merely because a broad ownership rule matches it. An expired override is the one write outside that bound, and [Overridden paths](#overridden-paths) is where it is settled.
 
-Unmatched defaulting to product is the safe direction for a path the template does not ship, and the wrong one for a path it does. A file at the repository root matches no directory pattern, so `CLAUDE.md`, `.pre-commit-config.yaml`, `.commitlintrc.yaml`, `.gitattributes`, and `.gitignore` fall through to product unless named individually, and those files carry the instructions every agent session in the destination reads, the pinned hook revisions behind the secret scanner, the commit-message rules, and the merge policy keeping a lockfile from being line-merged. The list grows: every root file the payload adds needs a line here, or a payload fix to it lands nowhere while the update reports success. Every path the template ships needs an ownership rule that reaches it; verify with `classify_path` rather than assuming a directory pattern covers a file at the root.
+Unmatched defaulting to product is the safe direction for a path the template does not ship, and the wrong one for a path it does. A file at the repository root matches no directory pattern, so `CLAUDE.md`, `.pre-commit-config.yaml`, `.commitlintrc.yaml`, `.gitattributes`, and `.gitignore` fall through to product unless named individually, and those files carry the instructions every agent session in the destination reads, the pinned hook revisions behind the secret scanner, the commit-message rules, and the merge policy keeping a lockfile from being line-merged. The list grows: every root file the payload adds needs a line here, or a payload fix to it lands nowhere while the update reports success. Every path the template ships needs an ownership rule that reaches it; verify with `classify_path` rather than assuming a directory pattern covers a file at the root. In this repository that claim is settled mechanically — `test_reference_assertions.py` matches every payload path against both this manifest's list and the example above, so a payload path added without a rule fails the commit rather than quietly leaving the template's later fix nowhere to land.
+
+Reaching a path is not the same as managing it. `.env` is reached and **product**: the payload ships an empty one so the file exists, and everything in a destination's copy is the destination's. Naming it is what makes that a decision rather than the default falling the same way by accident — and the default is what an added payload path would inherit next time.
 
 The root `CLAUDE.md` is managed for that reason and merged rather than overwritten, which is what `managed` already means: the destination writes its own project instructions into the same file the template ships, so an update reconciles the template's change with what the destination wrote and stops only where the two say different things about the same rule.
 
