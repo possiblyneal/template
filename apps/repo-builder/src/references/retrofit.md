@@ -65,7 +65,9 @@ The branch is named for the payload commit and the directory for the destination
 
 Write the payload paths preflight found absent, and write no colliding path at all. Every colliding path stays in the collision list for the per-file decision the flow reaches later. This satisfies the rule against deleting destination content to resolve a collision by construction; copy everything and restore afterwards is rejected, because it breaks that rule in the window between the two steps.
 
-The absent set is `payload_paths` minus the `path` of every collision, taken from the preflight JSON rather than recomputed:
+The absent set is `payload_paths` minus the `path` of every collision, taken from the preflight JSON rather than recomputed.
+
+**The payload's placeholder unit is not in that list, and preflight is what holds it back.** `apps/app-name/` exists for [generate's Step 8 — Personalize the candidate](generate.md#step-8--personalize-the-candidate) to rename into the application's own name; a retrofit reads its units off what the destination already delivers, so there is nothing for it to be. Overlaid, it survives every check the flow runs — it is a well-formed empty unit, so the layout audit, `unit-declaration` and `unit-facts` all pass it — and the retrofitted repository ships a second unit that delivers nothing. Both reference retrofits landed it and both retired it by hand. Do not add it back to the absent set on the reasoning that preflight found it missing: it is missing because the destination was right not to have it.
 
 ```bash
 xargs -r -a <absent-paths> -d '\n' \
