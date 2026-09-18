@@ -12,6 +12,9 @@ source "$repo_root/scripts/libs/detect.sh"
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=libs/precommit.sh
 source "$repo_root/scripts/libs/precommit.sh"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/dependabot.sh
+source "$repo_root/scripts/libs/dependabot.sh"
 
 check_required() {
   local tool="$1"
@@ -85,6 +88,28 @@ if [[ -s .pre-commit-config.yaml ]]; then
       done <<<"$uninstalled"
     fi
     verdict pre-commit "every configured hook is installed"
+  fi
+fi
+
+# Dependabot opens no update pull request for a manifest no entry names, and
+# says nothing about it: the file is valid, the check run is green, and the only
+# symptom is a bump that never arrives. An entry is derived per repository from
+# the manifests that repository tracks -- the rule is "Dependabot entries follow
+# the manifests present" -- so a manifest added since the last /repo-builder
+# update flow has none, and this is where that shows.
+#
+# not-applicable rather than a finding, and check_optional above is the shape:
+# nothing here fails for the lack of an entry, and the detail says what one
+# would add. A finding would fail the gate, and so CI, in every repository that
+# gains a manifest before its next update flow runs -- which would make adding a
+# module a red build rather than a line to read.
+if [[ -s .github/dependabot.yml ]]; then
+  unwatched="$(dependabot_unwatched_manifests .github/dependabot.yml)"
+
+  if [[ -n "$unwatched" ]]; then
+    result dependabot not-applicable "no updates entry for ${unwatched//$'\n'/, }; run the /repo-builder update flow to derive one"
+  else
+    result dependabot pass "every tracked manifest has an entry"
   fi
 fi
 

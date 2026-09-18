@@ -3,13 +3,13 @@
 # rather than being skipped, so npm, pip, cargo, gomod, gradle, and swift cannot
 # be listed ahead of the manifest that would justify one.
 #
-# A language entry is not added here by hand. Every /repo-builder flow that
-# writes this file derives one entry per manifest the repository holds and
-# appends it below, re-deriving the whole set each run -- so an entry survives by
-# being rebuilt rather than by being carried, and this file being replaced whole
-# by an update cannot drop it. `directory` is the manifest's own directory,
-# /apps/<name> where the module lives under apps/, so the entry cannot be
-# derived from the ecosystem name alone.
+# Every /repo-builder flow that writes this file derives the language entries
+# from the manifests the repository tracks and appends them below, re-deriving
+# the whole set each run -- so an entry survives by being rebuilt rather than by
+# being carried, and this file being replaced whole by an update cannot drop it.
+# `directory` is the manifest's own directory, /apps/<name> where the module
+# lives under apps/, so the entry cannot be derived from the ecosystem name
+# alone.
 #
 # The ecosystem per manifest: npm for package.json, pip for pyproject.toml,
 # gomod for go.mod, cargo for Cargo.toml, gradle for build.gradle.kts, swift for
@@ -17,8 +17,10 @@
 # entry of their own; they say where the modules are, and the modules are what
 # Dependabot reads.
 #
-# An entry added here by hand instead is not wrong, only unowned: nothing
-# re-derives it, and the next template update replaces this file without it.
+# An entry for an ecosystem outside that list -- docker, terraform, nuget and
+# the rest Dependabot supports -- stays yours to keep here. The derivation
+# rebuilds only what it maps, so a flow reads this file before replacing it and
+# reports such an entry by name on its gate rather than dropping it silently.
 #
 # This file governs version updates, the scheduled bumps for dependencies with
 # nothing wrong with them. Security updates are a separate feature that reads

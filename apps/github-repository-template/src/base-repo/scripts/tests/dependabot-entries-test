@@ -1,0 +1,264 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+# Asserts that libs/dependabot.sh names the tracked manifests no entry watches.
+#
+# The failure this exists for is silent in both directions, and that is why it
+# is worth a suite of its own. A manifest with no entry gets no update pull
+# request and no error: the config is valid YAML, the file's own check run is
+# green, and the only symptom is a bump that never arrives. A false report is
+# just as quiet in practice -- scripts/doctor prints a line telling the operator
+# to derive an entry that is already there, and the operator learns to skip the
+# line.
+#
+# So the cases here run in both directions: every shape that must be read as
+# watched, and every shape that must not be.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/harness.sh
+source "$repo_root/scripts/tests/libs/harness.sh"
+
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=../libs/dependabot.sh
+source "$repo_root/scripts/libs/dependabot.sh"
+
+
+# A scratch repository holding the given config, plus whatever manifests the
+# case names as paths after it. Everything is committed to the index, because
+# the question is about the tracked set: what Dependabot reads is the pushed
+# tree, so an untracked manifest is not one of its manifests.
+fixture() {
+  local name="$1" config="$2"
+  shift 2
+
+  scratch_repo
+  current="$name"
+
+  mkdir -p "$work/.github"
+  printf '%s\n' "$config" > "$work/.github/dependabot.yml"
+
+  local manifest
+  for manifest in "$@"; do
+    mkdir -p "$work/$(dirname "$manifest")"
+    printf '\n' > "$work/$manifest"
+  done
+
+  git -C "$work" add -A
+}
+
+
+# The answer as one space-separated line, so a case asserts against the whole
+# of it rather than grepping for one path and passing on a partial read.
+unwatched_in() {
+  local answer
+  answer="$(cd "$work" && dependabot_unwatched_manifests .github/dependabot.yml)"
+  printf '%s' "${answer//$'\n'/ }"
+}
+
+
+VERSION='version: 2
+updates:'
+
+echo "dependabot-entries-test"
+
+
+fixture "a root manifest with its entry is watched" "$VERSION
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly" pyproject.toml
+got="$(unwatched_in)"
+if [[ -z "$got" ]]; then
+  pass
+else
+  fail "reported '$got' for a manifest whose entry is right there"
+fi
+
+
+fixture "a root manifest with no entry is reported" "$VERSION
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly" pyproject.toml
+got="$(unwatched_in)"
+if [[ "$got" == "pyproject.toml" ]]; then
+  pass
+else
+  fail "reported '$got' rather than the unwatched pyproject.toml"
+fi
+
+
+# The case the rule exists for: a nested module under apps/, which is where a
+# repository following this template's layout keeps its units. An entry's
+# directory is the manifest's own directory, so one at / does not reach it.
+fixture "a nested manifest is not covered by the root entry" "$VERSION
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly" go.mod apps/api/go.mod
+got="$(unwatched_in)"
+if [[ "$got" == "apps/api/go.mod" ]]; then
+  pass
+else
+  fail "reported '$got', so a module under apps/ would age unwatched"
+fi
+
+
+# The ecosystem has to match as well as the directory. An entry naming the
+# wrong one for a manifest watches nothing and must not silence it.
+fixture "an entry for another ecosystem does not cover the manifest" "$VERSION
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly" pyproject.toml
+got="$(unwatched_in)"
+if [[ "$got" == "pyproject.toml" ]]; then
+  pass
+else
+  fail "an npm entry read as covering a pyproject.toml"
+fi
+
+
+# Both keys are valid and a hand-edit or a formatter turns one into the other.
+# Reading only the singular reports every manifest under a plural entry as
+# unwatched, which is the check inventing a gap rather than finding one.
+fixture "a directories list covers each of its members" "$VERSION
+  - package-ecosystem: cargo
+    directories:
+      - /apps/one
+      - /apps/two
+    schedule:
+      interval: weekly" apps/one/Cargo.toml apps/two/Cargo.toml
+got="$(unwatched_in)"
+if [[ -z "$got" ]]; then
+  pass
+else
+  fail "a directories list left '$got' reported"
+fi
+
+
+# directories accepts a glob, and the shipped github-actions entry uses one to
+# reach the composite actions. A literal comparison reads that as a directory
+# named "*" and reports every member.
+fixture "a glob directory covers what it matches" "$VERSION
+  - package-ecosystem: npm
+    directories:
+      - /apps/*
+    schedule:
+      interval: weekly" apps/one/package.json apps/two/package.json
+got="$(unwatched_in)"
+if [[ -z "$got" ]]; then
+  pass
+else
+  fail "a glob directory left '$got' reported"
+fi
+
+
+# The directories block ends at the next key. Running past it would read the
+# schedule's own lines as directories and match nothing, or worse, everything.
+fixture "a directories list ends at the next key" "$VERSION
+  - package-ecosystem: gomod
+    directories:
+      - /apps/one
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /apps/two
+    schedule:
+      interval: weekly" apps/one/go.mod apps/two/go.mod
+got="$(unwatched_in)"
+if [[ -z "$got" ]]; then
+  pass
+else
+  fail "the second entry was lost and '$got' reported"
+fi
+
+
+# The file's own header names every ecosystem Dependabot supports, including
+# ones no entry lists. Read as configuration, that prose would silence a real
+# gap.
+fixture "a commented entry is not an entry" "# - package-ecosystem: pip
+#   directory: /
+$VERSION
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly" pyproject.toml
+got="$(unwatched_in)"
+if [[ "$got" == "pyproject.toml" ]]; then
+  pass
+else
+  fail "a commented-out entry read as configuration, reporting '$got'"
+fi
+
+
+# A workspace file says where the modules are; the modules are what Dependabot
+# reads. An entry pointed at go.work's directory names no manifest and fails
+# the whole run with dependency_file_not_found, so go.work earns no entry and
+# must not be reported as owing one.
+fixture "a workspace file earns no entry" "$VERSION
+  - package-ecosystem: gomod
+    directory: /apps/api
+    schedule:
+      interval: weekly" go.work apps/api/go.mod
+got="$(unwatched_in)"
+if [[ -z "$got" ]]; then
+  pass
+else
+  fail "reported '$got', which would derive an entry naming no manifest"
+fi
+
+
+# The decision the operator made: the six the template detects and no seventh.
+# A manifest outside that vocabulary is a shape the rest of the checks cannot
+# see, and reporting it here would promise an entry the derivation will not
+# write.
+fixture "a manifest outside the six is not reported" "$VERSION
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly" requirements.txt build.gradle Gemfile
+got="$(unwatched_in)"
+if [[ -z "$got" ]]; then
+  pass
+else
+  fail "reported '$got', a shape the derivation does not map"
+fi
+
+
+# An untracked manifest is not in the pushed tree, so it is not one Dependabot
+# reads. This is the case a working-tree search gets wrong: a gitignored
+# checkout of the repository inside itself contributes manifests that are not
+# in the repository at all, and an entry derived from one fails the whole run.
+fixture "an untracked manifest is not reported" "$VERSION
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly"
+mkdir -p "$work/.claude/worktrees/agent-one"
+printf '\n' > "$work/.claude/worktrees/agent-one/pyproject.toml"
+got="$(unwatched_in)"
+if [[ -z "$got" ]]; then
+  pass
+else
+  fail "reported '$got', which is not in the repository"
+fi
+
+
+# A repository with no config has nothing to compare against. Reporting every
+# manifest there would be a finding about a file that does not exist.
+fixture "no config reports nothing" ""
+rm "$work/.github/dependabot.yml"
+printf '\n' > "$work/pyproject.toml"
+git -C "$work" add -A
+got="$(unwatched_in)"
+if [[ -z "$got" ]]; then
+  pass
+else
+  fail "reported '$got' with no config to read"
+fi
+
+
+report
