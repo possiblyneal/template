@@ -189,7 +189,14 @@ This is a deliberate divergence from [generate](generate.md), which reaches [Rem
 
 Four writes, in this order.
 
-**1. Merge settings, in one call.** `allow_merge_commit`, `allow_squash_merge`, `allow_rebase_merge`, and `delete_branch_on_merge` go in a single `PATCH`, for the reason generate's step 5 gives: sent separately the second call can be refused after the first has landed, and a half-applied merge policy is worse than one never started. State the destination's four current values out loud before overwriting them, since this is somebody's deliberate choice being replaced. Declinable, and a refusal is recorded in `generation.features` with its reason.
+**1. Merge settings, in one call.** `allow_merge_commit`, `allow_squash_merge`, `allow_rebase_merge`, and `delete_branch_on_merge` go in a single `PATCH`, for the reason generate's step 5 gives: sent separately the second call can be refused after the first has landed, and a half-applied merge policy is worse than one never started. State the destination's four current values out loud before overwriting them, since this is somebody's deliberate choice being replaced. Read them from the same endpoint the write goes to, so the read and the write name the fields the same way:
+
+```bash
+gh api "repos/<owner>/<repository>" \
+  --jq '{allow_merge_commit,allow_squash_merge,allow_rebase_merge,delete_branch_on_merge}'
+```
+
+The other route to these four is `gh repo view --json mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed,deleteBranchOnMerge`, and its names are not interchangeable with these: [Step 5 — Configure the repository settings](generate.md#step-5--configure-the-repository-settings) has the rule, which is that the wrong field set returns `null` for every field rather than erroring. All four reading `null` here is the signature of the wrong spelling, not of a destination with every merge method disabled — GitHub does not permit that state. Declinable, and a refusal is recorded in `generation.features` with its reason.
 
 **2. The default-branch rename.** **Declining is a hard stop.** The payload's workflows pin the branch name literally and [the automation directory](lifecycle.md#the-automation-directory-is-replaced-not-reconciled) is replaced whole, so a destination left on the old name receives CI that never fires: green by absence, which is the one failure mode the check surface cannot report. The bar cannot be met that way, so there is nothing to publish.
 
