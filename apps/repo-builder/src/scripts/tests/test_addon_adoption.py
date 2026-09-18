@@ -89,9 +89,8 @@ class AddonAdoptionManifest(unittest.TestCase):
 
         Adopting an addon is a copy into a tree that already has the payload in
         it, so the two namespaces have to stay disjoint. Guidance about a path
-        the payload ships belongs in that payload file, commented out, the way
-        .github/dependabot.yml carries the ecosystem entry to copy when a real
-        manifest arrives.
+        the payload ships belongs in that payload file itself, commented out,
+        where the person editing that file is the one who reads it.
         """
         shadowed = sorted(addon_paths() & payload_paths())
         self.assertEqual(

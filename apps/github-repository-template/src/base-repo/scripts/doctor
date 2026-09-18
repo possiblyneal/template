@@ -12,6 +12,9 @@ source "$repo_root/scripts/libs/detect.sh"
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=libs/precommit.sh
 source "$repo_root/scripts/libs/precommit.sh"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/dependabot.sh
+source "$repo_root/scripts/libs/dependabot.sh"
 
 check_required() {
   local tool="$1"
@@ -85,6 +88,35 @@ if [[ -s .pre-commit-config.yaml ]]; then
       done <<<"$uninstalled"
     fi
     verdict pre-commit "every configured hook is installed"
+  fi
+fi
+
+# Dependabot opens no update pull request for a manifest no entry names, and
+# says nothing about it: the file is valid, the check run is green, and the only
+# symptom is a bump that never arrives. An entry is derived per repository from
+# the manifests that repository tracks -- the rule is "Dependabot entries follow
+# the manifests present" -- so a manifest added since the last /repo-builder
+# update flow has none, and this is where that shows.
+#
+# A passing row carrying the advisory rather than a finding: nothing here fails
+# for the lack of an entry, and the detail says which manifests owe one. A
+# finding would fail the gate, and so CI, in every repository that gains a
+# manifest before its next update flow runs -- which would make adding a module
+# a red build rather than a line to read.
+#
+# It is not not-applicable either. That state means the check did not apply, the
+# way an absent optional tool is reported above, and here the check applied and
+# found something. The detail is where the difference between the two passing
+# rows reads.
+if [[ -s .github/dependabot.yml ]]; then
+  if ! unwatched="$(dependabot_unwatched_manifests .github/dependabot.yml)"; then
+    # An empty answer and an unread tracked set look identical, so a check that
+    # could not run is reported as one rather than as a green row.
+    result dependabot unavailable "the tracked file list could not be read, so no manifest was compared against the config"
+  elif [[ -n "$unwatched" ]]; then
+    result dependabot pass "no updates entry for ${unwatched//$'\n'/, }; run the /repo-builder update flow to derive one"
+  else
+    result dependabot pass "every tracked manifest has an entry"
   fi
 fi
 
