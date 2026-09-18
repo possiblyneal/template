@@ -247,6 +247,138 @@ else
 fi
 
 
+# YAML mapping keys are unordered, so an entry opening with `schedule:` is the
+# same entry. Reading the key's position rather than the entry boundary carries
+# the previous entry's ecosystem onto this one's directory and reports a real
+# gap as watched -- the one failure here that is silent rather than noisy.
+fixture "an entry whose ecosystem is not its first key is read whole" "$VERSION
+  - package-ecosystem: gomod
+    directory: /apps/b
+    schedule:
+      interval: weekly
+  - schedule:
+      interval: weekly
+    package-ecosystem: npm
+    directory: /apps/a" apps/b/go.mod apps/a/go.mod apps/a/package.json
+got="$(unwatched_in)"
+if [[ "$got" == "apps/a/go.mod" ]]; then
+  pass
+else
+  fail "reported '$got'; apps/a/go.mod is watched by nothing and must be named"
+fi
+
+
+# A blank line between members is a formatting choice. Ending the list there
+# drops every member after it and reports their manifests unwatched.
+fixture "a blank line inside a directories list separates members" "$VERSION
+  - package-ecosystem: gomod
+    directories:
+      - /apps/b
+
+      - /apps/c
+    schedule:
+      interval: weekly" apps/b/go.mod apps/c/go.mod
+got="$(unwatched_in)"
+if [[ -z "$got" ]]; then
+  pass
+else
+  fail "a blank line ended the list and left '$got' reported"
+fi
+
+
+fixture "a comment line inside a directories list separates members" "$VERSION
+  - package-ecosystem: cargo
+    directories:
+      - /apps/b
+      # the second module
+      - /apps/c
+    schedule:
+      interval: weekly" apps/b/Cargo.toml apps/c/Cargo.toml
+got="$(unwatched_in)"
+if [[ -z "$got" ]]; then
+  pass
+else
+  fail "a comment ended the list and left '$got' reported"
+fi
+
+
+fixture "a flow directories list is read" "$VERSION
+  - package-ecosystem: cargo
+    directories: [\"/apps/d\", \"/apps/e\"]
+    schedule:
+      interval: weekly" apps/d/Cargo.toml apps/e/Cargo.toml
+got="$(unwatched_in)"
+if [[ -z "$got" ]]; then
+  pass
+else
+  fail "a flow list left '$got' reported"
+fi
+
+
+# What a line-length formatter makes of the flow form.
+fixture "a flow directories list wrapped across lines is read whole" "$VERSION
+  - package-ecosystem: npm
+    directories: [/apps/d,
+      /apps/e]
+    schedule:
+      interval: weekly" apps/d/package.json apps/e/package.json
+got="$(unwatched_in)"
+if [[ -z "$got" ]]; then
+  pass
+else
+  fail "a wrapped flow list left '$got' reported"
+fi
+
+
+# A single star stays inside one path segment. Letting it cross a slash reports
+# a manifest one level deeper as watched when the entry does not reach it,
+# which is the silent direction.
+fixture "a single-star glob does not cross a path separator" "$VERSION
+  - package-ecosystem: cargo
+    directories:
+      - /apps/*
+    schedule:
+      interval: weekly" apps/one/Cargo.toml apps/one/nested/Cargo.toml
+got="$(unwatched_in)"
+if [[ "$got" == "apps/one/nested/Cargo.toml" ]]; then
+  pass
+else
+  fail "reported '$got'; /apps/* does not reach a directory two levels down"
+fi
+
+
+fixture "a double-star glob crosses path separators" "$VERSION
+  - package-ecosystem: cargo
+    directories:
+      - /apps/**
+    schedule:
+      interval: weekly" apps/one/Cargo.toml apps/one/nested/Cargo.toml
+got="$(unwatched_in)"
+if [[ -z "$got" ]]; then
+  pass
+else
+  fail "a double-star glob left '$got' reported"
+fi
+
+
+# An empty answer and an unread tracked set look identical, so the caller has to
+# be able to tell them apart or it reports a green row over nothing read.
+fixture "an unreadable tracked set is a failure, not an empty answer" "$VERSION
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly"
+outside="$(mktemp -d)"
+mkdir -p "$outside/.github"
+cp "$work/.github/dependabot.yml" "$outside/.github/dependabot.yml"
+if (cd "$outside" && dependabot_unwatched_manifests .github/dependabot.yml >/dev/null 2>&1); then
+  fail "reported success outside a repository, where nothing was read"
+else
+  pass
+fi
+rm -rf "$outside"
+
+
 # A repository with no config has nothing to compare against. Reporting every
 # manifest there would be a finding about a file that does not exist.
 fixture "no config reports nothing" ""

@@ -104,9 +104,11 @@ fi
 # gains a manifest before its next update flow runs -- which would make adding a
 # module a red build rather than a line to read.
 if [[ -s .github/dependabot.yml ]]; then
-  unwatched="$(dependabot_unwatched_manifests .github/dependabot.yml)"
-
-  if [[ -n "$unwatched" ]]; then
+  if ! unwatched="$(dependabot_unwatched_manifests .github/dependabot.yml)"; then
+    # An empty answer and an unread tracked set look identical, so a check that
+    # could not run is reported as one rather than as a green row.
+    result dependabot unavailable "the tracked file list could not be read, so no manifest was compared against the config"
+  elif [[ -n "$unwatched" ]]; then
     result dependabot not-applicable "no updates entry for ${unwatched//$'\n'/, }; run the /repo-builder update flow to derive one"
   else
     result dependabot pass "every tracked manifest has an entry"
