@@ -294,6 +294,20 @@ A generate reaches this twice, and the two gates authorize different things. The
 
 Ask for confirmation unless the invocation already authorizes these exact actions against this exact repository. Authorization for repository creation does not imply settings changes or a later merge. Never merge as part of this skill, except two cases, each gated the same as every other remote action here: the bootstrap-generate case documented under [Generate](generate.md) step 12, and the offer a retrofit makes at its own second gate, under [Step 9 — Publish, prove, and offer the merge](retrofit.md#step-9--publish-prove-and-offer-the-merge). The retrofit case is an offer rather than a step, declined by default, and it is asked only there: a generate into a populated destination arguably owes the same one, and nothing has established that, so it is not asserted.
 
+## A written ruleset is proved satisfiable, not merely present
+
+A ruleset that exists, binds, and can never be satisfied reads as a success from every angle a flow otherwise looks: creation returned 201, the rule reads back `active`, `scripts/repo-settings check` passes it, and a probe pushed at the default branch is rejected exactly as it should be. What none of those asks is whether the rule just written will ever let anything merge. A required context nothing reports is the usual way in — see [Step 5 — Configure the repository settings](generate.md#step-5--configure-the-repository-settings) for how the spelling goes wrong — and its symptom is a pull request that is simply never mergeable, with nothing anywhere naming the cause.
+
+The proof costs nothing and the flow is already holding it. Once the pull request's required checks have reported, read the two fields together:
+
+```bash
+gh pr view <n> --json mergeable,mergeStateStatus --jq '{mergeable,mergeStateStatus}'
+```
+
+`MERGEABLE` with `CLEAN` is the rule satisfied. `MERGEABLE` with `BLOCKED`, on an all-green pull request against a ruleset requiring no approving review, is the signature of a ruleset that is active and unsatisfiable: mergeable says no conflict, blocked says a rule is refusing, and with the checks green and no review owed there is nothing left for it to be refusing but a requirement nothing can meet. Report the pair verbatim rather than a verdict derived from it, and name the required contexts beside it, since the misspelling is what the operator has to fix.
+
+Read it as **two** findings at once. It is the satisfiability proof, and it is also the enforcement evidence — `BLOCKED` on a green pull request is a rule binding, observed on a pull request the flow opened anyway rather than manufactured by pushing a throwaway commit at a branch other people fetch. A flow that has this read does not owe the existence check beside it: a ruleset that is refusing is a ruleset that is there.
+
 ## Failure and recovery
 
 Stop before editing when:
