@@ -55,6 +55,13 @@ def reaches(path, pattern):
     A `/**` suffix reaches the directory and everything under it; anything
     else is the path itself. Kept here rather than imported for the
     stdlib-only reason above, and it must stay in step with `path_matches`.
+
+    The `/**` branch is identical to `path_matches`; the fallback is where
+    they diverge, since `path_matches` globs it and this compares it. That is
+    what keeps this the narrower of the two while the manifests hold literal
+    paths and `/**` alone. A rule in any other shape -- `.github/*.yml` --
+    stops matching here, and the shipped paths under it are then reported
+    unreached, which is a false alarm rather than a silent pass.
     """
     if pattern.endswith("/**"):
         prefix = pattern[:-3].rstrip("/")
