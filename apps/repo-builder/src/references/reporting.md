@@ -49,7 +49,7 @@ A flow that labels its pull request or rewrites its body writes through the REST
 
 ```bash
 gh api -X POST "repos/<owner>/<repository>/issues/<n>/labels" -f "labels[]=<label>"
-gh api -X PATCH "repos/<owner>/<repository>/issues/<n>" -f body=@<file>
+gh api -X PATCH "repos/<owner>/<repository>/issues/<n>" -F body=@<file>
 ```
 
 `gh pr edit --add-label` and `gh pr edit --body` both abort on the Projects-classic GraphQL deprecation. The failure is silent in the way that matters: **nothing is applied, only a deprecation notice is reported**, and the command's own exit says nothing useful, so a run that trusts it records a label it never set and a body that still holds whatever it held before. Read the result back — `gh pr view <n> --json labels,body` — rather than taking the exit for the write.

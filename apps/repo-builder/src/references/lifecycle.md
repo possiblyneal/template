@@ -128,7 +128,7 @@ Wherever a flow lands a payload path, the file ends at the mode the payload decl
 
 `.gitignore` is the one both reference retrofits hit: `100755` in the destination, `100644` in the payload, landed executable. It fails at `check-executables-have-shebangs` in the commit after the write, which names the file and not the step that wrote it, so the operator reads a pre-commit refusal with no visible cause.
 
-Every flow that lands payload content is bound: the overlay of an absent path, a collision disposed to the payload, the ignore file and the automation directory replaced whole, and an update applying a managed delta. Set the mode from the payload's index entry rather than from what the file on disk already carries — `git ls-files -s` on the payload path is where it reads.
+Every flow that lands payload content is bound: the overlay of an absent path, a collision disposed to the payload, the ignore file and the automation directory replaced whole, and an update applying a managed delta. Set the mode from the payload at the resolved source commit rather than from what the file on disk already carries — `git ls-tree <commit> -- <subtree>/<path>` prints it in the first field. Read it from the pinned tree and not from the template clone's index or working tree, for the reason every other payload read here is pinned: a clone checked out somewhere other than the target commit answers for a payload the flow is not landing.
 
 ## The automation directory is replaced, not reconciled
 

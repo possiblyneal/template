@@ -8,8 +8,15 @@ mode is not a stale doc a reader shrugs at: a generate follows the reference,
 looks for what it was told is there, and improvises when it is missing.
 
 Only mechanical claims are checked -- a named destination path exists, a cited
-decision record exists, a quoted heading exists. Whether a sentence is *right*
-about a file it names is not decidable here; whether the file exists is.
+decision record exists, a quoted heading exists, and every path the payload
+ships is reached by an ownership rule. Whether a sentence is *right* about a
+file it names is not decidable here; whether the file exists is.
+
+The fourth claim reads two ownership manifests rather than the references --
+this repository's `.repo-template.json` and the example in lifecycle.md -- and
+belongs here for the same reason as the rest: the rule the references state is
+that an unmatched path is product-owned, so a payload path no rule reaches
+sits outside every update with nothing anywhere saying so.
 
 STDLIB ONLY, for the same reason test_addon_adoption.py is: this runs under
 pytest and standalone from a pre-commit hook that resolves no dependencies.

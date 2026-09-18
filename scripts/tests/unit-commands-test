@@ -405,8 +405,9 @@ if command -v go > /dev/null 2>&1; then
     fail "the arguments did not reach the program unchanged: $out"
   fi
 else
-  # The only case here that runs a real program, because argument passing is
-  # the one thing a dry run cannot show.
+  # One of the two real-program cases here, because argument passing is one of
+  # the things a dry run cannot show; the Python run-fact group below is the
+  # other.
   skip "go is not installed"
 fi
 
@@ -448,7 +449,7 @@ TOML
   if command -v uv > /dev/null 2>&1; then
     out="$(run_real scripts/run dash)"
     status=$?
-    if grep -q 'dash started' <<< "$out"; then
+    if [ "$status" -eq 0 ] && grep -q 'dash started' <<< "$out"; then
       pass
     else
       fail "a $declared Python unit did not start (exit $status): $out"

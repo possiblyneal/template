@@ -422,10 +422,11 @@ _capability_format_write_kotlin() { gradle_has_task ktlintFormat || return "$NO_
 # same way, already resolved by the caller.
 #
 # Only one adapter reads the run fact, and that is the trap. In Go, Rust,
-# Kotlin, Swift and Python the command is identical whichever value is
-# declared, so anyone auditing those concludes correctly that the branch
-# changes nothing and can be deleted. It cannot: in Node it chooses between the
-# program's own entry point and a dev server, which are different programs.
+# Kotlin and Python the command is identical whichever value is declared --
+# Swift has no run adapter at all -- so anyone auditing those concludes
+# correctly that the branch changes nothing and can be deleted. It cannot: in
+# Node it chooses between the program's own entry point and a dev server,
+# which are different programs.
 # Delete the branch and a CLI starts a web server, or fails looking for one.
 #
 # All three are declared in libs/unit.sh, beside the reader that fills the
