@@ -118,6 +118,14 @@ An **overridden path** is a payload path a flow did not land, because the destin
 - Adopt neither writes nor reads an entry. It lands an addon the destination does not have, at the recorded commit, and resolves no collision, so it never meets an override. Generate, retrofit, and update are the flows this section binds.
 - An overridden path was never written, so it is absent from the copy proof [Reviewing the pull request](reporting.md#reviewing-the-pull-request) runs, and belongs to neither the copied set nor the authored surface. Name it as overridden in the report instead, with its reason.
 
+### The payload's mode travels with the payload's content
+
+Wherever a flow lands a payload path, the file ends at the mode the payload declares. This is free for a path the destination does not have — `git archive` carries the mode out of the tree it reads — and it is the part that has to be said for a path the destination does have, because rewriting a file in place keeps the mode it already had. A payload file arrives with the destination's bit set, and the destination's bit was set for the destination's version.
+
+`.gitignore` is the one both reference retrofits hit: `100755` in the destination, `100644` in the payload, landed executable. It fails at `check-executables-have-shebangs` in the commit after the write, which names the file and not the step that wrote it, so the operator reads a pre-commit refusal with no visible cause.
+
+Every flow that lands payload content is bound: the overlay of an absent path, a collision disposed to the payload, the ignore file and the automation directory replaced whole, and an update applying a managed delta. Set the mode from the payload's index entry rather than from what the file on disk already carries — `git ls-files -s` on the payload path is where it reads.
+
 ## The automation directory is replaced, not reconciled
 
 The payload's automation is a guarantee the template makes about every repository built from it, so it is not a collision to decide per file. `.github/` is replaced whole (`workflows/`, `actions/`, `dependabot.yml`, `zizmor.yml`, `ISSUE_TEMPLATE/`, and `PULL_REQUEST_TEMPLATE.md`), and the destination's version of that tree does not survive the flow. Reconciling it per file produces a repository whose CI is half the template's and half something else, which is the one state no later update can reason about: the template's guarantee is that these files are the payload's, and a merged `ci.yml` satisfies nothing.
