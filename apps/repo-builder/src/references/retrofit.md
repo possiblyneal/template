@@ -14,7 +14,7 @@ The shared mechanics stay in [`generate.md`](generate.md) and are cited by headi
 - **Step 4 — Provision the environment and the hooks**
 - **Step 5 — Read the destination's units**
 - **Step 6 — Reconcile the destination's layout**
-- **Step 7 — Write the record, decide the collisions, meet the bar**
+- **Step 7 — Dispose the collisions, write both records, meet the bar**
 - **Step 8 — The hosted-write gate**
 - **Step 9 — Publish, prove, and offer the merge**
 
@@ -107,7 +107,7 @@ Units are derived from what the destination already delivers, never interviewed 
 
 #### What the decomposition record will say
 
-Written after layout settles the paths, not here, but specified here because this step is where its content is decided.
+Written by [Step 7 — Dispose the collisions, write both records, meet the bar](#step-7--dispose-the-collisions-write-both-records-meet-the-bar), which owns every write that waits on settled paths. Its content is decided here, because this step is where the unit map is.
 
 **One record covers the whole decomposition**, not one per unit. This is the deliberate divergence from [generate's Step 7 — Derive the application boundaries](generate.md#step-7--derive-the-application-boundaries), which writes one record per deployable because each one argues a choke point. A retrofit argues nothing of the kind: it decides where boundaries fall, and it *observes* the languages the destination already committed to. A record per unit there would be deliberation theatre, one document each restating a choice nobody made.
 
@@ -125,7 +125,7 @@ Step 5 produced the map and moved nothing. This step is where the destination's 
 
 **Every root scoped folder the unit map claims moves to its unit.** `libs/`, `tests/`, `scripts/`, `tools/`, `deploy/`, and `assets/` at the root mean repository-wide, and a destination that never had units put everything there by default rather than by decision. This is the only instrument that closes the scope rule, which `scripts/structure` reports `not-applicable` because whether a file sits at its own scope is a judgement about content. The audit cannot make this move and cannot check it; the unit map is what makes it decidable at all.
 
-**Documentation stays repository-wide**, even where there is exactly one unit and every other scoped folder moved under it. `scripts/adr-index` rewrites the index from a root path, so a `docs/` that followed its unit takes the records with it and out of the index, which is the failure [Architecture records live at the root documentation path](lifecycle.md#architecture-records-live-at-the-root-documentation-path) names. The records migration to that path is performed here, with the moves, rather than left to the step that writes the new record.
+**Documentation stays repository-wide**, even where there is exactly one unit and every other scoped folder moved under it. `scripts/adr-index` rewrites the index from a root path, so a `docs/` that followed its unit takes the records with it and out of the index, which is the failure [Architecture records live at the root documentation path](lifecycle.md#architecture-records-live-at-the-root-documentation-path) names. The records migration to that path is performed here, with the moves, rather than left to [Step 7 — Dispose the collisions, write both records, meet the bar](#step-7--dispose-the-collisions-write-both-records-meet-the-bar), which writes the new record into the path these moves have already cleared.
 
 **A readme below the root is documentation and moves with it.** It lands in the nearest owning `docs/` under a name describing what it is about, because a `README.md` inside a documentation folder is a filename that tells a reader nothing and collides with the next one that moves. The repository's own root readme is not this: it stays at the root, where it is an addon the destination already holds.
 
@@ -143,9 +143,17 @@ The instruction file is merged, and it is re-established as one of the last step
 
 **What this step promises.** For a checkable destination, `scripts/structure` passes on zero allowlist entries after it. Layout reconciliation is cheap and the check bar is expensive, and they fail for unrelated reasons, so a green audit here says nothing about whether the destination's own checks pass; that is the later step's to report.
 
-### Step 7 — Write the record, decide the collisions, meet the bar
+### Step 7 — Dispose the collisions, write both records, meet the bar
 
-Nothing here reaches the network. This step settles everything that has to be true before the flow is allowed to publish, in the order that makes each part decidable: the collisions, then the record, then the tool declaration, then the bar measured on the result.
+Nothing here reaches the network. This step settles everything that has to be true before the flow is allowed to publish, in the order that makes each part decidable: the collisions, then the two records, then the tool declaration, then the bar measured on the result.
+
+**Two records are written here and both are this step's**: the decomposition architecture record, whose content [What the decomposition record will say](#what-the-decomposition-record-will-say) decided at step 5, and the manifest. They are written together because both wait on the same thing — step 6's moves settling where every path is — and because a step owning one of them and deferring the other is how the deferred one stops being written at all.
+
+**Write the decomposition record first, at the root documentation path**, under [Architecture records live at the root documentation path](lifecycle.md#architecture-records-live-at-the-root-documentation-path). It carries the confirmed unit map: each unit's name and the source that name came from, the evidence for each half of the delivery test, the run and ship pair with its evidence and whether it was observed or accepted, the domains and the boundary the destination draws for each, the choke point observed per unit with *none of these bind* recorded where none does, and every declared-but-not-built deployable.
+
+**Every path inside it is repository-relative**, because the record is: it lands at the root, it covers every unit at once, and a reader of `docs/adrs/` has no unit to resolve a bare `src/` against. A path written as the unit sees it resolves nowhere from where the record sits, which is the mistake the record's own shape invites rather than one a run happens to make.
+
+Then the manifest.
 
 **Every remaining collision is proposed and disposed, per file.** Diff the destination's version against the payload's, state what each one says, and let the operator pick payload, destination, or a merge. A disposition the payload wins writes the payload's mode too, under [The payload's mode travels with the payload's content](lifecycle.md#the-payloads-mode-travels-with-the-payloads-content). No path-matching rule can stand in for this. Across the reference repositories the same payload path was occupied by a copy differing in one word, by a genuinely different document with a stated reason for being different, by one naming five canonical roles where the payload names seven, and by one half again as long: four dispositions for one path, and nothing about the path predicts which.
 
