@@ -43,6 +43,19 @@ Report its count beside the copy proof's. A pilot retrofit moved 55 files, which
 
 Report the authored surface in **File list**, so the reader sees which lines were the template's and which were this run's.
 
+## Writing to the pull request
+
+A flow that labels its pull request or rewrites its body writes through the REST pull-request endpoint, never through `gh pr edit`:
+
+```bash
+gh api -X POST "repos/<owner>/<repository>/issues/<n>/labels" -f "labels[]=<label>"
+gh api -X PATCH "repos/<owner>/<repository>/issues/<n>" -f body=@<file>
+```
+
+`gh pr edit --add-label` and `gh pr edit --body` both abort on the Projects-classic GraphQL deprecation. The failure is silent in the way that matters: **nothing is applied, only a deprecation notice is reported**, and the command's own exit says nothing useful, so a run that trusts it records a label it never set and a body that still holds whatever it held before. Read the result back — `gh pr view <n> --json labels,body` — rather than taking the exit for the write.
+
+A pull request is an issue for both routes, which is why each is spelled `issues/<n>` rather than `pulls/<n>`.
+
 ## Final report
 
 Use this stable shape. On a generate into an empty destination the Reconciliation lines are empty or trivially everything, and File list carries the weight; a generate into a destination that already has content fills them like any other flow, Superseded included, since it is the only section reporting a file the payload ships and the candidate lacks, which no check can fail on. On an adopt the Template line shows the recorded commit on both sides because the pin does not move, and the Addon adoption block carries the weight. On a generate stopped at the wayfinding handoff there are no Application boundaries to report — that absence is the result; the Wayfinding line names the trigger and the map, Repository settings still reports the repository that exists, and Pending action carries the resume. On a retrofit the choke-point and Wayfinding lines are absent and the Unit map carries the section: a retrofit observes languages the destination already committed to rather than choosing one, and it derives units from that destination's own evidence rather than wayfinding them. A retrofit whose unit map the operator rejected with no correction reports the proposal and the rejection here, and Pending action carries the correction the flow is stopped for.
