@@ -76,7 +76,7 @@ dependabot_watched_pairs() {
   local config="$1"
   local -a lines=()
   local raw body content value flow indent i=0
-  local ecosystem="" in_directories=0 directories_indent=0
+  local ecosystem="" in_directories=0 directories_indent=0 updates_indent=-1
 
   [[ -s "$config" ]] || return 0
 
@@ -99,9 +99,24 @@ dependabot_watched_pairs() {
       content="${body#-}"
       content="${content#"${content%%[![:space:]]*}"}"
 
-      # Indented past the `directories` key, so it is one of its members.
-      if (( in_directories )) && (( indent > directories_indent )); then
+      # A member of the `directories` list. YAML lets a block sequence sit at
+      # its key's own indentation as well as past it, and several formatters
+      # write it that way, so the test is `>=` rather than `>`.
+      if (( in_directories )) && (( indent >= directories_indent )); then
         _dependabot_emit_pair "$ecosystem" "$content"
+        continue
+      fi
+
+      # The first `-` in the file opens the first update entry, and its column
+      # is where every later entry begins.
+      (( updates_indent >= 0 )) || updates_indent=$indent
+
+      # A `-` deeper than that is a member of some other sequence inside the
+      # entry -- a `groups` pattern list, an `ignore` or an `allow` -- and it is
+      # skipped rather than read as a boundary. Resetting the ecosystem on one
+      # drops every key after it, so an entry writing `groups` before
+      # `directory` reports its own manifest unwatched.
+      if (( indent > updates_indent )); then
         continue
       fi
 
@@ -156,12 +171,17 @@ dependabot_watched_pairs() {
 
 _dependabot_emit_flow() {
   local ecosystem="$1" flow="$2" member
-  local IFS=,
+  local -a members=()
 
   flow="${flow#*[}"
   flow="${flow%%]*}"
 
-  for member in $flow; do
+  # read -ra rather than word splitting an unquoted expansion: a member is a
+  # directory value and may hold a glob, which splitting would also expand
+  # against the filesystem.
+  IFS=, read -ra members <<< "$flow"
+
+  for member in ${members[@]+"${members[@]}"}; do
     _dependabot_emit_pair "$ecosystem" "$member"
   done
 }

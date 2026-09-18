@@ -379,6 +379,48 @@ fi
 rm -rf "$outside"
 
 
+# An entry holds sequences of its own -- a groups pattern list, an ignore, an
+# allow -- and a `-` inside one is not a new entry. Reading it as a boundary
+# clears the ecosystem before the directory below it is read, which reports the
+# entry's own manifest unwatched. The payload's entries put directory first,
+# which is why nothing else here catches it.
+fixture "a nested sequence inside an entry is not an entry boundary" "$VERSION
+  - package-ecosystem: npm
+    groups:
+      npm:
+        patterns:
+          - \"*\"
+    ignore:
+      - dependency-name: left-pad
+    directory: /apps/a
+    schedule:
+      interval: weekly" apps/a/package.json
+got="$(unwatched_in)"
+if [[ -z "$got" ]]; then
+  pass
+else
+  fail "a groups list was read as an entry boundary, leaving '$got' reported"
+fi
+
+
+# A block sequence may sit at its key's own column as well as past it, and
+# several formatters write it that way. Requiring the deeper indentation reads
+# each member as a new entry and emits nothing.
+fixture "a directories list at its key's own indentation is read" "$VERSION
+  - package-ecosystem: cargo
+    directories:
+    - /apps/b
+    - /apps/c
+    schedule:
+      interval: weekly" apps/b/Cargo.toml apps/c/Cargo.toml
+got="$(unwatched_in)"
+if [[ -z "$got" ]]; then
+  pass
+else
+  fail "a list at the key's own indentation left '$got' reported"
+fi
+
+
 # A repository with no config has nothing to compare against. Reporting every
 # manifest there would be a finding about a file that does not exist.
 fixture "no config reports nothing" ""

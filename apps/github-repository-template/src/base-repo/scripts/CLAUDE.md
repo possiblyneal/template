@@ -87,4 +87,4 @@ Each suite is `scripts/tests/<name>-test`, reports through the harness, and asse
 - `structure-test` — each layout rule in both directions, `.structure-allow` at a path and at a prefix, every declaration value, and `jq` absent. Each fixture is a real repository with the script copied in, since it resolves its own root from `BASH_SOURCE`
 - `protect-branch-test` — bare, qualified, near-miss, and unset destinations
 
-`scripts/check` runs all twenty before the checks they guard, then `structure` and `github-parity` before `ci`. `ci.yml` runs them before toolchain setup and installs `pre-commit` first, so the two hook-wiring suites do not skip every case. shellcheck runs via pre-commit with `-x`.
+`scripts/check` runs all twenty-two before the checks they guard, then `structure` and `github-parity` before `ci`. `ci.yml` runs them before toolchain setup and installs `pre-commit` first, so the two hook-wiring suites do not skip every case. shellcheck runs via pre-commit with `-x`.
