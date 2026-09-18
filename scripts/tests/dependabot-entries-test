@@ -195,9 +195,10 @@ fi
 
 
 # A workspace file says where the modules are; the modules are what Dependabot
-# reads. An entry pointed at go.work's directory names no manifest and fails
-# the whole run with dependency_file_not_found, so go.work earns no entry and
-# must not be reported as owing one.
+# reads, so go.work earns no entry of its own and must not be reported as owing
+# one. Whether an entry at its directory would also resolve is the service's own
+# discovery behaviour and it moves -- dependabot/dependabot-core#14909, 2026-05-05
+# -- while an entry at the manifest's own directory is right either way.
 fixture "a workspace file earns no entry" "$VERSION
   - package-ecosystem: gomod
     directory: /apps/api
@@ -207,7 +208,7 @@ got="$(unwatched_in)"
 if [[ -z "$got" ]]; then
   pass
 else
-  fail "reported '$got', which would derive an entry naming no manifest"
+  fail "reported '$got', which is a workspace file rather than a manifest"
 fi
 
 

@@ -37,8 +37,13 @@
 #
 # go.work and settings.gradle.kts are absent on purpose. They are workspace
 # files: they say where the modules are, and the modules are what Dependabot
-# reads. An entry pointed at a workspace file's directory names no manifest and
-# fails the whole run with dependency_file_not_found.
+# reads. Mapping one would derive an entry at the workspace root, and what
+# becomes of such an entry is the service's own discovery behaviour rather than
+# a fixed rule -- Go gained go.work discovery in dependabot/dependabot-core#14909
+# on 2026-05-05, so the dependency_file_not_found it would once have earned may
+# now resolve every module instead. An entry at the directory its own manifest
+# sits in is right under both behaviours, so this table maps manifests and
+# nothing else.
 dependabot_ecosystem_of() {
   case "$1" in
     package.json) printf 'npm\n' ;;
