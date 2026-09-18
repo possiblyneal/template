@@ -56,6 +56,8 @@ Every built repository tracks `.repo-template.json`:
     {"path": ".gitignore", "mode": "managed"},
     {"path": ".worktreeinclude", "mode": "managed"},
     {"path": ".mcp.json", "mode": "managed"},
+    {"path": "tmp/.gitkeep", "mode": "managed"},
+    {"path": ".env", "mode": "product"},
     {"path": "apps/**", "mode": "product"},
     {"path": "libs/**", "mode": "product"},
     {"path": "tests/**", "mode": "product"},
@@ -93,7 +95,9 @@ Ownership answers whether a path participates in template updates:
 
 The longest matching path wins; equal patterns are invalid. The old-to-new template delta bounds update scope. Do not edit an unrelated destination path merely because a broad ownership rule matches it. An expired override is the one write outside that bound, and [Overridden paths](#overridden-paths) is where it is settled.
 
-Unmatched defaulting to product is the safe direction for a path the template does not ship, and the wrong one for a path it does. A file at the repository root matches no directory pattern, so `CLAUDE.md`, `.pre-commit-config.yaml`, `.commitlintrc.yaml`, `.gitattributes`, and `.gitignore` fall through to product unless named individually, and those files carry the instructions every agent session in the destination reads, the pinned hook revisions behind the secret scanner, the commit-message rules, and the merge policy keeping a lockfile from being line-merged. The list grows: every root file the payload adds needs a line here, or a payload fix to it lands nowhere while the update reports success. Every path the template ships needs an ownership rule that reaches it; verify with `classify_path` rather than assuming a directory pattern covers a file at the root.
+Unmatched defaulting to product is the safe direction for a path the template does not ship, and the wrong one for a path it does. A file at the repository root matches no directory pattern, so `CLAUDE.md`, `.pre-commit-config.yaml`, `.commitlintrc.yaml`, `.gitattributes`, and `.gitignore` fall through to product unless named individually, and those files carry the instructions every agent session in the destination reads, the pinned hook revisions behind the secret scanner, the commit-message rules, and the merge policy keeping a lockfile from being line-merged. The list grows: every root file the payload adds needs a line here, or a payload fix to it lands nowhere while the update reports success. Every path the template ships needs an ownership rule that reaches it; verify with `classify_path` rather than assuming a directory pattern covers a file at the root. In this repository that claim is settled mechanically — `test_reference_assertions.py` matches every payload path against both this manifest's list and the example above, so a payload path added without a rule fails the commit rather than quietly leaving the template's later fix nowhere to land.
+
+Reaching a path is not the same as managing it. `.env` is reached and **product**: the payload ships an empty one so the file exists, and everything in a destination's copy is the destination's. Naming it is what makes that a decision rather than the default falling the same way by accident — and the default is what an added payload path would inherit next time.
 
 The root `CLAUDE.md` is managed for that reason and merged rather than overwritten, which is what `managed` already means: the destination writes its own project instructions into the same file the template ships, so an update reconciles the template's change with what the destination wrote and stops only where the two say different things about the same rule.
 
@@ -117,6 +121,14 @@ An **overridden path** is a payload path a flow did not land, because the destin
 - **An entry expires with the thing it records.** Where the destination has deleted its own version of an overridden path, the override has nothing left to protect: the update lands the payload's copy and drops the entry, both in the same pull request. A record outliving its subject is how the payload's file stays permanently absent for a reason nobody holds any more. Expiry is read from the entries against the destination rather than from the update's delta: a destination deleting its own version changes nothing on the template's side, so an expired entry sits inside the delta as readily as outside it. `preflight.py update` settles both halves from the destination's tracked paths alone. A delta path whose entry the destination no longer holds is marked `override_expired` rather than overridden, so it stays an ordinary managed change to apply. Every entry the delta does not reach is listed in `unmatched_overrides`, `expired` where the destination no longer holds the path and `unreached` where it still does and this delta simply passed it by. Only expiry ends the entry.
 - Adopt neither writes nor reads an entry. It lands an addon the destination does not have, at the recorded commit, and resolves no collision, so it never meets an override. Generate, retrofit, and update are the flows this section binds.
 - An overridden path was never written, so it is absent from the copy proof [Reviewing the pull request](reporting.md#reviewing-the-pull-request) runs, and belongs to neither the copied set nor the authored surface. Name it as overridden in the report instead, with its reason.
+
+### The payload's mode travels with the payload's content
+
+Wherever a flow lands a payload path, the file ends at the mode the payload declares. This is free for a path the destination does not have — `git archive` carries the mode out of the tree it reads — and it is the part that has to be said for a path the destination does have, because rewriting a file in place keeps the mode it already had. A payload file arrives with the destination's bit set, and the destination's bit was set for the destination's version.
+
+`.gitignore` is the one both reference retrofits hit: `100755` in the destination, `100644` in the payload, landed executable. It fails at `check-executables-have-shebangs` in the commit after the write, which names the file and not the step that wrote it, so the operator reads a pre-commit refusal with no visible cause.
+
+Every flow that lands payload content is bound: the overlay of an absent path, a collision disposed to the payload, the ignore file and the automation directory replaced whole, and an update applying a managed delta. Set the mode from the payload at the resolved source commit rather than from what the file on disk already carries — `git ls-tree <commit> -- <subtree>/<path>` prints it in the first field. Read it from the pinned tree and not from the template clone's index or working tree, for the reason every other payload read here is pinned: a clone checked out somewhere other than the target commit answers for a payload the flow is not landing.
 
 ## The automation directory is replaced, not reconciled
 
@@ -285,6 +297,20 @@ Read the block as a menu rather than a sequence — no gate shows every line. Se
 A generate reaches this twice, and the two gates authorize different things. The first, at [Generate](generate.md) step 4, covers every line through `issues` except settings drift: an empty repository, its settings, the probe that proves those settings bind, and the tracker writes steps 6 and 7 make against it — with no diff and no check result to show, because nothing has been built yet. Present them together even though steps 5 through 7 perform them later, since returning for a second authorization between each is noise; what the gate may not do is perform a remote write it did not list. The labels and issues lines carry their condition in their own text rather than being dropped, because which labels are missing and which tickets the map holds are not known until steps 6 and 7 run; a destination whose own tracker doc records local markdown makes neither write, and that authorization simply goes unused. The second, at step 11, covers the rest against a candidate that has been personalized, checked, and file-list reconciled. Show only the lines the gate is actually asking for. Presenting the whole block at step 4 takes authorization for a content push that does not exist yet.
 
 Ask for confirmation unless the invocation already authorizes these exact actions against this exact repository. Authorization for repository creation does not imply settings changes or a later merge. Never merge as part of this skill, except two cases, each gated the same as every other remote action here: the bootstrap-generate case documented under [Generate](generate.md) step 12, and the offer a retrofit makes at its own second gate, under [Step 9 — Publish, prove, and offer the merge](retrofit.md#step-9--publish-prove-and-offer-the-merge). The retrofit case is an offer rather than a step, declined by default, and it is asked only there: a generate into a populated destination arguably owes the same one, and nothing has established that, so it is not asserted.
+
+## A written ruleset is proved satisfiable, not merely present
+
+A ruleset that exists, binds, and can never be satisfied reads as a success from every angle a flow otherwise looks: creation returned 201, the rule reads back `active`, `scripts/repo-settings check` passes it, and a probe pushed at the default branch is rejected exactly as it should be. What none of those asks is whether the rule just written will ever let anything merge. A required context nothing reports is the usual way in — see [Step 5 — Configure the repository settings](generate.md#step-5--configure-the-repository-settings) for how the spelling goes wrong — and its symptom is a pull request that is simply never mergeable, with nothing anywhere naming the cause.
+
+The proof costs nothing and the flow is already holding it. Once the pull request's required checks have reported, read the two fields together:
+
+```bash
+gh pr view <n> --json mergeable,mergeStateStatus --jq '{mergeable,mergeStateStatus}'
+```
+
+`MERGEABLE` with `CLEAN` is the rule satisfied. `MERGEABLE` with `BLOCKED`, on an all-green pull request against a ruleset requiring no approving review, is the signature of a ruleset that is active and unsatisfiable: mergeable says no conflict, blocked says a rule is refusing, and with the checks green and no review owed there is nothing left for it to be refusing but a requirement nothing can meet. Report the pair verbatim rather than a verdict derived from it, and name the required contexts beside it, since the misspelling is what the operator has to fix.
+
+Read it as **two** findings at once. It is the satisfiability proof, and it is also the enforcement evidence — `BLOCKED` on a green pull request is a rule binding, observed on a pull request the flow opened anyway rather than manufactured by pushing a throwaway commit at a branch other people fetch. A flow that has this read does not owe the existence check beside it: a ruleset that is refusing is a ruleset that is there.
 
 ## Failure and recovery
 

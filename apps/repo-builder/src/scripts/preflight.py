@@ -979,6 +979,22 @@ def collision(
     return None
 
 
+# The payload ships a placeholder unit for a generate to rename into the
+# application's own name. A retrofit derives its units from what the
+# destination already delivers, so it has no use for one -- and left in the
+# payload list it is overlaid, because it is genuinely absent, and no later
+# step retires it. Nothing downstream catches that: it is a well-formed empty
+# unit, so the layout audit, the unit-declaration check and the unit-facts
+# check all pass it, and the retrofitted repository ships a second unit
+# delivering nothing, forever.
+#
+# Held out here rather than in the flow's prose because one list is both the
+# absent set the overlay writes and the denominator of the copy proof. A
+# retrofit skipping the path in one and counting it in the other reports a
+# delivery gap against a path it declined to land on purpose.
+PLACEHOLDER_UNIT_PREFIX = "apps/app-name/"
+
+
 def retrofit_preflight(arguments: argparse.Namespace) -> dict[str, object]:
     """Prove locally whether a destination can be retrofitted, and name the collisions.
 
@@ -1008,7 +1024,11 @@ def retrofit_preflight(arguments: argparse.Namespace) -> dict[str, object]:
 
     require_tracked_clean(destination)
 
-    payload = tree_paths(template_repo, target, subtree)
+    payload = [
+        path
+        for path in tree_paths(template_repo, target, subtree)
+        if not path.startswith(PLACEHOLDER_UNIT_PREFIX)
+    ]
     tracked = set(listed_paths(destination))
     # Ignored files are untracked for this purpose: git cannot restore one
     # either, so landing the payload over it is the same unrecoverable

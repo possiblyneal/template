@@ -421,11 +421,12 @@ _capability_format_write_kotlin() { gradle_has_task ktlintFormat || return "$NO_
 # in this file reads the working directory alone -- so this context arrives the
 # same way, already resolved by the caller.
 #
-# The run dispatch is unevenly load-bearing, and that is the trap. In Go, Rust
-# and Kotlin the command is identical whichever value is declared, so anyone
-# auditing those three concludes correctly that the branch changes nothing and
-# can be deleted. It cannot: in Node and Python it chooses between the
-# program's own entry point and a dev server, which are different programs.
+# Only one adapter reads the run fact, and that is the trap. In Go, Rust,
+# Kotlin and Python the command is identical whichever value is declared --
+# Swift has no run adapter at all -- so anyone auditing those concludes
+# correctly that the branch changes nothing and can be deleted. It cannot: in
+# Node it chooses between the program's own entry point and a dev server,
+# which are different programs.
 # Delete the branch and a CLI starts a web server, or fails looking for one.
 #
 # All three are declared in libs/unit.sh, beside the reader that fills the
@@ -499,17 +500,22 @@ _capability_run_node() {
       ;;
   esac
 }
-# A Python service has no conventional start command -- uvicorn, gunicorn,
-# manage.py runserver and a bare module are all ordinary -- so the long-lived
-# form has nothing to dispatch to rather than a wrong guess to make. A one-shot
-# does: [project.scripts] is where a Python CLI names its entry point, and it is
-# read with the interpreter the project already requires rather than by a shell
-# pattern over TOML.
+# Python has no dev-server convention for the long-lived form to dispatch to --
+# uvicorn, gunicorn, manage.py runserver and a bare module are all ordinary --
+# so there is no second command here for the declared fact to choose between.
+# [project.scripts] is the one place a Python project names its entry point,
+# and it names it whichever way the unit runs: a dashboard's console script
+# starts a server that does not return, a CLI's returns. Both are the program
+# the project declared, so this adapter reads the entry point rather than the
+# run fact. Gating it on `oneshot` left a unit that declared `longlived`
+# honestly with no way to be started by the repository's own entry point.
+#
+# The names are read with the interpreter the project already requires rather
+# than by a shell pattern over TOML.
 _capability_run_python() {
   local name names_out
   local -a names=()
 
-  [[ "${unit_run:-}" == oneshot ]] || return "$NO_RUNNER"
   command -v uv > /dev/null 2>&1 || return "$NO_RUNNER"
 
   names_out="$(uv run --quiet python -c 'import pathlib, tomllib

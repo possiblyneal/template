@@ -827,8 +827,6 @@ class RetrofitTests(unittest.TestCase):
                 report["payload_paths"],
                 [
                     "CLAUDE.md",
-                    "apps/app-name/.unit.json",
-                    "apps/app-name/src/.gitkeep",
                     "docs/LESSONS.md",
                     "docs/adrs/0000-template.md",
                     "scripts/check",
@@ -837,6 +835,43 @@ class RetrofitTests(unittest.TestCase):
             )
             self.assertEqual(report["destination"]["path_count"], 3)
             self.assertNotIn("paths", report["destination"])
+
+    def test_retrofit_holds_back_the_placeholder_unit(self) -> None:
+        """A retrofit derives its units, so the placeholder has nothing to be.
+
+        Left in the list it is overlaid, because it is genuinely absent, and
+        nothing downstream objects: it is a well-formed empty unit that every
+        check passes. The generate flow is the one that wants it, and renames
+        it.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._fixture(directory)
+            report = json.loads(self._preflight(fixture).stdout)
+
+            placeholder = [
+                path
+                for path in report["payload_paths"]
+                if path.startswith("apps/app-name/")
+            ]
+            self.assertEqual(placeholder, [])
+
+            # The payload still ships it; only the retrofit declines it. A
+            # generate reading the same tree has to find it to rename it.
+            shipped = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    fixture["template_repo"],
+                    "ls-tree",
+                    "-r",
+                    "--name-only",
+                    f"{fixture['target_commit']}:{fixture['subtree']}",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.split()
+            self.assertIn("apps/app-name/.unit.json", shipped)
 
     def test_retrofit_reports_untracked_work_and_does_not_refuse(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

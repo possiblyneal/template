@@ -8,14 +8,23 @@ mode is not a stale doc a reader shrugs at: a generate follows the reference,
 looks for what it was told is there, and improvises when it is missing.
 
 Only mechanical claims are checked -- a named destination path exists, a cited
-decision record exists, a quoted heading exists. Whether a sentence is *right*
-about a file it names is not decidable here; whether the file exists is.
+decision record exists, a quoted heading exists, and every path the payload
+ships is reached by an ownership rule. Whether a sentence is *right* about a
+file it names is not decidable here; whether the file exists is.
+
+The fourth claim reads two ownership manifests rather than the references --
+this repository's `.repo-template.json` and the example in lifecycle.md -- and
+belongs here for the same reason as the rest: the rule the references state is
+that an unmatched path is product-owned, so a payload path no rule reaches
+sits outside every update with nothing anywhere saying so.
 
 STDLIB ONLY, for the same reason test_addon_adoption.py is: this runs under
 pytest and standalone from a pre-commit hook that resolves no dependencies.
 """
 
+import json
 import re
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -38,6 +47,26 @@ ADR = re.compile(r"^docs/adrs/\d{4}-[a-z0-9-]+\.md$")
 
 HEADING = re.compile(r"`(#{1,6} [^`]+)`")
 PATH = re.compile(r"`([A-Za-z0-9_.][A-Za-z0-9_./-]*)`")
+
+
+def reaches(path, pattern):
+    """preflight.py's path_matches, for the one shape the manifests use.
+
+    A `/**` suffix reaches the directory and everything under it; anything
+    else is the path itself. Kept here rather than imported for the
+    stdlib-only reason above, and it must stay in step with `path_matches`.
+
+    The `/**` branch is identical to `path_matches`; the fallback is where
+    they diverge, since `path_matches` globs it and this compares it. That is
+    what keeps this the narrower of the two while the manifests hold literal
+    paths and `/**` alone. A rule in any other shape -- `.github/*.yml` --
+    stops matching here, and the shipped paths under it are then reported
+    unreached, which is a false alarm rather than a silent pass.
+    """
+    if pattern.endswith("/**"):
+        prefix = pattern[:-3].rstrip("/")
+        return path == prefix or path.startswith(f"{prefix}/")
+    return path == pattern
 
 
 def reference_files():
@@ -128,6 +157,62 @@ class ReferenceAssertions(unittest.TestCase):
             [],
             f"references quote headings no payload or reference file holds: {absent}",
         )
+
+    def test_every_shipped_path_is_reached_by_an_ownership_rule(self):
+        """A shipped path no rule reaches is product-owned by default.
+
+        Product is the safe default for a path the template does not ship and
+        the wrong one for a path it does: the path sits outside every update,
+        so a fix the template later makes to it arrives nowhere and the update
+        reports success. A file at the repository root is where this bites,
+        because no directory pattern reaches one.
+
+        Both lists are checked. This repository's own manifest governs this
+        repository, and lifecycle.md's is what a reader builds a destination's
+        from -- an illustration that misses a shipped path teaches the miss.
+        """
+        shipped = subprocess.run(
+            ["git", "-C", str(REPOSITORY_ROOT), "ls-files", "-z", "--", str(PAYLOAD)],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.split("\0")
+        prefix = f"{PAYLOAD.relative_to(REPOSITORY_ROOT)}/"
+        paths = sorted(
+            path.removeprefix(prefix) for path in shipped if path.startswith(prefix)
+        )
+        self.assertNotEqual(paths, [], "the payload ships nothing")
+
+        for source, rules in self._ownership_lists().items():
+            with self.subTest(manifest=source):
+                unreached = [
+                    path
+                    for path in paths
+                    if not any(reaches(path, pattern) for pattern in rules)
+                ]
+                self.assertEqual(
+                    unreached,
+                    [],
+                    f"{source} reaches none of these shipped paths: {unreached}",
+                )
+
+    def _ownership_lists(self):
+        """The two ownership lists, each as the set of its patterns.
+
+        lifecycle.md's is read out of the fenced manifest rather than by
+        importing preflight: this file is stdlib-only and runs standalone from
+        a pre-commit hook, the same reason the rest of it is.
+        """
+        manifest = json.loads((REPOSITORY_ROOT / ".repo-template.json").read_text())
+        lifecycle = (SKILL / "references/lifecycle.md").read_text()
+        block = re.search(r"```json\n(\{.*?\n\})\n```", lifecycle, re.DOTALL)
+        if block is None:
+            raise AssertionError("lifecycle.md holds no fenced manifest example")
+        example = json.loads(block.group(1))
+        return {
+            ".repo-template.json": [rule["path"] for rule in manifest["ownership"]],
+            "lifecycle.md": [rule["path"] for rule in example["ownership"]],
+        }
 
 
 if __name__ == "__main__":

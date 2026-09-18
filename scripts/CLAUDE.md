@@ -73,7 +73,7 @@ Each suite is `scripts/tests/<name>-test`, reports through the harness, and asse
 - `summarize-test` — what the Result-table filter keeps, what it drops, and that it exits with the command's own status
 - `harness-test` — the harness itself, run as a process: the tally line and exit status for all-pass, one-fail, all-skip, skip-beside-pass, a declared not-applicable, and a suite that counted nothing, plus each fixture primitive
 - `clean-test` — `clean` prunes the directories `libs/detect.sh` names
-- `unit-commands-test` — unit resolution, `run: none` and `ships: none`, quadlet validation with no container runtime, arguments after `--`, and `dist/` cleared only where a language packages there. Skips without `jq`
+- `unit-commands-test` — unit resolution, `run: none` and `ships: none`, quadlet validation with no container runtime, arguments after `--`, that a declared `run` fact reaches the adapter rather than gating it, and `dist/` cleared only where a language packages there. Skips without `jq`
 - `health-checks-test` — the offline boundary, with `gh` stubbed
 - `repo-settings-test` — every preflight absence, every judgment in each of its answers, and the two orderings, with `gh` stubbed per endpoint. Skips without `jq`
 - `release-test` — what `release` hands to `gh release create`, and each way the walk aborts before the tag is cut

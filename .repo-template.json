@@ -30,6 +30,8 @@
     {"path": ".gitignore", "mode": "managed"},
     {"path": ".worktreeinclude", "mode": "managed"},
     {"path": ".mcp.json", "mode": "managed"},
+    {"path": "tmp/.gitkeep", "mode": "managed"},
+    {"path": ".env", "mode": "product"},
     {"path": "apps/**", "mode": "product"},
     {"path": "libs/**", "mode": "product"},
     {"path": "tests/**", "mode": "product"},
