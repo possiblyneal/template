@@ -196,9 +196,9 @@ fi
 
 # A workspace file says where the modules are; the modules are what Dependabot
 # reads, so go.work earns no entry of its own and must not be reported as owing
-# one. Whether an entry at its directory would also resolve is the service's own
-# discovery behaviour and it moves -- dependabot/dependabot-core#14909, 2026-05-05
-# -- while an entry at the manifest's own directory is right either way.
+# one. Whether an entry at its directory would also reach those modules is the
+# service's own discovery behaviour and it moves -- dependabot/dependabot-core#14909,
+# 2026-05-05 -- which is why the table maps manifests rather than tracking it.
 fixture "a workspace file earns no entry" "$VERSION
   - package-ecosystem: gomod
     directory: /apps/api
