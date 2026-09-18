@@ -87,6 +87,17 @@ Read the result back with the repository's own `scripts/repo-settings check` rat
 
 Its output is the evidence for the settings section of the report, and `not offered for the plan` is a distinct outcome from disabled — do not collapse them.
 
+**A required status check is named by its check run, not by its workflow job id.** GitHub matches every `required_status_checks[].context` the ruleset names against the name a check run reports, which is the job's `name:` where the workflow sets one and the job id only where it does not. The payload sets both on every job, so the two always differ, and the contexts to require are what the runs report:
+
+| Workflow | Contexts its runs report |
+| --- | --- |
+| `ci.yml` | `CI` |
+| `security.yml` | `Security` |
+| `codeql.yml` | `Code scanning enabled`, `Detect languages`, and `Analyze <language>` once per detected language |
+| `release.yml` | `Release` |
+
+Require `ci` rather than `CI` and nothing ever reports that context, so it stays pending for the life of the repository. That failure is invisible from every angle the flow otherwise checks: creation returns 201, the ruleset reads back `active`, `scripts/repo-settings check` passes it, the probe above is rejected exactly as it should be — and the default branch is simply never mergeable, with nothing anywhere naming the misspelling as the cause. Require only contexts a run on this repository has actually reported: `codeql.yml`'s analyze leg is one context per language and `release.yml` does not run on a pull request, so neither belongs in a rule gating one.
+
 Ruleset creation can also be refused outright, and that is a different outcome from a ruleset that does not bind. A repository on a plan that does not offer rulesets returns 403, so there is no 201 to be suspicious of and the refusal is itself the measurement: record `not offered for the plan` and do not probe. Pushing anyway learns nothing the 403 has not already said, and an unprotected branch does not reject it — the probe commit lands on top of step 4's empty root and becomes the default-branch tip, with nothing verified and a commit that only a force-push removes. Probe only where creation returned 201.
 
 A ruleset that was accepted is not a ruleset that binds. Creation returns 201 either way, so prove enforcement rather than inferring it: put a throwaway commit on the default branch, push it directly, and require the `GH013` rejection. An unprotected branch accepts that push, which is the finding.
