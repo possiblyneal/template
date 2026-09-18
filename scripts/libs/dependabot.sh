@@ -39,9 +39,10 @@
 # files: they say where the modules are, and the modules are what Dependabot
 # reads. Mapping one would derive an entry at the workspace root, and what
 # becomes of such an entry is the service's own discovery behaviour rather than
-# a fixed rule -- Go gained go.work discovery in dependabot/dependabot-core#14909
-# on 2026-05-05. Mapping manifests and nothing else is the rule that does not
-# have to track which ecosystem gained it when.
+# a fixed rule -- go.work discovery was merged into dependabot-core in
+# dependabot/dependabot-core#14909 on 2026-05-05, a date on the engine rather
+# than on its rollout. Mapping manifests and nothing else is the rule that does
+# not have to track which ecosystem gained it when.
 dependabot_ecosystem_of() {
   case "$1" in
     package.json) printf 'npm\n' ;;
