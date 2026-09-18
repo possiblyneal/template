@@ -410,6 +410,54 @@ else
   skip "go is not installed"
 fi
 
+# --- the declared run fact reaches the adapter -------------------------------
+
+# Python names its entry point in [project.scripts] whichever way the unit runs,
+# so a unit declaring `longlived` starts the same way a `oneshot` one does. The
+# adapter gated on `oneshot` once, which left a dashboard declaring itself
+# honestly with nothing to start it. Real rather than dry, because a dry run
+# reports the language and never reaches the adapter that held the gate.
+for declared in longlived oneshot; do
+  fixture "a $declared Python unit starts from its console script"
+  declare_unit dash "$declared"
+  mkdir -p "$work/apps/dash/src/dash"
+  cat > "$work/apps/dash/pyproject.toml" <<'TOML'
+[project]
+name = "dash"
+version = "1.0.0"
+requires-python = ">=3.11"
+
+[project.scripts]
+dash = "dash:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dash"]
+TOML
+  printf 'def main():\n    print("dash started")\n' \
+    > "$work/apps/dash/src/dash/__init__.py"
+  # The orphan-manifest rule: a package no root manifest lists is a doctor
+  # failure, and doctor runs before the dispatch.
+  cat > "$work/pyproject.toml" <<'TOML'
+[tool.uv.workspace]
+members = ["apps/dash"]
+TOML
+  if command -v uv > /dev/null 2>&1; then
+    out="$(run_real scripts/run dash)"
+    status=$?
+    if grep -q 'dash started' <<< "$out"; then
+      pass
+    else
+      fail "a $declared Python unit did not start (exit $status): $out"
+    fi
+  else
+    skip "uv is not installed"
+  fi
+done
+
 # --- refusals that survived the rename ---------------------------------------
 
 # A run is one foreground process, so a unit holding two stacks is an ambiguity

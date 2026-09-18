@@ -1025,7 +1025,8 @@ def retrofit_preflight(arguments: argparse.Namespace) -> dict[str, object]:
     require_tracked_clean(destination)
 
     payload = [
-        path for path in tree_paths(template_repo, target, subtree)
+        path
+        for path in tree_paths(template_repo, target, subtree)
         if not path.startswith(PLACEHOLDER_UNIT_PREFIX)
     ]
     tracked = set(listed_paths(destination))
