@@ -359,7 +359,11 @@ _capability_test_swift() { command -v swift >/dev/null 2>&1 || return "$NO_RUNNE
 _capability_test_kotlin() { [[ -x ./gradlew ]] || return "$NO_RUNNER"; ./gradlew test; }
 
 _capability_build_node() { has_npm_script build || return "$NO_RUNNER"; npm run build; }
-_capability_build_go() { go_each go build ./...; }
+# The build discards its output: `go build ./...` writes an executable wherever
+# the pattern resolves to a single package, naming it after that package's own
+# directory, which for a lone main under this layout is `src` -- the directory
+# it was built from, which go refuses to overwrite. Delivery is `package`.
+_capability_build_go() { go_each go build -o /dev/null ./...; }
 _capability_build_rust() { cargo build --locked; }
 _capability_build_swift() { command -v swift >/dev/null 2>&1 || return "$NO_RUNNER"; swift_each swift build; }
 _capability_build_kotlin() { [[ -x ./gradlew ]] || return "$NO_RUNNER"; ./gradlew build -x test; }

@@ -390,6 +390,40 @@ else
   fail "go build ran in $(grep ' build$' "$work/visited" | tr '\n' ' ')rather than in both workspace modules"
 fi
 
+# --- the go build writes no binary -------------------------------------------
+
+# `go build ./...` writes an executable only where the pattern resolves to a
+# single package: cmd/go names it after that package's own directory and leaves
+# it in the module root. Under this repository's layout a lone main package sits
+# directly in src/, so the name it would write is `src` -- the directory it was
+# built from -- and go refuses rather than overwriting it. The check exists to
+# compile, not to deliver, so it discards the output, and the collision cannot
+# arise whatever the module holds. scripts/package is where a binary is produced.
+fixture "go build discards its output"
+go_mod "$work"
+stub go <<'STUB'
+#!/usr/bin/env bash
+if [[ "$1" == list ]]; then
+  pwd
+  exit 0
+fi
+cat >/dev/null
+printf '%s\n' "$*" >> "${MARKER:?}"
+STUB
+stub gofmt <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+out="$(MARKER="$work/invoked" ci_real)"
+status=$?
+if (( status != 0 )); then
+  fail "the gate failed though every stubbed go call succeeded (exit $status): $out"
+elif grep -qx 'build -o /dev/null ./\.\.\.' "$work/invoked"; then
+  pass
+else
+  fail "go build was invoked as $(grep '^build' "$work/invoked") rather than discarding its output"
+fi
+
 # --- a check never inherits the stdin it was called with ---------------------
 
 # The three cases above prove the list travels on fd 3. This is the other half:
