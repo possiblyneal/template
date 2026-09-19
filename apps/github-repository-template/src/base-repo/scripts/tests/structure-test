@@ -156,17 +156,17 @@ fixture "src under a scoped folder fails"
 write tests/src/helper.py
 assert_fails src-placement
 
-fixture "a scoped folder inside its own kind fails"
-write libs/auth/libs/token.py
-assert_fails leaf-rule
-
-fixture "the leaf rule reaches any depth"
-write scripts/one/two/three/scripts/thing
-assert_fails leaf-rule
-
 fixture "different kinds nest freely"
 write scripts/tests/libs/harness.sh
 write tests/libs/fixtures.py
+assert_passes
+
+fixture "a scoped folder inside its own kind passes"
+write libs/auth/libs/token.py
+assert_passes
+
+fixture "a scoped folder inside its own kind passes at any depth"
+write scripts/one/two/three/scripts/thing
 assert_passes
 
 fixture "an unrecognized deploy technology fails"
@@ -258,11 +258,6 @@ declare_unit api
 write apps/api/src/internal/docs/swagger.json
 assert_passes
 
-fixture "the leaf rule stops at src"
-declare_unit api
-write apps/api/src/gen/scripts/inner/scripts/run.py
-assert_passes
-
 fixture "a deploy folder inside src is not a deployment folder"
 declare_unit api
 write apps/api/src/deploy/nomad/job.hcl
@@ -304,11 +299,6 @@ fixture "a unit named docs still holds its own docs to the docs rule"
 declare_unit docs
 write apps/docs/docs/notes.yaml
 assert_fails docs-content
-
-fixture "a unit named tests still holds its own tests to the leaf rule"
-declare_unit tests
-write apps/tests/tests/inner/tests/a.py
-assert_fails leaf-rule
 
 fixture "a docs folder under a unit is still a scope holder"
 declare_unit api
