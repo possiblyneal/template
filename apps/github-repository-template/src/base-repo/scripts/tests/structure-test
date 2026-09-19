@@ -156,10 +156,16 @@ fixture "src under a scoped folder fails"
 write tests/src/helper.py
 assert_fails src-placement
 
-fixture "scoped folders nest freely, including inside their own kind"
+fixture "different kinds nest freely"
 write scripts/tests/libs/harness.sh
 write tests/libs/fixtures.py
+assert_passes
+
+fixture "a scoped folder inside its own kind passes"
 write libs/auth/libs/token.py
+assert_passes
+
+fixture "a scoped folder inside its own kind passes at any depth"
 write scripts/one/two/three/scripts/thing
 assert_passes
 

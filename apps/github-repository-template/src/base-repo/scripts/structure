@@ -72,8 +72,10 @@ root_files=(
 )
 
 # Scoped folders: a scope holder -- the repository root, a unit, or a domain --
-# may contain any of these, and they nest freely, including inside their own
-# kind -- tests/ for the tests under tests/ is a real arrangement.
+# may contain any of these. The list is what tells a scoped folder from a domain
+# and what src-placement refuses a src/ under; nesting is unrestricted, so a
+# tests/ holding the tests for the tests under tests/ is not this audit's
+# business.
 scoped_folders=(assets deploy docs libs scripts tests tools)
 
 # The deployment technologies deploy/ recognizes. Unlike the lists above this
