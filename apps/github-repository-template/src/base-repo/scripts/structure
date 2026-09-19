@@ -72,7 +72,8 @@ root_files=(
 )
 
 # Scoped folders: a scope holder -- the repository root, a unit, or a domain --
-# may contain any of these, and each is a leaf for its own kind at any depth.
+# may contain any of these, and they nest freely, including inside their own
+# kind -- tests/ for the tests under tests/ is a real arrangement.
 scoped_folders=(assets deploy docs libs scripts tests tools)
 
 # The deployment technologies deploy/ recognizes. Unlike the lists above this
@@ -465,23 +466,6 @@ for path in "${paths[@]}"; do
   done
 done
 verdict src-placement "no src/ sits under a scoped folder"
-
-# --- leaf rule --------------------------------------------------------------
-
-for path in "${paths[@]}"; do
-  split_path "$path"
-  for kind in "${scoped_folders[@]}"; do
-    count=0
-    for (( i = scope_start; i < ${#parts[@]} - 1 && i < src_limit; i++ )); do
-      [[ "${parts[i]}" == "$kind" ]] && count=$((count + 1))
-    done
-    if (( count >= 2 )); then
-      finding="$path: $kind/ contains another $kind/; a scoped folder is a leaf for its own kind"
-      record "$finding"
-    fi
-  done
-done
-verdict leaf-rule "no scoped folder contains another of its own kind"
 
 # --- deploy vocabulary ------------------------------------------------------
 
