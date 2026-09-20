@@ -41,7 +41,7 @@ The root config files and `apps/github-repository-template/src/base-repo/` hold 
 
 ## Read the `analyze` row before calling a green CodeQL run coverage
 
-`codeql.yml` is green whether it scanned or stood down. Its `scanning` job reads repository visibility and, where results cannot be uploaded, sets `enabled=false`, writes a warning annotation and a run summary, and leaves `detect` and `analyze` skipped.
+`codeql.yml` is green whether it scanned or stood down. Its `scanning` job reads repository visibility and, where the repository is not public, sets `enabled=false`, writes a warning annotation and a run summary, and leaves `detect` and `analyze` skipped.
 
 **Do:** Treat a green CodeQL check as coverage only when `analyze` ran. A repository choosing never to scan records `"codeql": "omitted-by-choice"` under `features` in `.repo-template.json`; that record, not the check colour, is the durable statement.
 
