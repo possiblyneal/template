@@ -156,3 +156,13 @@ pre-commit pins every tool it owns by `rev`, so those cannot drift. The language
 **Not fixed by pinning, at least not for free:** a `rust-toolchain.toml` in the payload makes both sides resolve the same compiler, and buys a maintenance obligation in every generated repository — Dependabot has no ecosystem for that file, so the pin is bumped by hand or not at all, and a stale pin runs an old clippy forever while CI stops catching what the world already caught. Drift that is legible is the cheaper failure until a second incident says otherwise. Where a pin is worth it, [`scripts/CLAUDE.md`](../scripts/CLAUDE.md) says where it goes.
 
 **Source:** [.github/actions/setup-toolchains/action.yml](../.github/actions/setup-toolchains/action.yml), [scripts/check](../scripts/check)
+
+## Install a CI audit tool with an explicit toolchain, not the repository's
+
+A workflow step running a bare toolchain command executes in `GITHUB_WORKSPACE`, so a version pin committed at the repository root applies to it. `rust-toolchain.toml` is a rustup directory override and governs `cargo install` as much as it governs `cargo build`.
+
+**Do:** Install a security tool under a named toolchain — `cargo +stable install cargo-audit --locked` in [`.github/workflows/security.yml`](../.github/workflows/security.yml). `cargo install` takes no `--toolchain` flag; `+stable` or `rustup run stable cargo install` are the two spellings, and `ubuntu-latest` has stable.
+
+**Why:** These tools float deliberately, so each release is free to raise its own MSRV. Coupled to a product pin, the audit job fails the day those two cross — not on a change to the workflow, and in a generated repository nobody is looking at this file in. `possiblyneal/glydr` pinned 1.85.1 and cargo-audit 0.22.2 requires 1.88. Go behaves differently: a `toolchain` directive in `go.mod` is a floor Go resolves upward, so `go install …@latest` upgrades where cargo fails.
+
+**Source:** [.github/workflows/security.yml](../.github/workflows/security.yml), [glydr PR #202 run 35517379182](https://github.com/possiblyneal/glydr/actions/runs/35517379182)
