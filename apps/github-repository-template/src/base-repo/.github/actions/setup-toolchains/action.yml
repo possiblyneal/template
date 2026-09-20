@@ -15,6 +15,15 @@ runs:
       shell: bash
       run: scripts/detect github-output >> "$GITHUB_OUTPUT"
 
+    # Ahead of every toolchain, because the need belongs to no one language:
+    # a Rust -sys crate, a wheel built from source, and node-gyp all resolve
+    # their headers through pkg-config. The reading of
+    # .github/system-packages.txt is scripts/system-packages' own, for the
+    # reason the step above states about scripts/detect.
+    - name: Install system packages
+      shell: bash
+      run: scripts/system-packages install
+
     - name: Set up Node
       if: steps.detect.outputs.node == 'true'
       uses: actions/setup-node@v7

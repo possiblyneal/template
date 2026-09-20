@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# The apt packages a build needs before any toolchain is set up.
+#
+# A crate, wheel, or native module that links against a system library resolves
+# its headers through pkg-config, and a runner image ships neither the headers
+# nor the .pc file. Such a build passes on a developer machine that happens to
+# have the package and fails in CI with a message about the build script rather
+# than about the missing library. A repository that has one of these lists the
+# package in .github/system-packages.txt; a repository with no such file runs
+# no apt at all.
+#
+# The parsing lives here rather than in the composite action so it runs locally
+# exactly as it runs in GitHub Actions, and so scripts/tests/ can reach it. The
+# action calls `install`; `list` is how a person sees what CI will install
+# without installing it.
+#
+# Not tied to a language, because the need is not: a Rust -sys crate, a wheel
+# built from source, and node-gyp all hit it. The install therefore runs ahead
+# of every toolchain rather than inside one language's setup.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+manifest=".github/system-packages.txt"
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/system-packages <command>
+
+  list      The packages .github/system-packages.txt names, one per line
+  install   Install them with apt-get; a no-op where the file is absent
+EOF
+}
+
+# One package per line, "#" starts a comment. A line naming two packages is
+# refused rather than joined or split: the file is small and hand-written, and
+# a silent reading of "libasound2-dev pkg-config" as one package name or as two
+# is a guess either way.
+#
+# A leading "-" is refused because apt-get would read it as a flag. A trailing
+# "-", "+", or "^" is refused because apt-get reads each as an instruction
+# rather than as part of the name: "libfoo-" REMOVES libfoo, "libfoo+" installs
+# it, and "task^" installs a whole tasksel task. A typed hyphen at the end of a
+# line would otherwise uninstall a package while the step reported success.
+# "=" is left alone, since "libfoo=1.2" is ordinary version pinning.
+#
+# No guard on readability: the redirection below fails under `set -e` when the
+# file cannot be read, which is the point. Testing existence and then letting
+# sed fail quietly would report success having installed nothing, and the
+# missing header would resurface later as an opaque compile error -- the exact
+# symptom this script exists to remove.
+list() {
+  [[ -f $manifest ]] || return 0
+  local line fields=()
+  while IFS= read -r line || [[ -n $line ]]; do
+    line="${line%%#*}"
+    read -ra fields <<<"$line"
+    (( ${#fields[@]} == 0 )) && continue
+    if (( ${#fields[@]} > 1 )); then
+      echo "$manifest: one package per line, found ${#fields[@]}: $line" >&2
+      return 1
+    fi
+    if [[ ${fields[0]} == -* || ${fields[0]} == *[-+^] ]]; then
+      echo "$manifest: not a package name: ${fields[0]}" >&2
+      return 1
+    fi
+    printf '%s\n' "${fields[0]}"
+  done < "$manifest"
+}
+
+# Command substitution rather than process substitution, so a failure in list
+# reaches `set -e` instead of arriving as an empty array.
+install() {
+  local packages=() names
+  names="$(list)"
+  if [[ -z $names ]]; then
+    # Named here rather than nowhere: the reader of this log is usually someone
+    # whose build just failed on a missing header, and this is the one line in
+    # the run that says where the fix goes.
+    echo "No packages to install: .github/system-packages.txt is absent or names none."
+    return 0
+  fi
+  mapfile -t packages <<<"$names"
+  sudo apt-get update
+  sudo apt-get install -y --no-install-recommends "${packages[@]}"
+}
+
+case "${1:-}" in
+  list) list ;;
+  install) install ;;
+  ""|-h|--help|help) usage ;;
+  *)
+    echo "Unknown command: $1" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

@@ -1,0 +1,199 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+# Asserts what scripts/system-packages reads out of .github/system-packages.txt
+# and, more importantly, what it refuses. The file is hand-written and the
+# consequence of misreading it is an opaque compile error much later in CI, so
+# every ambiguous line has to fail here and say why.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/harness.sh
+source "$repo_root/scripts/tests/libs/harness.sh"
+
+# Writes the manifest from stdin.
+manifest() {
+  mkdir -p "$work/.github"
+  cat > "$work/.github/system-packages.txt"
+}
+
+echo "system-packages-test"
+
+# The absent file is the state every repository is in until one of its builds
+# needs a header, so it must cost nothing and say nothing.
+fixture "no manifest lists nothing and succeeds"
+out="$(cd "$work" && scripts/system-packages list 2>&1)"
+status=$?
+if (( status == 0 )) && [[ -z $out ]]; then
+  pass
+else
+  fail "expected silence and exit 0, got status $status: $out"
+fi
+
+fixture "comments, blank lines, and trailing comments are stripped"
+manifest <<'TXT'
+# headers for cpal
+libasound2-dev
+
+pkg-config   # resolves the .pc file
+TXT
+out="$(cd "$work" && scripts/system-packages list 2>&1)"
+if [[ $out == "libasound2-dev"$'\n'"pkg-config" ]]; then
+  pass
+else
+  fail "expected two packages in file order, got: $out"
+fi
+
+# A file holding only commentary is a repository that wrote the manifest and
+# has nothing to install yet. Silence, not a failure.
+fixture "a comments-only manifest lists nothing and succeeds"
+manifest <<'TXT'
+# nothing needed yet
+
+TXT
+out="$(cd "$work" && scripts/system-packages list 2>&1)"
+status=$?
+if (( status == 0 )) && [[ -z $out ]]; then
+  pass
+else
+  fail "expected silence and exit 0, got status $status: $out"
+fi
+
+# Two names on one line could be read as one package or as two, and both
+# readings are a guess. Refusing names the line.
+fixture "two packages on one line are refused"
+manifest <<'TXT'
+libasound2-dev pkg-config
+TXT
+out="$(cd "$work" && scripts/system-packages list 2>&1)"
+status=$?
+if (( status != 0 )) && grep -q "one package per line" <<<"$out"; then
+  pass
+else
+  fail "expected a refusal naming the rule, got status $status: $out"
+fi
+
+# apt-get would read it as a flag, so a manifest could otherwise turn into
+# arbitrary apt options at a distance.
+fixture "a name beginning with a dash is refused"
+manifest <<'TXT'
+--reinstall
+TXT
+out="$(cd "$work" && scripts/system-packages list 2>&1)"
+status=$?
+if (( status != 0 )) && grep -q "not a package name" <<<"$out"; then
+  pass
+else
+  fail "expected a refusal, got status $status: $out"
+fi
+
+# apt-get reads a trailing "-" as "remove this", "+" as "install this", and "^"
+# as "install this whole tasksel task". A typed hyphen at the end of a line
+# would otherwise uninstall a package while the step reported success.
+fixture "a name carrying an apt action suffix is refused"
+for suffix in - + ^; do
+  manifest <<TXT
+libasound2-dev$suffix
+TXT
+  out="$(cd "$work" && scripts/system-packages list 2>&1)"
+  status=$?
+  if (( status != 0 )) && grep -q "not a package name" <<<"$out"; then
+    pass
+  else
+    fail "expected a refusal for the $suffix suffix, got status $status: $out"
+  fi
+done
+
+# Version pinning is ordinary apt syntax and must survive the suffix rule.
+fixture "a version-pinned name is kept"
+manifest <<'TXT'
+libasound2-dev=1.2.11-1
+TXT
+out="$(cd "$work" && scripts/system-packages list 2>&1)"
+if [[ $out == "libasound2-dev=1.2.11-1" ]]; then
+  pass
+else
+  fail "expected the pinned name through unchanged, got: $out"
+fi
+
+# The case the first draft of this script got wrong: it tested existence rather
+# than readability, so an unreadable manifest reported success having installed
+# nothing, and the missing header resurfaced as a compile error nobody could
+# trace back to here.
+fixture "an unreadable manifest fails rather than listing nothing"
+manifest <<'TXT'
+libasound2-dev
+TXT
+chmod 000 "$work/.github/system-packages.txt"
+if [[ -r "$work/.github/system-packages.txt" ]]; then
+  skip "running as a user that can read a mode-000 file"
+else
+  out="$(cd "$work" && scripts/system-packages list 2>&1)"
+  status=$?
+  if (( status != 0 )); then
+    pass
+  else
+    fail "expected a failure, got exit 0 and: $out"
+  fi
+fi
+chmod 644 "$work/.github/system-packages.txt"
+
+# install is what the composite action calls. With no manifest it must reach no
+# apt at all, which is the promise made to every repository that never writes
+# one.
+# Someone reading this log has usually just watched a build fail on a missing
+# header. The no-op has to name the file, or the step is a silent line between
+# them and the fix.
+fixture "install runs no apt where there is no manifest, and says where the fix goes"
+stub sudo <<'STUB'
+#!/usr/bin/env bash
+echo "sudo was called: $*" >&2
+exit 1
+STUB
+out="$(cd "$work" && scripts/system-packages install 2>&1)"
+status=$?
+if (( status == 0 )) && ! grep -q "sudo was called" <<<"$out" &&
+  grep -q ".github/system-packages.txt" <<<"$out"; then
+  pass
+else
+  fail "expected no apt, exit 0, and the manifest path named; got status $status: $out"
+fi
+
+fixture "install passes the listed packages to apt-get"
+manifest <<'TXT'
+libasound2-dev
+pkg-config
+TXT
+stub sudo <<'STUB'
+#!/usr/bin/env bash
+echo "$*" >> "$PWD/sudo.log"
+STUB
+(cd "$work" && scripts/system-packages install) > /dev/null 2>&1
+out="$(cat "$work/sudo.log" 2>&1)"
+if grep -qxF "apt-get update" <<<"$out" &&
+  grep -qxF "apt-get install -y --no-install-recommends libasound2-dev pkg-config" <<<"$out"; then
+  pass
+else
+  fail "apt-get was not called with the listed packages: $out"
+fi
+
+# A refusal must stop the install rather than fall through to an apt call with
+# whatever survived the parse.
+fixture "a refused manifest reaches no apt"
+manifest <<'TXT'
+libasound2-dev pkg-config
+TXT
+stub sudo <<'STUB'
+#!/usr/bin/env bash
+echo "sudo was called: $*" >&2
+STUB
+out="$(cd "$work" && scripts/system-packages install 2>&1)"
+status=$?
+if (( status != 0 )) && ! grep -q "sudo was called" <<<"$out"; then
+  pass
+else
+  fail "expected a refusal before any apt call, got status $status: $out"
+fi
+
+report
