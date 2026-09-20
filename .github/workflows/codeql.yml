@@ -32,8 +32,10 @@ jobs:
   # rather than detected: `security_and_analysis` comes back empty on a
   # repository without it even to an administrator's token, so a branch on it
   # would be one nothing can be shown to exercise, and Advanced Security on a
-  # private repository is Enterprise-only. Such a repository deletes this job's
-  # gate rather than the workflow.
+  # private repository is Enterprise-only. Such a repository deletes the `if:`
+  # on `detect` and `analyze` rather than the workflow -- the gates are there,
+  # not in this job, and dropping only `analyze`'s leaves it needing a matrix
+  # `detect` never built.
   #
   # Where results cannot be uploaded this reports and stands down rather than
   # failing. A private repository is the ordinary case for a generated
@@ -98,7 +100,8 @@ jobs:
             echo
             echo "GitHub Advanced Security also lets a private repository upload results, and"
             echo "this job does not test for it. On a private repository that has it, delete"
-            echo "the gate in this job rather than the workflow."
+            echo "the \`if:\` on both the \`detect\` and \`analyze\` jobs rather than the workflow."
+            echo "Dropping only \`analyze\`'s leaves it needing a matrix \`detect\` never built."
           } >> "${GITHUB_STEP_SUMMARY}"
           echo "::warning title=No static analysis coverage::Code scanning cannot accept results from a repository with ${visibility} visibility. CodeQL did not run. Make the repository public, or delete this workflow and record the omission. See the run summary for the Advanced Security case."
 
