@@ -14,9 +14,7 @@
     "languages": ["python"],
     "package_manager": "uv",
     "self_hosted": true,
-    "features": {
-      "codeql": "omitted-by-choice"
-    }
+    "features": {}
   },
   "ownership": [
     {"path": ".repo-template.json", "mode": "managed"},

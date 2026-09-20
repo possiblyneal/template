@@ -159,8 +159,8 @@ The plan of record is <the issue tracker named in docs/agents/issue-tracker.md>,
 message. Open tickets: <count>. First with no open blocker: <#n — title>. Start there.
 
 Expected initial state, not defects: <the absent root manifest scripts/doctor fails on |
-the workflow count a stripped codeql.yml leaves, per lifecycle.md "Code scanning follows
-visibility" | none>.
+the skipped CodeQL analyze leg on a private destination, per lifecycle.md "Code scanning
+lands everywhere and decides at run time" | none>.
 
 The first root manifest owes the checks their tools: <the declarations for the selected
 language, from lifecycle.md "Tools the first manifest must declare" | none, <language>

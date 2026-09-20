@@ -151,13 +151,13 @@ def setup_skill_checks(candidate: Path) -> list[Check]:
 
 
 def code_scanning_check(candidate: Path, generation_record: dict[str, object]) -> Check:
-    """`codeql.yml` lands or is stripped-and-recorded, never one without the other.
+    """`codeql.yml` is present, or absent with the omission recorded.
 
-    The generation evals build locally against no remote, so the live
-    visibility read the flow really makes has no answer here. What is still
-    checkable is that the two halves agree: a stripped workflow with no record
-    is indistinguishable from a workflow someone deleted, which is the whole
-    reason the record exists.
+    Generate lands the workflow at every destination now -- it reads
+    visibility itself on every run -- so the ordinary outcome here is present
+    with no record. The invariant is still worth checking from the other side:
+    an absent workflow with no record is indistinguishable from one someone
+    deleted, which is the whole reason the record exists.
     """
     present = (candidate / ".github/workflows/codeql.yml").is_file()
     features = generation_record.get("features", {})
