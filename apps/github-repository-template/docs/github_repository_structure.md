@@ -13,7 +13,7 @@ type: Note
 
 `.github/workflows/codeql.yml`: Runs GitHub's CodeQL static analysis on pull requests, on `main`, and on a weekly schedule. Its `init` step carries a commented-out `config-file:` line — uncomment it, and add the file it names, to scope which paths are analyzed or run a broader query suite than the default.
 
-`.github/actions/setup-toolchains/action.yml`: Installs a toolchain for each language manifest present in the repository.
+`.github/actions/setup-toolchains/action.yml`: Installs a toolchain for each language manifest present in the repository, and before them any apt package listed in `.github/system-packages.txt` — the optional, unshipped file a repository adds when one of its builds links against a system library the runner image does not carry. A `-sys` crate, a wheel built from source, and node-gyp all resolve their headers through pkg-config, so the need belongs to no one language and the step runs before every toolchain. A repository without the file runs no apt, so the cost falls only on the repository that asked for it.
 
 `.github/zizmor.yml`: Configuration for zizmor, a GitHub Actions workflow security linter run through pre-commit.
 
