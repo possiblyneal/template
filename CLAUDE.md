@@ -33,7 +33,7 @@ The only code this repository runs beyond shell is the Python under `apps/repo-b
 ## Git
 
 - Pre-commit blocks direct commits to `main` and `master`. Branch before you start; a commit attempted on either fails at the hook, not at review.
-- Run `scripts/check` before committing. It runs the same checks CI does, plus pre-commit across every file rather than the staged ones.
+- Run `scripts/check` before committing. It runs the same checks CI does, plus pre-commit across every file rather than the staged ones. The same checks, not the same tool versions: CI installs its toolchains fresh while this runs the machine's, so a lint can pass here and fail there — `scripts/CLAUDE.md` carries the rule.
 - These prompt for approval and cannot be assumed: `git reset --hard`, `git clean`, `git rebase`, `rm` and `git rm`, and the `gh` commands that merge pull requests, cut releases, or delete the repository.
 - So do these paths, whether the change creates or modifies: any dotfile or dot-folder, anything under the payload's `src/`, and anything directly in the repository root. Only the payload rule lives in this repository's `.claude/settings.json`, since it protects a boundary specific to this repo; the rest, and the `rm` rules above, come from the operator's global `~/.claude/settings.json`. It names `apps/github-repository-template/src/**` rather than every `src/`: the prompt asks whether a change belongs to the payload or to the root, and `apps/repo-builder/src/` is a source tree where that question has no meaning.
 - Work reaches `main` through a pull request, where `.github/PULL_REQUEST_TEMPLATE.md` applies.
