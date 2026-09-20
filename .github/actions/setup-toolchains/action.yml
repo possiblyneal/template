@@ -15,23 +15,14 @@ runs:
       shell: bash
       run: scripts/detect github-output >> "$GITHUB_OUTPUT"
 
-    # A crate or native extension linking against a system library resolves its
-    # headers through pkg-config, and the runner image ships neither the headers
-    # nor the .pc file. Such a build passes on a developer machine that happens
-    # to have the package and fails here. A repository that needs one lists it
-    # in .github/system-packages.txt, one apt package per line, # for a comment;
-    # a repository with no such file runs no apt at all. Not tied to a language,
-    # because the need is not: a Rust -sys crate, a Python wheel built from
-    # source, and node-gyp all hit it.
+    # Ahead of every toolchain, because the need belongs to no one language:
+    # a Rust -sys crate, a wheel built from source, and node-gyp all resolve
+    # their headers through pkg-config. The reading of
+    # .github/system-packages.txt is scripts/system-packages' own, for the
+    # reason the step above states about scripts/detect.
     - name: Install system packages
       shell: bash
-      run: |
-        manifest=.github/system-packages.txt
-        [[ -f $manifest ]] || exit 0
-        mapfile -t packages < <(sed 's/#.*//' "$manifest" | tr -s '[:space:]' '\n' | grep .)
-        [[ ${#packages[@]} -gt 0 ]] || exit 0
-        sudo apt-get update
-        sudo apt-get install -y --no-install-recommends "${packages[@]}"
+      run: scripts/system-packages install
 
     - name: Set up Node
       if: steps.detect.outputs.node == 'true'

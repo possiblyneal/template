@@ -607,6 +607,25 @@
         }
       ],
       "external": []
+    },
+    ".github/system-packages.txt": {
+      "slots": [],
+      "reviews": [
+        {
+          "section": "which packages the file names, against what the build actually links",
+          "decision": "Every line ships commented, so an adopted copy nobody edits installs nothing and changes no CI run -- adopting it is not the fix, filling it is. Name the -dev package rather than the runtime one, because what is missing is headers, and use the Debian/Ubuntu name, because these reach apt-get. The two ways it goes wrong point opposite directions: a package that does not exist fails the install with apt-get naming it, while a package that exists but is not the one the build wanted leaves the original compile error exactly where it was, with an apt call now in front of it -- which reads as though the fix was tried and did not work."
+        },
+        {
+          "section": "whether this repository's CI still runs on a ubuntu-latest runner",
+          "decision": "scripts/system-packages calls apt-get, and every workflow the payload ships pins runs-on: ubuntu-latest. A repository that has since moved a job to a macOS or Windows runner and then adopts this file gets a failure on that job at the install step. The failure is legible -- it names apt-get -- but the fix is not in this file: the dependency has to be installed the way that platform installs it, and this file left holding only comments."
+        }
+      ],
+      "external": [
+        {
+          "step": "Confirm each package name resolves on the runner image before relying on it: `docker run --rm ubuntu:latest sh -c 'apt-get update -qq && apt-get install -sy <package>'`, or push the branch and read the Install system packages step.",
+          "consequence": "A name that is close but wrong -- libasound-dev for libasound2-dev, a package renamed between Ubuntu releases -- fails the whole job at the install step rather than at the build, so every check reports nothing about the code. Nothing local catches it: scripts/system-packages validates the shape of a line and never that the name exists, and it cannot, since the answer belongs to the runner image rather than to this repository."
+        }
+      ]
     }
   }
 }

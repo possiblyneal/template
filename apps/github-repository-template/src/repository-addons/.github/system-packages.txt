@@ -1,0 +1,28 @@
+# One apt package per line, "#" starts a comment. scripts/system-packages reads
+# this file and installs what it names, ahead of every language toolchain, in
+# .github/actions/setup-toolchains. A repository without this file installs
+# nothing, which is why it is adopted rather than shipped.
+#
+# What earns a line here: a dependency that links against a system library and
+# resolves its headers through pkg-config. A Rust -sys crate, a Python wheel
+# built from source, and a node-gyp module all do. The build passes on a
+# developer machine that happens to have the library and fails in CI with a
+# message about a build script rather than about a missing package, so the
+# error almost never names what belongs here -- run `pkg-config --list-all` on
+# a machine where the build works, or read the failing crate's build.rs, to
+# find the name.
+#
+# Give the -dev package, not the runtime one: the build needs headers. And give
+# the Debian/Ubuntu name, since these reach apt-get on a ubuntu-latest runner.
+# A repository whose CI moves to a macOS or Windows runner has to solve this
+# another way; this file is not read there.
+#
+# Two rules are enforced rather than assumed, and each fails the run naming the
+# line: a line may hold exactly one package, and a package may not begin with
+# "-". Both exist because the alternative is a guess passed to apt-get.
+#
+# Delete this paragraph and uncomment what you need. An adopted file holding
+# only comments installs nothing and is not an error.
+#
+# libasound2-dev
+# pkg-config

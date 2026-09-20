@@ -13,7 +13,7 @@ type: Note
 
 `.github/workflows/codeql.yml`: Runs GitHub's CodeQL static analysis on pull requests, on `main`, and on a weekly schedule. Its `init` step carries a commented-out `config-file:` line — uncomment it, and add the file it names, to scope which paths are analyzed or run a broader query suite than the default.
 
-`.github/actions/setup-toolchains/action.yml`: Installs a toolchain for each language manifest present in the repository, and before them any apt package listed in `.github/system-packages.txt` — the optional, unshipped file a repository adds when one of its builds links against a system library the runner image does not carry. A `-sys` crate, a wheel built from source, and node-gyp all resolve their headers through pkg-config, so the need belongs to no one language and the step runs before every toolchain. A repository without the file runs no apt, so the cost falls only on the repository that asked for it.
+`.github/actions/setup-toolchains/action.yml`: Installs a toolchain for each language manifest present in the repository, and runs `scripts/system-packages install` ahead of all of them. Neither step decides anything here: each calls a script, so the same reading of the repository happens locally and in CI.
 
 `.github/zizmor.yml`: Configuration for zizmor, a GitHub Actions workflow security linter run through pre-commit.
 
@@ -72,6 +72,8 @@ The specific operating parameters for the AI agent.
 `scripts/libs/`: Shared shell libraries used by the `scripts/` entry points.
 
 `scripts/detect`: Reports which languages are present in the repository and which capability adapters are wired, for use by scripts and workflows.
+
+`scripts/system-packages`: Installs the apt packages `.github/system-packages.txt` names, ahead of every toolchain, and lists them without installing when asked to. That file is an addition by occasion rather than a shipped one, so the normal state is a repository where this installs nothing; the script exists shipped anyway because the occasion is a dependency that links against a system library, which is not something a generated repository can be asked to build the plumbing for at the moment it discovers it. Refuses a line naming two packages and a name beginning with `-`, since both would otherwise reach `apt-get` as a guess.
 
 `scripts/tests/`: Tests for the scripts themselves.
 
@@ -200,6 +202,10 @@ These live in `src/repository-addons/` and are never copied during generation �
 #### When a helper needs to be built before it runs
 
 `tools/CLAUDE.md`: Creates `tools/` and owns it as a documented boundary — each helper gets its own `tools/<name>/` with its own manifest and source, and a helper that's just a shell script belongs in `scripts/` instead. Copied in only when the project needs a helper that must be built before it runs: a linter, a code generator, a protobuf plugin. Its sections ship seeded with what the template can know, including the trap: `scripts/check` reads the manifests at the repository root, so a tool whose language has no root manifest is built and tested by nobody. Being a child document, it has to be added to the root `CLAUDE.md`'s Child Index when adopted, or nothing walking the tree reaches it.
+
+#### When a build links against a system library
+
+`.github/system-packages.txt`: Names the apt packages CI installs before any toolchain is set up, one per line. Copied in when a dependency resolves its headers through pkg-config — a Rust `-sys` crate, a wheel built from source, a node-gyp module — and the runner image ships neither the headers nor the `.pc` file. That build passes on a developer machine that happens to have the library and fails in CI with a message about a build script rather than about a missing package, which is why the file ships carrying the guidance for finding the right name. Every line ships commented, so adopting the file is not itself the fix.
 
 ### Program Language Metadata
 

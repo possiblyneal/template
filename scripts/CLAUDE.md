@@ -11,6 +11,7 @@ One flat directory, not a `ci/` and a `scripts/` split. The boundary that split 
 - `doctor`, `check`, `fix`, `clean`, `run`, `package` — run by a person
 - `summarize <command…>` — runs a check command and prints only its Result table, findings included, exiting with that command's status; the one consumer of the printed layout `libs/result.sh` documents
 - `ci`, `security`, `release`, `detect` — called by `.github/workflows/`
+- `system-packages` — called by `.github/actions/setup-toolchains`; installs the apt packages `.github/system-packages.txt` names, ahead of every toolchain. The file is an addition by occasion, so the shipped state is a repository where this installs nothing and the step is a stat. It lives here rather than in the action's `run:` for the reason at the top of this file: the parse runs locally exactly as it runs in GitHub Actions, and `tests/system-packages-test` can reach it
 - `repo-settings check` — hosted GitHub state, run explicitly
 - `adr-index` — called by pre-commit; regenerates `docs/adrs/index.md`
 - `structure` — called by `scripts/check` and by pre-commit; audits where files sit; the script itself holds the rules
