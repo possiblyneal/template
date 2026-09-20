@@ -88,6 +88,35 @@ else
   fail "expected a refusal, got status $status: $out"
 fi
 
+# apt-get reads a trailing "-" as "remove this", "+" as "install this", and "^"
+# as "install this whole tasksel task". A typed hyphen at the end of a line
+# would otherwise uninstall a package while the step reported success.
+fixture "a name carrying an apt action suffix is refused"
+for suffix in - + ^; do
+  manifest <<TXT
+libasound2-dev$suffix
+TXT
+  out="$(cd "$work" && scripts/system-packages list 2>&1)"
+  status=$?
+  if (( status != 0 )) && grep -q "not a package name" <<<"$out"; then
+    pass
+  else
+    fail "expected a refusal for the $suffix suffix, got status $status: $out"
+  fi
+done
+
+# Version pinning is ordinary apt syntax and must survive the suffix rule.
+fixture "a version-pinned name is kept"
+manifest <<'TXT'
+libasound2-dev=1.2.11-1
+TXT
+out="$(cd "$work" && scripts/system-packages list 2>&1)"
+if [[ $out == "libasound2-dev=1.2.11-1" ]]; then
+  pass
+else
+  fail "expected the pinned name through unchanged, got: $out"
+fi
+
 # The case the first draft of this script got wrong: it tested existence rather
 # than readability, so an unreadable manifest reported success having installed
 # nothing, and the missing header resurfaced as a compile error nobody could
@@ -113,7 +142,10 @@ chmod 644 "$work/.github/system-packages.txt"
 # install is what the composite action calls. With no manifest it must reach no
 # apt at all, which is the promise made to every repository that never writes
 # one.
-fixture "install runs no apt where there is no manifest"
+# Someone reading this log has usually just watched a build fail on a missing
+# header. The no-op has to name the file, or the step is a silent line between
+# them and the fix.
+fixture "install runs no apt where there is no manifest, and says where the fix goes"
 stub sudo <<'STUB'
 #!/usr/bin/env bash
 echo "sudo was called: $*" >&2
@@ -121,10 +153,11 @@ exit 1
 STUB
 out="$(cd "$work" && scripts/system-packages install 2>&1)"
 status=$?
-if (( status == 0 )) && [[ -z $out ]]; then
+if (( status == 0 )) && ! grep -q "sudo was called" <<<"$out" &&
+  grep -q ".github/system-packages.txt" <<<"$out"; then
   pass
 else
-  fail "expected no apt and exit 0, got status $status: $out"
+  fail "expected no apt, exit 0, and the manifest path named; got status $status: $out"
 fi
 
 fixture "install passes the listed packages to apt-get"

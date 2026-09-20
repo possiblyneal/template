@@ -37,8 +37,14 @@ EOF
 # One package per line, "#" starts a comment. A line naming two packages is
 # refused rather than joined or split: the file is small and hand-written, and
 # a silent reading of "libasound2-dev pkg-config" as one package name or as two
-# is a guess either way. A name beginning with "-" is refused because apt-get
-# would read it as a flag.
+# is a guess either way.
+#
+# A leading "-" is refused because apt-get would read it as a flag. A trailing
+# "-", "+", or "^" is refused because apt-get reads each as an instruction
+# rather than as part of the name: "libfoo-" REMOVES libfoo, "libfoo+" installs
+# it, and "task^" installs a whole tasksel task. A typed hyphen at the end of a
+# line would otherwise uninstall a package while the step reported success.
+# "=" is left alone, since "libfoo=1.2" is ordinary version pinning.
 #
 # No guard on readability: the redirection below fails under `set -e` when the
 # file cannot be read, which is the point. Testing existence and then letting
@@ -56,7 +62,7 @@ list() {
       echo "$manifest: one package per line, found ${#fields[@]}: $line" >&2
       return 1
     fi
-    if [[ ${fields[0]} == -* ]]; then
+    if [[ ${fields[0]} == -* || ${fields[0]} == *[-+^] ]]; then
       echo "$manifest: not a package name: ${fields[0]}" >&2
       return 1
     fi
@@ -69,7 +75,13 @@ list() {
 install() {
   local packages=() names
   names="$(list)"
-  [[ -n $names ]] || return 0
+  if [[ -z $names ]]; then
+    # Named here rather than nowhere: the reader of this log is usually someone
+    # whose build just failed on a missing header, and this is the one line in
+    # the run that says where the fix goes.
+    echo "No packages to install: .github/system-packages.txt is absent or names none."
+    return 0
+  fi
   mapfile -t packages <<<"$names"
   sudo apt-get update
   sudo apt-get install -y --no-install-recommends "${packages[@]}"

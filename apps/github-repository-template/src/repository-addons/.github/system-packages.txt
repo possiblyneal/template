@@ -17,9 +17,11 @@
 # A repository whose CI moves to a macOS or Windows runner has to solve this
 # another way; this file is not read there.
 #
-# Two rules are enforced rather than assumed, and each fails the run naming the
-# line: a line may hold exactly one package, and a package may not begin with
-# "-". Both exist because the alternative is a guess passed to apt-get.
+# Three rules are enforced rather than assumed, and each fails the run naming
+# the line: a line holds exactly one package; a name may not begin with "-",
+# which apt-get would read as a flag; and a name may not end in "-", "+", or
+# "^", each of which apt-get reads as an instruction rather than as part of the
+# name -- "libfoo-" REMOVES libfoo. Version pinning ("libfoo=1.2") is fine.
 #
 # Delete this paragraph and uncomment what you need. An adopted file holding
 # only comments installs nothing and is not an error.
