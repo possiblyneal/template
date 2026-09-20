@@ -349,33 +349,24 @@ def require_managed_overrides(
         )
 
 
-REPLACED_WHOLE_PATHS = (".gitignore",)
-"""Payload paths every flow replaces outright, so none can be an override.
-
-The ignore file is written from the payload at every flow that lands payload
-content, and a destination rule the payload does not cover is reported for the
-operator to settle rather than carried across. A file that always lands cannot
-be one that was never written, which is what an override records.
-"""
+REPLACED_OUTRIGHT_PATHS = (".gitignore",)
+"""Payload paths the flows replace outright, under `lifecycle.md`'s Overridden
+paths, so none can be an override."""
 
 
-def refuse_replaced_whole_overrides(overrides: dict[str, str]) -> None:
+def refuse_replaced_outright_overrides(overrides: dict[str, str]) -> None:
     """Refuse an override on a path the flows replace outright.
 
     Separate from `require_managed_overrides` because ownership cannot settle
     it: `.gitignore` is managed, so the rules admit the entry and the mistake
-    survives. The cost of letting it through is silent and durable rather than
-    visible at the next run -- an update skips a delta path listed in
-    `generation.overrides` instead of raising it, so every later payload change
-    to the ignore file is discarded on the strength of a collision that never
-    happened, and no check anywhere reads the file that stopped being updated.
+    survives ownership alone.
     """
-    for override_path in sorted(overrides):
-        if override_path not in REPLACED_WHOLE_PATHS:
+    for replaced_path in REPLACED_OUTRIGHT_PATHS:
+        if replaced_path not in overrides:
             continue
         raise PreflightError(
-            f"manifest.generation.overrides names a path every flow replaces "
-            f"outright: {override_path}; the payload's version lands and the "
+            f"manifest.generation.overrides names a path the flows replace "
+            f"outright: {replaced_path}; the payload's version lands and the "
             "destination's own rules are reported rather than re-added, so "
             "this is a merge to raise at the next update, not an override"
         )
@@ -436,7 +427,7 @@ def validate_manifest(
         seen.add(pattern)
         rules.append(OwnershipRule(pattern, str(mode), index))
     require_managed_overrides(overrides, rules)
-    refuse_replaced_whole_overrides(overrides)
+    refuse_replaced_outright_overrides(overrides)
     return manifest, rules, overrides
 
 

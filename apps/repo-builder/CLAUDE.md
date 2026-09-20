@@ -8,7 +8,7 @@ Develops the `/repo-builder` skill, which builds a repository from the payload a
 
 - `src/SKILL.md` — the entry point, and the only file Claude Code reads to decide the skill applies.
 - `src/references/` — the flows the entry point routes to: `lifecycle.md` first, then `generate.md`, `update.md`, `adopt.md`, `retrofit.md`, `wayfinding.md`, `addon-adoption.md`, and `reporting.md` at the end of any of them. `choosing_a_language.md` is the method wayfinding is a short path through.
-- `src/scripts/preflight.py` — validates and describes a flow's inputs before it acts. Retrofit shares the git helpers and the addon manifest reader, and none of the record ones: every check in `load_provenance` reads a `.repo-template.json` a retrofit has not written yet. That asymmetry decides where a record guard can fire, and `refuse_replaced_whole_overrides` is the one that shows it — a retrofit can write the bad entry and only the next update or adopt refuses it, which is still before the entry does any harm.
+- `src/scripts/preflight.py` — validates and describes a flow's inputs before it acts. Retrofit shares the git helpers and the addon manifest reader, and none of the record ones: every check in `load_provenance` reads a `.repo-template.json` a retrofit has not written yet.
 - `src/scripts/tests/` — the pytest suite over `preflight.py`, plus two checks that are not about this unit's code: `test_addon_adoption.py`, on the template payload, and `test_reference_assertions.py`, on whether `src/references/` still describes a payload that exists and whether every payload path is reached by an ownership rule.
 - `src/evals/` — `evals.json` and the fixture helpers the skill-eval tooling runs it against.
 - `scripts/install` — creates the link described below.
