@@ -273,13 +273,14 @@ Re-running the recipe is what a resume does, and it is not free here: `init-temp
 Verify by outcome before measuring the bar, never by the commands' exit status: `git -C <tree> rev-parse --git-path hooks` resolves inside `<hooksdir>` and every configured type is present there. A flow whose hooks are not working stops here and reports it as its own defect. Carrying on measures a destination against a check surface that cannot run and writes the result up as debt the destination owes, which is the worst available outcome: a real repository given a list of failures that are this skill's.
 
 A global `core.hooksPath` is reported with its key and its value, and it is not a stop. The recipe above works while it is set; naming it is what stops the next reader treating an unrelated editor integration as a defect. Removing and restoring the operator's global key around an install is not the shortcut it looks like: every other process on the machine reads the wrong config for the duration.
+
 ### Working hooks in the destination after a merge
 
 The section above leaves the candidate hooked and says nothing about the clone the operator commits from, because for update and adopt they are the same tree. For retrofit they are not: its key is set at `--worktree` scope on a candidate the report then hands over a removal command for, so when the candidate goes the hooks go with it.
 
 That matters because of what the pull request landed. **A retrofit merges a `.pre-commit-config.yaml` into a clone that did not have one**, along with an instruction file stating that commits are linted, attributed, and refused on the default branch. Nothing in the flow installs it. The destination is then a repository whose own documentation promises a hook surface that does not exist, which is the failure [Working hooks in a candidate](#working-hooks-in-a-candidate) already refuses to ship in the other direction — measuring against a surface that cannot run — arriving by the other end.
 
-So where the operator takes the merge at retrofit's second gate, install the hooks in the destination clone before the final report, and report the result in it. Declining the merge installs nothing: there is no config on the default branch yet, and hooks for a file the clone does not carry are shims that refuse every commit.
+So where the operator takes the merge at retrofit's second gate, install the hooks in the destination clone before the final report, and report the result in it. Declining the merge installs nothing, and not because the shims would misbehave — they skip a missing config and exit zero. It is that they would not be free: the recipe below moves aside hooks the clone already had and pins `core.hooksPath` at local scope, both durable changes to the operator's own tree, bought for a config that never landed.
 
 The recipe is [Working hooks in a candidate](#working-hooks-in-a-candidate)'s, with `<hooksdir>` the clone's own `.git` and `<scope>` `--local`:
 
