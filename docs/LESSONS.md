@@ -39,21 +39,35 @@ The root config files and `apps/github-repository-template/src/base-repo/` hold 
 
 **Source:** [Template payload contract](../apps/github-repository-template/CLAUDE.md)
 
-## CodeQL is deleted here, and the record is the finding
+## Read the `analyze` row before calling a green CodeQL run coverage
 
-Code scanning accepts uploaded results from a public repository, or from a private one with GitHub Advanced Security. This repository is neither, so `.github/workflows/codeql.yml` could never upload. It is deleted here, and `generation.features.codeql` in `.repo-template.json` reads `omitted-by-choice` — one of the three resolutions the workflow's own error named, alongside going public and enabling Advanced Security.
+`codeql.yml` is green whether it scanned or stood down. Its `scanning` job reads repository visibility and, where the repository is not public, sets `enabled=false`, writes a warning annotation and a run summary, and leaves `detect` and `analyze` skipped.
 
-**Do:** Restore the workflow from the payload at `apps/github-repository-template/src/base-repo/.github/workflows/codeql.yml` and clear the `features` entry the moment this repository goes public or gains Advanced Security. Until then, read `omitted-by-choice` as the statement that this repository has no static analysis coverage. Never fake coverage instead — `continue-on-error`, a removed upload step, or an `if:` that skips the job all render the workflow green, so a repository with no coverage looks exactly like one that scanned clean. A recorded omission is visible; a green check over nothing is not.
+**Do:** Treat a green CodeQL check as coverage only when `analyze` ran. A repository choosing never to scan records `"codeql": "omitted-by-choice"` under `features` in `.repo-template.json`; that record, not the check colour, is the durable statement.
 
-**Why a record rather than a permanently red check:** The workflow shipped for a while precisely so the red check would say the coverage gap out loud, which it did on every pull request, every push to `main`, and every Tuesday at 07:41. It could not turn green without a plan change, so it charged about 440 Actions minutes a month — measured at 337 over the 23 days it ran in August, against a 2000-minute free allowance — to restate a fact that cannot change while this repository is private on a free plan. Recorded versus silent is the distinction that matters, and `features` is the recorded form at no monthly cost.
+**Why:** A private repository cannot enable code scanning from inside itself, so failing there restated an unchangeable fact on every pull request and read as broken CI rather than as missing coverage. Standing down costs seconds and starts scanning by itself the day the repository goes public — at the price that green no longer distinguishes "scanned clean" from "did not scan".
 
-**The deletion survives a template update, and not by luck:** `.github/**` is `managed`, but `update.md` reconciles only paths in the preflight delta. An unchanged payload `codeql.yml` never enters that delta, so nothing re-applies it; a changed one meets "a changed file was deleted" and stops at the conflict gate for a policy decision. Neither path restores it quietly.
+**Source:** [.github/workflows/codeql.yml](../.github/workflows/codeql.yml)
 
-**Why the payload keeps it:** The fail-fast fixed a real defect and should keep shipping. Before it, the job burned an hour and then reported `Code scanning is not enabled` underneath a misleading note about pull requests from forks — slow and misdescribed, not merely red. In the payload it also reads visibility through `gh api` rather than `github.event.repository`, which GitHub documents as "Not applicable" for `schedule`; read from the event, the weekly run would compare a null against `public` and fail a public repository every Tuesday.
+## Read repository visibility from `gh api`, never `github.event.repository`
 
-**Source:** [Payload structure](../apps/github-repository-template/docs/github_repository_structure.md)
+GitHub documents that payload as "Not applicable" for the `schedule` event.
 
-**Source:** [`.repo-template.json`](../.repo-template.json)
+**Do:** Call `gh api "repos/${GITHUB_REPOSITORY}" --jq .visibility` in any workflow step that branches on visibility, and treat an empty or `null` result as a failure rather than as a private repository — an absent key prints the literal `null` at exit 0.
+
+**Why:** Read from the event, a weekly run compares a null against `public` and takes the private branch on a public repository every time it fires.
+
+**Source:** [GitHub webhook events and payloads](https://docs.github.com/en/webhooks/webhook-events-and-payloads#schedule)
+
+## A payload file the root drops stays dropped through an update, and not by luck
+
+`.github/**` is `managed` in `.repo-template.json`, but `update.md` reconciles only paths in the preflight delta.
+
+**Do:** Record a deliberately dropped payload file under `generation.features` as `omitted-by-choice` rather than relying on the update flow to leave it alone.
+
+**Why:** An unchanged payload file never enters the delta, so nothing re-applies it; a changed one meets "a changed file was deleted" and stops at the conflict gate. Only the record says which of the two an absence was, and `scripts/github-parity` excuses the omission on that exact value.
+
+**Source:** [scripts/github-parity](../scripts/github-parity), [update.md](../apps/repo-builder/src/references/update.md)
 
 ## Never give ruff or ty an `include` to reach one path
 
