@@ -168,6 +168,16 @@ class PreflightUnitTests(unittest.TestCase):
         with self.assertRaisesRegex(preflight.PreflightError, "no ownership rule"):
             preflight.require_managed_overrides({"README.md": "ours"}, [])
 
+    def test_an_override_on_the_ignore_file_is_refused(self) -> None:
+        """Ownership admits it -- .gitignore is managed -- so this is the guard."""
+        with self.assertRaisesRegex(preflight.PreflightError, "replaces outright"):
+            preflight.refuse_replaced_whole_overrides(
+                {".gitignore": "the destination keeps its own"}
+            )
+
+    def test_an_override_on_another_managed_path_still_passes(self) -> None:
+        preflight.refuse_replaced_whole_overrides({".claude/settings.json": "kept"})
+
     def test_an_override_the_delta_reaches_is_not_reported_as_unmatched(self) -> None:
         changes = preflight.parse_name_status(
             "M\0base-repo/scripts/check\0",
