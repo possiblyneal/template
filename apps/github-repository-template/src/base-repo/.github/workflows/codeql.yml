@@ -27,6 +27,14 @@ jobs:
   # turns an hour of work that dies at its upload step into an answer arriving
   # in seconds that names what is wrong.
   #
+  # The test is visibility alone, so a private repository that does have
+  # Advanced Security stands down here although it could upload. That is stated
+  # rather than detected: `security_and_analysis` comes back empty on a
+  # repository without it even to an administrator's token, so a branch on it
+  # would be one nothing can be shown to exercise, and Advanced Security on a
+  # private repository is Enterprise-only. Such a repository deletes this job's
+  # gate rather than the workflow.
+  #
   # Where results cannot be uploaded this reports and stands down rather than
   # failing. A private repository is the ordinary case for a generated
   # repository and it cannot fix this from inside the repository, so failing
@@ -36,8 +44,8 @@ jobs:
   #
   # The cost is that green no longer distinguishes "scanned clean" from "did
   # not scan", so three things carry that instead: the warning annotation
-  # below, the run summary, and `analyze` appearing on the checks list as
-  # skipped. A repository choosing never to scan still records the omission
+  # below, the run summary, and `detect` and `analyze` appearing on the checks
+  # list as skipped. A repository choosing never to scan still records the omission
   # under `features` in `.repo-template.json`, which is the durable statement.
   #
   # It is its own job so the check reads "Code scanning enabled" rather than a
@@ -59,6 +67,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           visibility="$(gh api "repos/${GITHUB_REPOSITORY}" --jq .visibility)"
+          # An absent key prints the literal null at exit 0, so without this the
+          # scan would stand down on a response nothing understood and say so in
+          # a summary reading "visibility is `null`". Not knowing the answer is
+          # a failure to report, not a private repository.
+          if [ -z "${visibility}" ] || [ "${visibility}" = "null" ]; then
+            echo "::error title=Visibility unreadable::gh api returned no visibility for ${GITHUB_REPOSITORY}, so whether code scanning can accept results is unknown."
+            exit 1
+          fi
           if [ "${visibility}" = "public" ]; then
             echo "enabled=true" >> "${GITHUB_OUTPUT}"
             echo "Repository is public. Code scanning accepts uploaded results."
@@ -68,27 +84,34 @@ jobs:
           {
             echo "### Code scanning is not available, so nothing was analyzed"
             echo
-            echo "Repository visibility is \`${visibility}\`. Code scanning accepts results"
-            echo "from a public repository, or from a private one with GitHub Advanced"
-            echo "Security. CodeQL would analyze the code and then fail at its upload step,"
-            echo "so \`analyze\` was skipped."
+            echo "Repository visibility is \`${visibility}\`, and code scanning accepts results"
+            echo "from a public repository. CodeQL would analyze the code and then fail at"
+            echo "its upload step, so \`analyze\` was skipped."
             echo
             echo "**This repository has no static analysis coverage.** A green check on this"
             echo "workflow means the scan stood down, not that it found nothing. Resolve it"
             echo "by one of:"
             echo
             echo "- making the repository public"
-            echo "- enabling GitHub Advanced Security"
             echo "- deleting \`.github/workflows/codeql.yml\`, recording the omission under"
             echo "  \`features\` in \`.repo-template.json\`"
+            echo
+            echo "GitHub Advanced Security also lets a private repository upload results, and"
+            echo "this job does not test for it. On a private repository that has it, delete"
+            echo "the gate in this job rather than the workflow."
           } >> "${GITHUB_STEP_SUMMARY}"
-          echo "::warning title=No static analysis coverage::Code scanning cannot accept results from a repository with ${visibility} visibility, without GitHub Advanced Security. CodeQL did not run. Make the repository public, enable Advanced Security, or delete this workflow and record the omission."
+          echo "::warning title=No static analysis coverage::Code scanning cannot accept results from a repository with ${visibility} visibility. CodeQL did not run. Make the repository public, or delete this workflow and record the omission. See the run summary for the Advanced Security case."
 
   # CodeQL fails when told to analyze a language the repository does not
   # contain, so the language list comes from the manifests actually present
   # rather than from a fixed list this template cannot know.
   detect:
     name: Detect languages
+    # Gated on the same answer as `analyze`. Building a matrix nothing consumes
+    # is a checkout and a runner spent on every push, pull request and weekly
+    # run of a repository that will not scan.
+    needs: scanning
+    if: needs.scanning.outputs.enabled == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:

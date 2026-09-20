@@ -79,8 +79,10 @@ updates:
   # manifest that is not there fails the run, which is the rule at the top of
   # this file. .github/** is managed in .repo-template.json, so a template
   # update replaces this file; the entry comes back because the update derives
-  # it again from the same manifest, which is what makes it unlike the deleted
-  # codeql.yml, whose absence is recorded rather than recomputed.
+  # it again from the same manifest rather than by being carried, which is what
+  # makes it unlike a payload file the root drops: that absence survives an
+  # update because `generation.features` records it, not because anything
+  # rebuilds it.
   #
   # The dependencies are the dev group in the root pyproject.toml: ruff, ty,
   # and pytest. Nothing here ships, so this is not about a CVE reaching a user

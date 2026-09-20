@@ -153,9 +153,9 @@ def setup_skill_checks(candidate: Path) -> list[Check]:
 def code_scanning_check(candidate: Path, generation_record: dict[str, object]) -> Check:
     """`codeql.yml` is present, or absent with the omission recorded.
 
-    Generate lands the workflow at every destination now -- it reads
-    visibility itself on every run -- so the ordinary outcome here is present
-    with no record. The invariant is still worth checking from the other side:
+    Generate lands the workflow at every destination -- it reads visibility
+    itself on every run -- so the ordinary outcome here is present with no
+    record. The invariant is still worth checking from the other side:
     an absent workflow with no record is indistinguishable from one someone
     deleted, which is the whole reason the record exists.
     """
