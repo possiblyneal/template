@@ -11,7 +11,7 @@ type: Note
 
 `.github/workflows/security.yml`: Runs dependency audits and, when a scanner is present, a secret scan.
 
-`.github/workflows/codeql.yml`: Runs GitHub's CodeQL static analysis on pull requests, on `main`, and on a weekly schedule. Its first job reads the repository's visibility and, where code scanning cannot accept results, stands the analysis down with a warning rather than failing, so the workflow starts scanning by itself if the repository goes public. Its `init` step carries a commented-out `config-file:` line — uncomment it, and add the file it names, to scope which paths are analyzed or run a broader query suite than the default.
+`.github/workflows/codeql.yml`: Runs GitHub's CodeQL static analysis on pull requests, on `main`, and on a weekly schedule. Its first job reads the repository's visibility and, where the repository is not public, stands the analysis down with a warning rather than failing, so the workflow starts scanning by itself if the repository goes public. Its `init` step carries a commented-out `config-file:` line — uncomment it, and add the file it names, to scope which paths are analyzed or run a broader query suite than the default.
 
 `.github/actions/setup-toolchains/action.yml`: Installs a toolchain for each language manifest present in the repository, and runs `scripts/system-packages install` ahead of all of them. Neither step decides anything here: each calls a script, so the same reading of the repository happens locally and in CI.
 

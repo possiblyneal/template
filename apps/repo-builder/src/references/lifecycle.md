@@ -160,7 +160,7 @@ A destination's gate scripts are not in `.github/`, so they are not replaced. Th
 
 ## Code scanning lands everywhere and decides at run time
 
-Code scanning is free on a public repository and unavailable on a private one without Advanced Security. `codeql.yml` lands at every destination regardless, because the workflow reads visibility itself: its `scanning` job calls `gh api "repos/<owner>/<repository>" --jq .visibility` on every run and, where results cannot be uploaded, writes a warning annotation and a run summary and skips `analyze`. The run is green and costs seconds.
+Code scanning is free on a public repository and unavailable on a private one without Advanced Security. `codeql.yml` lands at every destination regardless, because the workflow reads visibility itself: its `scanning` job calls `gh api "repos/<owner>/<repository>" --jq .visibility` on every run and, where the repository is not public, writes a warning annotation and a run summary and skips `detect` and `analyze`. The run is green and costs seconds. The test is visibility alone, so a private destination with Advanced Security stands down although it could upload; the workflow's own comment states that limit and what such a destination does about it.
 
 That is why no flow branches on visibility here and no flow records anything. A generation-time decision answers the question once, at the only moment the answer is guaranteed to go stale: a repository that goes public later would carry a stripped workflow and a record saying private, and would have to be regenerated to start scanning. Deciding per run, the same file starts scanning by itself the day visibility changes.
 

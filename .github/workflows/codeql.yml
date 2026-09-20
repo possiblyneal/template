@@ -45,8 +45,8 @@ jobs:
   # The cost is that green no longer distinguishes "scanned clean" from "did
   # not scan", so three things carry that instead: the warning annotation
   # below, the run summary, and `detect` and `analyze` appearing on the checks
-  # list as skipped. A repository choosing never to scan still records the omission
-  # under `features` in `.repo-template.json`, which is the durable statement.
+  # list as skipped. A repository choosing never to scan still records the
+  # omission under `features` in `.repo-template.json`, the durable statement.
   #
   # It is its own job so the check reads "Code scanning enabled" rather than a
   # language-detection result that would misdescribe the answer.

@@ -97,7 +97,7 @@ Its output is the evidence for the settings section of the report, and `not offe
 | --- | --- |
 | `ci.yml` | `CI` |
 | `security.yml` | `Security` |
-| `codeql.yml` | `Code scanning enabled`, `Detect languages`, and `Analyze <language>` once per detected language |
+| `codeql.yml` | `Code scanning enabled`, `Detect languages`, and `Analyze <language>` once per detected language. On a destination that is not public the first passes and the other two are skipped |
 | `release.yml` | `Release` |
 
 Require `ci` rather than `CI` and nothing ever reports that context, so it stays pending for the life of the repository. That failure is invisible from every angle the flow otherwise checks: creation returns 201, the ruleset reads back `active`, `scripts/repo-settings check` passes it, the probe above is rejected exactly as it should be — and the default branch is simply never mergeable, with nothing anywhere naming the misspelling as the cause. Require only contexts a run on this repository has actually reported: `codeql.yml`'s analyze leg is one context per language and `release.yml` does not run on a pull request, so neither belongs in a rule gating one.
