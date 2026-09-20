@@ -132,6 +132,7 @@ One line per check, from `scripts/summarize <command>` rather than from a filter
 - Candidate (retrofit): left standing at <path>; remove it with `git -C <clone> worktree remove <path>`
 - Code review: skipped, as [Reviewing the pull request](#reviewing-the-pull-request) directs
 - Default branch after merge: <check-suite result> | n/a (nothing merged)
+- Destination hooks after merge (retrofit): shims in <path>, `core.hooksPath` pinned local to it, <each hook moved aside or linked in, or none>, verified by <the refusals observed> | n/a (merge declined), under [Working hooks in the destination after a merge](lifecycle.md#working-hooks-in-the-destination-after-a-merge)
 
 ### Resumption
 Present only on a run that re-entered a stopped flow, as [Resuming](lifecycle.md#resuming) directs.
