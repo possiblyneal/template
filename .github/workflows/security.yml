@@ -65,9 +65,14 @@ jobs:
         if: steps.detect.outputs.go == 'true'
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
+      # +stable rather than bare cargo: this runs in the workspace, so a root
+      # rust-toolchain.toml applies as a rustup directory override and would
+      # build the auditor with the product's pinned toolchain. A floating
+      # cargo-audit raises its own MSRV, so that pin eventually sits below it
+      # and the install fails. The audit tool's toolchain is not the product's.
       - name: Install cargo-audit
         if: steps.detect.outputs.rust == 'true'
-        run: cargo install cargo-audit --locked
+        run: cargo +stable install cargo-audit --locked
 
       - name: Install trivy
         if: steps.detect.outputs.trivy == 'true'
