@@ -10,7 +10,6 @@ import tempfile
 import unittest
 import unittest.mock
 from pathlib import Path
-from typing import Any
 
 MODULE_PATH = Path(__file__).parents[1] / "preflight.py"
 SPEC = importlib.util.spec_from_file_location("repo_builder_preflight", MODULE_PATH)
@@ -19,14 +18,9 @@ preflight = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = preflight
 SPEC.loader.exec_module(preflight)
 
-# Every git command written by hand here goes through `git` or `git_output`
-# below, rather than the fixtures' route through evals/setup_fixture.py, which
-# carries its own GIT_ENV. A hand commit is the only kind that falls back to
-# ambient git config, and a CI runner has none and cannot derive one -- its
-# gecos field is empty, so git fails with "empty ident name" where a developer
-# machine silently succeeds. Supplying the identity on every call rather than
-# on the ones that commit is what keeps that from being a thing each new call
-# site has to remember.
+# Supplied on every call rather than on the ones that commit: a hand commit is
+# the only kind that falls back to ambient git config, and a CI runner has none.
+# ../../../CLAUDE.md Work Guidance holds the rule and why.
 GIT_IDENTITY = (
     "-c",
     "user.name=Repo Builder Test",
@@ -39,18 +33,26 @@ def git(
     *arguments: str,
     cwd: Path | str | None = None,
     check: bool = True,
-    **keywords: Any,
-) -> subprocess.CompletedProcess:
-    """Run git under the test identity, quiet and checked unless told otherwise."""
-    keywords.setdefault("stdout", subprocess.DEVNULL)
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run git under the test identity, checked unless told otherwise.
+
+    Both streams are captured rather than discarded, so a failure arrives as a
+    CalledProcessError carrying git's own diagnosis instead of a bare exit code.
+    """
     return subprocess.run(
-        ["git", *GIT_IDENTITY, *arguments], cwd=cwd, check=check, **keywords
+        ["git", *GIT_IDENTITY, *arguments],
+        cwd=cwd,
+        check=check,
+        env=env,
+        text=True,
+        capture_output=True,
     )
 
 
 def git_output(*arguments: str, cwd: Path | str | None = None) -> str:
     """Run git as above and return its standard output, stripped."""
-    return git(*arguments, cwd=cwd, text=True, stdout=subprocess.PIPE).stdout.strip()
+    return git(*arguments, cwd=cwd).stdout.strip()
 
 
 class PreflightUnitTests(unittest.TestCase):

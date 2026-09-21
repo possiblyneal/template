@@ -35,6 +35,8 @@ Develops the `/repo-builder` skill, which builds a repository from the payload a
 
 A fourth claim was added that way: every path the payload ships is reached by an ownership rule, checked against this repository's `.repo-template.json` and against the manifest example in `lifecycle.md`. It reads two manifests rather than the references, and it belongs here because the claim it settles is one the references make — an unmatched path is product-owned, so a payload path no rule reaches sits outside every update with nothing naming it. It asserts reachability of each list separately rather than agreement between them, since `lifecycle.md` says its example illustrates the shape and is not a canonical list to copy. `reaches()` is a hand-copy of `preflight.py`'s `path_matches` for the two shapes the manifests use, kept rather than imported for the stdlib-only reason above; it is strictly the narrower of the two, so it can only false-alarm.
 
+Every git command `test_preflight.py` writes by hand goes through its own `git` or `git_output` helper, never `subprocess.run` direct. The helper supplies a `-c user.name`/`-c user.email` identity on every call, because a hand commit is the only kind that falls back to ambient git config and a CI runner has none — its gecos field is empty, so git fails with "empty ident name" where a developer machine silently succeeds. A new call site that bypasses the helper passes locally and fails in CI. Fixture commits are exempt: `src/evals/setup_fixture.py` carries its own `GIT_ENV`.
+
 Editing under this unit's `src/` does not prompt — `.claude/settings.json` asks only for `apps/github-repository-template/src/**`, where the prompt's question, payload or root, is a real one.
 
 ## Verification
