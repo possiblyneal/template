@@ -18,10 +18,9 @@ preflight = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = preflight
 SPEC.loader.exec_module(preflight)
 
-# The two adopt tests below commit by hand, standing in for the repository
-# owner taking an addon months after the first. They are the only commits here
-# not made through evals/setup_fixture.py, which carries its own GIT_ENV, so
-# they are also the only ones that would fall back to ambient git config. A CI
+# Every commit written by hand here takes this, rather than the fixtures'
+# route through evals/setup_fixture.py, which carries its own GIT_ENV. A hand
+# commit is the only kind that falls back to ambient git config, and a CI
 # runner has none and cannot derive one -- its gecos field is empty, so git
 # fails with "empty ident name" where a developer machine silently succeeds.
 GIT_IDENTITY = (
