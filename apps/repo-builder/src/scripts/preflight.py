@@ -561,7 +561,10 @@ def mark_destination_state(
         # A rename carries a second destination path the rules weigh. An
         # untouched old name reads `unmodified` on its own, and step 3 takes
         # that as leave to apply the move without a read -- over whatever the
-        # destination already keeps at the new name.
+        # destination already keeps at the new name. Any entry there blocks the
+        # move, a directory included, which is why this asks `exists` where the
+        # old name asks `is_file`: that one is read as a blob and this one is
+        # only in the way.
         new_path = change.get("new_path")
         if (
             state == "unmodified"
