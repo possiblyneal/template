@@ -17,6 +17,13 @@
 # entry of their own; they say where the modules are, and the modules are what
 # Dependabot reads.
 #
+# A cargo workspace is the one case where several manifests take a single entry.
+# The root Cargo.toml holding [workspace] earns it and a member listed in its
+# members earns none: cargo's fetcher reads that list and bumps every member
+# from the root's job, moving the root Cargo.lock with it. A member entry opens
+# a duplicate pull request, and where the member pins its own versions rather
+# than inheriting with { workspace = true } that job sees no lockfile at all.
+#
 # An entry for an ecosystem outside that list -- docker, terraform, nuget and
 # the rest Dependabot supports -- stays yours to keep here. The derivation
 # rebuilds only what it maps, so a flow reads this file before replacing it and

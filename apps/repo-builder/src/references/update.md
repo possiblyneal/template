@@ -12,14 +12,12 @@ Read [`lifecycle.md`](lifecycle.md) first — the manifest, ownership, check rep
      --destination <destination>
    ```
 
-   The command validates the manifest, repository identities, clean worktree, old and target subtrees, full commits, ancestry, and ownership classification. A non-descendant target is a hard stop.
+   The command validates the manifest, repository identities, clean worktree, old and target subtrees, full commits, ancestry, and ownership classification. It also marks each delta path it leaves to reconcile `unmodified`, `modified`, or `absent` against the destination, which is what step 3 reads instead of opening the files. A non-descendant target is a hard stop.
 
    It reads local state only, and hosted settings are not files — they never enter the delta, so no reconciliation in step 4 can reach them. A settings rule added to the template after a repository was generated arrives as a changed `scripts/repo-settings`, which is a check nobody runs. Step 6 runs it, once reconciliation has put that changed script in the destination. Do not run it here: the copy sitting in the destination during this read-only pass is the one this update is replacing, and it is the only copy that cannot know the rule the update carries.
-3. Inspect four sources of intent:
-   - old payload at the recorded commit;
-   - current destination;
-   - new payload at the target commit;
-   - recorded generation decisions.
+3. Read the recorded generation decisions, then read file content only where step 4 needs it. Preflight marks every delta path it leaves to reconcile `unmodified`, `modified`, or `absent` in `destination_state` — an overridden path takes none of the four rules and carries no such field — comparing the destination's blob against the old payload's at the name the destination holds. Only `modified` earns reading the three versions the rules weigh — old payload at the recorded commit, destination, new payload at the target commit. An `unmodified` path is settled by the first rule in step 4 without opening anything, and on a routine update that is every path; reading them anyway is three file reads per path to rediscover what the field already said. An `absent` path earns the new payload's version alone: where the payload adds the path there is nothing else to read, and where it changes or renames one the destination no longer holds, the absence is the fourth rule's deletion conflict and the old and destination versions cannot be read anyway.
+
+   Paths under `.github/` are read for none of it whatever their state, since the prefix is replaced whole by the rule below rather than reconciled. The one exception is `dependabot.yml`, whose destination copy is read for the ecosystems the derivation cannot rebuild.
 4. Reconcile only paths in the preflight delta:
    - template changed, destination matches old: apply the new template version;
    - destination changed, template did not: preserve the destination;

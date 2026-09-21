@@ -352,6 +352,98 @@ class PreflightUnitTests(unittest.TestCase):
                 ).stdout
             )
 
+    @staticmethod
+    def _update_fixture(scenario: str, directory: str) -> dict[str, str]:
+        fixture_setup = MODULE_PATH.parents[1] / "evals" / "setup_fixture.py"
+        fixture_root = Path(directory) / "fixture"
+        subprocess.run(
+            ["python3", str(fixture_setup), scenario, str(fixture_root)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+        )
+        return json.loads((fixture_root / "fixture.json").read_text())
+
+    @staticmethod
+    def _run_update(fixture: dict[str, str]) -> list[dict[str, object]]:
+        result = subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "update",
+                "--template-repo",
+                fixture["template_repo"],
+                "--target",
+                fixture["target_commit"],
+                "--destination",
+                fixture["destination"],
+            ],
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        return json.loads(result.stdout)["changes"]
+
+    def test_update_reports_whether_the_destination_touched_each_path(self) -> None:
+        """The field that decides whether a delta path owes a content read.
+
+        `unmodified` means the destination still holds the payload's old
+        version, so the new one applies and neither payload version needs
+        reading. Only `modified` earns that read. The clean-update fixture
+        carries one of each: it renames a file the destination left alone and
+        changes one the destination had appended a note to.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._update_fixture("clean-update", directory)
+            changes = self._run_update(fixture)
+
+            states = {change["path"]: change["destination_state"] for change in changes}
+            self.assertEqual(
+                states, {"scripts/check": "modified", "scripts/preflight": "unmodified"}
+            )
+            # The rename is read at its old name, which is the only one the
+            # destination holds. Reading the new one would report "absent" and
+            # send the flow to a content read it does not owe.
+            self.assertEqual(
+                [
+                    change["old_path"]
+                    for change in changes
+                    if change["path"] == "scripts/preflight"
+                ],
+                ["scripts/legacy"],
+            )
+
+    def test_update_reports_a_rename_landing_on_destination_content(self) -> None:
+        """A rename has two destination names and both decide the read.
+
+        The old name alone says the destination left the file where it was,
+        which on its own reads `unmodified` and tells step 3 to apply the move
+        without opening anything. Where the destination already keeps a file
+        at the new name, that move would overwrite it, so the second name
+        pulls the state back to `modified` and the collision reaches step 4's
+        fourth rule.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._update_fixture("clean-update", directory)
+            destination = Path(fixture["destination"])
+            (destination / "scripts" / "preflight").write_text(
+                "#!/usr/bin/env bash\necho destination preflight\n"
+            )
+            subprocess.run(
+                ["git", "-C", str(destination), "add", "scripts/preflight"],
+                check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(destination), "commit", "-m", "add preflight"],
+                check=True,
+                stdout=subprocess.DEVNULL,
+            )
+
+            states = {
+                change["path"]: change["destination_state"]
+                for change in self._run_update(fixture)
+            }
+            self.assertEqual(states["scripts/preflight"], "modified")
+
 
 class GenerateTests(unittest.TestCase):
     """The source commit a generate pins is the base every update diffs from."""

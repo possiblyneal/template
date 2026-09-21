@@ -509,6 +509,72 @@ def parse_name_status(
     return changes
 
 
+def mark_destination_state(
+    changes: list[dict[str, object]],
+    destination: Path,
+    template_repo: Path,
+    recorded: str,
+    subtree: str,
+) -> None:
+    """Say whether the destination still holds the payload's old version.
+
+    Every one of update's four reconciliation rules turns on this question,
+    and without an answer here the flow reads the old payload, the new
+    payload, and the destination in full for every delta path to settle it.
+    It is a blob comparison: `unmodified` means the destination never touched
+    the file, so the new payload version applies and no content needs
+    reading at all. Only `modified` earns that read.
+
+    The old path is what both sides are read at. A rename has not happened in
+    the destination yet, so it holds the old name, and the payload's old
+    version is under that name too. A path the payload adds has no old blob,
+    which is why a destination file found there reads `modified`: it is
+    content the payload did not ship, and deciding a collision needs the read.
+
+    A path the record already settled is skipped: step 4 gives it none of the
+    four rules, so computing a state for it is two git calls nothing reads.
+    """
+    prefix = subtree.rstrip("/")
+    for change in changes:
+        if change.get("overridden"):
+            continue
+        path = str(change.get("old_path", change["path"]))
+        destination_file = destination / path
+        if not destination_file.is_file():
+            change["destination_state"] = "absent"
+            continue
+        destination_blob = git_output(
+            destination, "hash-object", "--", str(destination_file)
+        )
+        old = run_git(
+            template_repo,
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            f"{recorded}:{prefix}/{path}",
+            check=False,
+        )
+        old_blob = old.stdout.strip() if old.returncode == 0 else ""
+        state = (
+            "unmodified" if old_blob and old_blob == destination_blob else "modified"
+        )
+        # A rename carries a second destination path the rules weigh. An
+        # untouched old name reads `unmodified` on its own, and step 3 takes
+        # that as leave to apply the move without a read -- over whatever the
+        # destination already keeps at the new name. Any entry there blocks the
+        # move, a directory included, which is why this asks `exists` where the
+        # old name asks `is_file`: that one is read as a blob and this one is
+        # only in the way.
+        new_path = change.get("new_path")
+        if (
+            state == "unmodified"
+            and new_path
+            and (destination / str(new_path)).exists()
+        ):
+            state = "modified"
+        change["destination_state"] = state
+
+
 def mark_overridden(
     changes: list[dict[str, object]],
     overrides: dict[str, str],
@@ -757,6 +823,7 @@ def update_preflight(arguments: argparse.Namespace) -> dict[str, object]:
     changes = parse_name_status(diff, subtree, rules)
     destination_paths = set(listed_paths(destination))
     mark_overridden(changes, provenance.overrides, destination_paths)
+    mark_destination_state(changes, destination, template_repo, recorded, subtree)
     return {
         "operation": "update",
         "template": {
