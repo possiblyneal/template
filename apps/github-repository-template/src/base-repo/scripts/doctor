@@ -114,7 +114,7 @@ if [[ -s .github/dependabot.yml ]]; then
     # could not run is reported as one rather than as a green row.
     result dependabot unavailable "the tracked file list could not be read, so no manifest was compared against the config"
   elif [[ -n "$unwatched" ]]; then
-    result dependabot pass "no updates entry for ${unwatched//$'\n'/, }; run the /repo-builder update flow to derive one"
+    result dependabot pass "no updates entry for ${unwatched//$'\n'/, }; run the /repo-builder update flow to derive one. A Cargo workspace member is the exception: it is bumped through the workspace root's entry and earns none of its own"
   else
     result dependabot pass "every tracked manifest has an entry"
   fi
