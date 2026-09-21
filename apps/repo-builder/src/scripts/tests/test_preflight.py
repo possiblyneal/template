@@ -433,7 +433,15 @@ class PreflightUnitTests(unittest.TestCase):
                 check=True,
             )
             subprocess.run(
-                ["git", "-C", str(destination), "commit", "-m", "add preflight"],
+                [
+                    "git",
+                    "-C",
+                    str(destination),
+                    *GIT_IDENTITY,
+                    "commit",
+                    "-m",
+                    "add preflight",
+                ],
                 check=True,
                 stdout=subprocess.DEVNULL,
             )
