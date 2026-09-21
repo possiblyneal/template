@@ -16,6 +16,7 @@ Read [`lifecycle.md`](lifecycle.md) first — the manifest, ownership, check rep
 - **Step 10 — Verify the file list**
 - **Step 11 — Publish the candidate**
 - **Step 12 — Verify the published repository**
+- **Step 13 — The first prompt**
 
 A generate runs them in order and reads them in order. A reader needing one step alone — `SKILL.md`, `lifecycle.md`, `wayfinding.md` and `reporting.md` each cite one — reads it with `sed -n '/^### Step 12 /,/^### /p'` rather than opening the whole file. The headings are addresses so that a citation does not cost 30 KB to follow.
 
@@ -235,3 +236,32 @@ Step 6 is where a destination's own `docs/agents/` is a collision like any other
 8. Do not create the placeholder application when the destination already has its own application boundaries. Record the real ones in `generation.applications`. Wayfinding still runs, but against what is there: it names the choke point each existing deployable already answers to rather than proposing a new decomposition, and it writes an ADR only where the repository has none for that deployable. A generation is not the occasion to re-cut boundaries someone is already shipping against.
 
 Ownership still governs what a later update may touch, and a hand-merged file is managed content whose destination edits are real intent. Classify deliberately: marking a whole tree product to protect it also freezes it.
+
+### Step 13 — The first prompt
+
+The first prompt is written for a reader this session never speaks to: whoever opens the first working session in a fresh clone of the new repository. Everything this session knows about that repository's initial state dies with it otherwise — which checks are red on purpose, what the tracker holds, what a clone still has to install — and the next session rediscovers each one as a defect. Emit it as a fenced block so it can be copied whole, fill every placeholder from what actually happened rather than from this shape, and drop a line whose condition did not arise rather than shipping it empty. An update and an adopt write none: the destination already has working sessions. On a generate stopped at the wayfinding handoff the resume belongs to the operator of this session, not to a new one, so Pending action carries it and this section is still omitted.
+
+Copy this into the first session opened in a clone of the new repository:
+
+```text
+Work <owner/repository>. Clone it and install the hooks: `pre-commit install`, or, if that
+refuses because a `core.hooksPath` is already set on this machine, `pre-commit
+init-templatedir` into a directory of its own with `core.hooksPath` pointed at it. Nothing
+else installs them, and without them commits land unattributed and unchecked. Then read the
+root `CLAUDE.md` before touching anything.
+
+The plan of record is <the issue tracker named in docs/agents/issue-tracker.md>, not this
+message. Open tickets: <count>. First with no open blocker: <#n — title>. Start there.
+
+Expected initial state, not defects: <the absent root manifest scripts/doctor fails on |
+the skipped CodeQL detect and analyze legs on a private destination, per lifecycle.md
+"Code scanning lands everywhere and decides at run time" | none>.
+
+The first root manifest owes the checks their tools: <the declarations for the selected
+language, from lifecycle.md "Tools the first manifest must declare" | none, <language>
+declares no tools>. An undeclared tool reports `unavailable`, which fails the run.
+
+Branch before you commit; a commit made on `main` is refused at the hook.
+```
+
+The manifest sentence's lead-in, `The first root manifest owes`, is what the generation eval reads the handover for; rewording it updates the eval in the same change.

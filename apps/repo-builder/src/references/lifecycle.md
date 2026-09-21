@@ -387,4 +387,4 @@ It is not a journal of everything the flow did. A record that grows a line per s
 
 ## Reviewing and reporting
 
-Both belong to the end of a flow and both are in [`reporting.md`](reporting.md): [Reviewing the pull request](reporting.md#reviewing-the-pull-request), which is how a candidate is proved to be a copy rather than code-reviewed, and [Final report](reporting.md#final-report), the shape every flow ends in. Read that file when a flow reaches its review, not before — it is a third of this contract by size and none of it bears on anything earlier.
+Both belong to the end of a flow and both are in [`reporting.md`](reporting.md): [Reviewing the pull request](reporting.md#reviewing-the-pull-request), which is how a candidate is proved to be a copy rather than code-reviewed, and [Final report](reporting.md#final-report), the shape every flow ends in. Read that file when a flow reaches its review, not before — none of it bears on anything earlier. It holds the shape every flow shares; the lines only a generate or a retrofit fills are in those files instead, so no flow reads another's.

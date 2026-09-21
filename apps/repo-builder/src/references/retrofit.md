@@ -258,3 +258,49 @@ A retrofit takes no [repository addon](addon-adoption.md), and needs no mechanis
 Nothing has to be taught to leave those files alone. The root allowlist holds the addon filenames by name, under the rule that they are additions by occasion, so a destination's own readme, licence or changelog is already permitted where it sits and the structure audit does not flag it. And an addon is not a payload path: addons live in a sibling tree rather than under the payload subtree, so a destination's readme never reaches the collision list in the first place and step 3 never writes over one.
 
 The record the retrofit writes carries no addon entry, for the same reason [generate](generate.md)'s does not: the manifest records what the flow landed, and this flow landed none. A destination that wants one runs adopt afterwards, against the repository that now exists, and that run is what writes the entry.
+
+## Report additions
+
+A retrofit fills the shape [Final report](reporting.md#final-report) fixes, and adds the lines below to it. They live here rather than there because every one of them is a retrofit's alone, and a generate, an update and an adopt would each read them only to establish that none applies.
+
+Two of the shape's own lines also read differently here. The choke-point and Wayfinding lines under **Application boundaries** are absent: a retrofit observes languages the destination already committed to rather than choosing one, and derives units from that destination's own evidence rather than wayfinding them. A unit map the operator rejected with no correction is reported as the proposal and the rejection, with **Pending action** carrying the correction the flow is stopped for.
+
+Added under **Reconciliation**:
+
+- Layout plan: <old path> -> <new path>: moved | corrected by the operator to <path> | declined | none
+- Unmovable: <path>: <why it could not move>; no allowlist entry written | none
+- References repaired: <file>: <the moved path rewritten> | none
+- References reported, not rewritten: <file>: <the prose describing the old structure> | none
+- Ignore rules not re-added: <rule>: <what it ignored> | none
+
+Added under **Application boundaries**:
+
+- Unit map: <unit>: name from <the source it came from>, built by <evidence>, installed by <evidence>; run <value> and ships <value>, each <proposed from <evidence>, confirmed | corrected by the operator>; domains <names and the boundary the destination draws for each, or none>
+- Ships nothing for want of an adapter: <unit>: <language> has no packaging adapter | none
+- Declared but not built: <deployable>: declared by <the descriptor naming it>, filed under <the owning unit> | none
+
+Added under **Addon adoption**, and the whole of that block here, since a retrofit takes none:
+
+- Already held: <addon-shaped paths the destination brought with it, on one line> | none
+
+Added under **Verification**:
+
+- Moved paths byte-identical to their pre-move blob: <count>/<count>
+- Tool declaration: <manifest>: added <tool at the template's floor> | kept <the specifier the destination already declared> | declined by the operator, so <capability> cannot reach the bar | nothing missing
+- Bar: met | UNMET: <capability>: fail | unavailable (<reason>); stopped before the pull request, zero hosted writes performed
+- Candidate: left standing at <path>; remove it with `git -C <clone> worktree remove <path>`
+- Destination hooks after merge: shims in <path>, `core.hooksPath` pinned local to it, <each hook moved aside or linked in, or none>, verified by <the refusals observed> | n/a (merge declined), under [Working hooks in the destination after a merge](lifecycle.md#working-hooks-in-the-destination-after-a-merge)
+
+Two whole sections are added after **Repository settings**, and they are named apart from each other because a single block of reversal commands reads as though the whole gate can be walked back:
+
+### Hosted writes, reversible
+
+One line per write the gate authorized and performed, with the state it replaced and the command that puts it back.
+
+- <write>: was <before-state> -> <applied value>; reverse with `<exact command>` | declined by the operator (<reason>), recorded in `generation.features`
+
+### Hosted writes, irreversible
+
+- <write>: was <before-state> -> <applied value>; no command reverses it, and <the cost of having made it>
+- Ruleset enforcement: unproven; the probe is not performed against a live default branch, as [the hosted-write gate](#step-8--the-hosted-write-gate) directs
+- Permissions gap: <write>: refused without the host's upgrade message, so the credential and not the plan is the limit | none
