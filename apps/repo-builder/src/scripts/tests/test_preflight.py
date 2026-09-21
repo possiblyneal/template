@@ -18,17 +18,45 @@ preflight = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = preflight
 SPEC.loader.exec_module(preflight)
 
-# Every commit written by hand here takes this, rather than the fixtures'
-# route through evals/setup_fixture.py, which carries its own GIT_ENV. A hand
-# commit is the only kind that falls back to ambient git config, and a CI
-# runner has none and cannot derive one -- its gecos field is empty, so git
-# fails with "empty ident name" where a developer machine silently succeeds.
+# Supplied on every call rather than on the ones that commit: a hand commit is
+# the only kind that falls back to ambient git config, and a CI runner has none.
+# ../../../CLAUDE.md Work Guidance holds the rule and why.
 GIT_IDENTITY = (
     "-c",
     "user.name=Repo Builder Test",
     "-c",
     "user.email=repo-builder-test@example.invalid",
 )
+
+
+def git(
+    *arguments: str,
+    cwd: Path | str | None = None,
+    check: bool = True,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run git under the test identity, checked unless told otherwise.
+
+    stdout is captured so a passing run stays quiet and `git_output` has
+    something to read; stderr is deliberately left inherited. pytest collects
+    it at the file descriptor and prints it under "Captured stderr call" when
+    the test fails, where `CalledProcessError` would only carry it on an
+    attribute nobody reads -- its own str() is the exit status and nothing
+    more. No call site here reads `.stderr` off a git result.
+    """
+    return subprocess.run(
+        ["git", *GIT_IDENTITY, *arguments],
+        cwd=cwd,
+        check=check,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+    )
+
+
+def git_output(*arguments: str, cwd: Path | str | None = None) -> str:
+    """Run git as above and return its standard output, stripped."""
+    return git(*arguments, cwd=cwd).stdout.strip()
 
 
 class PreflightUnitTests(unittest.TestCase):
@@ -341,15 +369,7 @@ class PreflightUnitTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("is not an ancestor", result.stderr)
             destination = Path(fixture["destination"])
-            self.assertFalse(
-                subprocess.run(
-                    ["git", "status", "--porcelain"],
-                    cwd=destination,
-                    check=True,
-                    text=True,
-                    stdout=subprocess.PIPE,
-                ).stdout
-            )
+            self.assertFalse(git_output("status", "--porcelain", cwd=destination))
 
     @staticmethod
     def _update_fixture(scenario: str, directory: str) -> dict[str, str]:
@@ -427,23 +447,8 @@ class PreflightUnitTests(unittest.TestCase):
             (destination / "scripts" / "preflight").write_text(
                 "#!/usr/bin/env bash\necho destination preflight\n"
             )
-            subprocess.run(
-                ["git", "-C", str(destination), "add", "scripts/preflight"],
-                check=True,
-            )
-            subprocess.run(
-                [
-                    "git",
-                    "-C",
-                    str(destination),
-                    *GIT_IDENTITY,
-                    "commit",
-                    "-m",
-                    "add preflight",
-                ],
-                check=True,
-                stdout=subprocess.DEVNULL,
-            )
+            git("add", "scripts/preflight", cwd=destination)
+            git("commit", "-m", "add preflight", cwd=destination)
 
             states = {
                 change["path"]: change["destination_state"]
@@ -469,19 +474,9 @@ class GenerateTests(unittest.TestCase):
     @staticmethod
     def _commit_onto_main(template: Path, name: str) -> str:
         (template / "base-repo" / name).write_text(f"{name}\n")
-        subprocess.run(["git", "add", "-A"], cwd=template, check=True)
-        subprocess.run(
-            [*("git", *GIT_IDENTITY), "commit", "-q", "-m", f"chore: {name}"],
-            cwd=template,
-            check=True,
-        )
-        return subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=template,
-            check=True,
-            text=True,
-            stdout=subprocess.PIPE,
-        ).stdout.strip()
+        git("add", "-A", cwd=template)
+        git("commit", "-q", "-m", f"chore: {name}", cwd=template)
+        return git_output("rev-parse", "HEAD", cwd=template)
 
     @staticmethod
     def _preflight(fixture: dict[str, str], target: str) -> subprocess.CompletedProcess:
@@ -518,25 +513,11 @@ class GenerateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fixture = self._generation_fixture(directory)
             template = Path(fixture["template_repo"])
-            subprocess.run(
-                ["git", "checkout", "-q", "-b", "experiment"],
-                cwd=template,
-                check=True,
-            )
+            git("checkout", "-q", "-b", "experiment", cwd=template)
             (template / "base-repo" / "SCRATCH.md").write_text("not on main\n")
-            subprocess.run(["git", "add", "-A"], cwd=template, check=True)
-            subprocess.run(
-                [*("git", *GIT_IDENTITY), "commit", "-q", "-m", "chore: experiment"],
-                cwd=template,
-                check=True,
-            )
-            off_branch = subprocess.run(
-                ["git", "rev-parse", "HEAD"],
-                cwd=template,
-                check=True,
-                text=True,
-                stdout=subprocess.PIPE,
-            ).stdout.strip()
+            git("add", "-A", cwd=template)
+            git("commit", "-q", "-m", "chore: experiment", cwd=template)
+            off_branch = git_output("rev-parse", "HEAD", cwd=template)
 
             result = self._preflight(fixture, off_branch)
 
@@ -556,11 +537,9 @@ class GenerateTests(unittest.TestCase):
             fixture = self._generation_fixture(directory)
             upstream = Path(fixture["template_repo"])
             clone = Path(directory) / "clone"
-            subprocess.run(
-                ["git", "clone", "-q", str(upstream), str(clone)], check=True
-            )
+            git("clone", "-q", str(upstream), str(clone))
             ahead = self._commit_onto_main(upstream, "AHEAD.md")
-            subprocess.run(["git", "fetch", "-q", "origin"], cwd=clone, check=True)
+            git("fetch", "-q", "origin", cwd=clone)
 
             result = self._preflight({**fixture, "template_repo": str(clone)}, ahead)
 
@@ -579,17 +558,17 @@ class GenerateTests(unittest.TestCase):
             upstream = Path(fixture["template_repo"])
             clone = Path(directory) / "fetched"
             clone.mkdir()
-            subprocess.run(["git", "init", "-q"], cwd=clone, check=True)
-            subprocess.run(
-                ["git", "remote", "add", "origin", str(upstream)], cwd=clone, check=True
-            )
-            subprocess.run(["git", "fetch", "-q", "origin"], cwd=clone, check=True)
+            git("init", "-q", cwd=clone)
+            git("remote", "add", "origin", str(upstream), cwd=clone)
+            git("fetch", "-q", "origin", cwd=clone)
             self.assertEqual(
-                subprocess.run(
-                    ["git", "rev-parse", "--verify", "--quiet", "refs/heads/main"],
+                git(
+                    "rev-parse",
+                    "--verify",
+                    "--quiet",
+                    "refs/heads/main",
                     cwd=clone,
                     check=False,
-                    stdout=subprocess.DEVNULL,
                 ).returncode,
                 1,
                 "the fixture must hold no local main for this test to mean anything",
@@ -661,9 +640,7 @@ class GenerateTests(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as directory:
             fixture = self._generation_fixture(directory)
-            subprocess.run(
-                ["git", "tag", "v1"], cwd=fixture["template_repo"], check=True
-            )
+            git("tag", "v1", cwd=fixture["template_repo"])
 
             result = subprocess.run(
                 [
@@ -746,15 +723,7 @@ class AdoptTests(unittest.TestCase):
             )
 
             destination = Path(fixture["destination"])
-            self.assertFalse(
-                subprocess.run(
-                    ["git", "status", "--porcelain"],
-                    cwd=destination,
-                    check=True,
-                    text=True,
-                    stdout=subprocess.PIPE,
-                ).stdout
-            )
+            self.assertFalse(git_output("status", "--porcelain", cwd=destination))
             self.assertFalse((destination / "README.md").exists())
 
     def test_adopt_rejects_half_a_pair(self) -> None:
@@ -777,13 +746,8 @@ class AdoptTests(unittest.TestCase):
             self.assertIn("cannot be adopted with", result.stderr)
 
     def _commit(self, destination: Path, path: str, message: str) -> None:
-        subprocess.run(["git", "add", path], cwd=destination, check=True)
-        subprocess.run(
-            ["git", *GIT_IDENTITY, "commit", "--no-verify", "-m", message],
-            cwd=destination,
-            check=True,
-            stdout=subprocess.DEVNULL,
-        )
+        git("add", path, cwd=destination)
+        git("commit", "--no-verify", "-m", message, cwd=destination)
 
     def test_adopt_rejects_the_second_half_adopted_later(self) -> None:
         """One at a time is how a repository really ends up holding both: the
@@ -867,23 +831,10 @@ class RetrofitTests(unittest.TestCase):
         (destination / "data" / "notes.txt").write_text("kept deliberately\n")
         (destination / "docs" / "LESSONS.md").write_text("ignored, still present\n")
 
-        subprocess.run(
-            ["git", "init", "-q", "--initial-branch=master", str(destination)],
-            check=True,
-        )
-        subprocess.run(
-            ["git", "remote", "add", "origin", self.NAMED], cwd=destination, check=True
-        )
-        subprocess.run(
-            ["git", "add", "CLAUDE.md", "README.md", ".gitignore"],
-            cwd=destination,
-            check=True,
-        )
-        subprocess.run(
-            [*("git", *GIT_IDENTITY), "commit", "-q", "-m", "chore: years of work"],
-            cwd=destination,
-            check=True,
-        )
+        git("init", "-q", "--initial-branch=master", str(destination))
+        git("remote", "add", "origin", self.NAMED, cwd=destination)
+        git("add", "CLAUDE.md", "README.md", ".gitignore", cwd=destination)
+        git("commit", "-q", "-m", "chore: years of work", cwd=destination)
         fixture["destination"] = str(destination)
         return fixture
 
@@ -966,20 +917,13 @@ class RetrofitTests(unittest.TestCase):
 
             # The payload still ships it; only the retrofit declines it. A
             # generate reading the same tree has to find it to rename it.
-            shipped = subprocess.run(
-                [
-                    "git",
-                    "-C",
-                    fixture["template_repo"],
-                    "ls-tree",
-                    "-r",
-                    "--name-only",
-                    f"{fixture['target_commit']}:{fixture['subtree']}",
-                ],
-                check=True,
-                capture_output=True,
-                text=True,
-            ).stdout.split()
+            shipped = git_output(
+                "ls-tree",
+                "-r",
+                "--name-only",
+                f"{fixture['target_commit']}:{fixture['subtree']}",
+                cwd=fixture["template_repo"],
+            ).split()
             self.assertIn("apps/app-name/.unit.json", shipped)
 
     def test_retrofit_reports_untracked_work_and_does_not_refuse(self) -> None:
@@ -1006,9 +950,9 @@ class RetrofitTests(unittest.TestCase):
             fixture = self._fixture(directory)
             only_git = Path(directory) / "bin"
             only_git.mkdir()
-            git = shutil.which("git")
-            assert git, "git is required to run this suite"
-            (only_git / "git").symlink_to(git)
+            git_binary = shutil.which("git")
+            assert git_binary, "git is required to run this suite"
+            (only_git / "git").symlink_to(git_binary)
             result = subprocess.run(
                 [
                     sys.executable,
@@ -1043,13 +987,7 @@ class RetrofitTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fixture = self._fixture(directory)
             destination = fixture["destination"]
-            head = subprocess.run(
-                ["git", "rev-parse", "HEAD"],
-                cwd=destination,
-                check=True,
-                text=True,
-                stdout=subprocess.PIPE,
-            ).stdout.strip()
+            head = git_output("rev-parse", "HEAD", cwd=destination)
             for arguments in (
                 ("update-ref", "refs/remotes/origin/main", head),
                 (
@@ -1059,7 +997,7 @@ class RetrofitTests(unittest.TestCase):
                 ),
                 ("checkout", "-q", "-b", "feature/work"),
             ):
-                subprocess.run(["git", *arguments], cwd=destination, check=True)
+                git(*arguments, cwd=destination)
 
             report = json.loads(self._preflight(fixture).stdout)
 
@@ -1078,20 +1016,8 @@ class RetrofitTests(unittest.TestCase):
             destination = Path(fixture["destination"])
             (destination / "scripts" / "legacy").mkdir()
             (destination / "scripts" / "legacy" / "run.sh").write_text("exit 0\n")
-            subprocess.run(
-                ["git", "add", "scripts/legacy/run.sh"], cwd=destination, check=True
-            )
-            subprocess.run(
-                [
-                    *("git", *GIT_IDENTITY),
-                    "commit",
-                    "-q",
-                    "-m",
-                    "chore: legacy scripts",
-                ],
-                cwd=destination,
-                check=True,
-            )
+            git("add", "scripts/legacy/run.sh", cwd=destination)
+            git("commit", "-q", "-m", "chore: legacy scripts", cwd=destination)
 
             report = json.loads(self._preflight(fixture).stdout)
 
@@ -1108,9 +1034,9 @@ class RetrofitTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory) / "spaced"
             destination.mkdir()
-            subprocess.run(["git", "init", "-q", str(destination)], check=True)
+            git("init", "-q", str(destination))
             (destination / " lead.txt").write_text("first when sorted\n")
-            subprocess.run(["git", "add", "-A"], cwd=destination, check=True)
+            git("add", "-A", cwd=destination)
 
             self.assertEqual(preflight.listed_paths(destination), [" lead.txt"])
 
@@ -1125,25 +1051,19 @@ class RetrofitTests(unittest.TestCase):
             fixture = self._fixture(directory)
             destination = fixture["destination"]
             (Path(destination) / "README.md").write_text("a second commit\n")
-            subprocess.run(
-                [*("git", *GIT_IDENTITY), "commit", "-qam", "chore: more work"],
+            git("commit", "-qam", "chore: more work", cwd=destination)
+            git(
+                "rebase",
+                "-q",
+                "-i",
+                "HEAD~1",
                 cwd=destination,
-                check=True,
-            )
-            subprocess.run(
-                [*("git", *GIT_IDENTITY), "rebase", "-q", "-i", "HEAD~1"],
-                cwd=destination,
-                check=True,
                 env={**os.environ, "GIT_SEQUENCE_EDITOR": "sed -i '1s/^pick/edit/'"},
             )
             self.assertFalse(
-                subprocess.run(
-                    ["git", "status", "--porcelain=v1", "--untracked-files=no"],
-                    cwd=destination,
-                    check=True,
-                    text=True,
-                    stdout=subprocess.PIPE,
-                ).stdout,
+                git_output(
+                    "status", "--porcelain=v1", "--untracked-files=no", cwd=destination
+                ),
                 "the paused rebase must leave a clean index for this to be the gap",
             )
 
@@ -1166,11 +1086,7 @@ class RetrofitTests(unittest.TestCase):
     def test_retrofit_refuses_a_destination_with_no_origin(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = self._fixture(directory)
-            subprocess.run(
-                ["git", "remote", "remove", "origin"],
-                cwd=fixture["destination"],
-                check=True,
-            )
+            git("remote", "remove", "origin", cwd=fixture["destination"])
 
             result = self._preflight(fixture)
 
