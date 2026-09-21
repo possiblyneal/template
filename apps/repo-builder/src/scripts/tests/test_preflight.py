@@ -352,6 +352,61 @@ class PreflightUnitTests(unittest.TestCase):
                 ).stdout
             )
 
+    def _update_changes(self, scenario: str, directory: str) -> list[dict[str, object]]:
+        fixture_setup = MODULE_PATH.parents[1] / "evals" / "setup_fixture.py"
+        fixture_root = Path(directory) / "fixture"
+        subprocess.run(
+            ["python3", str(fixture_setup), scenario, str(fixture_root)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+        )
+        fixture = json.loads((fixture_root / "fixture.json").read_text())
+        result = subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                "update",
+                "--template-repo",
+                fixture["template_repo"],
+                "--target",
+                fixture["target_commit"],
+                "--destination",
+                fixture["destination"],
+            ],
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        return json.loads(result.stdout)["changes"]
+
+    def test_update_reports_whether_the_destination_touched_each_path(self) -> None:
+        """The field that decides whether a delta path owes a content read.
+
+        `unmodified` means the destination still holds the payload's old
+        version, so the new one applies and neither payload version needs
+        reading. Only `modified` earns that read. The clean-update fixture
+        carries one of each: it renames a file the destination left alone and
+        changes one the destination had appended a note to.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            changes = self._update_changes("clean-update", directory)
+
+            states = {change["path"]: change["destination_state"] for change in changes}
+            self.assertEqual(
+                states, {"scripts/check": "modified", "scripts/preflight": "unmodified"}
+            )
+            # The rename is read at its old name, which is the only one the
+            # destination holds. Reading the new one would report "absent" and
+            # send the flow to a content read it does not owe.
+            self.assertEqual(
+                [
+                    change["old_path"]
+                    for change in changes
+                    if change["path"] == "scripts/preflight"
+                ],
+                ["scripts/legacy"],
+            )
+
 
 class GenerateTests(unittest.TestCase):
     """The source commit a generate pins is the base every update diffs from."""
