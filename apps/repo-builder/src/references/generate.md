@@ -241,6 +241,8 @@ Ownership still governs what a later update may touch, and a hand-merged file is
 
 The first prompt is written for a reader this session never speaks to: whoever opens the first working session in a fresh clone of the new repository. Everything this session knows about that repository's initial state dies with it otherwise — which checks are red on purpose, what the tracker holds, what a clone still has to install — and the next session rediscovers each one as a defect. Emit it as a fenced block so it can be copied whole, fill every placeholder from what actually happened rather than from this shape, and drop a line whose condition did not arise rather than shipping it empty. An update and an adopt write none: the destination already has working sessions. On a generate stopped at the wayfinding handoff the resume belongs to the operator of this session, not to a new one, so Pending action carries it and this section is still omitted.
 
+It is the report's last section, **First prompt**, added after **Pending action** at the same heading level as the shape's own sections, and its first line is the instruction to the reader:
+
 Copy this into the first session opened in a clone of the new repository:
 
 ```text

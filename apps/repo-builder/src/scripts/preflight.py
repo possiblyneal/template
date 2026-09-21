@@ -530,9 +530,14 @@ def mark_destination_state(
     version is under that name too. A path the payload adds has no old blob,
     which is why a destination file found there reads `modified`: it is
     content the payload did not ship, and deciding a collision needs the read.
+
+    A path the record already settled is skipped: step 4 gives it none of the
+    four rules, so computing a state for it is two git calls nothing reads.
     """
     prefix = subtree.rstrip("/")
     for change in changes:
+        if change.get("overridden"):
+            continue
         path = str(change.get("old_path", change["path"]))
         destination_file = destination / path
         if not destination_file.is_file():
@@ -550,9 +555,21 @@ def mark_destination_state(
             check=False,
         )
         old_blob = old.stdout.strip() if old.returncode == 0 else ""
-        change["destination_state"] = (
+        state = (
             "unmodified" if old_blob and old_blob == destination_blob else "modified"
         )
+        # A rename carries a second destination path the rules weigh. An
+        # untouched old name reads `unmodified` on its own, and step 3 takes
+        # that as leave to apply the move without a read -- over whatever the
+        # destination already keeps at the new name.
+        new_path = change.get("new_path")
+        if (
+            state == "unmodified"
+            and new_path
+            and (destination / str(new_path)).exists()
+        ):
+            state = "modified"
+        change["destination_state"] = state
 
 
 def mark_overridden(
@@ -801,9 +818,9 @@ def update_preflight(arguments: argparse.Namespace) -> dict[str, object]:
         subtree,
     ).stdout
     changes = parse_name_status(diff, subtree, rules)
-    mark_destination_state(changes, destination, template_repo, recorded, subtree)
     destination_paths = set(listed_paths(destination))
     mark_overridden(changes, provenance.overrides, destination_paths)
+    mark_destination_state(changes, destination, template_repo, recorded, subtree)
     return {
         "operation": "update",
         "template": {

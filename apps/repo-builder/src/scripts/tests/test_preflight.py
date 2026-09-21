@@ -352,7 +352,8 @@ class PreflightUnitTests(unittest.TestCase):
                 ).stdout
             )
 
-    def _update_changes(self, scenario: str, directory: str) -> list[dict[str, object]]:
+    @staticmethod
+    def _update_fixture(scenario: str, directory: str) -> dict[str, str]:
         fixture_setup = MODULE_PATH.parents[1] / "evals" / "setup_fixture.py"
         fixture_root = Path(directory) / "fixture"
         subprocess.run(
@@ -360,7 +361,10 @@ class PreflightUnitTests(unittest.TestCase):
             check=True,
             stdout=subprocess.DEVNULL,
         )
-        fixture = json.loads((fixture_root / "fixture.json").read_text())
+        return json.loads((fixture_root / "fixture.json").read_text())
+
+    @staticmethod
+    def _run_update(fixture: dict[str, str]) -> list[dict[str, object]]:
         result = subprocess.run(
             [
                 "python3",
@@ -389,7 +393,8 @@ class PreflightUnitTests(unittest.TestCase):
         changes one the destination had appended a note to.
         """
         with tempfile.TemporaryDirectory() as directory:
-            changes = self._update_changes("clean-update", directory)
+            fixture = self._update_fixture("clean-update", directory)
+            changes = self._run_update(fixture)
 
             states = {change["path"]: change["destination_state"] for change in changes}
             self.assertEqual(
@@ -406,6 +411,38 @@ class PreflightUnitTests(unittest.TestCase):
                 ],
                 ["scripts/legacy"],
             )
+
+    def test_update_reports_a_rename_landing_on_destination_content(self) -> None:
+        """A rename has two destination names and both decide the read.
+
+        The old name alone says the destination left the file where it was,
+        which on its own reads `unmodified` and tells step 3 to apply the move
+        without opening anything. Where the destination already keeps a file
+        at the new name, that move would overwrite it, so the second name
+        pulls the state back to `modified` and the collision reaches step 4's
+        fourth rule.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._update_fixture("clean-update", directory)
+            destination = Path(fixture["destination"])
+            (destination / "scripts" / "preflight").write_text(
+                "#!/usr/bin/env bash\necho destination preflight\n"
+            )
+            subprocess.run(
+                ["git", "-C", str(destination), "add", "scripts/preflight"],
+                check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(destination), "commit", "-m", "add preflight"],
+                check=True,
+                stdout=subprocess.DEVNULL,
+            )
+
+            states = {
+                change["path"]: change["destination_state"]
+                for change in self._run_update(fixture)
+            }
+            self.assertEqual(states["scripts/preflight"], "modified")
 
 
 class GenerateTests(unittest.TestCase):
