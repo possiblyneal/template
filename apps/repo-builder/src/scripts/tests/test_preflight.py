@@ -37,8 +37,12 @@ def git(
 ) -> subprocess.CompletedProcess[str]:
     """Run git under the test identity, checked unless told otherwise.
 
-    Both streams are captured rather than discarded, so a failure arrives as a
-    CalledProcessError carrying git's own diagnosis instead of a bare exit code.
+    stdout is captured so a passing run stays quiet and `git_output` has
+    something to read; stderr is deliberately left inherited. pytest collects
+    it at the file descriptor and prints it under "Captured stderr call" when
+    the test fails, where `CalledProcessError` would only carry it on an
+    attribute nobody reads -- its own str() is the exit status and nothing
+    more. No call site here reads `.stderr` off a git result.
     """
     return subprocess.run(
         ["git", *GIT_IDENTITY, *arguments],
@@ -46,7 +50,7 @@ def git(
         check=check,
         env=env,
         text=True,
-        capture_output=True,
+        stdout=subprocess.PIPE,
     )
 
 
