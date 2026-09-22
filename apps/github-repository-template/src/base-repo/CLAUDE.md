@@ -4,7 +4,7 @@ Located at `./scripts` Use these instead of per-language tools; each detects the
 
 ## CI
 
-Every job in `.github/workflows/` takes its runner from a `RUNNER` repository variable and falls back to `ubuntu-latest`, so this repository redirects its own CI with `gh variable set RUNNER --body self-hosted` rather than by editing a workflow the template owns. Leave it unset while the repository is public: a self-hosted runner there lets any fork's pull request run arbitrary code on the host. A machine named by `RUNNER` must carry what the hosted image gave for free — `git`, `gh`, `jq`, and every toolchain the languages present need.
+Every job in `.github/workflows/` takes its runner from a `RUNNER` repository variable and falls back to `ubuntu-latest`, so this repository redirects its own CI with `gh variable set RUNNER --body self-hosted` rather than by editing a workflow the template owns. Leave it unset while the repository is public: a self-hosted runner there lets any fork's pull request run arbitrary code on the host. A machine named by `RUNNER` must carry what the hosted image gave for free — `git`, `gh`, `jq`, `pipx`, and every toolchain the languages present need. `pipx` is needed whatever the languages are, since `ci.yml` installs pre-commit with it before any toolchain is set up.
 
 ## Git
 

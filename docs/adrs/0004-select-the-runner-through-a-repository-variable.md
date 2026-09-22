@@ -107,8 +107,11 @@ Nothing else changes, and unsetting the variable moves it back.
 decision does not pretend otherwise.** The hosted image ships a large
 preinstalled toolchain and starts clean on every run; a self-hosted
 machine has whatever it has and keeps state between runs. The
-prerequisite is concrete: `git`, `gh`, and `jq` must be on the machine,
-plus every toolchain the languages present need. `codeql.yml`'s
+prerequisite is concrete: `git`, `gh`, `jq`, and `pipx` must be on the
+machine, plus every toolchain the languages present need. `pipx` is on
+that list for a language-independent reason — `ci.yml` installs
+pre-commit with it before any toolchain is set up, and pre-commit runs
+whatever the languages are. `codeql.yml`'s
 `scanning` job is the first to notice a missing `gh` — one `gh api` call
 is its whole body, and it is a required check on `main`, so a host
 without `gh` turns a stand-down into a hard failure on exactly the
