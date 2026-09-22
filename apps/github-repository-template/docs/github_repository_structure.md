@@ -47,7 +47,7 @@ The specific operating parameters for the AI agent.
 
 `.mcp.json`: Configures Model Context Protocol servers for this project. Ships empty.
 
-`CLAUDE.md`: The project's system prompt — conventions, commands, and context the AI needs to operate. Ships small: a pointer at `scripts/CLAUDE.md` for the commands, the branch rule, and a Child Index holding the instruction to scan the tree and build the rest of it. The Layout rules live in `scripts/structure` rather than here.
+`CLAUDE.md`: The project's system prompt — conventions, commands, and context the AI needs to operate.
 
 `CLAUDE.local.md`: Personal, per-machine instructions loaded alongside `CLAUDE.md`, excluded by `.gitignore`. Not shipped.
 
@@ -68,8 +68,6 @@ The specific operating parameters for the AI agent.
 `tests/`: Convention (not a shipped directory) for repo-level tests spanning multiple apps or libraries. Definitionally empty until a second app exists to span.
 
 `scripts/`: Portable shell scripts, run locally or in CI, covering checks, releases, security audits, and branch protection.
-
-`scripts/CLAUDE.md`: The contract for `scripts/` — what each script is for, the four result states, the language-capabilities interface and its test harness, and what adding a language or a check requires. The root copy's counterpart, minus the one paragraph that only applies to the template.
 
 `scripts/libs/`: Shared shell libraries used by the `scripts/` entry points.
 
