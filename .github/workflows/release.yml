@@ -27,7 +27,10 @@ concurrency:
 jobs:
   release:
     name: Release
-    runs-on: ubuntu-latest
+    # Hosted by default. A repository that sets a `RUNNER` variable runs this
+    # job on its own machine instead; `docs/github_repository_structure.md`
+    # has when that is worth doing and what it costs.
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     steps:
       - name: Checkout
