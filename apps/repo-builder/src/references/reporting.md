@@ -96,7 +96,7 @@ Two flows add lines to this shape rather than filling it as given, and each keep
 - <setting>: enabled | unavailable (<reason>) | not requested
 - Drift (update and adopt): <setting>: <current> -> <proposed>: patched | declined by user | none found | not checked (<reason>)
 - Merge settings overwritten (generate into existing content only): <setting>: <prior value> -> <applied value> | declined by user, recorded in `generation.features`
-- Issue tracker: <GitHub | GitLab | local markdown | other>, recorded in `docs/agents/issue-tracker.md`, shipped by the payload | written by `/setup-matt-pocock-skills` | kept from the destination; labels: created (<names>) | renamed to the payload's spelling (<old -> new>; label search is case-sensitive, so anything pinned to the old string stops matching) | already present | none created (<reason>)
+- Issue tracker: <GitHub | GitLab | local markdown | other>, recorded in `docs/agents/issue-tracker.md`, shipped by the payload | kept from the destination; labels: created (<names>) | renamed to the payload's spelling (<old -> new>; label search is case-sensitive, so anything pinned to the old string stops matching) | already present | none created (<reason>)
 
 ### Verification
 One line per check, from `scripts/summarize <command>` rather than from a filter built for the occasion.
