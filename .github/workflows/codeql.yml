@@ -54,7 +54,11 @@ jobs:
   # language-detection result that would misdescribe the answer.
   scanning:
     name: Code scanning enabled
-    runs-on: ubuntu-latest
+    # Hosted by default. A repository that sets a `RUNNER` variable runs this
+    # job on its own machine instead, and must leave it unset while it is
+    # public: a self-hosted runner there lets any fork's pull request run
+    # arbitrary code on the host.
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 5
     outputs:
       enabled: ${{ steps.check.outputs.enabled }}
@@ -115,7 +119,11 @@ jobs:
     # run of a repository that will not scan.
     needs: scanning
     if: needs.scanning.outputs.enabled == 'true'
-    runs-on: ubuntu-latest
+    # Hosted by default. A repository that sets a `RUNNER` variable runs this
+    # job on its own machine instead, and must leave it unset while it is
+    # public: a self-hosted runner there lets any fork's pull request run
+    # arbitrary code on the host.
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 5
     outputs:
       matrix: ${{ steps.detect.outputs.matrix }}
@@ -137,7 +145,12 @@ jobs:
     # Skipped where results cannot be uploaded. Without this the scan runs for
     # up to an hour and dies at the upload step it was already told about.
     if: needs.scanning.outputs.enabled == 'true'
-    runs-on: ${{ matrix.runner }}
+    # `RUNNER` redirects this job too, but only where the matrix asked for
+    # Linux. Swift's entry asks for `macos-latest`, and a `RUNNER` pointing at
+    # a Linux machine would take a scan that needs macOS and fail it, so the
+    # comparison lets that one entry through unchanged. An unset or empty
+    # `RUNNER` is falsy, which drops the whole expression back to the matrix.
+    runs-on: ${{ matrix.runner == 'ubuntu-latest' && vars.RUNNER || matrix.runner }}
     timeout-minutes: 60
     # The one job that uploads findings, so the one job that may write them.
     # actions: read lets CodeQL read workflow run metadata when scanning the
