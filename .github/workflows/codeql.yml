@@ -55,8 +55,9 @@ jobs:
   scanning:
     name: Code scanning enabled
     # Hosted by default. A repository that sets a `RUNNER` variable runs this
-    # job on its own machine instead; `docs/github_repository_structure.md`
-    # has when that is worth doing and what it costs.
+    # job on its own machine instead, and must leave it unset while it is
+    # public: a self-hosted runner there lets any fork's pull request run
+    # arbitrary code on the host.
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 5
     outputs:
@@ -119,8 +120,9 @@ jobs:
     needs: scanning
     if: needs.scanning.outputs.enabled == 'true'
     # Hosted by default. A repository that sets a `RUNNER` variable runs this
-    # job on its own machine instead; `docs/github_repository_structure.md`
-    # has when that is worth doing and what it costs.
+    # job on its own machine instead, and must leave it unset while it is
+    # public: a self-hosted runner there lets any fork's pull request run
+    # arbitrary code on the host.
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 5
     outputs:

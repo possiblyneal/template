@@ -106,12 +106,21 @@ Nothing else changes, and unsetting the variable moves it back.
 **A self-hosted runner is not a drop-in for `ubuntu-latest`, and this
 decision does not pretend otherwise.** The hosted image ships a large
 preinstalled toolchain and starts clean on every run; a self-hosted
-machine has whatever it has and keeps state between runs. A job that
-relied on a hosted preinstall needs an explicit setup step it was
-getting for free, and `release.yml` is the likeliest to notice, since a
-release built on a dirty machine is a release built from unknown
-inputs. Each repository that sets the variable owes itself one green
-run before trusting it.
+machine has whatever it has and keeps state between runs. The
+prerequisite is concrete: `git`, `gh`, and `jq` must be on the machine,
+plus every toolchain the languages present need. `codeql.yml`'s
+`scanning` job is the first to notice a missing `gh` — one `gh api` call
+is its whole body, and it is a required check on `main`, so a host
+without `gh` turns a stand-down into a hard failure on exactly the
+private repository this decision was written for. `release.yml` is the
+next, since a release built on a dirty machine is a release built from
+unknown inputs. Each repository that sets the variable owes itself one
+green run before trusting it.
+
+`RUNNER` names one label, not a set. `runs-on` takes the expression
+result as a single literal, so a comma-joined value matches no runner
+and the job queues until `timeout-minutes`. Selecting on several labels
+would need `fromJSON`, which nothing has asked for.
 
 Swift keeps its hosted macOS runner whatever `RUNNER` says, because the
 matrix comparison lets that entry through untouched. A repository whose
