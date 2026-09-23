@@ -25,7 +25,7 @@ What matches is the template's, already reviewed, and closed. What is left is th
 Which files make up that surface differs by flow:
 
 - **Update** — every managed file the destination had also changed and this skill hand-merged, plus `.repo-template.json`.
-- **Generate** — everything step 8 personalized: the root `CLAUDE.md` Child Index, each `apps/<name>/` and its `.unit.json`, the ADRs, and `.repo-template.json`. This surface is larger than update's and it gets no second look, because a bootstrap generate merges its own pull request under [Generate](generate.md) step 12. Read it before that merge rather than after.
+- **Generate** — everything step 8 personalized: each `apps/<name>/` and its `.unit.json`, the ADRs, and `.repo-template.json`. This surface is larger than update's and it gets no second look, because a bootstrap generate merges its own pull request under [Generate](generate.md) step 12. Read it before that merge rather than after.
 - **Adopt** — every region `addon-adoption.json` names for the addons taken. Here differing paths are the expected result rather than the exception: an addon is adopted by editing it, so byte-identity would mean the adoption never happened. Confirm that what differs is the named regions and nothing besides.
 - **Retrofit** — the configuration a move broke and this run repaired, every path reference it rewrote, the merged instruction file, the tool declaration, any retired gate script's callers, and `.repo-template.json`. This is the one flow whose authored surface is edits to the destination's own code, written by this run and reviewed by nobody, which is why its pull request is offered a merge at a gate rather than merged on the way past.
 
@@ -96,7 +96,7 @@ Two flows add lines to this shape rather than filling it as given, and each keep
 - <setting>: enabled | unavailable (<reason>) | not requested
 - Drift (update and adopt): <setting>: <current> -> <proposed>: patched | declined by user | none found | not checked (<reason>)
 - Merge settings overwritten (generate into existing content only): <setting>: <prior value> -> <applied value> | declined by user, recorded in `generation.features`
-- Issue tracker: <GitHub | GitLab | local markdown | other>, recorded in `docs/agents/issue-tracker.md`, shipped by the payload | written by `/setup-matt-pocock-skills` | kept from the destination; labels: created (<names>) | renamed to the payload's spelling (<old -> new>; label search is case-sensitive, so anything pinned to the old string stops matching) | already present | none created (<reason>)
+- Issue tracker: <GitHub | GitLab | local markdown | other>, recorded in `docs/agents/issue-tracker.md`, shipped by the payload | kept from the destination; labels: created (<names>) | renamed to the payload's spelling (<old -> new>; label search is case-sensitive, so anything pinned to the old string stops matching) | already present | none created (<reason>)
 
 ### Verification
 One line per check, from `scripts/summarize <command>` rather than from a filter built for the occasion.

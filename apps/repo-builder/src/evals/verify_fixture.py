@@ -120,32 +120,17 @@ def no_remote_check(candidate: Path) -> Check:
     )
 
 
-def setup_skill_checks(candidate: Path) -> list[Check]:
-    """`/setup-matt-pocock-skills` ran: every generate configures the tracker."""
+def agent_docs_checks(candidate: Path) -> list[Check]:
+    """The payload ships `docs/agents/`, so a generate confirms it rather than writing it."""
     agents = candidate / "docs/agents"
-    claude = candidate / "CLAUDE.md"
-    text = claude.read_text(encoding="utf-8") if claude.is_file() else ""
-    # The skill writes triage-labels.md and its sub-block only where the `triage`
-    # skill is installed beside it, so the pair is what holds, not either half.
-    labels = (agents / "triage-labels.md").is_file()
-    sub_block = "### Triage labels" in text
     return [
         (
-            "engineering-skill config written",
+            "engineering-skill config shipped",
             all(
-                (agents / name).is_file() for name in ("issue-tracker.md", "domain.md")
+                (agents / name).is_file()
+                for name in ("issue-tracker.md", "domain.md", "triage-labels.md")
             ),
-            "docs/agents holds issue-tracker.md and domain.md",
-        ),
-        (
-            "agent skills block added",
-            "## Agent skills" in text,
-            "root CLAUDE.md carries the ## Agent skills block",
-        ),
-        (
-            "triage labels consistent",
-            labels == sub_block,
-            "triage-labels.md and the ### Triage labels sub-block are both present or both absent",
+            "docs/agents holds issue-tracker.md, domain.md, and triage-labels.md",
         ),
     ]
 
@@ -204,11 +189,11 @@ def generation(root: Path, fixture: dict[str, object]) -> list[Check]:
             "apps/app-name absent",
         ),
         (
-            "CLAUDE bootstrap resolved",
-            contains_none(
-                candidate / "CLAUDE.md", ("apps/app-name", "not yet indexed")
-            ),
-            "root CLAUDE.md has no generation placeholders",
+            "CLAUDE skeleton left to the destination",
+            contains_none(candidate / "CLAUDE.md", ("apps/app-name",))
+            and "not yet indexed"
+            in (candidate / "CLAUDE.md").read_text(encoding="utf-8"),
+            "root CLAUDE.md drops the placeholder app and keeps the indexing instruction",
         ),
         (
             "lessons initialized",
@@ -266,7 +251,7 @@ def generation(root: Path, fixture: dict[str, object]) -> list[Check]:
             "report describes empty main base and content PR",
         ),
         no_remote_check(candidate),
-        *setup_skill_checks(candidate),
+        *agent_docs_checks(candidate),
     ]
 
 
@@ -356,13 +341,11 @@ def generation_multi(root: Path, fixture: dict[str, object]) -> list[Check]:
             "docs/adrs/0000-template.md remains a template",
         ),
         (
-            "boundaries carried into CLAUDE.md",
-            contains_none(candidate / "CLAUDE.md", ("apps/app-name", "not yet indexed"))
-            and all(
-                name in (candidate / "CLAUDE.md").read_text(encoding="utf-8")
-                for name in expected
-            ),
-            "root CLAUDE.md names both deployables and keeps no placeholders",
+            "CLAUDE skeleton left to the destination",
+            contains_none(candidate / "CLAUDE.md", ("apps/app-name",))
+            and "not yet indexed"
+            in (candidate / "CLAUDE.md").read_text(encoding="utf-8"),
+            "root CLAUDE.md drops the placeholder app and keeps the indexing instruction",
         ),
         report_check(
             report,
@@ -373,7 +356,7 @@ def generation_multi(root: Path, fixture: dict[str, object]) -> list[Check]:
             "report names each deployable with the constraint that selected its language",
         ),
         no_remote_check(candidate),
-        *setup_skill_checks(candidate),
+        *agent_docs_checks(candidate),
     ]
 
 
@@ -447,7 +430,7 @@ def generation_handoff(root: Path, fixture: dict[str, object]) -> list[Check]:
             "the Wayfinding line records which trigger fired",
         ),
         no_remote_check(candidate),
-        *setup_skill_checks(candidate),
+        *agent_docs_checks(candidate),
     ]
 
 

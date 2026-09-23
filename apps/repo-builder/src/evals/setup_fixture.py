@@ -67,6 +67,12 @@ def payload_instructions(commands: str) -> str:
     A scenario that changes the root instructions on the template's side edits
     that section, so the text around it is written once here rather than
     restated per scenario and drifting out of step with the payload.
+
+    The Child Index sentence is copied from the payload's own skeleton at
+    `apps/github-repository-template/src/base-repo/CLAUDE.md`. It is addressed
+    to the destination's first session, not to a generate, so every generate
+    scenario asserts it survives untouched; a fixture that told the flow to
+    leave it alone would be testing wording the payload does not ship.
     """
     return f"""## Commands
 
@@ -79,7 +85,7 @@ An `apps/` entry is one deployable service.
 
 ## Child Index
 
-This project is not yet indexed. Replace this message with the actual index.
+This project is not yet indexed. Before continuing you must scan the repository, create a `CLAUDE.md` in every child folder that is a durable boundary, and replace this message with one bullet per child `CLAUDE.md` — its path, then what that file owns.
 """
 
 
@@ -95,6 +101,26 @@ def template_payload(repo: Path) -> None:
         '{"schema_version": 1, "run": "none", "ships": {"kind": "none"}}\n',
     )
     write(repo, "base-repo/apps/app-name/src/.gitkeep", "")
+    # The payload ships `docs/agents/` rather than a flow collecting it, so the
+    # fixture ships it too: a generate confirms these three and creates the
+    # labels they name. `issue-tracker.md` records local markdown, which is the
+    # tracker every scenario here uses, since none may contact GitHub.
+    write(
+        repo,
+        "base-repo/docs/agents/issue-tracker.md",
+        "# Issue tracker\n\nIssues live as local markdown under `.scratch/`.\n",
+    )
+    write(
+        repo,
+        "base-repo/docs/agents/domain.md",
+        "# Domain\n\nThe glossary lives in `CONTEXT.md`; ADRs live in `docs/adrs/`.\n",
+    )
+    write(
+        repo,
+        "base-repo/docs/agents/triage-labels.md",
+        "# Triage labels\n\nbug, enhancement, needs-triage, needs-info, "
+        "ready-for-agent, ready-for-human, wontfix\n",
+    )
     write(
         repo,
         "base-repo/docs/adrs/0000-template.md",
