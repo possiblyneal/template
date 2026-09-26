@@ -20,6 +20,8 @@ set -uo pipefail
 # Exits with the command's own status, so it can stand in for the command in a
 # gate rather than only in a report.
 
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 if (( $# == 0 )); then
   echo "usage: scripts/summarize <command> [args...]" >&2
   echo "  e.g. scripts/summarize scripts/check" >&2
@@ -48,10 +50,20 @@ table_reported_failure=$?
 # script suites print their own tally, and pre-commit prints its own hook list.
 # A table of nothing but passes above a failing exit reads as a contradiction,
 # so say where the failure was instead of leaving the reader to find it.
+#
+# The output is kept rather than described, because the common case cannot be
+# reproduced by running the command again. Pre-commit's fixer hooks repair the
+# file and exit non-zero, so the second run passes having already fixed what it
+# found -- and every re-run after that reads as a transient failure. The whole
+# run is already in `output`; writing it out is the difference between a log to
+# grep and a cause that no longer exists.
 if (( status != 0 && table_reported_failure != 0 )); then
+  log="$repo_root/tmp/summarize-failure.log"
+  mkdir -p "$repo_root/tmp"
+  printf '%s\n' "$output" > "$log"
   echo
   echo "$1 exited $status with no failing result line: the failure is outside the"
-  echo "Result table. Re-run it directly to see what failed."
+  echo "Result table. The whole run is at $log; re-running may not reproduce it."
 fi
 
 exit "$status"

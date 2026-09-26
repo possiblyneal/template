@@ -61,12 +61,22 @@ else
 fi
 
 current="a failing exit with no failing result line says where the failure was"
-out="$(scripts/summarize bash -c 'echo "lint               pass             python"; exit 3' 2>&1)"
+rm -f tmp/summarize-failure.log
+out="$(scripts/summarize bash -c 'echo "lint               pass             python"; echo "hook rewrote a file"; exit 3' 2>&1)"
 notice_status=$?
 if (( notice_status == 3 )) && grep -q 'outside the' <<< "$out"; then
   pass
 else
   fail "wanted exit 3 and a notice, got exit $notice_status: $out"
+fi
+
+# The notice names a log rather than telling the reader to run the command
+# again, because a fixer hook that repaired the file passes on the second run.
+current="the whole run is kept for a failure outside the table"
+if grep -q 'hook rewrote a file' tmp/summarize-failure.log; then
+  pass
+else
+  fail "wanted the dropped output in tmp/summarize-failure.log"
 fi
 
 current="a FAIL in the table needs no such notice"
