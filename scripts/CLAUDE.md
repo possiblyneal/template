@@ -9,7 +9,7 @@ Every portable shell script, whether a person runs it or a workflow does. Projec
 One flat directory, not a `ci/` and a `scripts/` split. The boundary that split would need does not hold: `check` calls `ci` and `security`, `release` calls `ci`, and every script sources the same detection library, so a file's caller is not a property that stays put.
 
 - `doctor`, `check`, `fix`, `clean`, `run`, `package` — run by a person
-- `summarize <command…>` — runs a check command and prints only its Result table, findings included, exiting with that command's status; the one consumer of the printed layout `libs/result.sh` documents
+- `summarize <command…>` — runs a check command and prints only its Result table, findings included, exiting with that command's status; the one consumer of the printed layout `libs/result.sh` documents. Where the command fails with nothing failing in the table, it writes the whole run to `tmp/summarize-failure.log` and names it, because a fixer hook that repaired the file passes on the second run and the re-run is what destroys the evidence
 - `ci`, `security`, `release`, `detect` — called by `.github/workflows/`
 - `system-packages` — called by `.github/actions/setup-toolchains`; installs the apt packages `.github/system-packages.txt` names, ahead of every toolchain. The file is an addition by occasion, so the shipped state is a repository where this installs nothing and the step is a stat. It lives here rather than in the action's `run:` for the reason at the top of this file: the parse runs locally exactly as it runs in GitHub Actions, and `tests/system-packages-test` can reach it. `security.yml` repeats toolchain setup inline instead of using that action, so it installs none of these — which holds only while `security` audits lockfiles rather than building
 - `repo-settings check` — hosted GitHub state, run explicitly
@@ -72,7 +72,7 @@ Each suite is `scripts/tests/<name>-test`, reports through the harness, and asse
 
 - `capabilities-test` — the ten-by-six probe table, dispatch under `CI_DRY_RUN=1`, and real runs of `ci`, `security`, `run`, and `package` against stubbed toolchains
 - `result-gate-test` — the four states are enforced and findings deduped, and every command ending in `tally` fails on an `unavailable` line or a recorded orphan
-- `summarize-test` — what the Result-table filter keeps, what it drops, and that it exits with the command's own status
+- `summarize-test` — what the Result-table filter keeps, what it drops, that it exits with the command's own status, and that a failure outside the table leaves the whole run in `tmp/summarize-failure.log`
 - `harness-test` — the harness itself, run as a process: the tally line and exit status for all-pass, one-fail, all-skip, skip-beside-pass, a declared not-applicable, and a suite that counted nothing, plus each fixture primitive
 - `clean-test` — `clean` prunes the directories `libs/detect.sh` names
 - `unit-commands-test` — unit resolution, `run: none` and `ships: none`, quadlet validation with no container runtime, arguments after `--`, that a declared `run` fact reaches the adapter rather than gating it, and `dist/` cleared only where a language packages there. Skips without `jq`
