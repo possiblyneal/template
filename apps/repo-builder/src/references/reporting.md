@@ -107,7 +107,7 @@ One line per check, from `scripts/summarize <command>` rather than from a filter
 - Hooks: installed at <scope> into <hooks directory>; `core.hooksPath` left pinned there (update and adopt) | global `core.hooksPath` set to <value>, worked around rather than unset | `extensions.worktreeConfig` set on <clone> and left set (retrofit)
 - Copied paths byte-identical to their source: <count>/<count>; the rest are the authored surface, under File list. An overridden path is in neither count, under Reconciliation instead
 - Workflows the pull-request event never ran: <names> | none
-- Code review: skipped, as [Reviewing the pull request](#reviewing-the-pull-request) directs
+- Code review: skipped, as [Reviewing the pull request](#reviewing-the-pull-request) directs | on a retrofit, the axes that ran over the authored surface and what they found
 - Default branch after merge: <check-suite result> | n/a (nothing merged)
 
 ### Resumption

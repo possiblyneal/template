@@ -59,11 +59,18 @@ table_reported_failure=$?
 # grep and a cause that no longer exists.
 if (( status != 0 && table_reported_failure != 0 )); then
   log="$repo_root/tmp/summarize-failure.log"
-  mkdir -p "$repo_root/tmp"
-  printf '%s\n' "$output" > "$log"
   echo
   echo "$1 exited $status with no failing result line: the failure is outside the"
-  echo "Result table. The whole run is at $log; re-running may not reproduce it."
+  # The write is checked rather than assumed. Naming a log the run could not
+  # write -- a read-only tree, a `tmp` that is a file -- sends the reader after
+  # a file that is not there, which is the same wrong diagnosis in a new shape.
+  if mkdir -p "$repo_root/tmp" 2>/dev/null &&
+     printf '%s\n' "$output" > "$log" 2>/dev/null; then
+    echo "Result table. The whole run is at $log; re-running may not reproduce it."
+  else
+    echo "Result table, and $log could not be written, so the run is lost."
+    echo "Re-run redirecting to a file you can write; it may not reproduce."
+  fi
 fi
 
 exit "$status"
