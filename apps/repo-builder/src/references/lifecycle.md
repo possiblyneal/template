@@ -73,7 +73,7 @@ Every built repository tracks `.repo-template.json`:
 }
 ```
 
-The `ownership` array above illustrates the shape at the time this contract was written; it is not a canonical list to copy. Build it from the payload's actual top-level structure at the resolved source commit — e.g. `git ls-tree -r --name-only <commit> -- <subtree>` — rather than pasting this example, since the template's real paths can drift from documentation prose without this file being updated to match.
+The `ownership` array above illustrates the shape; it is not a list to copy into a manifest. Build that from the payload's actual top-level structure at the resolved source commit — e.g. `git ls-tree -r --name-only <commit> -- <subtree>` — since the template's real paths drift from prose. The example is nonetheless kept complete: `test_every_shipped_path_is_reached_by_an_ownership_rule` in this unit's `scripts/tests/test_reference_assertions.py` fails when a payload path no rule here reaches, so a rule added to the payload is added here too.
 
 Use a full lowercase 40-character commit. `template.commit` is the last template version successfully applied to the candidate state. Change it only after the candidate passes verification; commit it with the update it describes.
 
@@ -253,8 +253,25 @@ A machine-wide `core.hooksPath` set for an unrelated purpose (an editor's own gi
 The two halves have different remedies and neither is to unset the operator's key. A fixture is fixed by isolation, which the repository's own `scripts/tests/libs/harness.sh` already applies. A working tree is fixed by writing the shims into a directory of its own and pointing git at that directory, which is what `pre-commit init-templatedir` is for. Unlike `pre-commit install` it does not refuse while `core.hooksPath` is set at any scope, and the shims it writes are repository-independent, so the same directory serves whatever tree points at it:
 
 ```sh
+# --worktree only, and before the rest: the scope is refused without it.
+# <clone> is the main clone the candidate worktree belongs to, because git
+# offers the key nowhere else. Every other line below acts on <tree>, the
+# candidate itself.
+git -C <clone> config extensions.worktreeConfig true
+
 pre-commit init-templatedir -t <each configured type> <hooksdir>
+
+# Any hook the tree already had, chained under the shim. init-templatedir
+# installs with overwrite, so re-link after every run of it -- including the
+# re-runs a resume makes, not only the first. Generate's candidate has none:
+# step 3 created it.
+ln -sf <existing hook> "<hooksdir>/hooks/<type>.legacy"
+
 git -C <tree> config <scope> core.hooksPath "<hooksdir>/hooks"
+
+# Verify by outcome, never by the exit statuses above: this must resolve
+# inside <hooksdir>, and every configured type must be present there.
+git -C <tree> rev-parse --git-path hooks
 ```
 
 `<hooksdir>` is a sibling of the tree in the scratch tree, beside the resume record, for the reason [Resuming](#resuming) gives for that record: inside the tree it enters the diff, the copy proof, and the structure audit as a directory the payload does not ship.
@@ -263,7 +280,7 @@ Read the hook types from `pre_commit_hook_types` in `scripts/libs/precommit.sh`,
 
 `<scope>` is the one thing that varies by flow, and only retrofit needs the unusual one:
 
-- **Retrofit** — `--worktree`, with `git -C <clone> config extensions.worktreeConfig true` set first. Its candidate is a linked worktree, so `core.hooksPath` at local scope is the main clone's config and setting it there repoints the operator's own clone at a directory this flow created. The per-worktree scope is retrofit's alone because retrofit's candidate is the only one borrowing a hooks directory it does not own.
+- **Retrofit** — `--worktree`. Its candidate is a linked worktree, so `core.hooksPath` at local scope is the main clone's config and setting it there repoints the operator's own clone at a directory this flow created. The per-worktree scope is retrofit's alone because retrofit's candidate is the only one borrowing a hooks directory it does not own.
 - **Generate** — `--local`. The candidate is a dedicated clone with no parent to protect.
 - **Update and adopt** — `--local`. They run in the operator's own clone, where installing the hooks is the correct outcome rather than a side effect to contain.
 
@@ -271,9 +288,7 @@ Setting the key is itself a change to a tree somebody else owns, in every scope 
 
 What that key costs is that git stops reading `.git/hooks` entirely while it is set, so a hook the operator already had there silently stops firing. `pre-commit`'s shims chain only `<hooksdir>/hooks/<type>.legacy`, and `init-templatedir` into a fresh directory writes none, so in any tree that had its own hooks, link each of them in under that name before pinning the key. Generate's candidate is the one tree exempt: step 3 created it, so there is nothing there to chain.
 
-Re-running the recipe is what a resume does, and it is not free here: `init-templatedir` installs with overwrite, which removes a `<type>.legacy` already sitting beside the shims. Re-link them after every run of it, not only the first.
-
-Verify by outcome before measuring the bar, never by the commands' exit status: `git -C <tree> rev-parse --git-path hooks` resolves inside `<hooksdir>` and every configured type is present there. A flow whose hooks are not working stops here and reports it as its own defect. Carrying on measures a destination against a check surface that cannot run and writes the result up as debt the destination owes, which is the worst available outcome: a real repository given a list of failures that are this skill's.
+The verify line runs before the bar is measured. A flow whose hooks are not working stops there and reports it as its own defect. Carrying on measures a destination against a check surface that cannot run and writes the result up as debt the destination owes, which is the worst available outcome: a real repository given a list of failures that are this skill's.
 
 A global `core.hooksPath` is reported with its key and its value, and it is not a stop. The recipe above works while it is set; naming it is what stops the next reader treating an unrelated editor integration as a defect. Removing and restoring the operator's global key around an install is not the shortcut it looks like: every other process on the machine reads the wrong config for the duration.
 
