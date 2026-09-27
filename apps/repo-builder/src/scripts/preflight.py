@@ -1128,6 +1128,12 @@ def retrofit_preflight(arguments: argparse.Namespace) -> dict[str, object]:
     present = tracked | set(listed_paths(destination, "--others"))
 
     branch = default_branch(destination)
+    collisions = [
+        found
+        for found in (collision(path, present, tracked) for path in payload)
+        if found is not None
+    ]
+    colliding = {str(found["path"]) for found in collisions}
     return {
         "operation": "retrofit",
         "template": {
@@ -1166,11 +1172,11 @@ def retrofit_preflight(arguments: argparse.Namespace) -> dict[str, object]:
         # Evidence, never a decision. Which side of a collision wins is read
         # from ownership rules that live in a record a retrofit writes at the
         # end, so there is nothing here to read them from.
-        "collisions": [
-            found
-            for found in (collision(path, present, tracked) for path in payload)
-            if found is not None
-        ],
+        "collisions": collisions,
+        # The overlay set, derived here rather than left to the flow to
+        # subtract: it is the one list the overlay writes and the copy proof
+        # counts against, and two derivations of it can disagree.
+        "absent_paths": [path for path in payload if path not in colliding],
         "remote_actions_performed": False,
     }
 

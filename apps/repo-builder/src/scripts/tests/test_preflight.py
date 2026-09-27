@@ -899,6 +899,26 @@ class RetrofitTests(unittest.TestCase):
             self.assertEqual(report["destination"]["path_count"], 3)
             self.assertNotIn("paths", report["destination"])
 
+    def test_retrofit_names_the_absent_paths_the_overlay_writes(self) -> None:
+        """The overlay set is derived once, here, rather than by each flow.
+
+        It is both what step 3 writes and the denominator of the copy proof,
+        and a flow subtracting the collisions itself is a second derivation of
+        a list the two halves have to agree on.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._fixture(directory)
+            report = json.loads(self._preflight(fixture).stdout)
+
+            colliding = {found["path"] for found in report["collisions"]}
+            self.assertEqual(
+                report["absent_paths"],
+                [path for path in report["payload_paths"] if path not in colliding],
+            )
+            self.assertTrue(colliding)
+            self.assertNotIn("CLAUDE.md", report["absent_paths"])
+            self.assertIn("docs/adrs/0000-template.md", report["absent_paths"])
+
     def test_retrofit_holds_back_the_placeholder_unit(self) -> None:
         """A retrofit derives its units, so the placeholder has nothing to be.
 
