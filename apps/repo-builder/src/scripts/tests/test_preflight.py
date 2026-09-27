@@ -919,6 +919,27 @@ class RetrofitTests(unittest.TestCase):
             self.assertNotIn("CLAUDE.md", report["absent_paths"])
             self.assertIn("docs/adrs/0000-template.md", report["absent_paths"])
 
+    def test_retrofit_absent_paths_is_the_whole_payload_when_nothing_collides(
+        self,
+    ) -> None:
+        """A destination sharing no path with the payload is the overlay's widest case.
+
+        Step 3 then writes every payload path, so the field has to be the full
+        list rather than a subtraction that quietly kept a stale collision.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._fixture(directory)
+            destination = Path(fixture["destination"])
+            for colliding in ("CLAUDE.md", "docs/LESSONS.md", "scripts/check"):
+                (destination / colliding).unlink()
+            git("rm", "-q", "--cached", "CLAUDE.md", cwd=destination)
+            git("commit", "-q", "-m", "chore: drop the colliding path", cwd=destination)
+
+            report = json.loads(self._preflight(fixture).stdout)
+
+            self.assertEqual(report["collisions"], [])
+            self.assertEqual(report["absent_paths"], report["payload_paths"])
+
     def test_retrofit_holds_back_the_placeholder_unit(self) -> None:
         """A retrofit derives its units, so the placeholder has nothing to be.
 

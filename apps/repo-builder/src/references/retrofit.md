@@ -67,9 +67,9 @@ The branch is named for the payload commit and the directory for the destination
 
 Write the payload paths preflight found absent, and write no colliding path at all. Every colliding path stays in the collision list for the per-file decision the flow reaches later. This satisfies the rule against deleting destination content to resolve a collision by construction; copy everything and restore afterwards is rejected, because it breaks that rule in the window between the two steps.
 
-The absent set is `absent_paths` in the preflight JSON — `payload_paths` minus every collision, derived there so the overlay and the copy proof cannot count different lists. Write it as given; do not recompute it.
+The absent set is `absent_paths` in the preflight JSON — `payload_paths` minus every collision, derived there so the overlay and the copy proof cannot count different lists. Write its entries as given; do not recompute the set. `<absent-paths>` below is that JSON array written out one path per line, which is what `xargs -d '\n'` reads.
 
-**The payload's placeholder unit is in neither list, and preflight is what holds it back.** `apps/app-name/` exists for [generate's Step 8 — Personalize the candidate](generate.md#step-8--personalize-the-candidate) to rename into the application's own name; a retrofit reads its units off what the destination already delivers, so there is nothing for it to be. Do not add it back on the reasoning that it is genuinely absent: overlaid it passes every check the flow runs — the layout audit, `unit-declaration` and `unit-facts` all accept a well-formed empty unit — and the retrofitted repository ships a second unit that delivers nothing.
+**The payload's placeholder unit is in neither list, and preflight is what holds it back.** `apps/app-name/` exists for [generate's Step 8 — Personalize the candidate](generate.md#step-8--personalize-the-candidate) to rename into the application's own name; a retrofit reads its units off what the destination already delivers, so there is nothing for it to be. Both reference retrofits landed it and both retired it by hand. Do not add it back on the reasoning that it is genuinely absent: `preflight.py`'s comment on `PLACEHOLDER_UNIT_PREFIX` has what it survives and why nothing downstream catches it.
 
 ```bash
 xargs -r -a <absent-paths> -d '\n' \
@@ -97,7 +97,13 @@ Units are derived from what the destination already delivers, never interviewed 
 
 **The run and ship facts are not on disk and are never inferred silently.** `run` and `ships` are the two facts each unit's `.unit.json` carries, and no file in the destination states either: a single `main` package is a CLI, a TUI, or a service, and nothing in the tree tells them apart. So the flow names the evidence it found per unit, proposes a pair from it, and the operator confirms or corrects each one. Both the evidence and the confirmation reach the report and the architecture record, so a later reader can tell a fact that was observed from a fact that was accepted.
 
-**Read what grades the pair before proposing it**, because a declaration the check surface refuses is worse than the shape of the tree suggests. Three payload files decide it, and all three are in the candidate already: `scripts/libs/quadlet.sh` refuses `ships: quadlet` unless the unit's `deploy/quadlet/` holds a `.build` unit naming an `ImageTag` that every sibling `.container`'s `Image=` resolves to; `scripts/libs/detect.sh` holds one `_capability_package_<language>` per language that can ship an executable, and a language with none is the gap the paragraph below covers; and `scripts/run` detects languages only after entering `apps/<unit>/`, so a `run` other than `none` needs a manifest at that path rather than at the root. Where the confirmed pair and the check surface disagree, the disagreement is a finding for the report, not a value to soften.
+**Read what grades the pair before proposing it**, because a declaration the check surface refuses is worse than the shape of the tree suggests. Three payload files decide it, and all three are in the candidate already:
+
+- `scripts/libs/quadlet.sh` refuses `ships: quadlet` unless the unit's `deploy/quadlet/` holds a `.build` unit naming an `ImageTag` that every sibling `.container`'s `Image=` resolves to.
+- `scripts/libs/detect.sh` holds one `_capability_package_<language>` per language that can ship an executable. A language with none is the gap the paragraph below covers.
+- `scripts/run` detects languages only after entering `apps/<unit>/`, so a `run` other than `none` needs a manifest at that path rather than at the root.
+
+Where the confirmed pair and the check surface disagree, the disagreement is a finding for the report, not a value to soften.
 
 **A language with no packaging adapter declares that it ships nothing, and the gap is reported.** `ships.kind` is `none` there, and the report names the unit, its language, and the adapter that does not exist. A declaration guessing at a kind the check surface cannot serve turns `scripts/package` into a command that fails against the unit it was pointed at, which is worse than a declaration that says nothing and a report that says why.
 

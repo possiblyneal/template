@@ -73,7 +73,7 @@ Every built repository tracks `.repo-template.json`:
 }
 ```
 
-The `ownership` array above illustrates the shape; it is not a list to copy into a manifest. Build that from the payload's actual top-level structure at the resolved source commit — e.g. `git ls-tree -r --name-only <commit> -- <subtree>` — since the template's real paths drift from prose. The example is nonetheless kept complete: `test_every_shipped_path_is_reached_by_an_ownership_rule` in `scripts/tests/test_reference_assertions.py` fails when a payload path no rule here reaches, so a rule added to the payload is added here too.
+The `ownership` array above illustrates the shape; it is not a list to copy into a manifest. Build that from the payload's actual top-level structure at the resolved source commit — e.g. `git ls-tree -r --name-only <commit> -- <subtree>` — since the template's real paths drift from prose. The example is nonetheless kept complete: `test_every_shipped_path_is_reached_by_an_ownership_rule` in this unit's `scripts/tests/test_reference_assertions.py` fails when a payload path no rule here reaches, so a rule added to the payload is added here too.
 
 Use a full lowercase 40-character commit. `template.commit` is the last template version successfully applied to the candidate state. Change it only after the candidate passes verification; commit it with the update it describes.
 
@@ -253,13 +253,18 @@ A machine-wide `core.hooksPath` set for an unrelated purpose (an editor's own gi
 The two halves have different remedies and neither is to unset the operator's key. A fixture is fixed by isolation, which the repository's own `scripts/tests/libs/harness.sh` already applies. A working tree is fixed by writing the shims into a directory of its own and pointing git at that directory, which is what `pre-commit init-templatedir` is for. Unlike `pre-commit install` it does not refuse while `core.hooksPath` is set at any scope, and the shims it writes are repository-independent, so the same directory serves whatever tree points at it:
 
 ```sh
-# Retrofit only, and before the rest: --worktree is refused without it.
+# --worktree only, and before the rest: the scope is refused without it.
+# <clone> is the main clone the candidate worktree belongs to, because git
+# offers the key nowhere else. Every other line below acts on <tree>, the
+# candidate itself.
 git -C <clone> config extensions.worktreeConfig true
 
 pre-commit init-templatedir -t <each configured type> <hooksdir>
 
-# Any hook the tree already had, chained under the shim. Re-link after every
-# run of the line above, which installs with overwrite.
+# Any hook the tree already had, chained under the shim. init-templatedir
+# installs with overwrite, so re-link after every run of it -- including the
+# re-runs a resume makes, not only the first. Generate's candidate has none:
+# step 3 created it.
 ln -sf <existing hook> "<hooksdir>/hooks/<type>.legacy"
 
 git -C <tree> config <scope> core.hooksPath "<hooksdir>/hooks"
