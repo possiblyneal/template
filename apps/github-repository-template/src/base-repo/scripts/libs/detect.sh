@@ -137,6 +137,25 @@ has_trivy_target() {
     [[ -n "$(detect_find gradle.lockfile -print -quit)" ]]
 }
 
+# Every tests/integration/ directory in scope, one per line.
+#
+# The integration tier is a path this repository's layout owns rather than a
+# marker each language spells its own way -- a pytest mark, a Go build tag, a
+# Gradle source set -- so where an integration test goes is read off the layout
+# rules and not off six idioms. It needs no new placement rule: tests/ is
+# already a scoped folder that may nest its own kind at every scope. What is new
+# is that this one name under it means something to the capabilities.
+#
+# The tier is deliberately outside scripts/check. An integration test reaches
+# something a gate cannot assume is present -- a database, a container, a
+# network -- so a gate that ran it would fail on a machine that is not wrong.
+# scripts/integration runs it, and the test capability leaves it out.
+integration_dirs() {
+  local prune=()
+  detect_prune_expr prune
+  find . \( "${prune[@]}" \) -prune -o -type d -path '*/tests/integration' -print
+}
+
 # Runs trivy over every lockfile matching a name, since Swift and Gradle have no
 # first-party audit command. Every lockfile is scanned even after one reports a
 # vulnerability, so the first hit does not hide the rest.
@@ -344,19 +363,104 @@ _capability_typecheck_node() { has_npm_script typecheck || return "$NO_RUNNER"; 
 _capability_typecheck_python() { uv_run ty check .; }
 
 _capability_test_node() { has_npm_script test || return "$NO_RUNNER"; npm run test; }
+# The two runners that discover tests by walking the tree are the two that have
+# to be told about the tier, and they are told here rather than in each
+# repository's own config. media-encoder hand-wrote a pytest testpaths to keep
+# `scripts/check` out of its integration suite, which is a fix every generated
+# repository would otherwise have to rediscover.
+#
+# The other four declare their test set instead of discovering it -- an npm
+# script, a Gradle source set, a SwiftPM Tests directory, a Cargo test target --
+# so that declaration is what leaves the tier out, and a second exclusion here
+# would be a rule with nothing to apply to.
 _capability_test_python() {
-  local status=0
-  uv_run pytest || status=$?
+  local status=0 dir
+  local -a ignore=()
+  while IFS= read -r dir; do
+    [[ -n "$dir" ]] || continue
+    ignore+=(--ignore="$dir")
+  done < <(integration_dirs)
+
+  uv_run pytest ${ignore[@]+"${ignore[@]}"} || status=$?
   if (( status == 5 )); then
     echo "pytest collected no tests."
     return 0
   fi
   return "$status"
 }
-_capability_test_go() { go_each go test ./...; }
+# Run inside a module by go_each, so the import paths it filters are that
+# module's. A module whose every package is under the tier is not an error: the
+# tier has a runner of its own and this one has nothing left to do.
+_go_test_outside_integration() {
+  local listed
+  local -a packages=()
+  listed="$(go list ./...)" || return 1
+  if [[ -z "$listed" ]]; then
+    echo "This module names no packages."
+    return 0
+  fi
+  # Anchored at the segment: a package named tests/integrationutil is not the
+  # tier, and a substring filter would silently stop testing it.
+  mapfile -t packages < <(grep -vE '/tests/integration(/|$)' <<<"$listed" || true)
+  if (( ${#packages[@]} == 0 )); then
+    echo "Every package in this module is under tests/integration."
+    return 0
+  fi
+  go test "${packages[@]}"
+}
+_capability_test_go() {
+  if [[ -z "$(integration_dirs)" ]]; then
+    go_each go test ./...
+    return
+  fi
+  go_each _go_test_outside_integration
+}
 _capability_test_rust() { cargo test; }
 _capability_test_swift() { command -v swift >/dev/null 2>&1 || return "$NO_RUNNER"; swift_each swift test; }
 _capability_test_kotlin() { [[ -x ./gradlew ]] || return "$NO_RUNNER"; ./gradlew test; }
+
+# The tier's own runners. Absent for rust, swift and kotlin: each names its
+# integration tests somewhere its own build file already decides -- a Cargo test
+# target, a SwiftPM test target, a Gradle source set -- and a tests/integration/
+# directory is not where any of the three looks. There is no runner for one of
+# them to be missing, so each reports not-applicable whether or not a tier
+# exists -- see the arm in _capability_is_not_applicable.
+_capability_integration_node() { has_npm_script test:integration || return "$NO_RUNNER"; npm run test:integration; }
+_capability_integration_python() {
+  local status=0
+  local -a dirs=()
+  mapfile -t dirs < <(integration_dirs)
+
+  # Named on the command line, which overrides any testpaths the project set.
+  uv_run pytest "${dirs[@]}" || status=$?
+  if (( status == 5 )); then
+    echo "pytest collected no tests."
+    return 0
+  fi
+  return "$status"
+}
+# Each directory entered rather than named as a package pattern, so a repository
+# whose tiers sit in different modules needs no module bookkeeping here.
+#
+# Read on fd 3, not stdin, for the same reason as go_each: go test can read
+# stdin, which would otherwise consume the remaining directory list.
+_capability_integration_go() {
+  local dir status=0 ran=0
+  while IFS= read -r dir <&3; do
+    [[ -n "$dir" ]] || continue
+    # The tier is a path every language shares, so a repository holding Go also
+    # holds tiers written in something else. A directory with no Go package in
+    # it is not this adapter's to fail on -- `go test` there reports no Go
+    # files, which says nothing about the tests that are actually in it.
+    [[ -n "$(cd "$dir" && go list ./... 2>/dev/null)" ]] || continue
+    ran=1
+    ( cd "$dir" && go test ./... ) || status=1
+  done 3< <(integration_dirs)
+  if (( ran == 0 )); then
+    echo "No Go package under any tests/integration directory."
+  fi
+  return "$status"
+}
 
 _capability_build_node() { has_npm_script build || return "$NO_RUNNER"; npm run build; }
 # The build discards its output: `go build ./...` writes an executable wherever
@@ -440,36 +544,144 @@ _capability_format_write_kotlin() { gradle_has_task ktlintFormat || return "$NO_
 # empty rather than tripping `set -u`. shellcheck reads each array's first use
 # below as unassigned, and the directive there names the declaration's home.
 
-# The paths `bin` names, one per line. A string names one and an object names
-# several; either way the field is the package's own declaration of what it is
-# when run, which is what [project.scripts] declares in Python.
+# The entry points `bin` names, one `name<TAB>path` line each. A string names
+# one and an object names several; either way the field is the package's own
+# declaration of what it is when run, which is what [project.scripts] declares
+# in Python. npm's own rule supplies the name for the string form: a bare path
+# is the package's name, so that is what --entry has to spell.
 npm_bin_entries() {
   has_node &&
     command -v node > /dev/null 2>&1 &&
-    node -e 'const b = require("./package.json").bin || {};
-for (const p of typeof b === "string" ? [b] : Object.values(b)) console.log(p);' 2> /dev/null
+    node -e 'const pkg = require("./package.json");
+const b = pkg.bin || {};
+const entries = typeof b === "string" ? [[pkg.name, b]] : Object.entries(b);
+for (const [n, p] of entries) console.log(n + "\t" + p);' 2> /dev/null
+}
+
+# The entry point named with --entry, checked against the ones the unit's own
+# manifest declares. Prints it on stdout and returns 0.
+#
+# Three answers rather than two, because an adapter has three things to do.
+# Return 1 means nothing was named, and the adapter falls through to counting
+# what it found -- one starts, several refuse. Return 2 means one was named and
+# this unit does not declare it, which has already been said here along with
+# what it does declare, so the adapter returns a plain failure without a second
+# message about the same mistake.
+#
+# The declared set is passed in rather than read here: each language keeps its
+# entry points in its own manifest, and the adapter is already holding them.
+_entry_choice() {
+  local name
+  [[ -n "${unit_entry:-}" ]] || return 1
+
+  for name in "$@"; do
+    if [[ "$name" == "$unit_entry" ]]; then
+      echo "$name"
+      return 0
+    fi
+  done
+
+  echo "No entry point named $unit_entry here." >&2
+  if (( $# == 0 )); then
+    echo "This unit declares none." >&2
+  else
+    echo "It declares:" >&2
+    printf '  %s\n' "$@" >&2
+  fi
+  return 2
 }
 
 # A one-shot runs the entry point `bin` names, because naming one is how a
 # package says it is a CLI. A one-shot that is not a CLI -- a script, a job --
 # names none, and `npm start` is how it is started instead. A long-lived unit
 # runs the dev server whether or not the package also ships a CLI.
+# The dev servers this package names, one per line, as the entry point spells
+# them: the bare `dev` script has no entry name, and `dev:api` is the entry
+# `api`. Listed for the refusal below rather than to choose from -- the choice
+# is one has_npm_script test.
+npm_dev_entries() {
+  has_node &&
+    command -v node > /dev/null 2>&1 &&
+    node -e 'const s = require("./package.json").scripts || {};
+for (const n of Object.keys(s)) if (n.startsWith("dev:")) console.log(n.slice(4));' 2> /dev/null
+}
+
+# The autofix half of lint, and part of what `scripts/fix` does by default.
+# Every tool here applies only the fixes it considers safe -- ruff withholds the
+# rest behind --unsafe-fixes, cargo applies the machine-applicable suggestion and
+# nothing else -- so the rewrite is one the linter would have demanded anyway and
+# there is nothing for an operator to have opted into. `fix` is the command whose
+# whole purpose is to rewrite, and its output is a diff read before committing.
+#
+# Not-applicable for go, swift and kotlin rather than absent, which is the one
+# place this module's usual rule would mislead. `go vet` reports without
+# rewriting, and what `swift format` and ktlint rewrite is the formatter that
+# `format-write` already runs: there is no lint autofix in any of the three to be
+# missing. An `unavailable` would say a tool could be installed to fill the gap
+# and would fail `scripts/fix` on every Go repository for it.
+_capability_lint_fix_node() { has_npm_script lint:fix || return "$NO_RUNNER"; npm run lint:fix; }
+_capability_lint_fix_python() { uv_run ruff check --fix .; }
+# --allow-dirty and --allow-staged because cargo fix refuses an unclean tree,
+# and this command is only ever run on one: rewriting the working tree is what
+# it is for, and the diff is what the operator reviews before committing.
+_capability_lint_fix_rust() { cargo clippy --fix --allow-dirty --allow-staged; }
+
 _capability_run_node() {
-  local path paths_out
-  local -a paths=()
+  local line name entries_out chosen i
+  local status=0
+  local -a names=() paths=()
 
   if [[ "${unit_run:-}" != oneshot ]]; then
+    # A long-lived unit runs a dev server, and `bin` does not name those. The
+    # scripts do: `dev` is the unit with one, and `dev:<name>` is how a package
+    # with several already spells them, so --entry selects among those rather
+    # than among entry points this branch never reaches.
+    if [[ -n "${unit_entry:-}" ]]; then
+      if has_npm_script "dev:$unit_entry"; then
+        # shellcheck disable=SC2154 # declared in libs/unit.sh, filled by scripts/run
+        npm run "dev:$unit_entry" -- ${unit_args[@]+"${unit_args[@]}"}
+        return
+      fi
+      echo "No dev:$unit_entry script in package.json." >&2
+      entries_out="$(npm_dev_entries)" || entries_out=""
+      if [[ -n "$entries_out" ]]; then
+        echo "The dev servers this package names:" >&2
+        while IFS= read -r name; do
+          [[ -z "$name" ]] || echo "  $name" >&2
+        done <<< "$entries_out"
+      else
+        echo "This package names none, so there is nothing for --entry to pick." >&2
+      fi
+      return 1
+    fi
     has_npm_script dev || return "$NO_RUNNER"
-    # shellcheck disable=SC2154 # declared in libs/unit.sh, filled by scripts/run
     npm run dev -- ${unit_args[@]+"${unit_args[@]}"}
     return
   fi
 
-  paths_out="$(npm_bin_entries)" || return "$NO_RUNNER"
+  entries_out="$(npm_bin_entries)" || return "$NO_RUNNER"
 
-  while IFS= read -r path; do
-    if [[ -n "$path" ]]; then paths+=("$path"); fi
-  done <<< "$paths_out"
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    names+=("${line%%$'\t'*}")
+    paths+=("${line#*$'\t'}")
+  done <<< "$entries_out"
+
+  # A named entry narrows the list to one rather than starting it here, so the
+  # single-entry branch below stays the only place a bin is started and its
+  # build-output guidance covers a named entry too.
+  chosen="$(_entry_choice ${names[@]+"${names[@]}"})" || status=$?
+  case "$status" in
+    0)
+      for (( i = 0; i < ${#names[@]}; i++ )); do
+        if [[ "${names[i]}" == "$chosen" ]]; then
+          paths=("${paths[i]}")
+          break
+        fi
+      done
+      ;;
+    2) return 1 ;;
+  esac
 
   case "${#paths[@]}" in
     0) has_npm_script start || return "$NO_RUNNER"; npm start -- ${unit_args[@]+"${unit_args[@]}"} ;;
@@ -498,8 +710,8 @@ _capability_run_node() {
       ;;
     *)
       echo "Several bin entries here, and a run is one foreground process." >&2
-      echo "Start the one meant by path:" >&2
-      printf '  node %s\n' "${paths[@]}" >&2
+      echo "Name the one meant:" >&2
+      printf '  scripts/run --entry %s\n' "${names[@]}" >&2
       return 1
       ;;
   esac
@@ -517,7 +729,8 @@ _capability_run_node() {
 # The names are read with the interpreter the project already requires rather
 # than by a shell pattern over TOML.
 _capability_run_python() {
-  local name names_out
+  local name names_out chosen
+  local status=0
   local -a names=()
 
   command -v uv > /dev/null 2>&1 || return "$NO_RUNNER"
@@ -530,13 +743,19 @@ print("\n".join(project.get("scripts") or {}))' 2> /dev/null)" || return "$NO_RU
     if [[ -n "$name" ]]; then names+=("$name"); fi
   done <<< "$names_out"
 
+  chosen="$(_entry_choice ${names[@]+"${names[@]}"})" || status=$?
+  case "$status" in
+    0) names=("$chosen") ;;
+    2) return 1 ;;
+  esac
+
   case "${#names[@]}" in
     0) return "$NO_RUNNER" ;;
     1) uv run "${names[0]}" ${unit_args[@]+"${unit_args[@]}"} ;;
     *)
       echo "Several console scripts here, and a run is one foreground process." >&2
-      echo "Start the one meant by name:" >&2
-      printf '  uv run %s\n' "${names[@]}" >&2
+      echo "Name the one meant:" >&2
+      printf '  scripts/run --entry %s\n' "${names[@]}" >&2
       return 1
       ;;
   esac
@@ -566,26 +785,56 @@ _go_main_packages() {
 # here to start, which is no runner rather than a failure -- a library is not
 # broken for being a library.
 _capability_run_go() {
+  local chosen
+  local status=0
   local -a mains=()
   _go_main_packages mains || return 1
+
+  # The import path is the entry name here, not its last segment. Two modules
+  # in one repository are free to hold a main package of the same name, and a
+  # name that is ambiguous the day a second module arrives is one the refusal
+  # below cannot print.
+  chosen="$(_entry_choice ${mains[@]+"${mains[@]}"})" || status=$?
+  case "$status" in
+    0) mains=("$chosen") ;;
+    2) return 1 ;;
+  esac
 
   case "${#mains[@]}" in
     0) return "$NO_RUNNER" ;;
     1) go run "${mains[0]}" ${unit_args[@]+"${unit_args[@]}"} ;;
     *)
       echo "Several main packages here, and a run is one foreground process." >&2
-      echo "Start the one meant by name:" >&2
-      printf '  go run %s\n' "${mains[@]}" >&2
+      echo "Name the one meant:" >&2
+      printf '  scripts/run --entry %s\n' "${mains[@]}" >&2
       return 1
       ;;
   esac
 }
-_capability_run_rust() { cargo run -- ${unit_args[@]+"${unit_args[@]}"}; }
+# cargo already refuses an ambiguous run and names the bins, so there is
+# nothing to enumerate here: --bin is passed through and cargo judges the name
+# against the manifest it is the reader of.
+_capability_run_rust() {
+  if [[ -n "${unit_entry:-}" ]]; then
+    cargo run --bin "$unit_entry" -- ${unit_args[@]+"${unit_args[@]}"}
+    return
+  fi
+  cargo run -- ${unit_args[@]+"${unit_args[@]}"}
+}
 # Gradle takes program arguments as one string rather than a list, so this is
 # the one adapter that cannot pass them through unchanged: an argument
 # containing a space arrives as two.
 _capability_run_kotlin() {
   gradle_has_task run || return "$NO_RUNNER"
+  # The application plugin exposes one `run` task, bound to one main class, so
+  # there is no set of entry points here for a name to pick from. Refused
+  # rather than ignored: silently starting the only program there is would
+  # answer a different question than the one asked.
+  if [[ -n "${unit_entry:-}" ]]; then
+    echo "Gradle's application plugin exposes one run task, so --entry has nothing to pick." >&2
+    echo "Run the task that starts the program you mean, or split the unit." >&2
+    return 1
+  fi
   ./gradlew run ${unit_args[@]+--args="${unit_args[*]}"}
 }
 
@@ -723,17 +972,31 @@ packaging_writes_dist() {
 _capability_is_not_applicable() {
   case "$1:$2" in
     typecheck:go|typecheck:rust|typecheck:swift|typecheck:kotlin|build:python) return 0 ;;
+    # No lint autofix exists in any of the three, so there is no tool to install
+    # and nothing for an unavailable to be about. The adapters' own comment has it.
+    lint-fix:go|lint-fix:swift|lint-fix:kotlin) return 0 ;;
     # Package.resolved is committed by SwiftPM whenever a package has
     # dependencies; gradle.lockfile exists only once dependency locking is
     # turned on, which is not the Gradle default. Neither is guaranteed, so a
     # trivy target absent here means nothing to scan, not a missing tool.
     audit:swift) [[ -z "$(detect_find Package.resolved -print -quit)" ]] ;;
     audit:kotlin) [[ -z "$(detect_find gradle.lockfile -print -quit)" ]] ;;
+    # Each of the three names its integration tests where its own build file
+    # decides -- a Cargo test target, a SwiftPM Tests directory, a Gradle source
+    # set -- so tests/integration/ is not a place any of them looks and there is
+    # no runner for one to be missing. Unconditional, like lint-fix above: an
+    # unavailable here would fail every Rust repository the moment some other
+    # language in it grew a tier.
+    integration:rust|integration:swift|integration:kotlin) return 0 ;;
+    # A repository with no tier has nothing to run, which is not a missing
+    # runner: every language reports not-applicable rather than one of them
+    # reporting unavailable and failing a run over tests that do not exist.
+    integration:*) [[ -z "$(integration_dirs)" ]] ;;
     *) return 1 ;;
   esac
 }
 
-DETECT_CAPABILITIES=(lint format-check typecheck test build audit toolchain format-write run package)
+DETECT_CAPABILITIES=(lint format-check typecheck test build audit toolchain format-write lint-fix integration run package)
 
 # _in_list <word> <items…>: whether the word is one of the items.
 _in_list() {

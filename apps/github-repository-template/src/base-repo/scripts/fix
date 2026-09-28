@@ -8,12 +8,22 @@ cd "$repo_root"
 # shellcheck source=libs/detect.sh
 source "$repo_root/scripts/libs/detect.sh"
 
+# The write half of what `scripts/check` checks: the linter's own autofix, then
+# the formatter. Both unconditionally, and in that order, because a lint fix
+# rewrites code and leaves the layout of what it wrote to whatever runs next --
+# formatting last is what makes the result the same as a formatted commit.
+#
+# No flag over the lint half. Every autofix reached here is one the tool itself
+# considers safe, and it is a rewrite the linter would have demanded at the gate
+# anyway, so a flag would only be a way to run half of a command whose whole
+# purpose is to rewrite. Where a language has no lint autofix at all the
+# capability reports not-applicable, so this stays green on the three that do not.
 if ! language_capabilities has-any; then
   echo "No project manifest found, so there is nothing to format yet."
   exit 0
 fi
 
-language_capabilities run format-write
+language_capabilities run lint-fix format-write
 
 if tally; then
   echo "Review the diff before committing."

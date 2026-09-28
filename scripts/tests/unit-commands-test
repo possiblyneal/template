@@ -477,4 +477,133 @@ else
   fail "the refusal did not name both stacks: $out"
 fi
 
+# --- naming an entry point within a unit -------------------------------------
+
+# A unit with two programs is the case scripts/run used to refuse outright,
+# leaving the repository to write its own script. The refusal is still right
+# when nothing says which program; --entry is what says it.
+py_two_entries() {
+  declare_unit "$1" "$2"
+  mkdir -p "$work/apps/$1/src/svc"
+  cat > "$work/apps/$1/pyproject.toml" <<TOML
+[project]
+name = "$1"
+version = "1.0.0"
+requires-python = ">=3.11"
+
+[project.scripts]
+svc-api = "svc:api"
+svc-dashboard = "svc:dashboard"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/svc"]
+TOML
+  cat > "$work/apps/$1/src/svc/__init__.py" <<'PYSRC'
+import sys
+
+
+def api():
+    print("api started:" + "|".join(sys.argv[1:]))
+
+
+def dashboard():
+    print("dashboard started")
+PYSRC
+  cat > "$work/pyproject.toml" <<TOML
+[tool.uv.workspace]
+members = ["apps/$1"]
+TOML
+}
+
+fixture "two entry points and no name is refused with both named"
+py_two_entries svc longlived
+if command -v uv > /dev/null 2>&1; then
+  out="$(run_real scripts/run svc)"
+  status=$?
+  if (( status == 0 )); then
+    fail "a unit with two entry points started one of them"
+  elif grep -q -- '--entry svc-api' <<< "$out" && grep -q -- '--entry svc-dashboard' <<< "$out"; then
+    pass
+  else
+    fail "the refusal did not name both entry points as --entry: $out"
+  fi
+else
+  skip "uv is not installed"
+fi
+
+fixture "a named entry point starts that program"
+py_two_entries svc longlived
+if command -v uv > /dev/null 2>&1; then
+  out="$(run_real scripts/run svc --entry svc-dashboard)"
+  status=$?
+  if (( status == 0 )) && grep -q 'dashboard started' <<< "$out"; then
+    pass
+  else
+    fail "--entry did not start the named program (exit $status): $out"
+  fi
+else
+  skip "uv is not installed"
+fi
+
+# The flag and the program's own arguments are separate coordinates, so naming
+# an entry must not consume what follows `--`.
+fixture "a named entry point still passes the program its arguments"
+py_two_entries svc oneshot
+if command -v uv > /dev/null 2>&1; then
+  out="$(run_real scripts/run svc --entry=svc-api -- --verbose 'two words')"
+  if grep -q 'api started:--verbose|two words' <<< "$out"; then
+    pass
+  else
+    fail "the arguments did not reach the named entry point unchanged: $out"
+  fi
+else
+  skip "uv is not installed"
+fi
+
+# An entry point the unit does not declare is a typo to correct, so what it does
+# declare is what the refusal has to print.
+fixture "an entry point the unit does not declare names the ones it does"
+py_two_entries svc longlived
+if command -v uv > /dev/null 2>&1; then
+  out="$(run_real scripts/run svc --entry svc-worker)"
+  status=$?
+  if (( status == 0 )); then
+    fail "an undeclared entry point started something"
+  elif grep -q 'svc-worker' <<< "$out" && grep -q 'svc-api' <<< "$out"; then
+    pass
+  else
+    fail "the refusal did not name the declared entry points: $out"
+  fi
+else
+  skip "uv is not installed"
+fi
+
+# Needs no toolchain: the parse refuses before any language is detected.
+fixture "--entry without a value is a usage error"
+declare_unit svc oneshot
+out="$(run_in scripts/run svc --entry)"
+status=$?
+if (( status == 2 )) && grep -q -- '--entry needs a value' <<< "$out"; then
+  pass
+else
+  fail "a bare --entry was not refused as a usage error (exit $status): $out"
+fi
+
+# `--` is the program's separator, so it is never --entry's value. Taking it
+# would read the first program argument as the unit name and start the wrong
+# thing rather than refusing.
+fixture "--entry does not take the program separator as its value"
+declare_unit svc oneshot
+out="$(run_in scripts/run --entry -- svc)"
+status=$?
+if (( status == 2 )) && grep -q -- '--entry needs a value' <<< "$out"; then
+  pass
+else
+  fail "--entry consumed the -- separator (exit $status): $out"
+fi
+
 report
