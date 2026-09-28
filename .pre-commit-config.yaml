@@ -305,10 +305,12 @@ repos:
   # Rules live in .commitlintrc.yaml. commitlint refuses to lint at all without
   # a config naming a shared preset, so that file is required, not optional.
   #
-  # @commitlint/config-conventional is pinned and has to be bumped by hand:
-  # Dependabot's pre-commit ecosystem updates `rev` and never reads
-  # additional_dependencies, so an unpinned entry silently follows whatever npm
-  # serves that day and a commit rule can change without a diff.
+  # @commitlint/config-conventional is pinned to an exact version, because an
+  # entry naming no version follows whatever npm serves the day a hook
+  # environment is built, and a commit rule would change with no diff. The pin
+  # is not bumped by hand: Dependabot's pre-commit ecosystem reads
+  # additional_dependencies and raises the bump alongside `rev`, but only
+  # because a version is written there for it to read.
   - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
     rev: v9.27.0
     hooks:
