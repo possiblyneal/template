@@ -591,6 +591,23 @@ npm_dev_entries() {
 for (const n of Object.keys(s)) if (n.startsWith("dev:")) console.log(n.slice(4));' 2> /dev/null
 }
 
+# The autofix half of lint, opt-in behind `scripts/fix --lint` rather than part
+# of fix's default. A formatter's rewrite is decided by the format check that
+# would otherwise fail; a linter's is a judgment about the code, and a rule that
+# rewrites an import list or a comprehension is not one to apply to a whole
+# repository without being asked.
+#
+# Absent for go, swift and kotlin. `go vet` reports and does not rewrite;
+# `swift format`'s rewriting is the formatter, already the format-write adapter;
+# ktlint's is likewise ktlintFormat. Nothing in the three is a lint autofix, so
+# none is stubbed to look like one.
+_capability_lint_fix_node() { has_npm_script lint:fix || return "$NO_RUNNER"; npm run lint:fix; }
+_capability_lint_fix_python() { uv_run ruff check --fix .; }
+# --allow-dirty and --allow-staged because cargo fix refuses an unclean tree,
+# and this command is only ever run on one: rewriting the working tree is what
+# it is for, and the diff is what the operator reviews before committing.
+_capability_lint_fix_rust() { cargo clippy --fix --allow-dirty --allow-staged; }
+
 _capability_run_node() {
   local line name entries_out chosen i
   local status=0
@@ -951,7 +968,7 @@ _capability_is_not_applicable() {
   esac
 }
 
-DETECT_CAPABILITIES=(lint format-check typecheck test build audit toolchain format-write integration run package)
+DETECT_CAPABILITIES=(lint format-check typecheck test build audit toolchain format-write lint-fix integration run package)
 
 # _in_list <word> <items…>: whether the word is one of the items.
 _in_list() {

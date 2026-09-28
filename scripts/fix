@@ -8,12 +8,30 @@ cd "$repo_root"
 # shellcheck source=libs/detect.sh
 source "$repo_root/scripts/libs/detect.sh"
 
+# Formatting is the default and the whole of it. A formatter's rewrite is
+# already decided by the format check that would otherwise fail, so running it
+# unasked changes nothing anyone would have argued about. A linter's autofix is
+# a judgment about the code, so it is opt-in: `scripts/fix --lint` adds it, and
+# adds it first, because a lint fix rewrites code and leaves the layout of what
+# it wrote to whatever runs next. Formatting last is what makes the result the
+# same as a formatted commit.
+capabilities=(format-write)
+case "${1:-}" in
+  "") ;;
+  --lint) capabilities=(lint-fix format-write) ;;
+  *)
+    echo "Unknown option: $1" >&2
+    echo "Usage: scripts/fix [--lint]" >&2
+    exit 2
+    ;;
+esac
+
 if ! language_capabilities has-any; then
   echo "No project manifest found, so there is nothing to format yet."
   exit 0
 fi
 
-language_capabilities run format-write
+language_capabilities run "${capabilities[@]}"
 
 if tally; then
   echo "Review the diff before committing."

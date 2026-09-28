@@ -118,10 +118,11 @@ fi
 current="the probe reports every capability and language pairing"
 absent='typecheck:go typecheck:rust typecheck:swift typecheck:kotlin build:python
 integration:rust integration:swift integration:kotlin
+lint-fix:go lint-fix:swift lint-fix:kotlin
 run:swift package:node package:python package:swift package:kotlin'
 out="$(language_capabilities probe)"
 missing=""
-for cap in lint format-check typecheck test build audit toolchain format-write integration run package; do
+for cap in lint format-check typecheck test build audit toolchain format-write lint-fix integration run package; do
   for lang in node python go rust swift kotlin; do
     expected=wired
     [[ " ${absent//$'\n'/ } " != *" $cap:$lang "* ]] || expected=absent
@@ -130,8 +131,8 @@ for cap in lint format-check typecheck test build audit toolchain format-write i
 done
 if [[ -n "$missing" ]]; then
   fail "the probe does not report:$missing"
-elif (( $(wc -l <<<"$out") != 66 )); then
-  fail "the probe reports $(wc -l <<<"$out") pairings rather than 66 -- a capability or language it was not asked about"
+elif (( $(wc -l <<<"$out") != 72 )); then
+  fail "the probe reports $(wc -l <<<"$out") pairings rather than 72 -- a capability or language it was not asked about"
 elif grep -q '^dev ' <<<"$out"; then
   fail "a dev capability survives in the probe"
 else
@@ -614,6 +615,53 @@ if (( status != 0 )) && grep -qE '^run +unavailable +go$' <<<"$out"; then
   pass
 else
   fail "a module with no main package was not reported unavailable (exit $status): $out"
+fi
+
+# --- fix's opt-in lint half ---------------------------------------------------
+
+# The default is formatting alone. A linter's autofix is a judgment about the
+# code, and the gate's own scripts/fix must not make it unasked.
+fixture "fix formats and does not lint by default"
+printf '[project]\nname = "p"\nversion = "0.1.0"\n' > "$work/pyproject.toml"
+stub uv <<'STUB'
+#!/usr/bin/env bash
+if [[ "$*" == *--version* ]]; then exit 0; fi
+shift 1 # run
+printf '%s\n' "$*" >> "${MARKER:?}"
+STUB
+(cd "$work" && MARKER="$work/uv-args" scripts/fix > /dev/null 2>&1 </dev/null)
+if [[ "$(cat "$work/uv-args" 2>/dev/null)" == "ruff format ." ]]; then
+  pass
+else
+  fail "scripts/fix ran $(cat "$work/uv-args" 2>/dev/null) rather than the formatter alone"
+fi
+
+# And with --lint, the lint fix runs first: it rewrites code and leaves the
+# layout of what it wrote to whatever runs next, so formatting last is what
+# makes the result the same as a formatted commit.
+fixture "fix --lint fixes lint before formatting"
+printf '[project]\nname = "p"\nversion = "0.1.0"\n' > "$work/pyproject.toml"
+stub uv <<'STUB'
+#!/usr/bin/env bash
+if [[ "$*" == *--version* ]]; then exit 0; fi
+shift 1 # run
+printf '%s\n' "$*" >> "${MARKER:?}"
+STUB
+(cd "$work" && MARKER="$work/uv-args" scripts/fix --lint > /dev/null 2>&1 </dev/null)
+if [[ "$(cat "$work/uv-args" 2>/dev/null)" == $'ruff check --fix .\nruff format .' ]]; then
+  pass
+else
+  fail "scripts/fix --lint ran $(tr '\n' '; ' < "$work/uv-args" 2>/dev/null) rather than the lint fix then the formatter"
+fi
+
+fixture "fix refuses an option it does not have"
+printf '[project]\nname = "p"\nversion = "0.1.0"\n' > "$work/pyproject.toml"
+out="$(cd "$work" && scripts/fix --bogus 2>&1 </dev/null)"
+status=$?
+if (( status == 2 )) && grep -q 'Usage: scripts/fix' <<<"$out"; then
+  pass
+else
+  fail "scripts/fix --bogus exited $status saying: $out"
 fi
 
 # --- the integration tier ----------------------------------------------------
