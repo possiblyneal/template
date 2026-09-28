@@ -617,11 +617,12 @@ else
   fail "a module with no main package was not reported unavailable (exit $status): $out"
 fi
 
-# --- fix's opt-in lint half ---------------------------------------------------
+# --- fix rewrites both halves ------------------------------------------------
 
-# The default is formatting alone. A linter's autofix is a judgment about the
-# code, and the gate's own scripts/fix must not make it unasked.
-fixture "fix formats and does not lint by default"
+# The lint fix runs, and runs before the formatter: it rewrites code and leaves
+# the layout of what it wrote to whatever runs next, so formatting last is what
+# makes the result the same as a formatted commit.
+fixture "fix fixes lint before formatting"
 printf '[project]\nname = "p"\nversion = "0.1.0"\n' > "$work/pyproject.toml"
 stub uv <<'STUB'
 #!/usr/bin/env bash
@@ -630,38 +631,29 @@ shift 1 # run
 printf '%s\n' "$*" >> "${MARKER:?}"
 STUB
 (cd "$work" && MARKER="$work/uv-args" scripts/fix > /dev/null 2>&1 </dev/null)
-if [[ "$(cat "$work/uv-args" 2>/dev/null)" == "ruff format ." ]]; then
-  pass
-else
-  fail "scripts/fix ran $(cat "$work/uv-args" 2>/dev/null) rather than the formatter alone"
-fi
-
-# And with --lint, the lint fix runs first: it rewrites code and leaves the
-# layout of what it wrote to whatever runs next, so formatting last is what
-# makes the result the same as a formatted commit.
-fixture "fix --lint fixes lint before formatting"
-printf '[project]\nname = "p"\nversion = "0.1.0"\n' > "$work/pyproject.toml"
-stub uv <<'STUB'
-#!/usr/bin/env bash
-if [[ "$*" == *--version* ]]; then exit 0; fi
-shift 1 # run
-printf '%s\n' "$*" >> "${MARKER:?}"
-STUB
-(cd "$work" && MARKER="$work/uv-args" scripts/fix --lint > /dev/null 2>&1 </dev/null)
 if [[ "$(cat "$work/uv-args" 2>/dev/null)" == $'ruff check --fix .\nruff format .' ]]; then
   pass
 else
-  fail "scripts/fix --lint ran $(tr '\n' '; ' < "$work/uv-args" 2>/dev/null) rather than the lint fix then the formatter"
+  fail "scripts/fix ran $(tr '\n' '; ' < "$work/uv-args" 2>/dev/null) rather than the lint fix then the formatter"
 fi
 
-fixture "fix refuses an option it does not have"
-printf '[project]\nname = "p"\nversion = "0.1.0"\n' > "$work/pyproject.toml"
-out="$(cd "$work" && scripts/fix --bogus 2>&1 </dev/null)"
+# The one place this module's usual rule would mislead. Go, Swift and Kotlin have
+# no lint autofix at all, so there is no tool to install and an `unavailable`
+# would fail scripts/fix on every Go repository over a gap nothing can close.
+fixture "a language with no lint autofix does not fail fix"
+go_mod "$work"
+stub gofmt <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+out="$(cd "$work" && scripts/fix 2>&1 </dev/null)"
 status=$?
-if (( status == 2 )) && grep -q 'Usage: scripts/fix' <<<"$out"; then
+if (( status != 0 )); then
+  fail "scripts/fix failed on a Go repository (exit $status): $out"
+elif grep -qE '^lint-fix +not-applicable +go$' <<<"$out"; then
   pass
 else
-  fail "scripts/fix --bogus exited $status saying: $out"
+  fail "lint-fix does not report not-applicable for go: $out"
 fi
 
 # --- the integration tier ----------------------------------------------------

@@ -591,16 +591,19 @@ npm_dev_entries() {
 for (const n of Object.keys(s)) if (n.startsWith("dev:")) console.log(n.slice(4));' 2> /dev/null
 }
 
-# The autofix half of lint, opt-in behind `scripts/fix --lint` rather than part
-# of fix's default. A formatter's rewrite is decided by the format check that
-# would otherwise fail; a linter's is a judgment about the code, and a rule that
-# rewrites an import list or a comprehension is not one to apply to a whole
-# repository without being asked.
+# The autofix half of lint, and part of what `scripts/fix` does by default.
+# Every tool here applies only the fixes it considers safe -- ruff withholds the
+# rest behind --unsafe-fixes, cargo applies the machine-applicable suggestion and
+# nothing else -- so the rewrite is one the linter would have demanded anyway and
+# there is nothing for an operator to have opted into. `fix` is the command whose
+# whole purpose is to rewrite, and its output is a diff read before committing.
 #
-# Absent for go, swift and kotlin. `go vet` reports and does not rewrite;
-# `swift format`'s rewriting is the formatter, already the format-write adapter;
-# ktlint's is likewise ktlintFormat. Nothing in the three is a lint autofix, so
-# none is stubbed to look like one.
+# Not-applicable for go, swift and kotlin rather than absent, which is the one
+# place this module's usual rule would mislead. `go vet` reports without
+# rewriting, and what `swift format` and ktlint rewrite is the formatter that
+# `format-write` already runs: there is no lint autofix in any of the three to be
+# missing. An `unavailable` would say a tool could be installed to fill the gap
+# and would fail `scripts/fix` on every Go repository for it.
 _capability_lint_fix_node() { has_npm_script lint:fix || return "$NO_RUNNER"; npm run lint:fix; }
 _capability_lint_fix_python() { uv_run ruff check --fix .; }
 # --allow-dirty and --allow-staged because cargo fix refuses an unclean tree,
@@ -954,6 +957,9 @@ packaging_writes_dist() {
 _capability_is_not_applicable() {
   case "$1:$2" in
     typecheck:go|typecheck:rust|typecheck:swift|typecheck:kotlin|build:python) return 0 ;;
+    # No lint autofix exists in any of the three, so there is no tool to install
+    # and nothing for an unavailable to be about. The adapters' own comment has it.
+    lint-fix:go|lint-fix:swift|lint-fix:kotlin) return 0 ;;
     # Package.resolved is committed by SwiftPM whenever a package has
     # dependencies; gradle.lockfile exists only once dependency locking is
     # turned on, which is not the Gradle default. Neither is guaranteed, so a
