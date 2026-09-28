@@ -83,14 +83,24 @@ unit_resolve() {
 # a structured format by hand is how a check comes to accept one of several
 # valid spellings and call the rest wrong.
 #
-# unit_args is the one of the four no declaration holds: scripts/run fills it
-# from the arguments after `--`. Declared here with the rest so every adapter's
-# context has one home and a caller with no unit leaves all of it empty.
+# unit_args and unit_entry are the two of the five no declaration holds:
+# scripts/run fills them from the arguments after `--` and from --entry.
+# Declared here with the rest so every adapter's context has one home and a
+# caller with no unit leaves all of it empty.
+#
+# unit_entry is singular and unit_targets plural for a reason beyond arity:
+# they are different vocabularies. A target is a platform a unit ships to, from
+# .unit.json's ships.targets; an entry is one of the programs the unit's own
+# language manifest already declares -- a [project.scripts] name, a bin key, a
+# main package. Nothing declares the entry set here, because the manifest that
+# defines it is the one the adapter reads anyway.
 unit_run=""
 unit_ships=""
 unit_targets=()
 # shellcheck disable=SC2034 # filled by scripts/run, read by the adapters
 unit_args=()
+# shellcheck disable=SC2034 # filled by scripts/run, read by the run adapters
+unit_entry=""
 
 # The path of the declaration for the unit at $1, on stdout, once it is known to
 # be readable. Both readers below go through it, so a missing file and a missing

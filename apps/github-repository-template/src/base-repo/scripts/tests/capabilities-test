@@ -736,10 +736,55 @@ if command -v jq >/dev/null 2>&1 && command -v node >/dev/null 2>&1 && command -
   printf '{"name":"n","version":"1.0.0","bin":{"a":"./a.js","b":"./b.js"}}\n' > "$work/apps/web/package.json"
   out="$(run_real web)"
   status=$?
-  if (( status != 0 )) && grep -q 'node ./a.js' <<<"$out" && grep -q 'node ./b.js' <<<"$out"; then
+  # The bin key rather than the path it points at, because the key is what
+  # --entry takes and the refusal is the line to copy.
+  if (( status != 0 )) && grep -q -- '--entry a' <<<"$out" && grep -q -- '--entry b' <<<"$out"; then
     pass
   else
     fail "several bin entries did not refuse and name each one: $out"
+  fi
+
+  fixture "a named bin entry is the one that runs"
+  declare_unit web oneshot
+  printf '{"name":"n","version":"1.0.0","bin":{"a":"./a.js","b":"./b.js"}}\n' > "$work/apps/web/package.json"
+  printf 'console.log("ran:a");\n' > "$work/apps/web/a.js"
+  printf 'console.log("ran:b");\n' > "$work/apps/web/b.js"
+  out="$(run_real web --entry b)"
+  status=$?
+  if (( status == 0 )) && grep -qx 'ran:b' <<<"$out"; then
+    pass
+  else
+    fail "--entry did not select the named bin entry (exit $status): $out"
+  fi
+
+  # bin as a string names no key, so npm's own rule supplies one: the package
+  # name. A unit with one entry point needs no --entry, but the name it would
+  # answer to has to be the one npm installs.
+  fixture "a string bin answers to the package name"
+  declare_unit web oneshot
+  printf '{"name":"solo","version":"1.0.0","bin":"./cli.js"}\n' > "$work/apps/web/package.json"
+  printf 'console.log("ran:solo");\n' > "$work/apps/web/cli.js"
+  out="$(run_real web --entry solo)"
+  status=$?
+  if (( status == 0 )) && grep -qx 'ran:solo' <<<"$out"; then
+    pass
+  else
+    fail "a string bin did not answer to the package name (exit $status): $out"
+  fi
+
+  # A long-lived unit runs a dev server, which bin does not name, so --entry
+  # reaches the dev:<name> scripts instead.
+  fixture "a named dev server runs the dev: script"
+  declare_unit web longlived
+  printf '{"name":"n","version":"1.0.0","scripts":{"dev:api":"node api.js","dev:dash":"node dash.js"}}\n' \
+    > "$work/apps/web/package.json"
+  printf 'console.log("dev:dash ran");\n' > "$work/apps/web/dash.js"
+  out="$(run_real web --entry dash)"
+  status=$?
+  if (( status == 0 )) && grep -q 'dev:dash ran' <<<"$out"; then
+    pass
+  else
+    fail "--entry did not reach the dev: script (exit $status): $out"
   fi
 
   # A one-shot that is not a CLI -- a script, a scheduled job -- names no bin,

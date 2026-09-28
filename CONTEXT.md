@@ -38,6 +38,11 @@ How a unit is invoked locally: `oneshot` for a process that exits on its own,
 `longlived` for one that runs until stopped, `none` for a unit with nothing to run.
 _Avoid_: shape, type, mode, dev command
 
+**Entry point**:
+One of the programs a unit can be started as, named by the unit's own language
+manifest rather than by `.unit.json`. `scripts/run --entry` picks among them.
+_Avoid_: target, command, service, binary
+
 **Ship fact**:
 What a unit delivers, named as intent so the language adapter decides the
 concrete form: `executable`, `quadlet`, or `none`.

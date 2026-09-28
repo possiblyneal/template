@@ -440,36 +440,124 @@ _capability_format_write_kotlin() { gradle_has_task ktlintFormat || return "$NO_
 # empty rather than tripping `set -u`. shellcheck reads each array's first use
 # below as unassigned, and the directive there names the declaration's home.
 
-# The paths `bin` names, one per line. A string names one and an object names
-# several; either way the field is the package's own declaration of what it is
-# when run, which is what [project.scripts] declares in Python.
+# The entry points `bin` names, one `name<TAB>path` line each. A string names
+# one and an object names several; either way the field is the package's own
+# declaration of what it is when run, which is what [project.scripts] declares
+# in Python. npm's own rule supplies the name for the string form: a bare path
+# is the package's name, so that is what --entry has to spell.
 npm_bin_entries() {
   has_node &&
     command -v node > /dev/null 2>&1 &&
-    node -e 'const b = require("./package.json").bin || {};
-for (const p of typeof b === "string" ? [b] : Object.values(b)) console.log(p);' 2> /dev/null
+    node -e 'const pkg = require("./package.json");
+const b = pkg.bin || {};
+const entries = typeof b === "string" ? [[pkg.name, b]] : Object.entries(b);
+for (const [n, p] of entries) console.log(n + "\t" + p);' 2> /dev/null
+}
+
+# The entry point named with --entry, checked against the ones the unit's own
+# manifest declares. Prints it on stdout and returns 0.
+#
+# Three answers rather than two, because an adapter has three things to do.
+# Return 1 means nothing was named, and the adapter falls through to counting
+# what it found -- one starts, several refuse. Return 2 means one was named and
+# this unit does not declare it, which has already been said here along with
+# what it does declare, so the adapter returns a plain failure without a second
+# message about the same mistake.
+#
+# The declared set is passed in rather than read here: each language keeps its
+# entry points in its own manifest, and the adapter is already holding them.
+_entry_choice() {
+  local name
+  [[ -n "${unit_entry:-}" ]] || return 1
+
+  for name in "$@"; do
+    if [[ "$name" == "$unit_entry" ]]; then
+      echo "$name"
+      return 0
+    fi
+  done
+
+  echo "No entry point named $unit_entry here." >&2
+  if (( $# == 0 )); then
+    echo "This unit declares none." >&2
+  else
+    echo "It declares:" >&2
+    printf '  %s\n' "$@" >&2
+  fi
+  return 2
 }
 
 # A one-shot runs the entry point `bin` names, because naming one is how a
 # package says it is a CLI. A one-shot that is not a CLI -- a script, a job --
 # names none, and `npm start` is how it is started instead. A long-lived unit
 # runs the dev server whether or not the package also ships a CLI.
+# The dev servers this package names, one per line, as the entry point spells
+# them: the bare `dev` script has no entry name, and `dev:api` is the entry
+# `api`. Listed for the refusal below rather than to choose from -- the choice
+# is one has_npm_script test.
+npm_dev_entries() {
+  has_node &&
+    command -v node > /dev/null 2>&1 &&
+    node -e 'const s = require("./package.json").scripts || {};
+for (const n of Object.keys(s)) if (n.startsWith("dev:")) console.log(n.slice(4));' 2> /dev/null
+}
+
 _capability_run_node() {
-  local path paths_out
-  local -a paths=()
+  local line name entries_out chosen i
+  local status=0
+  local -a names=() paths=()
 
   if [[ "${unit_run:-}" != oneshot ]]; then
+    # A long-lived unit runs a dev server, and `bin` does not name those. The
+    # scripts do: `dev` is the unit with one, and `dev:<name>` is how a package
+    # with several already spells them, so --entry selects among those rather
+    # than among entry points this branch never reaches.
+    if [[ -n "${unit_entry:-}" ]]; then
+      if has_npm_script "dev:$unit_entry"; then
+        # shellcheck disable=SC2154 # declared in libs/unit.sh, filled by scripts/run
+        npm run "dev:$unit_entry" -- ${unit_args[@]+"${unit_args[@]}"}
+        return
+      fi
+      echo "No dev:$unit_entry script in package.json." >&2
+      entries_out="$(npm_dev_entries)" || entries_out=""
+      if [[ -n "$entries_out" ]]; then
+        echo "The dev servers this package names:" >&2
+        while IFS= read -r name; do
+          [[ -z "$name" ]] || echo "  $name" >&2
+        done <<< "$entries_out"
+      else
+        echo "This package names none, so there is nothing for --entry to pick." >&2
+      fi
+      return 1
+    fi
     has_npm_script dev || return "$NO_RUNNER"
-    # shellcheck disable=SC2154 # declared in libs/unit.sh, filled by scripts/run
     npm run dev -- ${unit_args[@]+"${unit_args[@]}"}
     return
   fi
 
-  paths_out="$(npm_bin_entries)" || return "$NO_RUNNER"
+  entries_out="$(npm_bin_entries)" || return "$NO_RUNNER"
 
-  while IFS= read -r path; do
-    if [[ -n "$path" ]]; then paths+=("$path"); fi
-  done <<< "$paths_out"
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    names+=("${line%%$'\t'*}")
+    paths+=("${line#*$'\t'}")
+  done <<< "$entries_out"
+
+  # A named entry narrows the list to one rather than starting it here, so the
+  # single-entry branch below stays the only place a bin is started and its
+  # build-output guidance covers a named entry too.
+  chosen="$(_entry_choice ${names[@]+"${names[@]}"})" || status=$?
+  case "$status" in
+    0)
+      for (( i = 0; i < ${#names[@]}; i++ )); do
+        if [[ "${names[i]}" == "$chosen" ]]; then
+          paths=("${paths[i]}")
+          break
+        fi
+      done
+      ;;
+    2) return 1 ;;
+  esac
 
   case "${#paths[@]}" in
     0) has_npm_script start || return "$NO_RUNNER"; npm start -- ${unit_args[@]+"${unit_args[@]}"} ;;
@@ -498,8 +586,8 @@ _capability_run_node() {
       ;;
     *)
       echo "Several bin entries here, and a run is one foreground process." >&2
-      echo "Start the one meant by path:" >&2
-      printf '  node %s\n' "${paths[@]}" >&2
+      echo "Name the one meant:" >&2
+      printf '  scripts/run --entry %s\n' "${names[@]}" >&2
       return 1
       ;;
   esac
@@ -517,7 +605,8 @@ _capability_run_node() {
 # The names are read with the interpreter the project already requires rather
 # than by a shell pattern over TOML.
 _capability_run_python() {
-  local name names_out
+  local name names_out chosen
+  local status=0
   local -a names=()
 
   command -v uv > /dev/null 2>&1 || return "$NO_RUNNER"
@@ -530,13 +619,19 @@ print("\n".join(project.get("scripts") or {}))' 2> /dev/null)" || return "$NO_RU
     if [[ -n "$name" ]]; then names+=("$name"); fi
   done <<< "$names_out"
 
+  chosen="$(_entry_choice ${names[@]+"${names[@]}"})" || status=$?
+  case "$status" in
+    0) names=("$chosen") ;;
+    2) return 1 ;;
+  esac
+
   case "${#names[@]}" in
     0) return "$NO_RUNNER" ;;
     1) uv run "${names[0]}" ${unit_args[@]+"${unit_args[@]}"} ;;
     *)
       echo "Several console scripts here, and a run is one foreground process." >&2
-      echo "Start the one meant by name:" >&2
-      printf '  uv run %s\n' "${names[@]}" >&2
+      echo "Name the one meant:" >&2
+      printf '  scripts/run --entry %s\n' "${names[@]}" >&2
       return 1
       ;;
   esac
@@ -566,26 +661,56 @@ _go_main_packages() {
 # here to start, which is no runner rather than a failure -- a library is not
 # broken for being a library.
 _capability_run_go() {
+  local chosen
+  local status=0
   local -a mains=()
   _go_main_packages mains || return 1
+
+  # The import path is the entry name here, not its last segment. Two modules
+  # in one repository are free to hold a main package of the same name, and a
+  # name that is ambiguous the day a second module arrives is one the refusal
+  # below cannot print.
+  chosen="$(_entry_choice ${mains[@]+"${mains[@]}"})" || status=$?
+  case "$status" in
+    0) mains=("$chosen") ;;
+    2) return 1 ;;
+  esac
 
   case "${#mains[@]}" in
     0) return "$NO_RUNNER" ;;
     1) go run "${mains[0]}" ${unit_args[@]+"${unit_args[@]}"} ;;
     *)
       echo "Several main packages here, and a run is one foreground process." >&2
-      echo "Start the one meant by name:" >&2
-      printf '  go run %s\n' "${mains[@]}" >&2
+      echo "Name the one meant:" >&2
+      printf '  scripts/run --entry %s\n' "${mains[@]}" >&2
       return 1
       ;;
   esac
 }
-_capability_run_rust() { cargo run -- ${unit_args[@]+"${unit_args[@]}"}; }
+# cargo already refuses an ambiguous run and names the bins, so there is
+# nothing to enumerate here: --bin is passed through and cargo judges the name
+# against the manifest it is the reader of.
+_capability_run_rust() {
+  if [[ -n "${unit_entry:-}" ]]; then
+    cargo run --bin "$unit_entry" -- ${unit_args[@]+"${unit_args[@]}"}
+    return
+  fi
+  cargo run -- ${unit_args[@]+"${unit_args[@]}"}
+}
 # Gradle takes program arguments as one string rather than a list, so this is
 # the one adapter that cannot pass them through unchanged: an argument
 # containing a space arrives as two.
 _capability_run_kotlin() {
   gradle_has_task run || return "$NO_RUNNER"
+  # The application plugin exposes one `run` task, bound to one main class, so
+  # there is no set of entry points here for a name to pick from. Refused
+  # rather than ignored: silently starting the only program there is would
+  # answer a different question than the one asked.
+  if [[ -n "${unit_entry:-}" ]]; then
+    echo "Gradle's application plugin exposes one run task, so --entry has nothing to pick." >&2
+    echo "Run the task that starts the program you mean, or split the unit." >&2
+    return 1
+  fi
   ./gradlew run ${unit_args[@]+--args="${unit_args[*]}"}
 }
 

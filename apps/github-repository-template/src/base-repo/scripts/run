@@ -13,13 +13,43 @@ source "$repo_root/scripts/libs/unit.sh"
 
 # Everything after `--` belongs to the program, so this script's own arguments
 # stay unambiguous however the program spells its flags.
+#
+# --entry is a flag rather than a second positional. A unit holding one program
+# needs no name and a repository holding one unit needs none either, so with
+# both omitted `scripts/run api` has two readings and no way to tell them
+# apart: positionally it is a unit, and the moment apps/ holds one unit it is
+# an entry point. A flag says which was meant whatever else is present.
 unit_name=""
-if (( $# > 0 )) && [[ "$1" != -- ]]; then
-  unit_name="$1"
-  shift
-fi
+entry=""
+while (( $# > 0 )) && [[ "$1" != -- ]]; do
+  case "$1" in
+    --entry)
+      (( $# >= 2 )) || { echo "--entry needs a value." >&2; exit 2; }
+      entry="$2"
+      shift 2
+      ;;
+    --entry=*)
+      entry="${1#--entry=}"
+      shift
+      ;;
+    -*)
+      echo "Unknown option: $1" >&2
+      echo "Usage: scripts/run [unit] [--entry <name>] [-- args...]" >&2
+      exit 2
+      ;;
+    *)
+      if [[ -n "$unit_name" ]]; then
+        echo "Two units named: $unit_name and $1. A run is one foreground process." >&2
+        exit 2
+      fi
+      unit_name="$1"
+      shift
+      ;;
+  esac
+done
 [[ "${1:-}" != -- ]] || shift
 unit_args=("$@")
+unit_entry="$entry"
 
 # A dry run reports what would be dispatched and runs nothing, so the
 # environment check is not run either: it is neither the dispatch nor free.
