@@ -46,9 +46,12 @@ record_file=".repo-template.json"
 # second divergence cannot join it silently. Presence is still checked: the
 # exception says the two copies may differ, not that either may be missing.
 #
-# dependabot.yml is the one. The payload ships no pyproject.toml, so its copy
-# must not carry the root's pip entry -- an ecosystem naming a manifest that is
-# not there fails the run rather than being skipped.
+# dependabot.yml is the one, and it differs twice. The payload ships no
+# pyproject.toml, so its copy must not carry the root's pip entry -- an
+# ecosystem naming a manifest that is not there fails the run rather than being
+# skipped. And the root's pre-commit entry names a second directory, the payload
+# itself, so that a bump reaches both copies of .pre-commit-config.yaml; a
+# generated repository has no payload for that directory to name.
 content_exceptions="dependabot.yml"
 
 # A payload file the root deliberately dropped. The record is

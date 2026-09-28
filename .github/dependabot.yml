@@ -70,8 +70,20 @@ updates:
   # a single revision and offers no floating form, so nothing here updates
   # without a bump. The scanners are the reason it matters: a stale gitleaks
   # reports a clean tree by knowing about fewer secret formats.
+  #
+  # Two directories, because the payload ships a second copy of that file and
+  # Dependabot updates the manifests it is pointed at. Listing the payload here
+  # is what makes a bump land on both copies in one pull request, through the
+  # group below; before it, a bump reached the root alone and left every
+  # generated repository pinned to the older hook with nothing refusing the
+  # split -- scripts/github-parity compares the two .github/ trees and reaches
+  # no file outside them. Root-only for the same reason the pip entry below is:
+  # a generated repository has no payload, so its copy of this file lists / and
+  # nothing else.
   - package-ecosystem: pre-commit
-    directory: /
+    directories:
+      - /
+      - /apps/github-repository-template/src/base-repo
     schedule:
       interval: weekly
     cooldown:
