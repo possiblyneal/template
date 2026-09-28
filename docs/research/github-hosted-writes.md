@@ -237,6 +237,8 @@ overwriting GitHub's descriptions and colours is "a change nobody asked for," as
 
 This is the finding for this question.
 
+> Fixed since this was written: `generate.md` step 6 now guards with `grep -ixF` and states why. The probe output below is the record of how the defect behaved, not a live defect.
+
 `generate.md` step 6 guards with `grep -qxF -- "$label" <<< "$existing"`, an exact, case-**sensitive**
 match. GitHub's uniqueness check on label names is case-**insensitive**: creating `Bug` on a
 repository that has `bug` returns the same 422 `already_exists`.
