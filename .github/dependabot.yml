@@ -70,14 +70,36 @@ updates:
   # a single revision and offers no floating form, so nothing here updates
   # without a bump. The scanners are the reason it matters: a stale gitleaks
   # reports a clean tree by knowing about fewer secret formats.
+  #
+  # Two directories, because this repository tracks a second copy of that file
+  # under the payload and Dependabot updates the manifests it is pointed at.
+  # Nothing else refuses the split: scripts/github-parity compares the two
+  # .github/ trees and reaches no file outside them. Derived rather than
+  # hand-added, like the pip entry below: a flow that writes this file names the
+  # payload directory again because the destination still tracks a
+  # .pre-commit-config.yaml there, so replacing this file whole cannot drop it.
+  # A generated repository holds no payload and gets one directory.
+  #
+  # group-by is what carries a bump across both of them. Without it Dependabot
+  # opens one pull request per directory, so a gitleaks bump would arrive as two
+  # -- root and payload -- and nothing would refuse merging one and leaving the
+  # copies split, which is the whole failure the second directory is here to
+  # close. With it, the group becomes a subgroup per hook repo: two hooks
+  # bumping in one week still open two pull requests, and neither of them
+  # leaves a copy behind, which is the property that matters rather than the
+  # count. patterns is what admits every hook repo to the group in the first
+  # place; group-by decides how the group is cut into pull requests.
   - package-ecosystem: pre-commit
-    directory: /
+    directories:
+      - /
+      - /apps/github-repository-template/src/base-repo
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
     groups:
       pre-commit:
+        group-by: dependency-name
         patterns:
           - "*"
 
