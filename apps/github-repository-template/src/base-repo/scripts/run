@@ -24,7 +24,9 @@ entry=""
 while (( $# > 0 )) && [[ "$1" != -- ]]; do
   case "$1" in
     --entry)
-      (( $# >= 2 )) || { echo "--entry needs a value." >&2; exit 2; }
+      # `--` is the program's separator, never a value: taking it would read
+      # the first program argument as the unit name.
+      { (( $# >= 2 )) && [[ "$2" != -- ]]; } || { echo "--entry needs a value." >&2; exit 2; }
       entry="$2"
       shift 2
       ;;

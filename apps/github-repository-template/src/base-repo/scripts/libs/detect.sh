@@ -395,7 +395,13 @@ _go_test_outside_integration() {
   local listed
   local -a packages=()
   listed="$(go list ./...)" || return 1
-  mapfile -t packages < <(grep -v '/tests/integration' <<<"$listed" || true)
+  if [[ -z "$listed" ]]; then
+    echo "This module names no packages."
+    return 0
+  fi
+  # Anchored at the segment: a package named tests/integrationutil is not the
+  # tier, and a substring filter would silently stop testing it.
+  mapfile -t packages < <(grep -vE '/tests/integration(/|$)' <<<"$listed" || true)
   if (( ${#packages[@]} == 0 )); then
     echo "Every package in this module is under tests/integration."
     return 0
@@ -416,9 +422,9 @@ _capability_test_kotlin() { [[ -x ./gradlew ]] || return "$NO_RUNNER"; ./gradlew
 # The tier's own runners. Absent for rust, swift and kotlin: each names its
 # integration tests somewhere its own build file already decides -- a Cargo test
 # target, a SwiftPM test target, a Gradle source set -- and a tests/integration/
-# directory is not where any of the three looks. A repository that has the tier
-# and one of those languages gets an honest unavailable rather than a stub that
-# runs nothing and reports a pass.
+# directory is not where any of the three looks. There is no runner for one of
+# them to be missing, so each reports not-applicable whether or not a tier
+# exists -- see the arm in _capability_is_not_applicable.
 _capability_integration_node() { has_npm_script test:integration || return "$NO_RUNNER"; npm run test:integration; }
 _capability_integration_python() {
   local status=0
@@ -439,11 +445,20 @@ _capability_integration_python() {
 # Read on fd 3, not stdin, for the same reason as go_each: go test can read
 # stdin, which would otherwise consume the remaining directory list.
 _capability_integration_go() {
-  local dir status=0
+  local dir status=0 ran=0
   while IFS= read -r dir <&3; do
     [[ -n "$dir" ]] || continue
+    # The tier is a path every language shares, so a repository holding Go also
+    # holds tiers written in something else. A directory with no Go package in
+    # it is not this adapter's to fail on -- `go test` there reports no Go
+    # files, which says nothing about the tests that are actually in it.
+    [[ -n "$(cd "$dir" && go list ./... 2>/dev/null)" ]] || continue
+    ran=1
     ( cd "$dir" && go test ./... ) || status=1
   done 3< <(integration_dirs)
+  if (( ran == 0 )); then
+    echo "No Go package under any tests/integration directory."
+  fi
   return "$status"
 }
 
@@ -966,6 +981,13 @@ _capability_is_not_applicable() {
     # trivy target absent here means nothing to scan, not a missing tool.
     audit:swift) [[ -z "$(detect_find Package.resolved -print -quit)" ]] ;;
     audit:kotlin) [[ -z "$(detect_find gradle.lockfile -print -quit)" ]] ;;
+    # Each of the three names its integration tests where its own build file
+    # decides -- a Cargo test target, a SwiftPM Tests directory, a Gradle source
+    # set -- so tests/integration/ is not a place any of them looks and there is
+    # no runner for one to be missing. Unconditional, like lint-fix above: an
+    # unavailable here would fail every Rust repository the moment some other
+    # language in it grew a tier.
+    integration:rust|integration:swift|integration:kotlin) return 0 ;;
     # A repository with no tier has nothing to run, which is not a missing
     # runner: every language reports not-applicable rather than one of them
     # reporting unavailable and failing a run over tests that do not exist.

@@ -593,4 +593,17 @@ else
   fail "a bare --entry was not refused as a usage error (exit $status): $out"
 fi
 
+# `--` is the program's separator, so it is never --entry's value. Taking it
+# would read the first program argument as the unit name and start the wrong
+# thing rather than refusing.
+fixture "--entry does not take the program separator as its value"
+declare_unit svc oneshot
+out="$(run_in scripts/run --entry -- svc)"
+status=$?
+if (( status == 2 )) && grep -q -- '--entry needs a value' <<< "$out"; then
+  pass
+else
+  fail "--entry consumed the -- separator (exit $status): $out"
+fi
+
 report

@@ -749,6 +749,75 @@ else
   fail "the gate's go test asks for $(grep '^test ' "$work/go-args" 2>/dev/null) rather than the packages outside the tier"
 fi
 
+# A tier in one language must not fail the run for another. Rust, Swift and
+# Kotlin each name their integration tests where their own build file decides,
+# so the tier is nothing to them whether or not the repository has one -- an
+# unavailable here would turn any Python tier into a red run for the Rust beside
+# it.
+fixture "a tier in another language leaves rust not-applicable"
+printf '[package]\nname = "c"\nversion = "0.1.0"\n' > "$work/Cargo.toml"
+mkdir -p "$work/tests/integration"
+out="$(cd "$work" && CI_DRY_RUN=1 scripts/integration 2>&1 </dev/null)"
+if grep -qE '^integration +not-applicable +rust$' <<<"$out"; then
+  pass
+else
+  fail "a tier present makes rust something other than not-applicable: $out"
+fi
+
+# The other direction of the same fact: the tier is a path every language
+# shares, so a Go repository holds tiers written in something else. go test
+# there reports no Go files, which says nothing about the tests in it.
+fixture "the tier's go run skips a directory holding no Go package"
+go_mod "$work"
+mkdir -p "$work/tests/integration"
+stub go <<'STUB'
+#!/usr/bin/env bash
+case "$1" in
+  list)
+    if [[ "$2" == -m ]]; then printf '%s\n' "$PWD"; exit 0; fi
+    [[ "$PWD" != */tests/integration ]] || exit 0
+    printf 'example.com/work/src\n'
+    exit 0
+    ;;
+  test) printf '%s\n' "$*" >> "${MARKER:?}" ;;
+esac
+exit 0
+STUB
+if (cd "$work" && MARKER="$work/go-args" scripts/integration > /dev/null 2>&1 </dev/null) &&
+  ! grep -q '^test ' "$work/go-args" 2>/dev/null; then
+  pass
+else
+  fail "the tier's go run entered a directory with no Go package: $(cat "$work/go-args" 2>/dev/null)"
+fi
+
+# The exclusion is anchored at the path segment. A package merely named like the
+# tier is not the tier, and a substring filter would stop testing it silently.
+fixture "a package named like the tier still runs at the gate"
+go_mod "$work"
+mkdir -p "$work/tests/integration"
+stub go <<'STUB'
+#!/usr/bin/env bash
+case "$1" in
+  list)
+    if [[ "$2" == -m ]]; then printf '%s\n' "$PWD"; exit 0; fi
+    printf 'example.com/work/tests/integrationutil\nexample.com/work/tests/integration\n'
+    exit 0
+    ;;
+  test) printf '%s\n' "$*" >> "${MARKER:?}" ;;
+esac
+exit 0
+STUB
+stub gofmt <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+MARKER="$work/go-args" ci_real > /dev/null 2>&1
+if [[ "$(grep '^test ' "$work/go-args" 2>/dev/null)" == "test example.com/work/tests/integrationutil" ]]; then
+  pass
+else
+  fail "the gate's go test asks for $(grep '^test ' "$work/go-args" 2>/dev/null) rather than the package outside the tier"
+fi
+
 # --- the rename left nothing behind ------------------------------------------
 
 # `dev` promised a dev server, which is one of the three things a unit can do.
