@@ -139,6 +139,10 @@ Step 5 produced the map and moved nothing. This step is where the destination's 
 
 **A readme below the root is documentation and moves with it.** It lands in the nearest owning `docs/` under a name describing what it is about, because a `README.md` inside a documentation folder is a filename that tells a reader nothing and collides with the next one that moves. The repository's own root readme is not this: it stays at the root, where it is an addon the destination already holds.
 
+**A move that empties a directory can leave it standing in the operator's own clone.** Two facts hide it and neither is the other's reason. Git tracks no directories, so nothing in the candidate's diff names the emptied path and `scripts/structure` cannot raise it either — it enumerates with `git ls-files`, which is the enumeration it should use. And the residue is never in the candidate at all: step 2 checks that worktree out fresh from `origin/<default-branch>`, so a `__pycache__` or a build directory sitting in the operator's clone has no copy there. After the merge the clone drops the tracked file and keeps the residue, at the path the rules just emptied, ignored and so unseen by `git status` too.
+
+Read it from the clone, then, which is the only place it exists: `git -C <clone> status --ignored --porcelain -- <each path the plan empties>`, read-only and at this step, while the tracked file is still there to name the directory. Report every directory a move empties and what the operator will find still standing in it, and remove none of it — a file the destination's own ignore rules cover is theirs to delete.
+
 **The flow writes no `.structure-allow` entry.** Across the reference repositories nothing was genuinely immovable, so an entry written by the flow would almost always be a move it declined to make, recorded as permission nobody asked for. A path that cannot be moved is reported with the reason; the operator may write the entry themselves afterwards, outside the flow, which keeps the allowlist a record of human decisions rather than of the flow's difficulties.
 
 **Configuration a move broke, the flow repairs, in the same change.** A test path, a build target, a workflow's working directory, a lint or coverage root: these are broken by the move and by nothing else, and the flow is the only party holding the mapping from old path to new. A path reference that is **exactly** a path the flow moved is rewritten. Prose describing the old structure is reported and left alone, because a sentence about where things live is a claim a rewrite cannot make true and a reader has to re-make.
@@ -297,9 +301,16 @@ Added under **Addon adoption**, and the whole of that block here, since a retrof
 
 - Already held: <addon-shaped paths the destination brought with it, on one line> | none
 
+Added under **Repository settings**, as the first line of that block, because a retrofit is the flow that never asks — [Step 2 — Collect the unresolved decisions](generate.md#step-2--collect-the-unresolved-decisions) collects visibility for a generate, and a retrofit finds whatever the destination has been for years:
+
+- Destination visibility: public | private, either way read from the API at report time and recorded nowhere, under [Manifest](lifecycle.md#manifest)
+
+One fact decides four things the operator otherwise meets separately: push protection standing down, the branch ruleset unavailable where the plan offers it on a public repository only, every required check failing before a job starts where the plan bills Actions minutes, and CodeQL's `detect` and `analyze` legs skipping — which has no line of its own anywhere in the report, so on a private destination it is reported here or not at all.
+
 Added under **Verification**:
 
 - Moved paths byte-identical to their pre-move blob: <count>/<count>
+- Directories emptied by a move: <path>: gone after the merge | still standing in the clone, holding <the ignored residue>, removed by nobody | none
 - Untracked at the bar: none | <paths>: <the ignore rule step 6 replaced>, disposed by <the operator's decision>
 - Declared facts executed: <unit>: `scripts/package` <result>, `scripts/run` <result under CI_DRY_RUN> | the payload ships neither command, so both facts are written and unexecuted
 - Tool declaration: <manifest>: added <tool at the template's floor> | kept <the specifier the destination already declared> | declined by the operator, so <capability> cannot reach the bar | nothing missing
