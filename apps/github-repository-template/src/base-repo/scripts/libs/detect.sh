@@ -137,6 +137,25 @@ has_trivy_target() {
     [[ -n "$(detect_find gradle.lockfile -print -quit)" ]]
 }
 
+# Every tests/integration/ directory in scope, one per line.
+#
+# The integration tier is a path this repository's layout owns rather than a
+# marker each language spells its own way -- a pytest mark, a Go build tag, a
+# Gradle source set -- so where an integration test goes is read off the layout
+# rules and not off six idioms. It needs no new placement rule: tests/ is
+# already a scoped folder that may nest its own kind at every scope. What is new
+# is that this one name under it means something to the capabilities.
+#
+# The tier is deliberately outside scripts/check. An integration test reaches
+# something a gate cannot assume is present -- a database, a container, a
+# network -- so a gate that ran it would fail on a machine that is not wrong.
+# scripts/integration runs it, and the test capability leaves it out.
+integration_dirs() {
+  local prune=()
+  detect_prune_expr prune
+  find . \( "${prune[@]}" \) -prune -o -type d -path '*/tests/integration' -print
+}
+
 # Runs trivy over every lockfile matching a name, since Swift and Gradle have no
 # first-party audit command. Every lockfile is scanned even after one reports a
 # vulnerability, so the first hit does not hide the rest.
@@ -344,19 +363,89 @@ _capability_typecheck_node() { has_npm_script typecheck || return "$NO_RUNNER"; 
 _capability_typecheck_python() { uv_run ty check .; }
 
 _capability_test_node() { has_npm_script test || return "$NO_RUNNER"; npm run test; }
+# The two runners that discover tests by walking the tree are the two that have
+# to be told about the tier, and they are told here rather than in each
+# repository's own config. media-encoder hand-wrote a pytest testpaths to keep
+# `scripts/check` out of its integration suite, which is a fix every generated
+# repository would otherwise have to rediscover.
+#
+# The other four declare their test set instead of discovering it -- an npm
+# script, a Gradle source set, a SwiftPM Tests directory, a Cargo test target --
+# so that declaration is what leaves the tier out, and a second exclusion here
+# would be a rule with nothing to apply to.
 _capability_test_python() {
-  local status=0
-  uv_run pytest || status=$?
+  local status=0 dir
+  local -a ignore=()
+  while IFS= read -r dir; do
+    [[ -n "$dir" ]] || continue
+    ignore+=(--ignore="$dir")
+  done < <(integration_dirs)
+
+  uv_run pytest ${ignore[@]+"${ignore[@]}"} || status=$?
   if (( status == 5 )); then
     echo "pytest collected no tests."
     return 0
   fi
   return "$status"
 }
-_capability_test_go() { go_each go test ./...; }
+# Run inside a module by go_each, so the import paths it filters are that
+# module's. A module whose every package is under the tier is not an error: the
+# tier has a runner of its own and this one has nothing left to do.
+_go_test_outside_integration() {
+  local listed
+  local -a packages=()
+  listed="$(go list ./...)" || return 1
+  mapfile -t packages < <(grep -v '/tests/integration' <<<"$listed" || true)
+  if (( ${#packages[@]} == 0 )); then
+    echo "Every package in this module is under tests/integration."
+    return 0
+  fi
+  go test "${packages[@]}"
+}
+_capability_test_go() {
+  if [[ -z "$(integration_dirs)" ]]; then
+    go_each go test ./...
+    return
+  fi
+  go_each _go_test_outside_integration
+}
 _capability_test_rust() { cargo test; }
 _capability_test_swift() { command -v swift >/dev/null 2>&1 || return "$NO_RUNNER"; swift_each swift test; }
 _capability_test_kotlin() { [[ -x ./gradlew ]] || return "$NO_RUNNER"; ./gradlew test; }
+
+# The tier's own runners. Absent for rust, swift and kotlin: each names its
+# integration tests somewhere its own build file already decides -- a Cargo test
+# target, a SwiftPM test target, a Gradle source set -- and a tests/integration/
+# directory is not where any of the three looks. A repository that has the tier
+# and one of those languages gets an honest unavailable rather than a stub that
+# runs nothing and reports a pass.
+_capability_integration_node() { has_npm_script test:integration || return "$NO_RUNNER"; npm run test:integration; }
+_capability_integration_python() {
+  local status=0
+  local -a dirs=()
+  mapfile -t dirs < <(integration_dirs)
+
+  # Named on the command line, which overrides any testpaths the project set.
+  uv_run pytest "${dirs[@]}" || status=$?
+  if (( status == 5 )); then
+    echo "pytest collected no tests."
+    return 0
+  fi
+  return "$status"
+}
+# Each directory entered rather than named as a package pattern, so a repository
+# whose tiers sit in different modules needs no module bookkeeping here.
+#
+# Read on fd 3, not stdin, for the same reason as go_each: go test can read
+# stdin, which would otherwise consume the remaining directory list.
+_capability_integration_go() {
+  local dir status=0
+  while IFS= read -r dir <&3; do
+    [[ -n "$dir" ]] || continue
+    ( cd "$dir" && go test ./... ) || status=1
+  done 3< <(integration_dirs)
+  return "$status"
+}
 
 _capability_build_node() { has_npm_script build || return "$NO_RUNNER"; npm run build; }
 # The build discards its output: `go build ./...` writes an executable wherever
@@ -854,11 +943,15 @@ _capability_is_not_applicable() {
     # trivy target absent here means nothing to scan, not a missing tool.
     audit:swift) [[ -z "$(detect_find Package.resolved -print -quit)" ]] ;;
     audit:kotlin) [[ -z "$(detect_find gradle.lockfile -print -quit)" ]] ;;
+    # A repository with no tier has nothing to run, which is not a missing
+    # runner: every language reports not-applicable rather than one of them
+    # reporting unavailable and failing a run over tests that do not exist.
+    integration:*) [[ -z "$(integration_dirs)" ]] ;;
     *) return 1 ;;
   esac
 }
 
-DETECT_CAPABILITIES=(lint format-check typecheck test build audit toolchain format-write run package)
+DETECT_CAPABILITIES=(lint format-check typecheck test build audit toolchain format-write integration run package)
 
 # _in_list <word> <items…>: whether the word is one of the items.
 _in_list() {

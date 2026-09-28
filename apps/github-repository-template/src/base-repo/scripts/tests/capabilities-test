@@ -117,10 +117,11 @@ fi
 # cell is wired, and a `dev` capability no longer exists to have a row at all.
 current="the probe reports every capability and language pairing"
 absent='typecheck:go typecheck:rust typecheck:swift typecheck:kotlin build:python
+integration:rust integration:swift integration:kotlin
 run:swift package:node package:python package:swift package:kotlin'
 out="$(language_capabilities probe)"
 missing=""
-for cap in lint format-check typecheck test build audit toolchain format-write run package; do
+for cap in lint format-check typecheck test build audit toolchain format-write integration run package; do
   for lang in node python go rust swift kotlin; do
     expected=wired
     [[ " ${absent//$'\n'/ } " != *" $cap:$lang "* ]] || expected=absent
@@ -129,8 +130,8 @@ for cap in lint format-check typecheck test build audit toolchain format-write r
 done
 if [[ -n "$missing" ]]; then
   fail "the probe does not report:$missing"
-elif (( $(wc -l <<<"$out") != 60 )); then
-  fail "the probe reports $(wc -l <<<"$out") pairings rather than 60 -- a capability or language it was not asked about"
+elif (( $(wc -l <<<"$out") != 66 )); then
+  fail "the probe reports $(wc -l <<<"$out") pairings rather than 66 -- a capability or language it was not asked about"
 elif grep -q '^dev ' <<<"$out"; then
   fail "a dev capability survives in the probe"
 else
@@ -613,6 +614,99 @@ if (( status != 0 )) && grep -qE '^run +unavailable +go$' <<<"$out"; then
   pass
 else
   fail "a module with no main package was not reported unavailable (exit $status): $out"
+fi
+
+# --- the integration tier ----------------------------------------------------
+
+# The tier is a directory the layout owns, so a repository without one has
+# nothing to run and no missing runner either. not-applicable rather than
+# unavailable is the whole difference between a clean run and a failed one.
+fixture "no tests/integration is not-applicable rather than unavailable"
+printf '[project]\nname = "p"\nversion = "0.1.0"\n' > "$work/pyproject.toml"
+out="$(cd "$work" && CI_DRY_RUN=1 scripts/integration 2>&1 </dev/null)"
+if grep -qE '^integration +not-applicable +python$' <<<"$out"; then
+  pass
+else
+  fail "a repository with no tier does not report integration not-applicable: $out"
+fi
+
+# The tier found at a unit's scope, not only the root's: tests/ nests at every
+# scope holder, and the tier has to be found wherever tests/ is allowed to sit.
+fixture "a unit's tier dispatches"
+printf '[project]\nname = "p"\nversion = "0.1.0"\n' > "$work/pyproject.toml"
+mkdir -p "$work/apps/api/tests/integration"
+out="$(cd "$work" && CI_DRY_RUN=1 scripts/integration 2>&1 </dev/null)"
+if grep -qE '^integration +would-run +python$' <<<"$out"; then
+  pass
+else
+  fail "a tier under a unit does not dispatch: $out"
+fi
+
+# The latent defect this capability exists to fix. pytest walks the tree, so
+# without the exclusion `scripts/check` collects the integration suite and fails
+# on a database nobody asked it to have. media-encoder hand-wrote a testpaths to
+# work around it; the exclusion belongs here, once.
+fixture "the gate's pytest run leaves the tier out"
+printf '[project]\nname = "p"\nversion = "0.1.0"\n' > "$work/pyproject.toml"
+mkdir -p "$work/apps/api/tests/integration"
+stub uv <<'STUB'
+#!/usr/bin/env bash
+if [[ "$*" == *--version* ]]; then exit 0; fi
+shift 2 # run pytest
+printf '%s\n' "$*" >> "${MARKER:?}"
+STUB
+MARKER="$work/pytest-args" ci_real > /dev/null 2>&1
+if grep -q -- '--ignore=./apps/api/tests/integration' "$work/pytest-args" 2>/dev/null; then
+  pass
+else
+  fail "the gate's pytest run does not ignore the tier: $(cat "$work/pytest-args" 2>/dev/null)"
+fi
+
+# And the other side of it: the tier's own run names those directories on the
+# command line, which overrides any testpaths the project set.
+fixture "the tier's pytest run names the tier"
+printf '[project]\nname = "p"\nversion = "0.1.0"\n' > "$work/pyproject.toml"
+mkdir -p "$work/apps/api/tests/integration"
+stub uv <<'STUB'
+#!/usr/bin/env bash
+if [[ "$*" == *--version* ]]; then exit 0; fi
+shift 2 # run pytest
+printf '%s\n' "$*" >> "${MARKER:?}"
+STUB
+(cd "$work" && MARKER="$work/pytest-args" scripts/integration > /dev/null 2>&1 </dev/null)
+if [[ "$(cat "$work/pytest-args" 2>/dev/null)" == "./apps/api/tests/integration" ]]; then
+  pass
+else
+  fail "the tier's pytest run asks for $(cat "$work/pytest-args" 2>/dev/null) rather than the tier"
+fi
+
+# go test discovers by walking too, so the same exclusion is owed there. The
+# stub answers go list with a package under the tier and one outside it; only
+# the second may reach go test.
+fixture "the gate's go test leaves the tier out"
+go_mod "$work"
+mkdir -p "$work/tests/integration"
+stub go <<'STUB'
+#!/usr/bin/env bash
+case "$1" in
+  list)
+    if [[ "$2" == -m ]]; then printf '%s\n' "$PWD"; exit 0; fi
+    printf 'example.com/work/src\nexample.com/work/tests/integration\n'
+    exit 0
+    ;;
+  test) printf '%s\n' "$*" >> "${MARKER:?}" ;;
+esac
+exit 0
+STUB
+stub gofmt <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+MARKER="$work/go-args" ci_real > /dev/null 2>&1
+if [[ "$(grep '^test ' "$work/go-args" 2>/dev/null)" == "test example.com/work/src" ]]; then
+  pass
+else
+  fail "the gate's go test asks for $(grep '^test ' "$work/go-args" 2>/dev/null) rather than the packages outside the tier"
 fi
 
 # --- the rename left nothing behind ------------------------------------------

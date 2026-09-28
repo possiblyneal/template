@@ -151,6 +151,11 @@ _Avoid_: task, command, step, script
 The per-language implementation of one capability.
 _Avoid_: handler, driver, backend
 
+**Integration tier**:
+The tests under a `tests/integration/` directory at any scope holder. Run by
+`scripts/integration`, excluded from the `test` capability, and outside the gate.
+_Avoid_: e2e, functional tests, slow tests, acceptance tests
+
 **Result state**:
 The outcome of one capability against one language: `pass`, `not-applicable`,
 `unavailable`, or `FAIL`.
