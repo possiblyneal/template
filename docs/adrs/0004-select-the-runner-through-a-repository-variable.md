@@ -136,3 +136,55 @@ is easy to break. Anyone editing it should know that an empty variable
 is falsy, which is what makes the fallback collapse cleanly; rewriting
 it as a ternary-looking construct that treats `''` as a value
 reintroduces the bug this form avoids.
+
+**The billing block does not reach a self-hosted job, and that is measured
+rather than reasoned.** On 2026-09-28 this account's hosted minutes were
+exhausted with a failed payment on top, so every hosted job failed before it
+started. `knowledge-base-app` ran CI, Security and CodeQL green on
+`dev-knowledge-base-app` the same day, with `runner_name` on every job naming
+that runner. GitHub meters and bills the hosted pool; a self-hosted runner is
+neither metered nor billed, so a blocked account still dispatches to it. That
+is what makes this variable a way out of the block rather than only a way out
+of the allowance.
+
+The prerequisite list above is written for a generic host. The host these
+repositories actually use is narrower, and the payload has been shaped to it:
+
+- Debian 13 (trixie), runner user `gh-runner`, **no sudo** — the operator holds
+  the fleet keys and the runner is deliberately not one of them. So
+  `scripts/system-packages install` skips what `dpkg-query` already reports
+  installed and reaches `apt-get` only for the rest, failing by name when it
+  cannot reach root. It probes that with `sudo -n apt-get --version` rather
+  than `sudo -n true`, so a host permitting only `apt-get` through sudoers is
+  not refused by a probe stricter than the work. A package the manifest lists is the operator's to install
+  on the host, once.
+- **No Docker.** Rootless podman and buildah are present. Nothing in the
+  payload may grow a `docker/*` action, a `services:` block, a `container:`
+  job, or a Docker-container action, because each of those needs a daemon this
+  host does not run. An image is built with podman or buildah.
+- State persists between jobs — `_work`, `~/.local`, and every tool cache. A
+  step that assumes a clean machine is the class of bug to watch for here, and
+  the system-packages skip above is the first one found.
+- Present system-wide: `git`, `gh`, `jq`, `pipx`, node, go, `uv`, podman,
+  buildah, `pkg-config`, python3 3.13, with `~/.local/bin` on `PATH`. That
+  covers the four this decision named as the prerequisite.
+- **rustup is not present**, so it joins the prerequisite list above for any
+  repository with Rust. Hosted images ship it and
+  `.github/actions/setup-toolchains` assumed so, and so does
+  `security.yml`'s `cargo +stable install cargo-audit`, which sets up its
+  toolchains inline rather than through that action. Both now fail with one
+  line naming the host and the fix rather than with `rustup`'s own complaint
+  about an unknown subcommand. `Security` is a required check on `main`, so
+  the second one is the gating path and leaving it would have moved the
+  opaque failure rather than removed it. It does not install rustup: that would pipe a
+  network script into a shell in every generated repository and write a bin
+  directory to `GITHUB_PATH` for the steps after it, both to replace a
+  prerequisite the host owner satisfies once. Python goes through
+  `astral-sh/setup-uv` rather than `actions/setup-python`, which is untested
+  on this distribution.
+
+Setting the variable is gated on both halves being true, because the failure
+of either is silent in a way the other is not: a repository with `RUNNER` set
+and no runner online queues every job until `timeout-minutes`, reporting
+nothing about why. See [`lifecycle.md`](../../apps/repo-builder/src/references/lifecycle.md)
+for the rule the `/repo-builder` flows apply.

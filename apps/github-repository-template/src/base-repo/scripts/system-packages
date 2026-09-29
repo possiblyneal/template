@@ -30,7 +30,8 @@ usage() {
 Usage: scripts/system-packages <command>
 
   list      The packages .github/system-packages.txt names, one per line
-  install   Install them with apt-get; a no-op where the file is absent
+  install   Install the ones this host lacks with apt-get; a no-op where the
+            file is absent or every package is already present
 EOF
 }
 
@@ -66,14 +67,59 @@ list() {
       echo "$manifest: not a package name: ${fields[0]}" >&2
       return 1
     fi
+    # "*", "?" and "[" are refused for the same reason as the suffixes above:
+    # both apt-get and dpkg-query read a name holding one as a pattern, so
+    # "libfoo*" would install whatever matched and the installed check below
+    # would answer about the first match rather than about this line.
+    if [[ ${fields[0]} == *[][*?]* ]]; then
+      echo "$manifest: not a package name, reads as a pattern: ${fields[0]}" >&2
+      return 1
+    fi
     printf '%s\n' "${fields[0]}"
   done < "$manifest"
 }
 
+# Whether dpkg already holds the package this spec names. A "name=version"
+# spec counts only when that exact version is the installed one, since the pin
+# is there to ask for it. A host with no dpkg-query is not a Debian host and
+# cannot answer, so nothing counts as installed and apt-get decides -- the
+# behavior this script had before the check existed.
+installed() {
+  local spec=$1 name=${1%%=*} pin="" records record
+  [[ $spec == *=* ]] && pin=${spec#*=}
+  command -v dpkg-query > /dev/null 2>&1 || return 1
+  # The trailing newline in the format is not cosmetic. -W emits one record per
+  # match with no separator of its own, so without it a package present for two
+  # architectures comes back as two records run together on one line and every
+  # field read off it is wrong. list() refuses a name that reads as a pattern,
+  # so the only way here is multi-arch, where any installed record answers the
+  # question: dpkg holds the package.
+  records="$(dpkg-query -W -f='${Status}|${Version}\n' "$name" 2> /dev/null)" || return 1
+  while IFS= read -r record; do
+    [[ ${record%%|*} == "install ok installed" ]] || continue
+    [[ -z $pin || ${record#*|} == "$pin" ]] && return 0
+  done <<< "$records"
+  return 1
+}
+
 # Command substitution rather than process substitution, so a failure in list
 # reaches `set -e` instead of arriving as an empty array.
+#
+# What is already installed is skipped, and the skip is the whole install on a
+# machine that persists between runs: a self-hosted runner keeps its packages,
+# so a repository with a manifest would otherwise reach apt on every job for
+# headers that have been there since the first one. A hosted image starts
+# clean and nothing is skipped there, which is the unchanged case.
+#
+# Root is required only when something is actually missing, and that ordering
+# is the point rather than an optimization. The runner host this was written
+# for has no sudo by design -- fleet keys live elsewhere -- so a manifest whose
+# packages the operator installed by hand must pass there. One whose packages
+# are genuinely absent must fail naming them, because the alternative is a
+# build failing later on the header the manifest exists to name.
 install() {
-  local packages=() names
+  local packages=() missing=() names package
+  local -a as_root=()
   names="$(list)"
   if [[ -z $names ]]; then
     # Named here rather than nowhere: the reader of this log is usually someone
@@ -83,8 +129,36 @@ install() {
     return 0
   fi
   mapfile -t packages <<<"$names"
-  sudo apt-get update
-  sudo apt-get install -y --no-install-recommends "${packages[@]}"
+
+  for package in "${packages[@]}"; do
+    installed "$package" || missing+=("$package")
+  done
+
+  if (( ${#missing[@]} == 0 )); then
+    echo "Already installed, nothing to do: ${packages[*]}"
+    return 0
+  fi
+
+  # The probe runs apt-get rather than true, and does so under -n. Under -n
+  # because the failing case on the runner is a sudo that exists and asks: a
+  # password prompt on a non-interactive job hangs until the step times out,
+  # and the timeout says nothing about the missing package. Against apt-get
+  # because a sudoers entry of the common `NOPASSWD: /usr/bin/apt-get` shape
+  # refuses `sudo -n true` while permitting every call this script makes, and
+  # a probe that fails where the work would succeed is a refusal invented here.
+  if (( EUID != 0 )); then
+    if command -v sudo > /dev/null 2>&1 && sudo -n apt-get --version > /dev/null 2>&1; then
+      as_root=(sudo)
+    else
+      echo "$manifest names packages this host does not have, and root is not available to install them:" >&2
+      printf '  %s\n' "${missing[@]}" >&2
+      echo "Install them on the runner host, or run this where sudo works." >&2
+      return 1
+    fi
+  fi
+
+  "${as_root[@]}" apt-get update
+  "${as_root[@]}" apt-get install -y --no-install-recommends "${missing[@]}"
 }
 
 case "${1:-}" in
