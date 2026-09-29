@@ -52,10 +52,26 @@ runs:
       with:
         go-version: stable
 
+    # rustup is a host prerequisite here, not something this step installs. A
+    # hosted image ships it; a self-hosted host may not, and `rustup component
+    # add` there fails on an unknown command -- a message about a subcommand,
+    # in a job whose real problem is that the machine has no Rust. The guard
+    # turns that into one line naming the host and the fix.
+    #
+    # Installing it instead would mean piping a network script into a shell in
+    # every generated repository, and writing the new bin directory to
+    # GITHUB_PATH for the steps that follow. Both are worse than a prerequisite
+    # the host owner satisfies once, and both sit against the rule in
+    # scripts/CLAUDE.md that the toolchains are the machine's.
     - name: Set up Rust
       if: steps.detect.outputs.rust == 'true'
       shell: bash
-      run: rustup component add clippy rustfmt
+      run: |
+        if ! command -v rustup > /dev/null 2>&1; then
+          echo "::error::rustup is not on this runner. A GitHub-hosted image ships it; a self-hosted host must install it for the runner user before a Rust repository can build here."
+          exit 1
+        fi
+        rustup component add clippy rustfmt
 
     # GitHub's Ubuntu runners include Swift, but this controls the requested
     # version rather than inheriting whatever the runner image happens to ship.

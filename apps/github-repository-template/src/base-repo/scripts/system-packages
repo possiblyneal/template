@@ -30,7 +30,8 @@ usage() {
 Usage: scripts/system-packages <command>
 
   list      The packages .github/system-packages.txt names, one per line
-  install   Install them with apt-get; a no-op where the file is absent
+  install   Install the ones this host lacks with apt-get; a no-op where the
+            file is absent or every package is already present
 EOF
 }
 
@@ -70,10 +71,38 @@ list() {
   done < "$manifest"
 }
 
+# Whether dpkg already holds the package this spec names. A "name=version"
+# spec counts only when that exact version is the installed one, since the pin
+# is there to ask for it. A host with no dpkg-query is not a Debian host and
+# cannot answer, so nothing counts as installed and apt-get decides -- the
+# behavior this script had before the check existed.
+installed() {
+  local spec=$1 name=${1%%=*} pin="" record
+  [[ $spec == *=* ]] && pin=${spec#*=}
+  command -v dpkg-query > /dev/null 2>&1 || return 1
+  record="$(dpkg-query -W -f='${Status}|${Version}' "$name" 2> /dev/null)" || return 1
+  [[ ${record%%|*} == "install ok installed" ]] || return 1
+  [[ -z $pin || ${record#*|} == "$pin" ]]
+}
+
 # Command substitution rather than process substitution, so a failure in list
 # reaches `set -e` instead of arriving as an empty array.
+#
+# What is already installed is skipped, and the skip is the whole install on a
+# machine that persists between runs: a self-hosted runner keeps its packages,
+# so a repository with a manifest would otherwise reach apt on every job for
+# headers that have been there since the first one. A hosted image starts
+# clean and nothing is skipped there, which is the unchanged case.
+#
+# Root is required only when something is actually missing, and that ordering
+# is the point rather than an optimization. The runner host this was written
+# for has no sudo by design -- fleet keys live elsewhere -- so a manifest whose
+# packages the operator installed by hand must pass there. One whose packages
+# are genuinely absent must fail naming them, because the alternative is a
+# build failing later on the header the manifest exists to name.
 install() {
-  local packages=() names
+  local packages=() missing=() names package
+  local -a as_root=()
   names="$(list)"
   if [[ -z $names ]]; then
     # Named here rather than nowhere: the reader of this log is usually someone
@@ -83,8 +112,33 @@ install() {
     return 0
   fi
   mapfile -t packages <<<"$names"
-  sudo apt-get update
-  sudo apt-get install -y --no-install-recommends "${packages[@]}"
+
+  for package in "${packages[@]}"; do
+    installed "$package" || missing+=("$package")
+  done
+
+  if (( ${#missing[@]} == 0 )); then
+    echo "Already installed, nothing to do: ${packages[*]}"
+    return 0
+  fi
+
+  # `sudo -n true` rather than `command -v sudo`, because the failing case on
+  # the runner is a sudo that exists and refuses: a password prompt on a
+  # non-interactive job hangs until the step times out, and the timeout says
+  # nothing about the missing package.
+  if (( EUID != 0 )); then
+    if command -v sudo > /dev/null 2>&1 && sudo -n true > /dev/null 2>&1; then
+      as_root=(sudo)
+    else
+      echo "$manifest names packages this host does not have, and root is not available to install them:" >&2
+      printf '  %s\n' "${missing[@]}" >&2
+      echo "Install them on the runner host, or run this where sudo works." >&2
+      return 1
+    fi
+  fi
+
+  "${as_root[@]}" apt-get update
+  "${as_root[@]}" apt-get install -y --no-install-recommends "${missing[@]}"
 }
 
 case "${1:-}" in

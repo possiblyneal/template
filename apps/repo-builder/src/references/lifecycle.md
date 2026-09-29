@@ -321,6 +321,24 @@ Writing into `.git/hooks` is the one place this recipe can destroy something, an
 
 Verify by outcome, never by exit status, and verify it the way the destination will experience it: a commit on the default branch is refused, a malformed subject fails commitlint, and a `Co-Authored-By` trailer comes back rewritten. Do it in a throwaway worktree and remove it, so the proof costs the operator nothing.
 
+## The runner variable is set only where it is safe and answerable
+
+`docs/adrs/0004-select-the-runner-through-a-repository-variable.md` gives every shipped workflow `runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}`, so a destination redirects its own CI by setting one repository variable. A flow may offer that write. Two conditions have to hold first, and neither is inferable from the payload:
+
+- **The repository is private.** A self-hosted runner on a public repository lets any fork's pull request execute arbitrary code on the host. Read the visibility rather than remembering it — `gh repo view <owner>/<repository> --json visibility` — and on `PUBLIC` do not offer the write at all. This is not a question for the gate: there is no answer the user could give that makes it safe, and putting it on the menu invites one.
+- **A runner is online for it.** `gh api repos/<owner>/<repository>/actions/runners --jq '.runners[] | select(.name == "dev-<repository>") | .status'` has to read `online`. The variable set without a runner is the worst of the three states: every job queues until `timeout-minutes` and the run says nothing about why, so it looks like GitHub being slow rather than like a misconfiguration. Registering the runner belongs to whoever owns the host, not to this skill.
+
+Both true, the write is an ordinary gate line and an ordinary `gh variable set RUNNER --body self-hosted -R <owner>/<repository>`. Either false, report which one and offer nothing.
+
+A repository that sets it owes one green run of every workflow it has before the variable is trusted, and the proof is `runner_name` on the jobs rather than a green check: a job that fell back to `ubuntu-latest` is also green.
+
+```bash
+gh run list -R <owner>/<repository> --limit 5 --json name,conclusion,databaseId
+gh api repos/<owner>/<repository>/actions/runs/<id>/jobs --jq '.jobs[] | {name, runner_name, conclusion}'
+```
+
+A Swift CodeQL job naming a hosted macOS runner is correct and is not a failure of this check — the matrix lets that entry through untouched, for the reason the ADR gives.
+
 ## Remote action gates
 
 Repository creation, settings writes, pushes, and pull-request creation are separate outward-facing actions. Plan and validate locally first. Immediately before them, show:
@@ -334,6 +352,7 @@ Remote execution
 - push: throwaway ruleset probe -> main, only where ruleset creation returned 201; rejection is what proves the ruleset binds, so a ruleset that was accepted without binding leaves that commit on the remote default branch
 - labels: created by step 6 — the twelve `docs/agents/` names, being the roles `docs/agents/triage-labels.md` records plus `wayfinder:map` and the four `wayfinder:<type>` labels, and only those the repository does not already carry; where the payload's file is the one in force, a label the repository carries under a different case is renamed to the payload's spelling rather than created, and the rename is its own line
 - issues: map and tickets from `/wayfinder`, if the tracker doc records a hosted tracker
+- variable: `RUNNER=self-hosted`, offered only on a private destination whose `dev-<repository>` runner reads online, per [The runner variable is set only where it is safe and answerable](#the-runner-variable-is-set-only-where-it-is-safe-and-answerable) — authorized on its own line, never folded into the settings one
 - push: repo-builder/<short-target> -> generated content or template update
 - open PR: repo-builder/<short-target> -> main
 - merge: repo-builder/<short-target> -> main (bootstrap generate only, see Generate step 12)
