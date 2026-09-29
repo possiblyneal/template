@@ -121,7 +121,7 @@ rename must poll, not read once. Nothing in `generate.md` or `lifecycle.md` curr
 
 ## 2. Merge settings on a repository that already has content
 
-`generate.md:84` records that the four settings have to be sent in one call because GitHub refuses to
+`generate.md:87` records that the four settings have to be sent in one call because GitHub refuses to
 leave a repository with no merge method enabled. **The constraint is real and reproduces exactly on an
 existing repository with content, non-default settings, an open pull request, and issues.** The
 prose is slightly wrong about the failure mode in a way that matters.
@@ -143,7 +143,7 @@ The rule is: **any `PATCH` whose resulting state would leave zero merge methods 
 It is evaluated on the whole resulting state, not on the fields in the request, which is exactly why
 one call works.
 
-### The correction to `generate.md:84`
+### The correction to `generate.md:87`
 
 The reference says the three "sent separately" are rejected. Probe sequence, starting from
 `{merge_commit: false, squash: true, rebase: true}` — a destination that has deliberately turned the
@@ -237,7 +237,13 @@ overwriting GitHub's descriptions and colours is "a change nobody asked for," as
 
 This is the finding for this question.
 
-> Fixed since this was written: `generate.md` step 6 now guards with `grep -ixF` and states why. The probe output below is the record of how the defect behaved, not a live defect.
+> Fixed since this was written, and more widely than the fix this section proposed. `generate.md`
+> step 6 now guards with `grep -ixF`, reads `gh label list --limit 1000`, and creates **twelve**
+> labels rather than eight — the seven triage roles, `wayfinder:map`, and four `wayfinder:<type>`
+> labels. A case variant is now *renamed* to the payload's spelling rather than skipped or failed,
+> which carries the label's id and every issue already wearing it. Read the whole of this section as
+> the record of how the defect behaved and what it exposed; the specific consequences below, the
+> pagination note, and loose end 3 have each been overtaken. Step 6's own prose is the live text.
 
 `generate.md` step 6 guards with `grep -qxF -- "$label" <<< "$existing"`, an exact, case-**sensitive**
 match. GitHub's uniqueness check on label names is case-**insensitive**: creating `Bug` on a
@@ -264,6 +270,9 @@ label **was not created**. Two consequences:
   destination ends up missing one of the seven triage roles, and `/triage` — which per
   `docs/agents/triage-labels.md` creates a missing label rather than substituting the nearest one —
   will hit the same 422 every time it runs.
+
+  > Overtaken: step 6 now renames the case variant instead of trying to create the payload's
+  > spelling, so no role is left uncreated and the 422 is never reached.
 - Every script under `scripts/` in this repository runs `set -euo pipefail`. If this loop is ever
   lifted into one, that exit 1 aborts the step, and step 7's `gh issue create --label wayfinder:map`
   never runs.
@@ -278,6 +287,17 @@ the create silently leaves the payload's file naming a label that does not exist
 against a destination with its own label vocabulary needs a decision about which spelling wins, and
 the answer has to be written into the destination's `triage-labels.md`, not just into the label set.**
 
+> Decided since, and against what this paragraph prescribes. `generate.md` step 6 rules that the
+> payload's spelling wins and renames the destination's variant to it, explicitly rejecting the
+> edit to the destination's `triage-labels.md` proposed here: that file ships identical to every
+> repository built from the payload, and editing it per destination is how a retrofitted
+> repository's vocabulary comes to differ from a generated one's. The one exception is a
+> destination that kept a `triage-labels.md` of its own under the collision rules — there that
+> file names the vocabulary, and step 6 creates what it names and renames nothing. The rename's
+> cost is recorded rather than dismissed: label *search* is case-sensitive though creation
+> uniqueness is not, so anything pinned to `Bug` silently stops matching, and every rename is
+> reported with both spellings.
+
 ### A smaller inconsistency, noted rather than resolved
 
 `docs/agents/triage-labels.md:25` shows `gh label create needs-triage --description "Maintainer needs
@@ -290,6 +310,9 @@ about whether a created label carries a description. Not in this ticket's scope 
 The loop reads `gh label list --limit 200`. A destination carrying more than 200 labels would truncate
 the guard list and produce the same failure for any label past the cut. None of the four reference
 repositories is anywhere near that, so this is a note, not a finding.
+
+> Overtaken: the loop reads `--limit 1000`.
+
 
 ---
 
@@ -346,7 +369,7 @@ destination on a different host or under an org with these features disabled.
 
 ### What it reads
 
-`scripts/repo-settings` fetches exactly five endpoints (`fetch_settings`, lines 44–50) and every
+`scripts/repo-settings` fetches exactly five endpoints (`fetch_settings`, lines 45–52) and every
 judgment reads that one document:
 
 | key | endpoint | on a **private free** repo | on a **public free** repo |
@@ -367,6 +390,18 @@ than accidental.
 
 ### Confirming the claims in this repository's `CLAUDE.md`, "Repository settings"
 
+> `possiblyneal/template` was **private** when this ran, and is public now. That inverts the premise
+> of this subsection rather than dating it: push protection, secret scanning, rulesets and code
+> scanning are each free on a public repository and unavailable on a private one on this plan, so all
+> four are now **enabled** here and the root `CLAUDE.md` records them that way. The two
+> `not-applicable` rows in the transcript below would read `pass` if the check were re-run today.
+>
+> What the probe established survives the change and is why it is kept: the 403s are a plan *and
+> visibility* limit rather than a permission one — confirmed with an admin token — which is exactly
+> what the repository going public then demonstrated. The stand-down paths those rows exercise are
+> still the ones a generated repository that stays private takes, and they are now exercised against
+> destinations rather than here.
+
 Actual output of `scripts/repo-settings check` against `possiblyneal/template` today:
 
 ```
@@ -381,8 +416,10 @@ rulesets           not-applicable   not offered for possiblyneal/template's plan
 
 Where the documented claims **hold**:
 
-- **"Push protection and branch rulesets: unavailable on this plan."** Holds, and the probe sharpens
-  it: it is unavailable on a private repository on this plan, and **available on a public one**.
+- **"Push protection and branch rulesets: unavailable on this plan."** Holds *for the private
+  repository this was read against*, and the probe sharpens it: unavailable on a private repository
+  on this plan, and **available on a public one**. That sharpening is what the claim was later
+  corrected by — the repository is public now and both are enabled.
   Rulesets created, bound, and enforced normally on `conversion-probe-public`; classic branch
   protection did too; enabling `secret_scanning_push_protection` succeeded there and returned 422
   `"Secret scanning is not available for this repository."` on the private one. The script's own
@@ -391,7 +428,7 @@ Where the documented claims **hold**:
 - **The merge settings.** Observed, and the four `pass` lines are real reads of the repository.
 - **`generate.md`'s note that `security_and_analysis` is missing both for a non-admin and for a plan
   that does not offer the feature.** Holds. Confirmed `null` on the private probe *with* admin, and
-  the script's `.permissions.admin` gate (line 224) returns before `judge_push_protection` for a
+  the script's `.permissions.admin` gate (line 225) returns before `judge_push_protection` for a
   non-admin, so the two never collapse into one verdict.
 
 Where they **fail, or are unobserved**:
@@ -451,6 +488,8 @@ converted destination. Three things do change:
 3. **A label vocabulary that differs only in case** needs a decision about which spelling wins and a
    corresponding edit to the destination's `triage-labels.md`. The `grep -qixF` fix alone hides the
    question rather than answering it.
+   *Closed since: `generate.md` step 6 answers it — the payload's spelling wins by rename, and the
+   edit to the destination's `triage-labels.md` is rejected rather than required. See §3.*
 4. **Every post-write verification against GitHub needs to poll rather than read once.** The rename in
    particular is documented as asynchronous, and three separate stale reads were observed. Neither
    `generate.md` nor `lifecycle.md` says so.

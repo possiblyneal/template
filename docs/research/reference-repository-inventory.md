@@ -8,7 +8,7 @@ Each clone is the default branch's tip as of 2026-09-10, so every path named is 
 path and gitignored scratch is invisible by construction, the same enumeration
 `scripts/structure` uses.
 
-Sources: `apps/github-repository-template/src/base-repo/` (the payload, 78 files),
+Sources: `apps/github-repository-template/src/base-repo/` (the payload, 78 files as of 2026-09-10; 84 today),
 `scripts/structure`, `scripts/libs/detect.sh`, `scripts/detect probe`, `gh api repos/<slug>`.
 `scripts/structure` and `scripts/detect` derive their repository root from their own location,
 so each clone got an untracked copy of `scripts/structure`, `scripts/detect`,
@@ -153,7 +153,9 @@ configuration.
 
 Adapter coverage for python, from `scripts/detect probe`: `lint`, `format-check`, `typecheck`,
 `test`, `audit`, `toolchain`, `format-write`, and `run` are **wired**; `build` and `package` are
-**absent**. Absent `build` and `package` are by design for Python and are not a conversion
+**absent**. Two have been added since this probe and are wired for python too: `lint-fix`
+(`libs/detect.sh:623`) and `integration` (`:429`). Neither changes the finding below — the bar still
+breaks at `typecheck`. Absent `build` and `package` are by design for Python and are not a conversion
 problem, since `scripts/package` leaves `dist/` alone where a language has no packaging adapter.
 
 Wired is not the same as available, and this is where the conversion bar actually breaks:
