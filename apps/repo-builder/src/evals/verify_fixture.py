@@ -46,6 +46,20 @@ def report_check(
     return name, predicate(text), expected
 
 
+def tags_a_language(line: str) -> bool:
+    """One frontmatter line carries a `lang:` token under `tags`, in either form.
+
+    `0000-template.md` ships `tags: []`, so flow style is what a model copying
+    the template writes, but a run that reformats the frontmatter emits a block
+    sequence instead and obeys the ruling just as well. `scope:` carries no
+    `lang:` under either form, which is the whole point of the check.
+    """
+    stripped = line.strip()
+    return (line.startswith("tags:") and "lang:" in line) or stripped.startswith(
+        "- lang:"
+    )
+
+
 def handover_declares_python_tools(text: str) -> bool:
     """The handover's manifest sentence names the tools, and names the right ones.
 
@@ -322,12 +336,7 @@ def generation_multi(root: Path, fixture: dict[str, object]) -> list[Check]:
         (
             "ADRs scoped to their app, tagged with their language",
             all(f"apps/{name}" in adr_text for name in expected)
-            and sum(
-                1
-                for line in adr_text.splitlines()
-                if line.startswith("tags:") and "lang:" in line
-            )
-            >= 2,
+            and sum(1 for line in adr_text.splitlines() if tags_a_language(line)) >= 2,
             "each ADR scopes to apps/<name> and tags lang:<name>",
         ),
         (
