@@ -254,7 +254,8 @@ root `CLAUDE.md` before touching anything.
 The plan of record is <the issue tracker named in docs/agents/issue-tracker.md>, not this
 message. Open tickets: <count>. First with no open blocker: <#n — title>. Start there.
 
-Expected initial state, not defects: <the absent root manifest scripts/doctor fails on |
+Expected initial state, not defects: <the absent root manifest, which scripts/check
+reports as "No project manifest found, so there is nothing to check yet" |
 the skipped CodeQL detect and analyze legs on a private destination, per lifecycle.md
 "Code scanning lands everywhere and decides at run time" | none>.
 
@@ -266,3 +267,5 @@ Branch before you commit; a commit made on `main` is refused at the hook.
 ```
 
 The manifest sentence's lead-in, `The first root manifest owes`, is what the generation eval reads the handover for; rewording it updates the eval in the same change.
+
+The expected-state line names `scripts/check` rather than `scripts/doctor` because doctor does not fail on this shape. `detect_orphan_manifests` fires only on a manifest nested under a root that has none, so a destination with no manifest anywhere trips nothing and doctor reports `detection pass`. Naming a failure that never arrives is worse than naming none: the reader it is written for cannot ask the session that generated the repository, so they go looking for it, and what they learn is that the block is unreliable.

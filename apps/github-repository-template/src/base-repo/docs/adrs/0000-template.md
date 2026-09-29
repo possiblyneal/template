@@ -2,8 +2,8 @@
 type: Template                # replace with: Architecture Decision Record
 title: <The Decision as One Imperative Statement, e.g. "Use PostgreSQL for the Primary Datastore">
 description: <Write the decision as one sentence. Scans and indexes surface this without opening the file.>
-scope: [] # `apps/<app-name>` for one deployable, `domain` for a business area rather than a deployable, `global` for the repository as a whole, `lang:<name>` for a language
-tags: [] # High level architectural themes only (Max 5)
+scope: [] # What the decision governs: `apps/<app-name>` for one deployable, `domain` for a business area rather than a deployable, `global` for the repository as a whole
+tags: [] # How the decision is found: high level architectural themes only (Max 5), plus `lang:<name>` where one language is the subject
 # sources:
 #   - id: <stable-source-id>
 #     resource: <URL or bundle-relative path>

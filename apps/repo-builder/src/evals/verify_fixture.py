@@ -320,10 +320,10 @@ def generation_multi(root: Path, fixture: dict[str, object]) -> list[Check]:
             f"two numbered ADRs, found {len(records)}",
         ),
         (
-            "ADRs scoped to their app and language",
+            "ADRs scoped to their app, tagged with their language",
             all(f"apps/{name}" in adr_text for name in expected)
             and adr_text.count("lang:") >= 2,
-            "each ADR scopes to apps/<name> and lang:<name>",
+            "each ADR scopes to apps/<name> and tags lang:<name>",
         ),
         (
             "ADRs accepted, not proposed",
