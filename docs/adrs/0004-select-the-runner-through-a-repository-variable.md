@@ -154,7 +154,9 @@ repositories actually use is narrower, and the payload has been shaped to it:
   the fleet keys and the runner is deliberately not one of them. So
   `scripts/system-packages install` skips what `dpkg-query` already reports
   installed and reaches `apt-get` only for the rest, failing by name when it
-  cannot reach root. A package the manifest lists is the operator's to install
+  cannot reach root. It probes that with `sudo -n apt-get --version` rather
+  than `sudo -n true`, so a host permitting only `apt-get` through sudoers is
+  not refused by a probe stricter than the work. A package the manifest lists is the operator's to install
   on the host, once.
 - **No Docker.** Rootless podman and buildah are present. Nothing in the
   payload may grow a `docker/*` action, a `services:` block, a `container:`
@@ -168,9 +170,13 @@ repositories actually use is narrower, and the payload has been shaped to it:
   covers the four this decision named as the prerequisite.
 - **rustup is not present**, so it joins the prerequisite list above for any
   repository with Rust. Hosted images ship it and
-  `.github/actions/setup-toolchains` assumed so; the step now fails with one
+  `.github/actions/setup-toolchains` assumed so, and so does
+  `security.yml`'s `cargo +stable install cargo-audit`, which sets up its
+  toolchains inline rather than through that action. Both now fail with one
   line naming the host and the fix rather than with `rustup`'s own complaint
-  about an unknown subcommand. It does not install rustup: that would pipe a
+  about an unknown subcommand. `Security` is a required check on `main`, so
+  the second one is the gating path and leaving it would have moved the
+  opaque failure rather than removed it. It does not install rustup: that would pipe a
   network script into a shell in every generated repository and write a bin
   directory to `GITHUB_PATH` for the steps after it, both to replace a
   prerequisite the host owner satisfies once. Python goes through

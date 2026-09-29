@@ -18,6 +18,31 @@ manifest() {
   cat > "$work/.github/system-packages.txt"
 }
 
+# A sudo that logs what it was asked to run and succeeds, including the
+# `sudo -n true` probe install makes before deciding it can reach root.
+sudo_logging() {
+  stub sudo <<'STUB'
+#!/usr/bin/env bash
+echo "$*" >> "$PWD/sudo.log"
+STUB
+}
+
+# A dpkg-query reporting every package in $1 installed and every other name
+# absent. Each token is `name` or `name=version`, and the stub answers on the
+# name alone, because that is what install queries with: the version in a
+# token is what dpkg reports back, not what it is asked about. Writing that
+# the other way round is how the pin case ends up asserting absence.
+dpkg_holding() {
+  local held=$1
+  stub dpkg-query <<STUB
+#!/usr/bin/env bash
+for held in $held; do
+  [[ "\${*: -1}" == "\${held%%=*}" ]] && { echo "install ok installed|\${held#*=}"; exit 0; }
+done
+exit 1
+STUB
+}
+
 echo "system-packages-test"
 
 # The absent file is the state every repository is in until one of its builds
@@ -160,28 +185,6 @@ else
   fail "expected no apt, exit 0, and the manifest path named; got status $status: $out"
 fi
 
-# A sudo that logs what it was asked to run and succeeds, including the
-# `sudo -n true` probe install makes before deciding it can reach root.
-sudo_logging() {
-  stub sudo <<'STUB'
-#!/usr/bin/env bash
-echo "$*" >> "$PWD/sudo.log"
-STUB
-}
-
-# A dpkg-query reporting every name in $1 installed and every other name
-# absent, in the format install queries it with.
-dpkg_holding() {
-  local held=$1
-  stub dpkg-query <<STUB
-#!/usr/bin/env bash
-for held in $held; do
-  [[ "\${*: -1}" == "\$held" ]] && { echo "install ok installed|\${held#*=}"; exit 0; }
-done
-exit 1
-STUB
-}
-
 fixture "install passes the listed packages to apt-get"
 manifest <<'TXT'
 libasound2-dev
@@ -235,6 +238,24 @@ else
   fail "expected only the absent package installed: $out"
 fi
 
+fixture "a pinned name the host holds at that exact version is left alone"
+manifest <<'TXT'
+libasound2-dev=1.2.11-1
+TXT
+stub sudo <<'STUB'
+#!/usr/bin/env bash
+echo "sudo was called: $*" >&2
+exit 1
+STUB
+dpkg_holding "libasound2-dev=1.2.11-1"
+out="$(cd "$work" && scripts/system-packages install 2>&1)"
+status=$?
+if (( status == 0 )) && ! grep -q "sudo was called" <<<"$out"; then
+  pass
+else
+  fail "expected the pin read as satisfied, got status $status: $out"
+fi
+
 # The pin is there to ask for that version, so a different one installed is
 # not the package the manifest named.
 fixture "a pinned name the host does not match at that version is installed"
@@ -250,6 +271,56 @@ if grep -qxF "apt-get install -y --no-install-recommends libasound2-dev=1.2.11-1
 else
   fail "expected the pinned name installed over the mismatched version: $out"
 fi
+
+# -W emits one record per match with no separator of its own. A package
+# present for two architectures is the case that reaches this, and reading the
+# two run together on one line gets every field wrong.
+fixture "a package dpkg reports twice for two architectures reads as installed"
+manifest <<'TXT'
+libasound2-dev=1.2.11-1
+TXT
+stub sudo <<'STUB'
+#!/usr/bin/env bash
+echo "sudo was called: $*" >&2
+exit 1
+STUB
+# This stub renders the caller's own -f= format rather than printing a fixed
+# string, so the case is sensitive to the format install asks for. A stub that
+# hardcoded two lines would pass with the newline dropped from the format --
+# which is the whole bug -- because the stub, not dpkg, would be supplying the
+# separator.
+stub dpkg-query <<'STUB'
+#!/usr/bin/env bash
+format=""
+for arg; do [[ $arg == -f=* ]] && format=${arg#-f=}; done
+record=${format//'${Status}'/install ok installed}
+record=${record//'${Version}'/1.2.11-1}
+printf '%b%b' "$record" "$record"
+STUB
+out="$(cd "$work" && scripts/system-packages install 2>&1)"
+status=$?
+if (( status == 0 )) && ! grep -q "sudo was called" <<<"$out"; then
+  pass
+else
+  fail "expected the two records read separately, got status $status: $out"
+fi
+
+# apt-get and dpkg-query both read these as patterns, so the name would
+# install whatever matched and the installed check would answer about the
+# first match rather than about this line.
+fixture "a name reading as a glob pattern is refused"
+for name in 'libasound2-*' 'libasound2-dev?' 'libasound[12]'; do
+  manifest <<TXT
+$name
+TXT
+  out="$(cd "$work" && scripts/system-packages list 2>&1)"
+  status=$?
+  if (( status != 0 )) && grep -q "reads as a pattern" <<<"$out"; then
+    pass
+  else
+    fail "expected a refusal for $name, got status $status: $out"
+  fi
+done
 
 # The runner host holds no sudo by design. A package genuinely missing there is
 # the operator's to install, and the run has to say which one -- a build that

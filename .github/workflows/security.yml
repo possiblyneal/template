@@ -76,11 +76,19 @@ jobs:
       # cargo-audit raises its own MSRV, so that pin eventually sits below it
       # and the install fails. The audit tool's toolchain is not the product's.
       # +stable is rustup's syntax, not cargo's, so this assumes rustup rather
-      # than a distribution cargo. That holds on ubuntu-latest above; a runner
-      # image without rustup fails here on an unknown subcommand.
+      # than a distribution cargo. That holds on ubuntu-latest; a self-hosted
+      # host may have no rustup at all, where a bare `cargo +stable` fails on
+      # an unknown subcommand and says nothing about the machine. The guard is
+      # the same one .github/actions/setup-toolchains makes, repeated because
+      # this job sets up its toolchains inline rather than through that action.
       - name: Install cargo-audit
         if: steps.detect.outputs.rust == 'true'
-        run: cargo +stable install cargo-audit --locked
+        run: |
+          if ! command -v rustup > /dev/null 2>&1; then
+            echo "::error::rustup is not on this runner. A GitHub-hosted image ships it; a self-hosted host must install it for the runner user before a Rust repository can be audited here."
+            exit 1
+          fi
+          cargo +stable install cargo-audit --locked
 
       - name: Install trivy
         if: steps.detect.outputs.trivy == 'true'

@@ -67,6 +67,14 @@ list() {
       echo "$manifest: not a package name: ${fields[0]}" >&2
       return 1
     fi
+    # "*", "?" and "[" are refused for the same reason as the suffixes above:
+    # both apt-get and dpkg-query read a name holding one as a pattern, so
+    # "libfoo*" would install whatever matched and the installed check below
+    # would answer about the first match rather than about this line.
+    if [[ ${fields[0]} == *[][*?]* ]]; then
+      echo "$manifest: not a package name, reads as a pattern: ${fields[0]}" >&2
+      return 1
+    fi
     printf '%s\n' "${fields[0]}"
   done < "$manifest"
 }
@@ -77,12 +85,21 @@ list() {
 # cannot answer, so nothing counts as installed and apt-get decides -- the
 # behavior this script had before the check existed.
 installed() {
-  local spec=$1 name=${1%%=*} pin="" record
+  local spec=$1 name=${1%%=*} pin="" records record
   [[ $spec == *=* ]] && pin=${spec#*=}
   command -v dpkg-query > /dev/null 2>&1 || return 1
-  record="$(dpkg-query -W -f='${Status}|${Version}' "$name" 2> /dev/null)" || return 1
-  [[ ${record%%|*} == "install ok installed" ]] || return 1
-  [[ -z $pin || ${record#*|} == "$pin" ]]
+  # The trailing newline in the format is not cosmetic. -W emits one record per
+  # match with no separator of its own, so without it a package present for two
+  # architectures comes back as two records run together on one line and every
+  # field read off it is wrong. list() refuses a name that reads as a pattern,
+  # so the only way here is multi-arch, where any installed record answers the
+  # question: dpkg holds the package.
+  records="$(dpkg-query -W -f='${Status}|${Version}\n' "$name" 2> /dev/null)" || return 1
+  while IFS= read -r record; do
+    [[ ${record%%|*} == "install ok installed" ]] || continue
+    [[ -z $pin || ${record#*|} == "$pin" ]] && return 0
+  done <<< "$records"
+  return 1
 }
 
 # Command substitution rather than process substitution, so a failure in list
@@ -122,12 +139,15 @@ install() {
     return 0
   fi
 
-  # `sudo -n true` rather than `command -v sudo`, because the failing case on
-  # the runner is a sudo that exists and refuses: a password prompt on a
-  # non-interactive job hangs until the step times out, and the timeout says
-  # nothing about the missing package.
+  # The probe runs apt-get rather than true, and does so under -n. Under -n
+  # because the failing case on the runner is a sudo that exists and asks: a
+  # password prompt on a non-interactive job hangs until the step times out,
+  # and the timeout says nothing about the missing package. Against apt-get
+  # because a sudoers entry of the common `NOPASSWD: /usr/bin/apt-get` shape
+  # refuses `sudo -n true` while permitting every call this script makes, and
+  # a probe that fails where the work would succeed is a refusal invented here.
   if (( EUID != 0 )); then
-    if command -v sudo > /dev/null 2>&1 && sudo -n true > /dev/null 2>&1; then
+    if command -v sudo > /dev/null 2>&1 && sudo -n apt-get --version > /dev/null 2>&1; then
       as_root=(sudo)
     else
       echo "$manifest names packages this host does not have, and root is not available to install them:" >&2
