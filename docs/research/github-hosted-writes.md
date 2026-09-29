@@ -4,6 +4,10 @@ Research for [issue #107](https://github.com/possiblyneal/template/issues/107), 
 [#104](https://github.com/possiblyneal/template/issues/104). Facts only; the decisions that consume
 them are separate tickets.
 
+> Parts of this record have been overtaken. The tree has moved under §3, where a decision landed
+> against what this record prescribed, and under §5, whose premise inverted when this repository
+> went public. Each overtaken claim carries its own blockquote; nothing below is rewritten.
+
 Every behaviour below was confirmed twice: against GitHub's own REST documentation, and against a
 throwaway repository under `possiblyneal`. Where the two disagree, or where the documentation is
 silent, that is called out — several of the facts this ticket turns on are **not documented anywhere**
@@ -215,6 +219,10 @@ default set is not the nine most references assume.
 Of the eight names `generate.md` step 6 creates, **three collide**: `bug`, `enhancement`, `wontfix`.
 The other five (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wayfinder:map`)
 are new on any stock repository.
+
+> Overtaken: step 6 now creates twelve names, not eight. The three collisions are unchanged; the
+> nine that are new on a stock repository are the seven triage roles, `wayfinder:map`, and four
+> `wayfinder:<type>` labels. The next section's blockquote has the rest.
 
 ### The two collision behaviours
 
