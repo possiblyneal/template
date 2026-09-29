@@ -221,8 +221,8 @@ The other five (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-huma
 are new on any stock repository.
 
 > Overtaken: step 6 now creates twelve names, not eight. The three collisions are unchanged; the
-> nine that are new on a stock repository are the seven triage roles, `wayfinder:map`, and four
-> `wayfinder:<type>` labels. The next section's blockquote has the rest.
+> nine that are new on a stock repository are the four remaining triage roles, `wayfinder:map`, and
+> the four `wayfinder:<type>` labels. The next section's blockquote has the rest.
 
 ### The two collision behaviours
 
