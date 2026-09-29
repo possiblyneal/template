@@ -56,11 +56,18 @@ def tags_a_language(text: str) -> bool:
     under `scope:`, and the second is the superseded spelling #184 ruled
     against -- so walk the frontmatter and remember the key each item sits
     under. Only `tags` counts, which is the whole point of the check.
+
+    The comment is cut before the token is looked for. `0000-template.md`
+    ships its ruling in the `tags:` line's own trailing comment, so a
+    generator that copied the template and added no tag would otherwise score
+    on the instruction telling it to -- the one failure this check exists to
+    catch, reading as success.
     """
     key = ""
-    for line in text.splitlines()[1:]:
-        if line.startswith("---"):
+    for raw in text.splitlines()[1:]:
+        if raw.startswith("---"):
             break
+        line = raw.split("#", 1)[0]
         match = re.match(r"([A-Za-z_][\w-]*):", line)
         if match:
             key = match.group(1)
