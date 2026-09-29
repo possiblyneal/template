@@ -50,7 +50,7 @@ The number of deployables is the number of `apps/<name>/` directories to create.
 
 ## Recording the outcome
 
-Write one ADR per deployable under `docs/adrs/`, copied from `0000-template.md` and numbered from `0001`. Set `scope` to `apps/<name>` and the `lang:<language>` tag, state the choke point in **Context** — with the seam contract behind it when a map established one — and record in **Alternatives Considered** the constraints that were checked and did not bind.
+Write one ADR per deployable under `docs/adrs/`, copied from `0000-template.md` and numbered from `0001`. Set `scope` to `apps/<name>` and add `lang:<language>` to `tags`, state the choke point in **Context** — with the seam contract behind it when a map established one — and record in **Alternatives Considered** the constraints that were checked and did not bind.
 
 Set `status: accepted`, not the template's `status: proposed`. Generation acted on this decision: the directory exists and the language is chosen. Shipping it as a proposal describes a deliberation that already concluded, and leaves every generated repository with a decision log nobody appears to have agreed to.
 

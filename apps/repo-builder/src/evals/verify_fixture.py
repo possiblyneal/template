@@ -46,6 +46,38 @@ def report_check(
     return name, predicate(text), expected
 
 
+def tags_a_language(text: str) -> bool:
+    """One ADR carries a `lang:` token under `tags`, in either YAML form.
+
+    `0000-template.md` ships `tags: []`, so flow style is what a model copying
+    the template writes, but a run that reformats the frontmatter emits a block
+    sequence instead and obeys the ruling just as well. A block item cannot be
+    judged on its own line -- `  - lang:python` is identical under `tags:` and
+    under `scope:`, and the second is the superseded spelling #184 ruled
+    against -- so walk the frontmatter and remember the key each item sits
+    under. Only `tags` counts, which is the whole point of the check.
+
+    The comment is cut before the token is looked for. `0000-template.md`
+    ships its ruling in the `tags:` line's own trailing comment, so a
+    generator that copied the template and added no tag would otherwise score
+    on the instruction telling it to -- the one failure this check exists to
+    catch, reading as success.
+    """
+    key = ""
+    for raw in text.splitlines()[1:]:
+        if raw.startswith("---"):
+            break
+        line = raw.split("#", 1)[0]
+        match = re.match(r"([A-Za-z_][\w-]*):", line)
+        if match:
+            key = match.group(1)
+            if key == "tags" and "lang:" in line:
+                return True
+        elif key == "tags" and line.strip().startswith("- lang:"):
+            return True
+    return False
+
+
 def handover_declares_python_tools(text: str) -> bool:
     """The handover's manifest sentence names the tools, and names the right ones.
 
@@ -320,10 +352,11 @@ def generation_multi(root: Path, fixture: dict[str, object]) -> list[Check]:
             f"two numbered ADRs, found {len(records)}",
         ),
         (
-            "ADRs scoped to their app and language",
+            "ADRs scoped to their app, tagged with their language",
             all(f"apps/{name}" in adr_text for name in expected)
-            and adr_text.count("lang:") >= 2,
-            "each ADR scopes to apps/<name> and lang:<name>",
+            and bool(records)
+            and all(tags_a_language(p.read_text(encoding="utf-8")) for p in records),
+            "each ADR scopes to apps/<name> and tags lang:<name>",
         ),
         (
             "ADRs accepted, not proposed",

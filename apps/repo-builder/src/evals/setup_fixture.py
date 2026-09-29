@@ -127,7 +127,8 @@ def template_payload(repo: Path) -> None:
         """---
 type: Template
 title: <Decision title>
-scope: [] # `apps/<app-name>` for one deployable, `domain` for a business area rather than a deployable, `global` for the repository as a whole, `lang:<name>` for a language
+scope: [] # What the decision governs: `apps/<app-name>` for one deployable, `domain` for a business area rather than a deployable, `global` for the repository as a whole
+tags: [] # How the decision is found: high level architectural themes only (Max 5), plus `lang:<name>` where one language is the subject
 status: proposed
 ---
 
