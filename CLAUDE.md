@@ -137,6 +137,6 @@ Single-context: `CONTEXT.md` at the root, ADRs in `docs/adrs/`. See `docs/agents
 - `apps/github-repository-template/CLAUDE.md` — the template payload and the reference docs explaining it
 - `apps/repo-builder/CLAUDE.md` — the `/repo-builder` skill, and how it is linked into a clone
 - `scripts/CLAUDE.md` — the language-capabilities interface, and what adding a language or check requires
-- `docs/CLAUDE.md` — ADRs, specs, plans, and lessons
+- `docs/CLAUDE.md` — ADRs, specs, plans, research records, and lessons
 
 Read the nearest `CLAUDE.md` above every path you touch before editing, and update the owning file after meaningful changes.
