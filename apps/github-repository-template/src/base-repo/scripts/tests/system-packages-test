@@ -19,7 +19,7 @@ manifest() {
 }
 
 # A sudo that logs what it was asked to run and succeeds, including the
-# `sudo -n true` probe install makes before deciding it can reach root.
+# `sudo -n apt-get --version` probe install makes before deciding it can reach root.
 sudo_logging() {
   stub sudo <<'STUB'
 #!/usr/bin/env bash
