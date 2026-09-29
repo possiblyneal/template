@@ -313,7 +313,6 @@ repositories is anywhere near that, so this is a note, not a finding.
 
 > Overtaken: the loop reads `--limit 1000`.
 
-
 ---
 
 ## 4. Sub-issues and native issue dependencies on a private repository on this plan
