@@ -80,7 +80,7 @@
         "The payload's agent docs arrived before the handoff: docs/agents/issue-tracker.md records the local-markdown tracker, and docs/agents/domain.md and docs/agents/triage-labels.md both exist.",
         "The /wayfinder map is charted under .scratch/, where the recorded tracker puts issues, rather than at a path repo-builder chose for it.",
         "The map carries open tickets and no resolved ones, and none of the six steps of choosing_a_language.md is answered in this session.",
-        "The report records Operation: stopped with no pull request created, names the trigger that fired, points at the map, and says to re-invoke /repo-builder against the same candidate once the map has no open tickets.",
+        "The report records Status: stopped with no pull request created, names the trigger that fired, points at the map, and says to re-invoke /repo-builder against the same candidate once the map has no open tickets.",
         "No gh command, push, remote creation, or other network mutation occurs."
       ]
     },

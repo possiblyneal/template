@@ -448,7 +448,7 @@ def generation_handoff(root: Path, fixture: dict[str, object]) -> list[Check]:
             report,
             "reported as stopped",
             lambda text: "stopped" in text.lower() and "not created" in text.lower(),
-            "Operation: stopped with no pull request",
+            "Status: stopped with no pull request",
         ),
         report_check(
             report,

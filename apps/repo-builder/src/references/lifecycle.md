@@ -298,7 +298,7 @@ A global `core.hooksPath` is reported with its key and its value, and it is not 
 
 ### Working hooks in the destination after a merge
 
-The section above leaves the candidate hooked and says nothing about the clone the operator commits from, because for update and adopt they are the same tree. For retrofit they are not: its key is set at `--worktree` scope on a candidate the report then hands over a removal command for, so when the candidate goes the hooks go with it.
+The section above leaves the candidate hooked and says nothing about the clone the operator commits from, because for update and adopt they are the same tree. For retrofit they are not: its key is set at `--worktree` scope on a candidate the flow removes at its end, so when the candidate goes the hooks go with it.
 
 That matters because of what the pull request landed. **A retrofit merges a `.pre-commit-config.yaml` into a clone that did not have one**, along with an instruction file stating that commits are linted, attributed, and refused on the default branch. Nothing in the flow installs it. The destination is then a repository whose own documentation promises a hook surface that does not exist, which is the failure [Working hooks in a candidate](#working-hooks-in-a-candidate) already refuses to ship in the other direction — measuring against a surface that cannot run — arriving by the other end.
 

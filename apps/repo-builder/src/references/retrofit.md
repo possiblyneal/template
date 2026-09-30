@@ -61,7 +61,39 @@ The fetch is explicit because the worktree branches from `origin/<default-branch
 
 The branch is named for the payload commit and the directory for the destination repository, using the identity preflight verified. Both names are addresses a resumed run has to find again, so neither is chosen freshly per session.
 
-`tmp/` is resolved against this repository rather than against the directory the session was invoked from, and `tmp/*` in `.gitignore` is what keeps a candidate from being committed here by accident. The candidate is never torn down: it is the evidence the report cites. The report hands the operator the command that removes it, `git -C <clone> worktree remove <candidate path>`, rather than running it.
+Because the name carries the payload commit, a run at a later commit gets a different branch and cannot see the one an earlier run left. List them here — `git -C <clone> branch --list 'retrofit/*'` — and report every branch naming a commit other than this run's under **Left for the operator**, with the state of its pull request. Reporting and not deleting: it exists because a merge was declined, so it is the local counterpart of a pull request nobody closed, which the sweep never touches. What the operator should not have to do is discover it themselves.
+
+`tmp/` is resolved against this repository rather than against the directory the session was invoked from, and `tmp/*` in `.gitignore` is what keeps a candidate from being committed here by accident. The candidate stands for as long as the flow can still be resumed from it, because it is the evidence the report cites. It comes down at the end of the flow rather than being handed to the operator as a command, and the end is reached once the pull request is open, its verification read, and step 9's merge offer settled **either way** — a declined merge is a finished flow, not a stop, so the sweep runs on the default path and not only on the rare one:
+
+```bash
+# Refreshes origin/<default-branch> for the containment test at the end of
+# this block. Not step 2's build fetch above, which aims the worktree.
+git -C <clone> fetch origin <default-branch>
+
+# Refuses on a worktree holding modified or untracked-and-unignored files.
+# Ignored output does not block it, so the checks' own leavings usually do not;
+# what blocks is a file some step wrote and no step committed, and the clean
+# reaches it only where the destination's ignore rules do not cover it. Cheap
+# either way. Never --force: a refusal that survives the clean is a finding,
+# not an obstacle.
+( cd <absolute path to this repository>/tmp/<repository-name> && scripts/clean )
+git -C <clone> worktree remove <absolute path to this repository>/tmp/<repository-name>
+git -C <clone> worktree prune
+rm -rf <hooksdir> <resume record>
+
+# Only where the merge was taken, and only against proved containment.
+git -C <clone> merge-base --is-ancestor \
+      retrofit/<first 12 of the payload commit> origin/<default-branch> \
+  && git -C <clone> branch -d retrofit/<first 12 of the payload commit>
+```
+
+`<hooksdir>` is the candidate's own, made for it under [Working hooks in a candidate](lifecycle.md#working-hooks-in-a-candidate) and pinned by nothing once the worktree is gone — the `core.hooksPath` naming it was set at `--worktree` scope and leaves with the worktree. It is not the hooks surface a taken merge owes the destination clone, which is a different directory and stays. The resume record is a sibling of the candidate rather than a file inside it, under [Resuming](lifecycle.md#resuming), so removing the worktree does not take it.
+
+**`-d` is not the containment guard, which is why `merge-base --is-ancestor` runs ahead of it.** `git branch -d` compares the branch against its upstream where one is set and against HEAD otherwise — never against the remote-tracking ref of the default branch. Both readings are wrong here. With no upstream it compares against a local default branch this flow deliberately never moved, so it refuses a branch the merge *did* carry; with an upstream set by a push it compares against that same branch on the remote, which trivially contains it, so it deletes a branch merged nowhere with only a warning. The fetch above is what makes the ancestry test read the merge, and the test is what makes the delete safe; `-d` rather than `-D` stays as the second line of defence. A non-zero exit from the test deletes nothing and is a finding to report rather than something to force past.
+
+Where the merge was declined the branch stays, because it is the local counterpart of a pull request the destination's own people still have open; report it under **Left for the operator** with that reason. A branch left that way outlives its worktree, so a later run at the same payload commit reuses it — `git -C <clone> worktree add` without `-b`, since `-b` fails on a branch that already exists.
+
+A run that stops before the pull request leaves the whole candidate standing and says so. That is the only case the operator is handed a removal to make.
 
 ### Step 3 — Overlay the payload's absent paths
 
@@ -312,12 +344,11 @@ One fact decides four things the operator otherwise meets separately: push prote
 Added under **Verification**:
 
 - Moved paths byte-identical to their pre-move blob: <count>/<count>
-- Directories emptied by a move: <path>: gone after the merge | still standing in the clone, holding <the ignored residue>, removed by nobody | none
+- Directories emptied by a move: <path>: gone after the merge | held open by <the ignored residue>, which is the destination's own and is left in place, named under **Left for the operator** | none
 - Untracked at the bar: none | <paths>: <the ignore rule step 6 replaced>, disposed by <the operator's decision>
 - Declared facts executed: <unit>: `scripts/package` <result>, `scripts/run` <result under CI_DRY_RUN> | the payload ships neither command, so both facts are written and unexecuted
 - Tool declaration: <manifest>: added <tool at the template's floor> | kept <the specifier the destination already declared> | declined by the operator, so <capability> cannot reach the bar | nothing missing
 - Bar: met | UNMET: <capability>: fail | unavailable (<reason>); stopped before the pull request, zero hosted writes performed
-- Candidate: left standing at <path>; remove it with `git -C <clone> worktree remove <path>`
 - Destination hooks after merge: shims in <path>, `core.hooksPath` pinned local to it, <each hook moved aside or linked in, or none>, verified by <the refusals observed> | n/a (merge declined), under [Working hooks in the destination after a merge](lifecycle.md#working-hooks-in-the-destination-after-a-merge)
 
 Two whole sections are added after **Repository settings**, and they are named apart from each other because a single block of reversal commands reads as though the whole gate can be walked back:
