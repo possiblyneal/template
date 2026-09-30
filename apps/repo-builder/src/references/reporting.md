@@ -60,6 +60,12 @@ A pull request is an issue for both routes, which is why each is spelled `issues
 
 ## Final report
 
+**The report is how a flow ends, and its first line says whether the flow is finished.** A run that did everything it set out to do says so plainly rather than trailing off after its last tool call; a run that stopped says that instead and Pending action carries what remains. A reader should never have to infer which of the two happened from the absence of a complaint.
+
+**Sweep before writing it.** What a flow created and is not delivering is the flow's to remove, not a list of chores for the operator. Cleanup runs once the result is verified and before the report is composed, so **Cleanup** below states outcomes rather than instructions.
+
+*What* that is differs by flow, so each flow's own file names it and this one does not. Only a generate and a retrofit build a candidate apart from the operator's clone; **update and adopt run in the operator's own clone**, as the per-flow scope list under [Working hooks in a candidate](lifecycle.md#working-hooks-in-a-candidate) states, so they create no candidate and sweep nothing of the kind. Three things are never swept in any flow: anything a stop still needs to resume from; anything the flow did not create, such as destination content or ignored residue left behind by a move; and anything whose removal is not this flow's call, such as a branch still carrying an open pull request, a dirty worktree, or a directory something else is still pinned to. Name each of those under **Left for the operator** with the reason it stayed.
+
 Use this stable shape. On a generate into an empty destination the Reconciliation lines are empty or trivially everything, and File list carries the weight; a generate into a destination that already has content fills them like any other flow, Superseded included, since it is the only section reporting a file the payload ships and the candidate lacks, which no check can fail on. On an adopt the Template line shows the recorded commit on both sides because the pin does not move, and the Addon adoption block carries the weight. On a generate stopped at the wayfinding handoff there are no Application boundaries to report — that absence is the result; the Wayfinding line names the trigger and the map, Repository settings still reports the repository that exists, and Pending action carries the resume.
 
 Two flows add lines to this shape rather than filling it as given, and each keeps them in its own file so that the flows that do not use them never read them: [Step 13 — The first prompt](generate.md#step-13--the-first-prompt) for a generate's handover block, and [Report additions](retrofit.md#report-additions) for a retrofit's unit map, its moves, and its two hosted-write sections.
@@ -67,7 +73,8 @@ Two flows add lines to this shape rather than filling it as given, and each keep
 ````md
 ## Repo Builder Result
 
-- Operation: generate | update | adopt | stopped
+- Status: finished | stopped (<what remains, expanded under Pending action>)
+- Operation: generate | update | adopt | retrofit
 - Pull request: <URL or "not created">
 - Template: <old full commit, or "not previously generated"> -> <target full commit>
 - Destination: <owner/repository>
@@ -109,6 +116,13 @@ One line per check, from `scripts/summarize <command>` rather than from a filter
 - Workflows the pull-request event never ran: <names> | none
 - Code review: skipped, as [Reviewing the pull request](#reviewing-the-pull-request) directs | on a retrofit, the axes that ran over the authored surface and what they found
 - Default branch after merge: <check-suite result> | n/a (nothing merged)
+
+### Cleanup
+What this flow created that was not the result, and what became of it.
+
+- Candidate: removed from <path>, branch <name> deleted | worktree removed from <path>, branch <name> kept for the pull request still open | left standing at <path>, because the flow stopped and resumes from it | none created: this flow ran in the operator's own clone
+- Scratch outside the candidate: <paths>: removed | kept, because <what is still pinned to it> | none
+- Left for the operator: <path>: <why removing it was not this flow's call> | none
 
 ### Resumption
 Present only on a run that re-entered a stopped flow, as [Resuming](lifecycle.md#resuming) directs.

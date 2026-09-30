@@ -49,6 +49,8 @@ Materialize the subtree from that exact commit into `tmp/<repository-name>/`, re
 
 [The payload's mode travels with the payload's content](lifecycle.md#the-payloads-mode-travels-with-the-payloads-content) binds every flow that lands payload content, and generate is the one flow it costs nothing. `git archive` carries each mode out of the pinned tree and the candidate is fresh, so no destination file's bit is there to survive the write. That is why no step below reads a mode or cites the rule — the exemption is in how this flow writes, not in the rule's reach.
 
+The candidate stands while the flow can still be resumed from it, and comes down at the flow's end rather than being handed to the operator as a command: once step 12's verification is read, and, on a bootstrap generate, the default branch after the merge with it. Remove the tree, the `<hooksdir>` made beside it under [Working hooks in a candidate](lifecycle.md#working-hooks-in-a-candidate), and the resume record beside that — `rm -rf` each, and only inside this repository's `tmp/`. There is no branch to delete: the candidate is its own repository and goes with the directory. That is also why removing it does not break the rule against sweeping a branch whose pull request is still open — the work is on the destination's remote, and what comes down is a throwaway tree this flow created, not a worktree of a clone somebody else owns. A generate stopped at the wayfinding handoff sweeps nothing, because that stop resumes from exactly these three; report them left standing, under **Cleanup** in [Final report](reporting.md#final-report).
+
 ### Step 4 — Create the destination repository
 
 Create the destination repository, at the [remote action gate](lifecycle.md#remote-action-gates). Present the gate first, and every line of it that applies: the repository name and visibility, the empty root commit, the settings step 5 applies, the ruleset probe step 5 pushes to prove those settings bind, the triage labels step 6 creates, and the map step 7 writes. The payload records the tracker, so both are decided here rather than left open: they are GitHub Issues on this repository. There is no diff and no check result to show yet, which is why this gate is separate from the one at step 11 — that one authorizes publishing content that has been reviewed, and this one authorizes an empty repository so that everything after it has somewhere to live.
@@ -195,7 +197,7 @@ Publish the candidate, at the [remote action gate](lifecycle.md#remote-action-ga
 
 ### Step 12 — Verify the published repository
 
-Verify the remote default branch, PR base/head, URL, settings state, and available checks. Do not merge.
+Verify the remote default branch, PR base/head, URL, settings state, and available checks. Do not merge. This verification is what step 3's sweep waits on: read it, then sweep the candidate before composing the report.
 
 A pull request with no checks means the workflows are unverified, never that they passed. Establish which one it is before reporting:
 
