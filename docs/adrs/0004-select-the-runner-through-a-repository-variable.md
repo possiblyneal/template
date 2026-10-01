@@ -149,8 +149,8 @@ of the allowance.
 
 The prerequisite list above is written for a generic host. The host these
 repositories actually use is narrower, and the payload has been shaped to it.
-What follows is observed state with no check behind it, last verified against
-`dev` on 2026-10-01; two of its bullets were wrong on that date, so confirm
+The bullets below are observed state with no check behind them, last verified
+against `dev` on 2026-10-01; two of them were wrong on that date, so confirm
 before acting on one.
 
 - Debian 13 (trixie), runner user `gh-runner`, **no sudo** — the operator holds
