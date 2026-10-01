@@ -180,3 +180,13 @@ A workflow step running a bare toolchain command executes in `GITHUB_WORKSPACE`,
 **Why:** These tools float deliberately, so each release is free to raise its own MSRV. Coupled to a product pin, the audit job fails the day those two cross — not on a change to the workflow, and in a generated repository nobody is looking at this file in. `possiblyneal/glydr` pinned 1.85.1 and cargo-audit 0.22.2 requires 1.88. Go behaves differently: a `toolchain` directive in `go.mod` is a floor Go resolves upward, so `go install …@latest` upgrades where cargo fails.
 
 **Source:** [.github/workflows/security.yml](../.github/workflows/security.yml), [glydr PR #202 run 35517379182](https://github.com/possiblyneal/glydr/actions/runs/35517379182)
+
+## Put a self-hosted runner's PATH in the service unit, not in `.path`
+
+The `.path` file beside a runner's configuration is read by `bin/runsvc.sh`, the wrapper the runner's own `svc.sh` installs. The `gh-runner@.service` unit on `dev` runs `run.sh` instead, which never reads it, so a job inherits the listener process's PATH and nothing else.
+
+**Do:** Add a tool directory to `Environment=PATH=` in `/etc/systemd/system/gh-runner@.service` and restart the runners. Verify with `tr '\0' '\n' < /proc/<listener-pid>/environ | grep ^PATH=`, not by reading `.path`.
+
+**Why:** Editing `.path` changes nothing while looking like the fix, and its content omits `~/.local/bin`, which CI needs for the pipx-installed `pre-commit` — so it would break jobs the day someone switched to the `svc.sh` service.
+
+**Source:** [ADR 0004](adrs/0004-select-the-runner-through-a-repository-variable.md)
