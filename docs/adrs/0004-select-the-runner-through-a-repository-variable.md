@@ -165,9 +165,12 @@ repositories actually use is narrower, and the payload has been shaped to it:
 - State persists between jobs — `_work`, `~/.local`, and every tool cache. A
   step that assumes a clean machine is the class of bug to watch for here, and
   the system-packages skip above is the first one found.
-- Present system-wide: `git`, `gh`, `jq`, `pipx`, node, go, `uv`, podman,
-  buildah, `pkg-config`, python3 3.13, with `~/.local/bin` on `PATH`. That
-  covers the four this decision named as the prerequisite.
+- Present system-wide: `git`, `gh`, `jq`, `pipx`, node, go, podman, buildah,
+  `pkg-config`, python3 3.13, with `~/.local/bin` on `PATH` — which is where
+  the pipx-installed `pre-commit` the payload's CI calls lives. That covers
+  the four this decision named as the prerequisite. `uv` is **not** among
+  them, despite what this list said until now: it arrives per job through
+  `astral-sh/setup-uv` below, and nothing has installed it on the host.
 - **rustup is installed for `gh-runner`, and putting it on a job's PATH is a
   second step.** It joins the prerequisite list above for any repository with
   Rust. It lives at `/home/gh-runner/.cargo/bin/rustup`, which is not on the
