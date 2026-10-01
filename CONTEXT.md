@@ -137,7 +137,8 @@ _Avoid_: remote write, settings change, API call
 **Authored surface**:
 The part of a candidate a flow wrote rather than copied, and so the only part a
 reader must read line by line. A file proved identical to what it was copied
-from, or proved unchanged by a move, is not on it.
+from, or proved unchanged by a move, is not on it, and neither is one the
+destination's own linter or formatter rewrote under a retrofit's autofix pass.
 _Avoid_: custom content, hand-written files, non-template files, the diff
 
 ### Checks

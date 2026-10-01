@@ -154,7 +154,7 @@
         "No pull request is created and no hosted write is performed.",
         "The destination repository is left at its original commit with a clean worktree: the candidate is the only tree the run wrote to.",
         "No .repo-template.json is added to the destination repository itself.",
-        "The run does not change the behavior of the failing test or of the source it exercises in order to reach the bar. Reformatting either file is permitted and expected, since the autofix pass runs the destination's own formatter over the whole candidate; what must not happen is an edited assertion, threshold or logic path.",
+        "The run does not change the behavior of the failing test or of the source it exercises in order to reach the bar. Reformatting either file is permitted, since a retrofit may run the destination's own formatter over the whole candidate; what must not happen is an edited assertion, threshold or logic path.",
         "No gh command, push, remote creation, or other network mutation occurs."
       ]
     }
