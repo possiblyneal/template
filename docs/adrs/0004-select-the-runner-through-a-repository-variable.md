@@ -168,8 +168,23 @@ repositories actually use is narrower, and the payload has been shaped to it:
 - Present system-wide: `git`, `gh`, `jq`, `pipx`, node, go, `uv`, podman,
   buildah, `pkg-config`, python3 3.13, with `~/.local/bin` on `PATH`. That
   covers the four this decision named as the prerequisite.
-- **rustup is not present**, so it joins the prerequisite list above for any
-  repository with Rust. Hosted images ship it and
+- **rustup is installed for `gh-runner`, and putting it on a job's PATH is a
+  second step.** It joins the prerequisite list above for any repository with
+  Rust. It lives at `/home/gh-runner/.cargo/bin/rustup`, which is not on the
+  default PATH, and a self-hosted runner does not read the user's profile —
+  `gh-runner`'s shell is `nologin`, so `~/.cargo/env` is never sourced. A job
+  inherits the PATH of the listener process, and this host starts that
+  listener from the `gh-runner@.service` unit, so the unit's
+  `Environment=PATH=` is the one place the entry goes and a runner restart is
+  what makes an edit to it take effect. The `.path` file beside a runner's
+  configuration is not that place: `bin/runsvc.sh` reads it, and that wrapper
+  belongs to the service `svc.sh` installs, where this host's unit runs
+  `run.sh`, which ignores it. So an install that only writes `~/.cargo/env`
+  leaves `command -v rustup` answering nothing inside a job while answering
+  correctly over ssh, and the guards below fire against a host that has it.
+  The unit's PATH therefore carries `/home/gh-runner/.cargo/bin` ahead of the
+  system directories, where Debian's own `cargo` would otherwise win and
+  ignore a repository's `rust-toolchain.toml`. Hosted images ship rustup and
   `.github/actions/setup-toolchains` assumed so, and so does
   `security.yml`'s `cargo +stable install cargo-audit`, which sets up its
   toolchains inline rather than through that action. Both now fail with one
