@@ -185,7 +185,7 @@ A workflow step running a bare toolchain command executes in `GITHUB_WORKSPACE`,
 
 The `.path` file beside a runner's configuration is read by `bin/runsvc.sh`, the wrapper the runner's own `svc.sh` installs. The `gh-runner@.service` unit on `dev` runs `run.sh` instead, which never reads it, so a job inherits the listener process's PATH and nothing else.
 
-**Do:** Add a tool directory to `Environment=PATH=` in `/etc/systemd/system/gh-runner@.service` and restart the runners. Verify with `tr '\0' '\n' < /proc/<listener-pid>/environ | grep ^PATH=`, not by reading `.path`.
+**Do:** Add a tool directory to `Environment=PATH=` in `/etc/systemd/system/gh-runner@.service` and restart the runners. Verify with `sudo tr '\0' '\n' < /proc/<listener-pid>/environ | grep ^PATH=`, not by reading `.path` — the listener runs as `gh-runner`, so an unprivileged read returns nothing and reads as an unset PATH.
 
 **Why:** Editing `.path` changes nothing while looking like the fix, and its content omits `~/.local/bin`, which CI needs for the pipx-installed `pre-commit` — so it would break jobs the day someone switched to the `svc.sh` service.
 
