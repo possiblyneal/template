@@ -112,3 +112,5 @@ docker-data/
 # finds it; the link is a deployment artifact of that unit, not content, and
 # committing it would put the skill at two paths in the tree.
 .claude/skills/repo-builder
+/TASKS.md
+/.tasks.git
