@@ -35,7 +35,7 @@ A retrofit runs a **second proof beside the copy proof**, over the paths it move
 
 Report its count beside the copy proof's. A pilot retrofit moved 55 files, which is exactly the volume at which a content edit rides along inside a rename and no reader notices: a rename is the one diff people skim.
 
-**Measure it before the autofix pass**, while each moved file still holds the bytes the move gave it, and carry the counts forward into the report. That pass runs the destination's own formatter over the whole candidate, so a moved file it rewrites differs from its pre-move blob for a reason that has nothing to do with the rename — while the proof exists to catch the opposite case, a content edit riding along inside one. Run it afterwards and every reformatted move is a finding, which is worth the same as having no proof. There is no reading that recovers it later: the pass is the first thing in the flow to commit, so before it the candidate's tip is still the commit the branch left and no tree in the repository holds a moved file at its new path. [Step 7](retrofit.md#step-7--dispose-the-collisions-write-both-records-meet-the-bar) fixes the order both proofs need — measure, then commit, then the pass — and it is the same order the copy proof's `--cached` read depends on.
+**Measure it before the autofix pass**, while each moved file still holds the bytes the move gave it, and carry the counts forward into the report. That pass runs the destination's own formatter over the whole candidate, so a moved file it rewrites differs from its pre-move blob for a reason that has nothing to do with the rename — while the proof exists to catch the opposite case, a content edit riding along inside one. Run it afterwards and every reformatted move is a finding, which is worth the same as having no proof. There is no reading that recovers it later: both proofs read the index, and the commit of this flow's own work that precedes the pass empties it, while before that commit the candidate's tip is still the commit the branch left and no tree in the repository holds a moved file at its new path. [Step 7](retrofit.md#step-7--dispose-the-collisions-write-both-records-meet-the-bar) fixes the order both proofs need — measure, then commit, then the pass — and it is the same order the copy proof's `--cached` read depends on.
 
 Report the authored surface in **File list**, so the reader sees which lines were the template's and which were this run's.
 
@@ -114,7 +114,7 @@ One line per check, from `scripts/summarize <command>` rather than from a filter
 ### Cleanup
 What this flow created that was not the result, and what became of it.
 
-- Candidate: removed from <path>, branch <name> deleted | worktree removed from <path>, branch <name> kept for the pull request still open | left standing at <path>, because the flow stopped and resumes from it | none created: this flow ran in the operator's own clone
+- Candidate: removed from <path>, branch <name> deleted | worktree removed from <path>, branch <name> kept for the pull request still open | already absent | standing, because `branch -d` refused it | standing, because the containment test could not run | left standing at <path>, because the flow stopped and resumes from it | none created: this flow ran in the operator's own clone
 - Scratch outside the candidate: <paths>: removed | kept, because <what is still pinned to it> | none
 - Left for the operator: <path>: <why removing it was not this flow's call> | none
 

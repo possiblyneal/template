@@ -319,6 +319,51 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class HookOutcomeTests(unittest.TestCase):
+    """The refusals prove something only once a well-formed commit has landed."""
+
+    def test_no_refusal_counts_when_every_commit_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            tree = Path(directory) / "tree"
+            git("init", "-q", "-b", "main", str(tree), cwd=Path(directory))
+            (tree / "docs").mkdir()
+            git("commit", "-q", "--allow-empty", "-m", "chore: start", cwd=tree)
+            refuse = tree / ".git/hooks/pre-commit"
+            refuse.write_text("#!/bin/sh\nexit 1\n")
+            refuse.chmod(0o755)
+            script = (
+                "import json, sys; from pathlib import Path; "
+                f"sys.path.insert(0, {str(MODULE_PATH.parent)!r}); import retrofit; "
+                "print(json.dumps(retrofit.hook_outcomes(Path(sys.argv[1]), 'main')))"
+            )
+
+            result = subprocess.run(
+                ["python3", "-c", script, str(tree)],
+                text=True,
+                capture_output=True,
+                check=False,
+                env={
+                    **os.environ,
+                    # This machine's own global hooks would run instead.
+                    "GIT_CONFIG_GLOBAL": os.devnull,
+                    "GIT_AUTHOR_NAME": "Repo Builder Test",
+                    "GIT_AUTHOR_EMAIL": "repo-builder-test@example.invalid",
+                    "GIT_COMMITTER_NAME": "Repo Builder Test",
+                    "GIT_COMMITTER_EMAIL": "repo-builder-test@example.invalid",
+                },
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                json.loads(result.stdout),
+                {
+                    "default_branch_refused": False,
+                    "malformed_subject_refused": False,
+                    "trailer_rewritten": False,
+                },
+            )
+
+
 GH_STUB = """#!/usr/bin/env python3
 import json, os, sys
 
@@ -532,6 +577,31 @@ class SweepTests(unittest.TestCase):
                 "left standing with its worktree, which can still be resumed",
             )
 
+    def test_names_a_contained_branch_whose_deletion_was_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            clone, candidate = self._candidate(directory)
+            self._merge(clone)
+            # A second checkout of the branch is what `branch -d` refuses on.
+            git(
+                "worktree",
+                "add",
+                "-q",
+                "--force",
+                str(Path(directory) / "other"),
+                self.BRANCH,
+                cwd=clone,
+            )
+
+            result = self._sweep(directory, clone, candidate)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["stages"]["branch"], "refused")
+            self.assertEqual(
+                report["left_for_the_operator"][0]["reason"],
+                "contained in origin/main, but `branch -d` refused it",
+            )
+
     def test_names_a_pull_request_lookup_it_could_not_make(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             clone, candidate = self._candidate(directory)
@@ -696,6 +766,7 @@ class HostedTests(unittest.TestCase):
                     "created": ["wayfinder:map"],
                     "renamed": [{"from": "Needs-Triage", "to": "needs-triage"}],
                     "skipped": [{"label": "bug", "reason": "exists"}],
+                    "refused": [],
                 },
             )
             self.assertEqual(report["findings"], [])
@@ -815,6 +886,134 @@ class HostedTests(unittest.TestCase):
                 ["gh", "api", "-X", "DELETE", f"{REPO}/rulesets/42"],
             )
 
+    def test_push_protection_hidden_from_a_non_admin_is_a_gap(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = {"visibility": "public", "permissions": {"admin": False}}
+            result = run(
+                "hosted",
+                "apply",
+                "--repository",
+                "owner/ledger",
+                "--write-log",
+                str(Path(directory) / "candidate.writes.json"),
+                "--approve",
+                "push-protection",
+                env=stub_gh(
+                    directory, [{"args": ["api", REPO], "stdout": json.dumps(repo)}]
+                ),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["writes"], {"push-protection": "permissions gap"})
+            self.assertEqual(len(report["findings"]), 1)
+            self.assertTrue(report["findings"][0].startswith("push-protection:"))
+
+    def test_a_replaced_ruleset_is_saved_without_its_read_only_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            body = Path(directory) / "ruleset.json"
+            body.write_text('{"name": "main"}\n')
+            current = {
+                "id": 7,
+                "node_id": "RRS_7",
+                "_links": {"self": {"href": "x"}},
+                "created_at": "2026-01-01T00:00:00Z",
+                "updated_at": "2026-01-01T00:00:00Z",
+                "source": "owner/ledger",
+                "source_type": "Repository",
+                "current_user_can_bypass": "never",
+                "name": "protect",
+                "target": "branch",
+                "enforcement": "active",
+                "rules": [{"type": "deletion"}],
+            }
+            result = run(
+                "hosted",
+                "apply",
+                "--repository",
+                "owner/ledger",
+                "--write-log",
+                str(Path(directory) / "candidate.writes.json"),
+                "--approve",
+                "ruleset",
+                "--ruleset",
+                str(body),
+                "--replace-ruleset",
+                "7",
+                env=stub_gh(
+                    directory,
+                    [
+                        {
+                            "args": ["api", f"{REPO}/rulesets/7"],
+                            "stdout": json.dumps(current),
+                        },
+                        {"args": ["api", "-X", "PUT"], "stdout": "{}"},
+                    ],
+                ),
+            )
+
+            self.assertEqual(json.loads(result.stdout)["writes"], {"ruleset": "done"})
+            log = json.loads((Path(directory) / "candidate.writes.json").read_text())
+            saved = json.loads(Path(log[0]["before"]).read_text())
+            self.assertEqual(
+                saved,
+                {
+                    "name": "protect",
+                    "target": "branch",
+                    "enforcement": "active",
+                    "rules": [{"type": "deletion"}],
+                },
+            )
+
+    def test_labels_created_before_a_refusal_are_kept(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = run(
+                "hosted",
+                "apply",
+                "--repository",
+                "owner/ledger",
+                "--write-log",
+                str(Path(directory) / "candidate.writes.json"),
+                "--approve",
+                "labels",
+                "--label",
+                "first",
+                "--label",
+                "second",
+                "--label",
+                "third",
+                env=stub_gh(
+                    directory,
+                    [
+                        *self._responses(),
+                        {
+                            "args": [
+                                "api",
+                                "-X",
+                                "POST",
+                                f"{REPO}/labels",
+                                "-f",
+                                "name=second",
+                            ],
+                            **FORBIDDEN,
+                        },
+                    ],
+                ),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            labels = report["writes"]["labels"]
+            self.assertEqual(labels["created"], ["first"])
+            self.assertEqual(
+                [(item["label"], item["outcome"]) for item in labels["refused"]],
+                [("second", "permissions gap")],
+            )
+            self.assertEqual(len(report["findings"]), 1)
+            self.assertTrue(report["findings"][0].startswith("labels:"))
+            log = json.loads((Path(directory) / "candidate.writes.json").read_text())
+            self.assertEqual([entry["write"] for entry in log], ["label:first"])
+
 
 PROOFS = {
     "operation": "proofs",
@@ -868,6 +1067,15 @@ HOOKS = {
     "worktree_removed": True,
     "findings": [],
 }
+SWEEP_STAGES = {
+    "fetch": "done",
+    "clean": "done",
+    "worktree": "done",
+    "prune": "done",
+    "hooks_dir": "removed",
+    "write_log": "removed",
+    "branch": "deleted",
+}
 SWEEP = {
     "operation": "sweep",
     "clone": {"path": "/home/op/ledger", "default_branch": "main"},
@@ -876,15 +1084,7 @@ SWEEP = {
         "hooks_dir": "/r/tmp/ledger-hooks",
         "write_log": "/r/tmp/ledger.writes.json",
     },
-    "stages": {
-        "fetch": "done",
-        "clean": "done",
-        "worktree": "done",
-        "prune": "done",
-        "hooks_dir": "removed",
-        "write_log": "removed",
-        "branch": "deleted",
-    },
+    "stages": SWEEP_STAGES,
     "left_for_the_operator": [
         {
             "branch": "retrofit/000000000000",
@@ -1072,7 +1272,7 @@ class ReportTests(unittest.TestCase):
                     "stopped before the pull request, zero hosted writes performed"
                 ),
                 "- Default branch after merge: n/a (nothing merged)",
-                "- Destination hooks after merge: n/a (merge declined)",
+                "- Destination hooks after merge: n/a (stopped before the merge was offered)",
                 "- Merge settings (merge commit only, head branches deleted): not requested",
                 "- none performed",
                 "- Permissions gap: none",
@@ -1086,6 +1286,63 @@ class ReportTests(unittest.TestCase):
             )
             self.assertTrue(lines[-1].startswith("[[FILL: "))
             self.assertIn("the unmet-bar outcome, in the Report additions shape", slots)
+
+    def test_a_nonzero_exit_outside_the_result_table_fails_the_bar(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            lines, _ = self._render(
+                directory,
+                SUMMARY_PASS
+                + "\nscripts/check exited 1 with no failing result line: the "
+                "failure is outside the\nResult table.\n",
+                proofs=PROOFS,
+                stopped="the bar is unmet",
+            )
+
+            self.assertIn("- `scripts/check`: fail (exit-status)", lines)
+            self.assertIn(
+                "  - exit-status: scripts/check exited 1 outside the Result table",
+                lines,
+            )
+            self.assertNotIn("- Bar: met", lines)
+            self.assertTrue(
+                any(
+                    line.startswith("- Bar: UNMET: exit-status: fail") for line in lines
+                )
+            )
+
+    def test_reads_ruleset_enforcement_and_the_branch_from_their_stages(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            apply = {
+                **HOSTED_APPLY,
+                "writes": {"ruleset": "done"},
+                "findings": [],
+            }
+            stages = {**SWEEP_STAGES, "branch": "refused"}
+            sweep = {**SWEEP, "stages": stages}
+            lines, slots = self._render(
+                directory,
+                SUMMARY_PASS,
+                proofs=PROOFS,
+                hooks=HOOKS,
+                sweep=sweep,
+                hosted_apply=apply,
+                pull_request="https://github.com/o/ledger/pull/9",
+            )
+
+            self.assertIn(
+                "step 9's mergeable/mergeStateStatus reading of the pull request",
+                slots,
+            )
+            self.assertIn(
+                "- Candidate: worktree removed from /r/tmp/ledger, branch "
+                "retrofit/aaaaaaaaaaaa standing, because `branch -d` refused it",
+                lines,
+            )
+
+            lines, _ = self._render(
+                directory, SUMMARY_PASS, proofs=PROOFS, hosted_apply=HOSTED_APPLY
+            )
+            self.assertIn("- Ruleset enforcement: n/a (no ruleset written)", lines)
 
     def test_adds_resumption_naming_the_writes_read_from_the_log(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

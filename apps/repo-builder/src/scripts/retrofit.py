@@ -16,7 +16,7 @@ import shutil
 import subprocess
 import sys
 import urllib.parse
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, NoReturn
 
@@ -389,15 +389,21 @@ def hook_outcomes(tree: Path, default_branch: str) -> dict[str, bool]:
         and REWRITTEN_TRAILER in message
         and AGENT_TRAILER not in message
     )
+    landed = message is not None
     malformed_refused = (
-        attempt_commit(tree, f"Not a conventional subject\n\n{AGENT_TRAILER}\n") is None
+        landed
+        and attempt_commit(tree, f"Not a conventional subject\n\n{AGENT_TRAILER}\n")
+        is None
     )
 
     scratch_ref = f"refs/worktree/{default_branch}"
     run_git(tree, "update-ref", scratch_ref, "HEAD")
     run_git(tree, "symbolic-ref", "HEAD", scratch_ref)
     default_refused = (
-        attempt_commit(tree, f"docs: commit to the default branch\n\n{AGENT_TRAILER}\n")
+        landed
+        and attempt_commit(
+            tree, f"docs: commit to the default branch\n\n{AGENT_TRAILER}\n"
+        )
         is None
     )
 
@@ -576,6 +582,8 @@ def sweep(arguments: argparse.Namespace) -> dict[str, object]:
     ).splitlines():
         if name == branch and stages["branch"] == "skipped":
             reason = "left standing with its worktree, which can still be resumed"
+        elif name == branch and stages["branch"] == "refused":
+            reason = f"contained in origin/{default}, but `branch -d` refused it"
         elif name == branch:
             reason = f"not contained in origin/{default}, so its merge was declined"
         else:
@@ -793,64 +801,88 @@ def write_merge_settings(repository: str, log: WriteLog) -> str:
 
 def write_labels(
     repository: str, names: list[str], rename: bool, log: WriteLog
-) -> dict[str, list[object]]:
+) -> dict[str, list[Any]]:
     """Create what is missing; the host matches names case-insensitively, so a
     case variant is renamed to the given spelling, or kept where `rename` is off
     because the destination's own vocabulary file is the one in force."""
     listed = gh("api", "--paginate", f"repos/{repository}/labels")
     assert isinstance(listed, list)
     existing = {label["name"].casefold(): label["name"] for label in listed}
-    outcome: dict[str, list[object]] = {"created": [], "renamed": [], "skipped": []}
+    outcome: dict[str, list[Any]] = {
+        "created": [],
+        "renamed": [],
+        "skipped": [],
+        "refused": [],
+    }
     for name in names:
-        write = f"label:{name}"
-        present = existing.get(name.casefold())
-        if log.logged(write) or present == name:
-            outcome["skipped"].append({"label": name, "reason": "exists"})
-        elif present is not None and not rename:
-            outcome["skipped"].append(
-                {"label": name, "reason": f"exists as {present}, kept"}
+        try:
+            write_label(repository, name, existing, rename, log, outcome)
+        except Refusal as refusal:
+            # Stop at the first: what landed before it is kept in the outcome.
+            outcome["refused"].append(
+                {"label": name, "outcome": refusal.outcome, "reason": str(refusal)}
             )
-        elif present is not None:
-            quoted = urllib.parse.quote(present, safe="")
-            gh(
+            break
+    return outcome
+
+
+def write_label(
+    repository: str,
+    name: str,
+    existing: Mapping[str, str],
+    rename: bool,
+    log: WriteLog,
+    outcome: dict[str, list[Any]],
+) -> None:
+    """One label, its outcome recorded in `outcome` as it lands."""
+    write = f"label:{name}"
+    present = existing.get(name.casefold())
+    if log.logged(write) or present == name:
+        outcome["skipped"].append({"label": name, "reason": "exists"})
+    elif present is not None and not rename:
+        outcome["skipped"].append(
+            {"label": name, "reason": f"exists as {present}, kept"}
+        )
+    elif present is not None:
+        quoted = urllib.parse.quote(present, safe="")
+        gh(
+            "api",
+            "-X",
+            "PATCH",
+            f"repos/{repository}/labels/{quoted}",
+            "-f",
+            f"new_name={name}",
+        )
+        log.append(
+            write,
+            present,
+            name,
+            [
+                "gh",
                 "api",
                 "-X",
                 "PATCH",
-                f"repos/{repository}/labels/{quoted}",
+                f"repos/{repository}/labels/{urllib.parse.quote(name, safe='')}",
                 "-f",
-                f"new_name={name}",
-            )
-            log.append(
-                write,
-                present,
-                name,
-                [
-                    "gh",
-                    "api",
-                    "-X",
-                    "PATCH",
-                    f"repos/{repository}/labels/{urllib.parse.quote(name, safe='')}",
-                    "-f",
-                    f"new_name={present}",
-                ],
-            )
-            outcome["renamed"].append({"from": present, "to": name})
-        else:
-            gh("api", "-X", "POST", f"repos/{repository}/labels", "-f", f"name={name}")
-            log.append(
-                write,
-                None,
-                name,
-                [
-                    "gh",
-                    "api",
-                    "-X",
-                    "DELETE",
-                    f"repos/{repository}/labels/{urllib.parse.quote(name, safe='')}",
-                ],
-            )
-            outcome["created"].append(name)
-    return outcome
+                f"new_name={present}",
+            ],
+        )
+        outcome["renamed"].append({"from": present, "to": name})
+    else:
+        gh("api", "-X", "POST", f"repos/{repository}/labels", "-f", f"name={name}")
+        log.append(
+            write,
+            None,
+            name,
+            [
+                "gh",
+                "api",
+                "-X",
+                "DELETE",
+                f"repos/{repository}/labels/{urllib.parse.quote(name, safe='')}",
+            ],
+        )
+        outcome["created"].append(name)
 
 
 def write_toggle(repository: str, write: str, endpoint: str, log: WriteLog) -> str:
@@ -882,6 +914,9 @@ def write_push_protection(repository: str, log: WriteLog) -> str:
     )
     if before == "enabled":
         return "already set"
+    # As in hosted_read: only an admin is shown the key at all.
+    if before is None and not repo.get("permissions", {}).get("admin"):
+        raise Refusal("403", "push protection status is not shown to this credential")
     if before in (None, "unavailable"):
         raise Refusal("403", f"{UPGRADE_MESSAGE}: push protection is not offered")
     gh("api", "-X", "PATCH", f"repos/{repository}", "-f", f"{field}=enabled")
@@ -892,6 +927,19 @@ def write_push_protection(repository: str, log: WriteLog) -> str:
         ["gh", "api", "-X", "PATCH", f"repos/{repository}", "-f", f"{field}={before}"],
     )
     return "done"
+
+
+# What a ruleset GET returns and its PUT does not take back.
+RULESET_READ_ONLY = (
+    "id",
+    "node_id",
+    "_links",
+    "created_at",
+    "updated_at",
+    "source",
+    "source_type",
+    "current_user_can_bypass",
+)
 
 
 def write_ruleset(
@@ -924,8 +972,12 @@ def write_ruleset(
         return "done"
     endpoint = f"repos/{repository}/rulesets/{replaces}"
     before = gh("api", endpoint)
+    assert isinstance(before, dict)
+    restorable = {
+        key: value for key, value in before.items() if key not in RULESET_READ_ONLY
+    }
     saved = log.path.with_name(f"{log.path.stem}.ruleset-{replaces}.json")
-    saved.write_text(json.dumps(before, indent=2) + "\n")
+    saved.write_text(json.dumps(restorable, indent=2) + "\n")
     gh("api", "-X", "PUT", endpoint, "--input", str(body))
     log.append(
         "ruleset",
@@ -1012,11 +1064,18 @@ def hosted_apply(arguments: argparse.Namespace) -> dict[str, object]:
             writes[write] = "logged"
             continue
         try:
-            writes[write] = performers[write]()
+            outcome = performers[write]()
         except Refusal as refusal:
-            writes[write] = refusal.outcome
+            outcome = refusal.outcome
             if refusal.outcome != "not offered":
                 findings.append(f"{write}: {refusal}")
+        if isinstance(outcome, dict):
+            findings.extend(
+                f"{write}: {item['reason']}"
+                for item in outcome["refused"]
+                if item["outcome"] != "not offered"
+            )
+        writes[write] = outcome
     return {
         "operation": "hosted apply",
         "repository": repository,
@@ -1029,6 +1088,8 @@ def hosted_apply(arguments: argparse.Namespace) -> dict[str, object]:
 SUMMARY_ROW = re.compile(
     r"^([A-Za-z0-9_-]+) +(pass|not-applicable|unavailable|FAIL|would-run)(?: +(.*))?$"
 )
+# `scripts/summarize`'s line for a non-zero exit with no failing row.
+UNLISTED_FAILURE = re.compile(r"^(.+ exited \d+) with no failing result line")
 SETTING_WRITES = {
     "merge-settings": "Merge settings (merge commit only, head branches deleted)",
     "dependabot-alerts": "Dependabot alerts",
@@ -1058,14 +1119,28 @@ class Report:
 
 
 def read_summary(path: Path) -> list[dict[str, Any]]:
-    """`scripts/summarize` rows: a state line, then the findings indented under it."""
+    """`scripts/summarize` rows: a state line, then the findings indented under it.
+
+    A command that exited non-zero with every row passing fails as a row of its
+    own, since the saved summary is the only place its exit status survives.
+    """
     rows: list[dict[str, Any]] = []
     for line in path.read_text().splitlines():
         matched = SUMMARY_ROW.match(line)
+        unlisted = UNLISTED_FAILURE.match(line)
         if matched:
             check, state, detail = matched.groups()
             rows.append(
                 {"check": check, "state": state, "detail": detail or "", "findings": []}
+            )
+        elif unlisted:
+            rows.append(
+                {
+                    "check": "exit-status",
+                    "state": "FAIL",
+                    "detail": unlisted.group(1),
+                    "findings": [f"{unlisted.group(1)} outside the Result table"],
+                }
             )
         elif line[:1].isspace() and line.strip() and rows:
             rows[-1]["findings"].append(line.strip())
@@ -1092,6 +1167,26 @@ def joined(items: list[str]) -> str:
 
 def load(path: Path | None) -> Any:
     return json.loads(path.read_text()) if path is not None else {}
+
+
+# The candidate branch's sweep stage, as the Cleanup line reads it.
+BRANCH_FATES = {
+    "kept": "kept for the pull request still open",
+    "absent": "already absent",
+    "refused": "standing, because `branch -d` refused it",
+    "skipped": "standing, because the containment test could not run",
+}
+
+
+def ruleset_enforcement(
+    outcome: object, pull_request: str | None, slot: Callable[[str], str]
+) -> str:
+    """Step 8 proves nothing here; step 9's reading of the pull request does."""
+    if outcome not in ("done", "logged"):
+        return "n/a (no ruleset written)"
+    if pull_request is None:
+        return "not yet proven at the gate, and no pull request opened to prove it"
+    return slot("step 9's mergeable/mergeStateStatus reading of the pull request")
 
 
 def render_report(arguments: argparse.Namespace) -> dict[str, object]:
@@ -1219,6 +1314,10 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
             parts.append(
                 f"already present ({', '.join(item['label'] for item in labels['skipped'])})"
             )
+        parts += [
+            f"refused at {item['label']} ({item['outcome']}), the rest not attempted"
+            for item in labels.get("refused", [])
+        ]
         label_line = "; ".join(parts)
     else:
         label_line = f"none created ({r('reason no labels were created')})"
@@ -1243,11 +1342,16 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
         for finding in applied.get("findings", [])
         if writes.get(str(finding).split(":", 1)[0]) == "permissions gap"
     ]
+    if isinstance(labels, dict):
+        gaps += [
+            f"labels: {item['reason']}"
+            for item in labels.get("refused", [])
+            if item["outcome"] == "permissions gap"
+        ]
     report.section("### Hosted writes, irreversible")
     report.add(
         f"- {r('each irreversible write, its before-state, applied value and cost; or none')}",
-        "- Ruleset enforcement: unproven; the probe is not performed against a live "
-        "default branch, as the hosted-write gate directs",
+        f"- Ruleset enforcement: {ruleset_enforcement(writes.get('ruleset'), arguments.pull_request, r)}",
         f"- Permissions gap: {'; '.join(gaps) if gaps else 'none'}",
     )
 
@@ -1310,6 +1414,10 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
             f"global hooks: {joined(linked)}, verified by {joined(observed)}"
             + (f"; NOT observed: {', '.join(failed)}" if failed else "")
         )
+    elif arguments.stopped:
+        report.add(
+            "- Destination hooks after merge: n/a (stopped before the merge was offered)"
+        )
     else:
         report.add("- Destination hooks after merge: n/a (merge declined)")
 
@@ -1331,7 +1439,7 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
         elif stages.get("worktree") in ("done", "absent"):
             report.add(
                 f"- Candidate: worktree removed from {candidate['path']}, branch "
-                f"{candidate['branch']} kept for the pull request still open"
+                f"{candidate['branch']} {BRANCH_FATES[stages.get('branch')]}"
             )
         else:
             report.add(
