@@ -1454,7 +1454,9 @@ def repository_settings(
     report: Report, hosted_state: dict, applied: dict, stopped: str | None
 ) -> None:
     writes, reasons = applied.get("writes", {}), applied.get("reasons", {})
-    gate_reached = bool(applied) or not stopped
+    # The gate opens with `hosted read`, so its JSON marks a run that reached
+    # the gate even where it stopped there with nothing applied.
+    gate_reached = bool(hosted_state or applied) or not stopped
     report.section("### Repository settings")
     report.add(
         f"- Destination visibility: {hosted_state.get('visibility') or report.fill('public or private, read from the API')}"

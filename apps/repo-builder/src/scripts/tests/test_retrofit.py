@@ -1500,6 +1500,19 @@ class ReportTests(unittest.TestCase):
             self.assertEqual(filled, len(slots))
             self.assertIn("check-suite result", slots)
 
+    def test_renders_a_run_stopped_at_the_gate_as_reaching_it(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            lines, _ = self._render(
+                directory,
+                SUMMARY_PASS,
+                proofs=PROOFS,
+                hosted_read=HOSTED_READ,
+                stopped="the operator declined every hosted write",
+            )
+
+            self.assertIn("- Runner variable: not requested", lines)
+            self.assertNotIn("not reached", "\n".join(lines))
+
     def test_renders_a_stopped_unmet_bar_with_nothing_hosted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             lines, slots = self._render(
