@@ -310,15 +310,17 @@ The recipe is [Working hooks in a candidate](#working-hooks-in-a-candidate)'s, w
 python3 apps/repo-builder/src/scripts/retrofit.py hooks \
   --clone <path-to-destination-clone> \
   --default-branch <default-branch> \
-  --scratch <absolute path to this repository>/tmp/<repository-name>-hooks
+  --scratch <absolute path to this repository>/tmp/<repository-name>-hooks \
+  --resume-record <resume record>
 ```
 
 It fetches the default branch and refuses, exiting 2, where that branch carries no `.pre-commit-config.yaml`: the merge has not landed, and there is nothing to install. Otherwise it prints:
 
 - `hook_types` — read through the branch's own `pre_commit_hook_types`.
-- `hooks_path` — the shims' directory, now `core.hooksPath` at local scope; `previous_local_hooks_path` is what the key held before, or `null`.
-- `moved_aside` — each hook the clone already had, with where it was and the `<type>.legacy` it is chained from now.
-- `global_hooks` — each hook in the operator's global `core.hooksPath` directory, `linked` with the path it was linked as, or `duplicate`.
+- `hooks_path` — the shims' directory, now `core.hooksPath` at local scope.
+- `prior_hooks` — the directory git ran the clone's hooks from before the pin, with `scope`: the scope that set `core.hooksPath`, as `git config --show-scope` names it, or `default` for the clone's own `.git/hooks`. It is read once and kept in the resume record, because after the pin every later run would read the shims' directory back as the prior one.
+- `moved_aside` — each hook in `.git/hooks` the pin would otherwise change, with where it was and where it is now: `<type>.legacy`, chained, where git was running it, or `<name>.dormant` where git was not.
+- `chained` — each hook in a prior directory other than `.git/hooks`, `linked` with the path it was linked as, or `duplicate`.
 - `checks` — the three outcome checks below, each `true` where the hooks did what the destination's documentation promises.
 - `worktree_removed` and `findings` — a refusal anywhere, including a throwaway worktree git would not remove, is a finding and nothing is forced.
 
@@ -328,7 +330,7 @@ Three things about that clone decide what differs from the candidate's version o
 - **The clone is not on the merged branch**, and does not need to be. The operator was working somewhere when the flow began and is still there. `init-templatedir` writes repository-independent shims and reads no config, so nothing has to be checked out for it, and the shims resolve `--config=.pre-commit-config.yaml` relative to whatever tree invokes them rather than pinning the branch installed from.
 - **Branches in flight predate the config.** Every one of them lacks `.pre-commit-config.yaml`, and a shim finding none would refuse every commit on work this flow does not own. `init-templatedir` allows a missing config by default, printing `Skipping pre-commit` and exiting zero, so those branches pass through untouched while the default branch gets the full surface. Do not pass `--no-allow-missing-config`.
 
-Writing into `.git/hooks` is the one place this recipe can destroy something. The shims are written *into* the directory the clone's own hooks live in, and `init-templatedir` installs with overwrite, which deletes `<type>.legacy` after moving an existing hook there — so moving a hook aside to `.legacy` before installing loses it exactly as not moving it does. The helper holds each one under another name across the install and puts it at `<type>.legacy` afterwards. Hooks in the operator's *global* `core.hooksPath` directory are the other case: pinning the key stops git reading them for this clone, so each is linked in unless it duplicates the payload's. A message hook is a duplicate when it rewrites a probe message exactly as the payload's stage does; any other is linked, because keeping a hook the payload already covers costs a second run and dropping one it does not costs the operator a check.
+Writing into `.git/hooks` is the one place this recipe can destroy something. The shims are written *into* the directory the clone's own hooks live in, and `init-templatedir` installs with overwrite, which deletes `<type>.legacy` after moving an existing hook there — so moving a hook aside to `.legacy` before installing loses it exactly as not moving it does. The helper holds each one under another name across the install and puts it at `<type>.legacy` afterwards. That is right only where `.git/hooks` is what git was running. Where a `core.hooksPath` at local or global scope pointed elsewhere, pinning the key stops git reading *that* directory for this clone, so each of its hooks is linked in instead, unless it duplicates the payload's — and the hooks sitting in `.git/hooks`, which git was not running, are renamed `<name>.dormant`, so the pin neither starts them nor chains them. Chain what git was running, and nothing it was not. A message hook is a duplicate when it rewrites a probe message exactly as the payload's stage does; any other is linked, because keeping a hook the payload already covers costs a second run and dropping one it does not costs the operator a check.
 
 The checks verify by outcome the way the destination will experience it, in a throwaway worktree the helper removes: a commit on the default branch is refused, a malformed subject fails commitlint, and a `Co-Authored-By` trailer comes back rewritten. The test file goes under `docs/`, since the structure audit refuses an unpermitted root file and would refuse all three for the wrong reason, and the default branch is stood in for by a per-worktree ref of the same name, so a hook that failed to refuse would advance a ref that leaves with the worktree rather than the clone's own branch.
 
@@ -431,6 +433,8 @@ A resumed run **re-observes** rather than replays. Almost everything a flow does
 ```
 
 `source_commit` is in the record for the same reason, though it looks derivable. The invocation may have named a branch, and re-resolving that branch on the resume gives whatever it points at now, which is a different commit from the one already materialized as the candidate on disk. Read the record's commit and resolve nothing.
+
+A retrofit's post-merge hooks record one more: `prior_hooks`, the directory git ran the destination clone's hooks from before [Working hooks in the destination after a merge](#working-hooks-in-the-destination-after-a-merge) pinned `core.hooksPath`. The pin overwrites the only live state that answered it.
 
 A retrofit's hosted writes are the other case. Each one's before-state is gone once it lands, so a resumed run reads it from the write log `retrofit.py hosted apply` keeps, under [Step 8 — The hosted-write gate](retrofit.md#step-8--the-hosted-write-gate), and `apply` reports a write already in the log as `logged` rather than performing it again.
 

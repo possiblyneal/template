@@ -174,6 +174,14 @@ def hook_environments_unavailable() -> str | None:
     return None
 
 
+def write_hooks(directory: Path, hooks: dict[str, str]) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    for name, body in hooks.items():
+        hook = directory / name
+        hook.write_text(body)
+        hook.chmod(0o755)
+
+
 class HooksTests(unittest.TestCase):
     """The destination clone's hooks, installed after the merge and proved."""
 
@@ -199,15 +207,18 @@ class HooksTests(unittest.TestCase):
         git("checkout", "-q", "-b", "feature", cwd=destination)
         return destination
 
-    def _global(self, directory: str, hooks: dict[str, str]) -> dict[str, str]:
-        """An operator's global hooks directory, isolated from this machine's."""
+    def _env(
+        self, directory: str, global_hooks: dict[str, str] | None = None
+    ) -> dict[str, str]:
+        """An operator's global config, isolated from this machine's, with a
+        global hooks directory holding `global_hooks` where it is given."""
         root = Path(directory) / "global"
-        (root / "hooks").mkdir(parents=True)
-        for name, body in hooks.items():
-            hook = root / "hooks" / name
-            hook.write_text(body)
-            hook.chmod(0o755)
-        (root / "gitconfig").write_text(f"[core]\n\thooksPath = {root / 'hooks'}\n")
+        root.mkdir()
+        config = ""
+        if global_hooks is not None:
+            write_hooks(root / "hooks", global_hooks)
+            config = f"[core]\n\thooksPath = {root / 'hooks'}\n"
+        (root / "gitconfig").write_text(config)
         return {
             **os.environ,
             "GIT_CONFIG_GLOBAL": str(root / "gitconfig"),
@@ -226,59 +237,52 @@ class HooksTests(unittest.TestCase):
             str(destination),
             "--default-branch",
             "main",
+            "--resume-record",
+            str(destination.parent / "record.json"),
             "--scratch",
             str(destination.parent / "hook-test"),
             env=env,
         )
 
+    def _assert_proved(self, report: dict[str, object], destination: Path) -> None:
+        self.assertEqual(report["findings"], [])
+        self.assertEqual(
+            report["checks"],
+            {
+                "default_branch_refused": True,
+                "malformed_subject_refused": True,
+                "trailer_rewritten": True,
+            },
+        )
+        self.assertEqual(
+            git_output("config", "--local", "core.hooksPath", cwd=destination),
+            str(destination / ".git/hooks"),
+        )
+        self.assertTrue(report["worktree_removed"])
+
     def test_installs_the_hooks_and_proves_all_three_refusals(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             destination = self._merged(directory)
             fired = Path(directory) / "fired"
-            own = destination / ".git/hooks/pre-commit"
-            own.write_text(f'#!/bin/sh\ntouch "{fired}"\n')
-            own.chmod(0o755)
-            env = self._global(
-                directory,
-                {
-                    "prepare-commit-msg": (
-                        PAYLOAD / "scripts/attribute-commit"
-                    ).read_text(),
-                    "post-rewrite": "#!/bin/sh\nexit 0\n",
-                },
-            )
-            result = self._hooks(destination, env)
+            hooks = destination / ".git/hooks"
+            write_hooks(hooks, {"pre-commit": f'#!/bin/sh\ntouch "{fired}"\n'})
+            result = self._hooks(destination, self._env(directory))
 
             self.assertEqual(result.returncode, 0, result.stderr)
             report = json.loads(result.stdout)
-            self.assertEqual(report["findings"], [])
+            self._assert_proved(report, destination)
+            prior = {"scope": "default", "path": str(hooks)}
+            self.assertEqual(report["prior_hooks"], prior)
             self.assertEqual(
-                report["checks"],
-                {
-                    "default_branch_refused": True,
-                    "malformed_subject_refused": True,
-                    "trailer_rewritten": True,
-                },
-            )
-            hooks = destination / ".git/hooks"
-            self.assertEqual(
-                git_output("config", "--local", "core.hooksPath", cwd=destination),
-                str(hooks),
+                json.loads((destination.parent / "record.json").read_text()),
+                {"prior_hooks": prior},
             )
             # The clone's own hook is chained, not destroyed: it fired.
             self.assertEqual(
                 report["moved_aside"][0]["to"], str(hooks / "pre-commit.legacy")
             )
             self.assertTrue(fired.exists())
-            self.assertEqual(
-                sorted(
-                    (Path(h["hook"]).name, h["disposition"])
-                    for h in report["global_hooks"]
-                ),
-                [("post-rewrite", "linked"), ("prepare-commit-msg", "duplicate")],
-            )
-            self.assertTrue((hooks / "post-rewrite").is_symlink())
-            self.assertTrue(report["worktree_removed"])
+            self.assertEqual(report["chained"], [])
             self.assertEqual(
                 git_output("worktree", "list", "--porcelain", cwd=destination).count(
                     "worktree "
@@ -290,14 +294,100 @@ class HooksTests(unittest.TestCase):
                 "refs/heads/feature\nrefs/heads/main\nrefs/remotes/origin/main",
             )
 
+    def test_chains_the_global_hooks_and_leaves_the_clones_own_dormant(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            destination = self._merged(directory)
+            own_fired = Path(directory) / "own-fired"
+            global_fired = Path(directory) / "global-fired"
+            hooks = destination / ".git/hooks"
+            # Dormant: git was reading the global directory, not this one.
+            write_hooks(hooks, {"pre-commit": f'#!/bin/sh\ntouch "{own_fired}"\n'})
+            env = self._env(
+                directory,
+                {
+                    "pre-commit": f'#!/bin/sh\ntouch "{global_fired}"\n',
+                    "prepare-commit-msg": (
+                        PAYLOAD / "scripts/attribute-commit"
+                    ).read_text(),
+                    "post-rewrite": "#!/bin/sh\nexit 0\n",
+                },
+            )
+            result = self._hooks(destination, env)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self._assert_proved(report, destination)
+            global_dir = Path(directory) / "global/hooks"
+            self.assertEqual(
+                report["prior_hooks"], {"scope": "global", "path": str(global_dir)}
+            )
+            self.assertTrue(global_fired.exists())
+            self.assertFalse(own_fired.exists())
+            self.assertEqual(
+                report["moved_aside"],
+                [
+                    {
+                        "from": str(hooks / "pre-commit"),
+                        "to": str(hooks / "pre-commit.dormant"),
+                    }
+                ],
+            )
+            self.assertEqual(
+                sorted(
+                    (Path(h["hook"]).name, h["disposition"]) for h in report["chained"]
+                ),
+                [
+                    ("post-rewrite", "linked"),
+                    ("pre-commit", "linked"),
+                    ("prepare-commit-msg", "duplicate"),
+                ],
+            )
+            self.assertEqual(
+                (hooks / "pre-commit.legacy").resolve(), global_dir / "pre-commit"
+            )
+
+    def test_chains_a_local_hooks_path_and_reads_it_back_on_a_resume(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            destination = self._merged(directory)
+            local_fired = Path(directory) / "local-fired"
+            global_fired = Path(directory) / "global-fired"
+            local_dir = Path(directory) / "local-hooks"
+            write_hooks(
+                local_dir, {"pre-commit": f'#!/bin/sh\ntouch "{local_fired}"\n'}
+            )
+            git("config", "core.hooksPath", str(local_dir), cwd=destination)
+            env = self._env(
+                directory, {"pre-commit": f'#!/bin/sh\ntouch "{global_fired}"\n'}
+            )
+            first = self._hooks(destination, env)
+
+            self.assertEqual(first.returncode, 0, first.stderr)
+            report = json.loads(first.stdout)
+            self._assert_proved(report, destination)
+            prior = {"scope": "local", "path": str(local_dir)}
+            self.assertEqual(report["prior_hooks"], prior)
+            self.assertTrue(local_fired.exists())
+            self.assertFalse(global_fired.exists())
+
+            # The key now names the shims, so only the record still knows.
+            local_fired.unlink()
+            second = self._hooks(destination, env)
+
+            self.assertEqual(second.returncode, 0, second.stderr)
+            resumed = json.loads(second.stdout)
+            self._assert_proved(resumed, destination)
+            self.assertEqual(resumed["prior_hooks"], prior)
+            self.assertEqual(resumed["chained"], report["chained"])
+            self.assertTrue(local_fired.exists())
+
     def test_reports_a_worktree_it_could_not_remove_and_forces_nothing(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             destination = self._merged(directory)
             # A chained hook that leaves a file no step commits.
-            own = destination / ".git/hooks/pre-commit"
-            own.write_text("#!/bin/sh\ntouch stray\n")
-            own.chmod(0o755)
-            result = self._hooks(destination, self._global(directory, {}))
+            write_hooks(
+                destination / ".git/hooks", {"pre-commit": "#!/bin/sh\ntouch stray\n"}
+            )
+            result = self._hooks(destination, self._env(directory))
 
             self.assertEqual(result.returncode, 0, result.stderr)
             report = json.loads(result.stdout)
@@ -309,7 +399,7 @@ class HooksTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fixture = retrofit_fixture(directory)
             destination = Path(fixture["destination"])
-            result = self._hooks(destination, self._global(directory, {}))
+            result = self._hooks(destination, self._env(directory))
 
             self.assertEqual(result.returncode, 2)
             self.assertIn("no .pre-commit-config.yaml", result.stderr)
@@ -788,22 +878,27 @@ class HostedTests(unittest.TestCase):
                 ["gh", "api", "-X", "DELETE", f"{REPO}/labels/wayfinder%3Amap"],
             )
 
+    def _reverse(
+        self, directory: str, responses: list[dict[str, object]]
+    ) -> tuple[dict[str, object], list[str]]:
+        """The one logged write, and the call its reverse command sends."""
+        log = json.loads((Path(directory) / "candidate.writes.json").read_text())
+        self.assertEqual(len(log), 1)
+        reverse_dir = Path(directory) / "reverse"
+        reverse_dir.mkdir()
+        subprocess.run(
+            log[0]["reverse_command"],
+            check=True,
+            capture_output=True,
+            env=stub_gh(str(reverse_dir), responses),
+        )
+        return log[0], gh_calls(str(reverse_dir))[0]
+
     def test_a_logged_reverse_command_sends_the_recorded_before_state(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             self._apply(directory, "--approve", "merge-settings")
-            log = json.loads((Path(directory) / "candidate.writes.json").read_text())
-            entry = log[0]
+            entry, sent = self._reverse(directory, self._responses())
 
-            reverse_dir = Path(directory) / "reverse"
-            reverse_dir.mkdir()
-            subprocess.run(
-                entry["reverse_command"],
-                check=True,
-                capture_output=True,
-                env=stub_gh(str(reverse_dir), self._responses()),
-            )
-
-            sent = gh_calls(str(reverse_dir))[0]
             self.assertEqual(sent[:4], ["api", "-X", "PATCH", REPO])
             self.assertEqual(
                 {
@@ -811,6 +906,95 @@ class HostedTests(unittest.TestCase):
                     for field, value in (flag.split("=", 1) for flag in sent[5::2])
                 },
                 entry["before"],
+            )
+
+    def test_push_protection_reverses_to_its_recorded_before_state(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = {
+                "visibility": "public",
+                "permissions": {"admin": True},
+                "security_and_analysis": {
+                    "secret_scanning_push_protection": {"status": "disabled"}
+                },
+            }
+            responses: list[dict[str, object]] = [
+                {"args": ["api", REPO], "stdout": json.dumps(repo)},
+                *self._responses(),
+            ]
+            result = run(
+                "hosted",
+                "apply",
+                "--repository",
+                "owner/ledger",
+                "--write-log",
+                str(Path(directory) / "candidate.writes.json"),
+                "--approve",
+                "push-protection",
+                env=stub_gh(directory, responses),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            entry, sent = self._reverse(directory, responses)
+            self.assertEqual(entry["before"], "disabled")
+            self.assertEqual(
+                sent,
+                [
+                    "api",
+                    "-X",
+                    "PATCH",
+                    REPO,
+                    "-f",
+                    (
+                        "security_and_analysis[secret_scanning_push_protection]"
+                        "[status]=disabled"
+                    ),
+                ],
+            )
+
+    def test_the_runner_variable_reverses_to_its_recorded_before_state(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            runners = {"runners": [{"name": "dev-ledger", "status": "online"}]}
+            responses: list[dict[str, object]] = [
+                {
+                    "args": ["api", f"{REPO}/actions/runners"],
+                    "stdout": json.dumps(runners),
+                },
+                {
+                    "args": ["api", f"{REPO}/actions/variables/RUNNER"],
+                    "stdout": json.dumps({"name": "RUNNER", "value": "ubuntu-latest"}),
+                },
+                {"args": ["variable", "set"]},
+                *self._responses(),
+            ]
+            result = run(
+                "hosted",
+                "apply",
+                "--repository",
+                "owner/ledger",
+                "--write-log",
+                str(Path(directory) / "candidate.writes.json"),
+                "--approve",
+                "runner-variable",
+                env=stub_gh(directory, responses),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                json.loads(result.stdout)["writes"], {"runner-variable": "done"}
+            )
+            entry, sent = self._reverse(directory, responses)
+            self.assertEqual(entry["before"], "ubuntu-latest")
+            self.assertEqual(
+                sent,
+                [
+                    "variable",
+                    "set",
+                    "RUNNER",
+                    "--body",
+                    "ubuntu-latest",
+                    "-R",
+                    "owner/ledger",
+                ],
             )
 
     def test_names_an_upgrade_refusal_not_offered_and_a_403_a_gap(self) -> None:
@@ -1055,10 +1239,9 @@ PROOFS = {
 HOOKS = {
     "operation": "hooks",
     "hooks_path": "/home/op/ledger/.git/hooks",
-    "moved_aside": [
-        {"type": "pre-commit", "from": "pre-commit", "to": "pre-commit.legacy"}
-    ],
-    "global_hooks": [{"hook": "commit-msg", "disposition": "duplicate"}],
+    "prior_hooks": {"scope": "global", "path": "/home/op/.config/git/hooks"},
+    "moved_aside": [{"from": "pre-commit", "to": "pre-commit.dormant"}],
+    "chained": [{"hook": "commit-msg", "disposition": "duplicate"}],
     "checks": {
         "default_branch_refused": True,
         "malformed_subject_refused": True,
@@ -1134,6 +1317,7 @@ HOSTED_APPLY = {
             }
         ],
     },
+    "reasons": {"ruleset": "Resource not accessible (HTTP 403)"},
     "findings": ["ruleset: Resource not accessible (HTTP 403)"],
 }
 SUMMARY_PASS = "lint               pass             ruff\ntest               pass             pytest\n"
@@ -1242,8 +1426,9 @@ class ReportTests(unittest.TestCase):
             )
             self.assertIn(
                 "- Destination hooks after merge: shims in /home/op/ledger/.git/hooks, "
-                "`core.hooksPath` pinned local to it, moved aside: pre-commit -> "
-                "pre-commit.legacy, global hooks: commit-msg duplicate, verified by "
+                "`core.hooksPath` pinned local to it, prior hooks: "
+                "/home/op/.config/git/hooks (global), moved aside: pre-commit -> "
+                "pre-commit.dormant, chained: commit-msg duplicate, verified by "
                 "default_branch_refused, malformed_subject_refused, trailer_rewritten",
                 lines,
             )

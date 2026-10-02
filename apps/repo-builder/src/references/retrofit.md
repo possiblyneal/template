@@ -296,7 +296,8 @@ python3 apps/repo-builder/src/scripts/retrofit.py hosted apply \
 
 `apply` takes `--approve` once per write the gate approved — `merge-settings`, `labels`, `dependabot-alerts`, `security-updates`, `push-protection`, `ruleset`, `runner-variable` — performs them in that order and nothing else, and reports:
 
-- `writes` — each approved write's outcome: `done`, `already set`, `logged` (performed by an earlier run, so not repeated), `not offered`, `permissions gap` or `refused`; `labels` reports `created`, `renamed` and `skipped` per label instead, and `runner-variable` reports `not offered` with which of its two conditions failed
+- `writes` — each approved write's outcome: `done`, `already set`, `logged` (performed by an earlier run, so not repeated), `not offered`, `permissions gap` or `refused`; `labels` reports `created`, `renamed` and `skipped` per label instead, and `runner-variable` reports `not offered` when either of its two conditions fails
+- `reasons` — why, for each write that was `not offered` for a reason other than the plan, or refused other than as `not offered`: the runner variable's failed condition, or the host's refusal text
 - `write_log` — its path and every entry: `{write, before, after, reverse_command}`, one per write performed, where `reverse_command` is the argument list that puts `before` back
 - `findings` — every refusal other than `not offered`
 
@@ -430,7 +431,7 @@ Added under **Verification**:
 - Bar: met | UNMET: <capability>: fail | unavailable (<reason>); stopped before the pull request, zero hosted writes performed
 - Destination fix prepared (unmet bar only): branch <name> in <clone>, <commit> clearing <rule> at <paths>, worktree removed; <the rule count before and after under the candidate's target version>, read <by flag | in the candidate, revert verified clean>, <the harness delta | no harness exists in the destination> | partly prepared: <the same>, and left outstanding: <file and rule for each>, because <what the second reading still showed | the path exists only in the candidate> | nothing to prepare: <the capability was unavailable rather than failing, so no rule is there to clear> | nothing prepared: <tool> resolved `<path>`, outside the fix worktree — or no path could be read for it — so every finding is left outstanding, worktree removed
 - Destination fix published (unmet bar only): push and pull request offered and awaiting the gate | authorized and performed, at <URL> | declined or never answered, branch left local | not reached, because nothing was prepared
-- Destination hooks after merge: shims in <path>, `core.hooksPath` pinned local to it, <each hook moved aside or linked in, or none>, verified by <the refusals observed> | n/a (merge declined) | n/a (stopped before the merge was offered), under [Working hooks in the destination after a merge](lifecycle.md#working-hooks-in-the-destination-after-a-merge)
+- Destination hooks after merge: shims in <path>, `core.hooksPath` pinned local to it, prior hooks: <path> (<the scope that set it | default>), moved aside: <each hook and where it went, or none>, chained: <each prior hook linked or a duplicate, or none>, verified by <the refusals observed> | n/a (merge declined) | n/a (stopped before the merge was offered), under [Working hooks in the destination after a merge](lifecycle.md#working-hooks-in-the-destination-after-a-merge)
 
 Two whole sections are added after **Repository settings**, and they are named apart from each other because a single block of reversal commands reads as though the whole gate can be walked back:
 
