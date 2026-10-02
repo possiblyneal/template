@@ -31,15 +31,7 @@ Which files make up that surface differs by flow:
 - **Adopt** — every region `addon-adoption.json` names for the addons taken. Here differing paths are the expected result rather than the exception: an addon is adopted by editing it, so byte-identity would mean the adoption never happened. Confirm that what differs is the named regions and nothing besides.
 - **Retrofit** — the configuration a move broke and this run repaired, every path reference it rewrote, the merged instruction file, the tool declaration, any retired gate script's callers, and `.repo-template.json`. This is the one flow whose authored surface is edits to the destination's own code, written by this run, which is why its pull request is offered a merge at a gate rather than merged on the way past. **It is also the one surface that is reviewed, and reading it line by line is not that review.** Review it for standards, specification and correctness — the three axes a copy proof cannot produce a finding on — scoped to these paths alone, since the two proofs already cover every other path in the diff. Use whatever review facility the session has; where it has none, read the surface against those three axes by hand and say in the report that is what happened. A pilot retrofit's scan found four defects here, two of them in commands the bar does not reach, on a surface that had already been read. **The autofix pass's rewrites are not on this surface**, which is the one exception to the rule above that a path the payload does not hold belongs to the authored surface. They are the destination's own linter and formatter producing a result its gate demands, so they are accounted for by the measurement [step 7](retrofit.md#step-7--dispose-the-collisions-write-both-records-meet-the-bar) reports rather than read line by line — and a formatter that rewrites most of the tree would otherwise bury the edits this flow actually judged. The pass being its own commit is what makes the exception decidable rather than a matter of opinion: every path it touched and nothing else is in that commit's diff, so a path is off this surface exactly when that commit holds it. Where the pass produced no commit it reached nothing, and the exception is empty.
 
-A retrofit runs a **second proof beside the copy proof**, over the paths it moved rather than the paths it wrote. Each moved file's blob must equal its pre-move blob, read from the destination's commit the candidate branched from:
-
-```bash
-git -C "<destination>" diff --cached --diff-filter=R --name-status |
-  while read -r _ old new; do
-    git -C "<destination>" cat-file -p "<base-commit>:$old" 2> /dev/null |
-      diff -q - "<destination>/$new" > /dev/null || echo "$new"
-  done
-```
+A retrofit runs a **second proof beside the copy proof**, over the paths it moved rather than the paths it wrote: each moved file's blob must equal its pre-move blob, read from the destination's commit the candidate branched from. A retrofit measures both with the helper [step 7](retrofit.md#step-7--dispose-the-collisions-write-both-records-meet-the-bar) names rather than with the loop above.
 
 Report its count beside the copy proof's. A pilot retrofit moved 55 files, which is exactly the volume at which a content edit rides along inside a rename and no reader notices: a rename is the one diff people skim.
 
