@@ -143,10 +143,17 @@ def proofs(arguments: argparse.Namespace) -> dict[str, object]:
 
     moved = {str(move["to"]) for move in moves}
     authored = sorted(staged - payload_set - moved)
+    # A move edited past git's rename threshold lands here as a deletion,
+    # with its new path under `authored`.
+    deleted = sorted(paths[0] for status, paths in changes if status == "D")
     return {
         "operation": "proofs",
         "template": {"commit": target, "subtree": subtree},
-        "candidate": {"path": str(candidate), "base": base},
+        "candidate": {
+            "path": str(candidate),
+            "base": base,
+            "pre_commit_config": (candidate / ".pre-commit-config.yaml").is_file(),
+        },
         "copy": {
             "identical": identical,
             "total": identical + len(differing),
@@ -161,6 +168,7 @@ def proofs(arguments: argparse.Namespace) -> dict[str, object]:
         # Neither proof can produce a finding here, so this is what the
         # review reads, together with every differing copy and impure move.
         "authored": authored,
+        "deleted": deleted,
     }
 
 
@@ -1338,13 +1346,16 @@ def header(report: Report, arguments: argparse.Namespace, proofs: dict) -> None:
     )
 
 
-def reconciliation(report: Report, moves: list[dict]) -> None:
+def reconciliation(report: Report, proofs: dict) -> None:
     fill = report.fill
+    moves = proofs["rename_purity"]["moves"]
+    renamed = [f"{move['from']} -> {move['to']}" for move in moves]
+    deleted = [f"{path} deleted" for path in proofs["deleted"]]
     report.section("### Reconciliation")
     report.add(
         f"- Applied: {fill('payload paths written because they were absent, or none')}",
         f"- Preserved: {fill('paths kept as the destination had them, or none')}",
-        f"- Renamed/deleted: {fill('paths, or none')}",
+        f"- Renamed/deleted: {joined(renamed + deleted)}",
         f"- Conflicted: {fill('paths and competing intents, or none')}",
         f"- Superseded: {fill('each superseded path, what it did and what carries it now, or none')}",
         f"- Partially covered, not cut: {fill('script paths and the parts already covered, or none')}",
@@ -1400,9 +1411,13 @@ def addon_adoption(report: Report) -> None:
     )
 
 
-def setting_line(name: str, outcome: object, reason: str | None) -> str:
+def setting_line(
+    name: str, outcome: object, reason: str | None, gate_reached: bool
+) -> str:
     if outcome in (Outcome.DONE, Outcome.ALREADY_SET, Outcome.LOGGED):
         return f"- {name}: enabled"
+    if not gate_reached:
+        return f"- {name}: not reached (stopped before the gate)"
     if outcome is None:
         return f"- {name}: not requested"
     if outcome == Outcome.NOT_OFFERED:
@@ -1435,8 +1450,11 @@ def labels_line(report: Report, labels: object) -> str:
     return "; ".join(parts)
 
 
-def repository_settings(report: Report, hosted_state: dict, applied: dict) -> None:
+def repository_settings(
+    report: Report, hosted_state: dict, applied: dict, stopped: str | None
+) -> None:
     writes, reasons = applied.get("writes", {}), applied.get("reasons", {})
+    gate_reached = bool(applied) or not stopped
     report.section("### Repository settings")
     report.add(
         f"- Destination visibility: {hosted_state.get('visibility') or report.fill('public or private, read from the API')}"
@@ -1445,7 +1463,10 @@ def repository_settings(report: Report, hosted_state: dict, applied: dict) -> No
         if write.setting is not None:
             report.add(
                 setting_line(
-                    write.setting, writes.get(write.name), reasons.get(write.name)
+                    write.setting,
+                    writes.get(write.name),
+                    reasons.get(write.name),
+                    gate_reached,
                 )
             )
     labels = labels_line(report, writes.get("labels"))
@@ -1563,8 +1584,7 @@ def verification(
         for row in failing(rows):
             report.add(*(f"  - {row.check}: {finding}" for finding in row.findings))
     report.add(
-        f"- Hooks: installed at worktree scope into {swept.get('scratch', {}).get('hooks_dir') or fill('the candidate hooks directory')}; "
-        f"`extensions.worktreeConfig` set on {swept.get('clone', {}).get('path') or fill('the clone')} and left set",
+        candidate_hooks_line(report, proofs, swept),
         f"- Copied paths byte-identical to their source: {copy['identical']}/{copy['total']}; "
         "the rest are the authored surface, under File list. An overridden path is "
         "in neither count, under Reconciliation instead",
@@ -1585,6 +1605,20 @@ def verification(
     )
     report.add(*bar_lines(report, summaries))
     report.add(destination_hooks_line(hooks_result, arguments.stopped))
+
+
+def candidate_hooks_line(report: Report, proofs: dict, swept: dict) -> str:
+    if not proofs["candidate"]["pre_commit_config"]:
+        return (
+            "- Hooks: none installed, because the candidate carries no "
+            "`.pre-commit-config.yaml` to read hook types from"
+        )
+    hooks_dir = swept.get("scratch", {}).get("hooks_dir")
+    clone = swept.get("clone", {}).get("path")
+    return (
+        f"- Hooks: installed at worktree scope into {hooks_dir or report.fill('the candidate hooks directory')}; "
+        f"`extensions.worktreeConfig` set on {clone or report.fill('the clone')} and left set"
+    )
 
 
 def candidate_line(report: Report, swept: dict) -> str:
@@ -1620,10 +1654,12 @@ def cleanup(report: Report, swept: dict, hooks_result: dict) -> None:
     ]
     left += [str(finding) for finding in swept.get("findings", [])]
     left += [str(finding) for finding in hooks_result.get("findings", [])]
-    report.add(f"- Left for the operator: {joined(left)}")
-    report.add(
-        f"- Left for the operator: {report.fill('any other path left in place and why; or delete this line')}"
+    others = report.fill(
+        "any other path left in place and why, or delete this entry"
+        if left
+        else "each path left in place and why, or none"
     )
+    report.add(f"- Left for the operator: {'; '.join([*left, others])}")
 
 
 def resumption(report: Report, writes: dict) -> None:
@@ -1655,11 +1691,11 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
     ]
     report = Report()
     header(report, arguments, proofs)
-    reconciliation(report, proofs["rename_purity"]["moves"])
+    reconciliation(report, proofs)
     application_boundaries(report)
     file_list(report, proofs)
     addon_adoption(report)
-    repository_settings(report, load(arguments.hosted_read), applied)
+    repository_settings(report, load(arguments.hosted_read), applied, arguments.stopped)
     reversible_writes(report, applied.get("write_log", {}).get("entries", []))
     irreversible_writes(report, applied, arguments.pull_request)
     verification(report, arguments, proofs, summaries, hooks_result, swept)

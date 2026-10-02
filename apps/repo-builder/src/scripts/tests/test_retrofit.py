@@ -134,6 +134,33 @@ class ProofsTests(unittest.TestCase):
             )
             self.assertEqual(purity["identical"], purity["total"] - 1)
 
+    def test_names_a_move_edited_past_the_rename_threshold_as_deleted(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = retrofit_fixture(directory)
+            destination = self._overlay(fixture)
+            (destination / "apps/ledger/tests/test_rates.py").write_text("rewritten\n")
+            git("add", "-A", cwd=destination)
+            report = json.loads(self._proofs(fixture).stdout)
+
+            self.assertEqual(report["deleted"], ["tests/test_rates.py"])
+            self.assertIn("apps/ledger/tests/test_rates.py", report["authored"])
+            self.assertNotIn(
+                "tests/test_rates.py",
+                [move["from"] for move in report["rename_purity"]["moves"]],
+            )
+
+    def test_records_whether_the_candidate_carries_a_pre_commit_config(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = retrofit_fixture(directory)
+            destination = self._overlay(fixture)
+            before = json.loads(self._proofs(fixture).stdout)
+            (destination / ".pre-commit-config.yaml").write_text("repos: []\n")
+            git("add", "-A", cwd=destination)
+            after = json.loads(self._proofs(fixture).stdout)
+
+            self.assertFalse(before["candidate"]["pre_commit_config"])
+            self.assertTrue(after["candidate"]["pre_commit_config"])
+
     def test_refuses_an_empty_index(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = retrofit_fixture(directory)
@@ -1225,7 +1252,7 @@ class HostedTests(unittest.TestCase):
 PROOFS = {
     "operation": "proofs",
     "template": {"commit": "a" * 40, "subtree": "base-repo"},
-    "candidate": {"path": "/r/tmp/ledger", "base": "b" * 40},
+    "candidate": {"path": "/r/tmp/ledger", "base": "b" * 40, "pre_commit_config": True},
     "copy": {
         "identical": 61,
         "total": 63,
@@ -1257,7 +1284,8 @@ PROOFS = {
             },
         ],
     },
-    "authored": [".repo-template.json"],
+    "authored": [".repo-template.json", "docs/adrs/0001-one-ledger.md"],
+    "deleted": ["docs/adr/0001-one-ledger.md"],
 }
 HOOKS = {
     "operation": "hooks",
@@ -1400,8 +1428,14 @@ class ReportTests(unittest.TestCase):
                 f"- Template: not previously generated -> {'a' * 40}",
                 "- Layout plan: src/rates.py -> apps/ledger/src/rates.py: moved",
                 (
+                    "- Renamed/deleted: src/rates.py -> apps/ledger/src/rates.py, "
+                    "tests/test_rates.py -> apps/ledger/tests/test_rates.py, "
+                    "docs/adr/0001-one-ledger.md deleted"
+                ),
+                (
                     "- Authored surface: CLAUDE.md (merged), scripts/check (extended), "
-                    ".repo-template.json, apps/ledger/tests/test_rates.py "
+                    ".repo-template.json, docs/adrs/0001-one-ledger.md, "
+                    "apps/ledger/tests/test_rates.py "
                     "(moved from tests/test_rates.py, +1/-0)"
                 ),
                 "- Destination visibility: private",
@@ -1428,13 +1462,18 @@ class ReportTests(unittest.TestCase):
                     "- Scratch outside the candidate: /r/tmp/ledger-hooks: removed, "
                     "/r/tmp/ledger.writes.json: removed"
                 ),
-                (
-                    "- Left for the operator: retrofit/000000000000: an earlier run at "
-                    "another payload commit; pull request "
-                    "https://github.com/o/ledger/pull/3 (open)"
-                ),
             ):
                 self.assertIn(line, lines)
+            self.assertTrue(
+                any(
+                    line.startswith(
+                        "- Left for the operator: retrofit/000000000000: an earlier "
+                        "run at another payload commit; pull request "
+                        "https://github.com/o/ledger/pull/3 (open); [[FILL: "
+                    )
+                    for line in lines
+                )
+            )
             self.assertTrue(
                 any(
                     line.startswith("- Issue tracker: [[FILL: ")
@@ -1481,11 +1520,25 @@ class ReportTests(unittest.TestCase):
                 ),
                 "- Default branch after merge: n/a (nothing merged)",
                 "- Destination hooks after merge: n/a (stopped before the merge was offered)",
-                "- Merge settings (merge commit only, head branches deleted): not requested",
+                (
+                    "- Merge settings (merge commit only, head branches deleted): "
+                    "not reached (stopped before the gate)"
+                ),
+                "- Runner variable: not reached (stopped before the gate)",
                 "- none performed",
                 "- Permissions gap: none",
             ):
                 self.assertIn(line, lines)
+            self.assertNotIn("not requested", "\n".join(lines))
+            left = [
+                line for line in lines if line.startswith("- Left for the operator:")
+            ]
+            self.assertEqual(
+                left,
+                [
+                    "- Left for the operator: [[FILL: each path left in place and why, or none]]"
+                ],
+            )
             self.assertTrue(
                 any(
                     line.startswith("- Candidate: left standing at [[FILL: ")
@@ -1494,6 +1547,27 @@ class ReportTests(unittest.TestCase):
             )
             self.assertTrue(lines[-1].startswith("[[FILL: "))
             self.assertIn("the unmet-bar outcome, in the Report additions shape", slots)
+
+    def test_reports_no_hooks_where_the_candidate_carries_no_config(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            proofs = {
+                **PROOFS,
+                "candidate": {
+                    "path": "/r/tmp/ledger",
+                    "base": "b" * 40,
+                    "pre_commit_config": False,
+                },
+            }
+            lines, slots = self._render(
+                directory, SUMMARY_PASS, proofs=proofs, stopped="awaiting the gate"
+            )
+
+            self.assertIn(
+                "- Hooks: none installed, because the candidate carries no "
+                "`.pre-commit-config.yaml` to read hook types from",
+                lines,
+            )
+            self.assertNotIn("the candidate hooks directory", slots)
 
     def test_a_nonzero_exit_outside_the_result_table_fails_the_bar(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

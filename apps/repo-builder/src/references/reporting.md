@@ -96,7 +96,7 @@ Two flows add lines to this shape rather than filling it as given, and each keep
 - <addons offered and not taken, on one line>
 
 ### Repository settings
-- <setting>: enabled | unavailable (<reason>) | not requested
+- <setting>: enabled | unavailable (<reason>) | not requested | not reached (stopped before the gate)
 - Drift (update and adopt): <setting>: <current> -> <proposed>: patched | declined by user | none found | not checked (<reason>)
 - Merge settings overwritten (generate into existing content only): <setting>: <prior value> -> <applied value> | declined by user, recorded in `generation.features`
 - Issue tracker: <GitHub | GitLab | local markdown | other>, recorded in `docs/agents/issue-tracker.md`, shipped by the payload | kept from the destination; labels: created (<names>) | renamed to the payload's spelling (<old -> new>; label search is case-sensitive, so anything pinned to the old string stops matching) | already present | none created (<reason>)
@@ -105,7 +105,7 @@ Two flows add lines to this shape rather than filling it as given, and each keep
 One line per check, from `scripts/summarize <command>` rather than from a filter built for the occasion.
 
 - `<exact command>`: pass | fail | unavailable (<reason>)
-- Hooks: installed at <scope> into <hooks directory>; `core.hooksPath` left pinned there (update and adopt) | global `core.hooksPath` set to <value>, worked around rather than unset | `extensions.worktreeConfig` set on <clone> and left set (retrofit)
+- Hooks: installed at <scope> into <hooks directory>; `core.hooksPath` left pinned there (update and adopt) | global `core.hooksPath` set to <value>, worked around rather than unset | `extensions.worktreeConfig` set on <clone> and left set (retrofit) | none installed, because the candidate carries no `.pre-commit-config.yaml` to read hook types from
 - Copied paths byte-identical to their source: <count>/<count>; the rest are the authored surface, under File list. An overridden path is in neither count, under Reconciliation instead
 - Workflows the pull-request event never ran: <names> | none
 - Code review: skipped, as [Reviewing the pull request](#reviewing-the-pull-request) directs | on a retrofit, the axes that ran over the authored surface and what they found
