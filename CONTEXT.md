@@ -171,3 +171,9 @@ _Avoid_: gate, green, verification, passing checks
 **Tool declaration**:
 The entries in a repository's root manifest naming the tools its adapters run.
 _Avoid_: dev dependencies, dev group, tooling config, npm scripts
+
+**Configuration boundary**:
+A section in a repository's own manifest that stops a tool resolving settings
+from a directory above it. Written by the tool declaration, at the tool's
+defaults where the repository declares no preference.
+_Avoid_: anchor, config root, settings file, pin
