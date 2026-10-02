@@ -357,6 +357,8 @@ Remote execution
 - open PR: repo-builder/<short-target> -> main
 - merge: repo-builder/<short-target> -> main (bootstrap generate only, see Generate step 12)
 - merge: retrofit/<short-target> -> <default branch> (retrofit's second gate, offered once every required check polls green; declining is the default and leaves the pull request open)
+- push: retrofit/fix-<short-target> -> origin (retrofit's unmet bar only, per [Step 7](retrofit.md#step-7--dispose-the-collisions-write-both-records-meet-the-bar); the destination's own debt, prepared and verified, never merged by this flow)
+- open PR: retrofit/fix-<short-target> -> <default branch> (base, not target; same gate as the push above, and the only remote write a stopped retrofit makes)
 ```
 
 Read the block as a menu rather than a sequence — no gate shows every line. Settings drift is raised by an update and an adopt and never by a generate, since a generate applies the settings it just listed and nothing has drifted from anything. A generate into a repository that already has content is still a generate here: it applies the merge settings rather than reporting them as drift, and states their current values on the gate, because it is the one flow that overwrites a hosted setting someone deliberately chose.
