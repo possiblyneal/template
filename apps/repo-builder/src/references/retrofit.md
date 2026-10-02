@@ -373,6 +373,21 @@ The record the retrofit writes carries no addon entry, for the same reason [gene
 
 ## Report additions
 
+**Run the renderer, then fill its slots.** It writes the shape [Final report](reporting.md#final-report) fixes with the lines below in place, every count, setting, hosted write and undo command, check result and cleanup outcome read from the JSON the other subcommands printed, each saved to a file as it ran:
+
+```bash
+python3 apps/repo-builder/src/scripts/retrofit.py report \
+  --repository <owner>/<repository> \
+  --output <absolute path to this repository>/tmp/<repository-name>-report.md \
+  --proofs <proofs JSON> \
+  --summary "scripts/check" <its scripts/summarize output> \
+  [--hooks <hooks JSON>] [--sweep <sweep JSON>] \
+  [--hosted-read <hosted read JSON>] [--hosted-apply <hosted apply JSON>] \
+  [--pull-request <URL>] [--stopped "<what remains>"] [--resumed]
+```
+
+Leave out the JSON of a subcommand that did not run: `--hooks` where the merge was declined, `--sweep` and both `--hosted-*` on a run stopped at the bar. It reports `path` and `slots`, the judgement lines left as `[[FILL: <what goes here>]]`: the unit map, the review findings, and each decision. Fill every slot from what this run decided, delete the ones marked optional that do not apply, and change no rendered line; a rendered line that reads wrong is a defect in the JSON it came from. The finished report holds no `[[FILL:`.
+
 A retrofit fills the shape [Final report](reporting.md#final-report) fixes, and adds the lines below to it. They live here rather than there because every one of them is a retrofit's alone, and a generate, an update and an adopt would each read them only to establish that none applies.
 
 Three of the shape's own lines also read differently here. The **Code review** line does not read `skipped`: a retrofit's authored surface is reviewed, as [Reviewing the pull request](reporting.md#reviewing-the-pull-request) names it the one flow that is, so the line carries the axes that ran, the findings corrected, any recorded as incorrectly identified, and the `Reviewed-Head:` sha step 9 signed off, or that no sign-off was written and why. The choke-point and Wayfinding lines under **Application boundaries** are absent: a retrofit observes languages the destination already committed to rather than choosing one, and derives units from that destination's own evidence rather than wayfinding them. A unit map the operator rejected with no correction is reported as the proposal and the rejection, with **Pending action** carrying the correction the flow is stopped for.

@@ -814,3 +814,296 @@ class HostedTests(unittest.TestCase):
                 log[0]["reverse_command"],
                 ["gh", "api", "-X", "DELETE", f"{REPO}/rulesets/42"],
             )
+
+
+PROOFS = {
+    "operation": "proofs",
+    "template": {"commit": "a" * 40, "subtree": "base-repo"},
+    "candidate": {"path": "/r/tmp/ledger", "base": "b" * 40},
+    "copy": {
+        "identical": 61,
+        "total": 63,
+        "differing": [
+            {"path": "CLAUDE.md", "class": "merged", "ignored": False},
+            {"path": "scripts/check", "class": "extended", "ignored": False},
+        ],
+        "missing": [],
+    },
+    "rename_purity": {
+        "identical": 1,
+        "total": 2,
+        "moves": [
+            {
+                "from": "src/rates.py",
+                "to": "apps/ledger/src/rates.py",
+                "similarity": 100,
+                "identical": True,
+                "added": 0,
+                "removed": 0,
+            },
+            {
+                "from": "tests/test_rates.py",
+                "to": "apps/ledger/tests/test_rates.py",
+                "similarity": 96,
+                "identical": False,
+                "added": 1,
+                "removed": 0,
+            },
+        ],
+    },
+    "authored": [".repo-template.json"],
+}
+HOOKS = {
+    "operation": "hooks",
+    "hooks_path": "/home/op/ledger/.git/hooks",
+    "moved_aside": [
+        {"type": "pre-commit", "from": "pre-commit", "to": "pre-commit.legacy"}
+    ],
+    "global_hooks": [{"hook": "commit-msg", "disposition": "duplicate"}],
+    "checks": {
+        "default_branch_refused": True,
+        "malformed_subject_refused": True,
+        "trailer_rewritten": True,
+    },
+    "worktree_removed": True,
+    "findings": [],
+}
+SWEEP = {
+    "operation": "sweep",
+    "clone": {"path": "/home/op/ledger", "default_branch": "main"},
+    "candidate": {"path": "/r/tmp/ledger", "branch": "retrofit/aaaaaaaaaaaa"},
+    "scratch": {
+        "hooks_dir": "/r/tmp/ledger-hooks",
+        "write_log": "/r/tmp/ledger.writes.json",
+    },
+    "stages": {
+        "fetch": "done",
+        "clean": "done",
+        "worktree": "done",
+        "prune": "done",
+        "hooks_dir": "removed",
+        "write_log": "removed",
+        "branch": "deleted",
+    },
+    "left_for_the_operator": [
+        {
+            "branch": "retrofit/000000000000",
+            "reason": "an earlier run at another payload commit",
+            "pull_requests": [
+                {
+                    "number": 3,
+                    "state": "open",
+                    "merged": False,
+                    "url": "https://github.com/o/ledger/pull/3",
+                }
+            ],
+        }
+    ],
+    "findings": [],
+}
+HOSTED_READ = {"operation": "hosted read", "visibility": "private"}
+HOSTED_APPLY = {
+    "operation": "hosted apply",
+    "writes": {
+        "merge-settings": "done",
+        "labels": {
+            "created": ["wayfinder:map"],
+            "renamed": [{"from": "Bug", "to": "bug"}],
+            "skipped": [{"label": "enhancement", "reason": "exists"}],
+        },
+        "dependabot-alerts": "already set",
+        "push-protection": "not offered",
+        "ruleset": "permissions gap",
+    },
+    "write_log": {
+        "path": "/r/tmp/ledger.writes.json",
+        "entries": [
+            {
+                "write": "merge-settings",
+                "before": {"allow_squash_merge": True},
+                "after": {"allow_squash_merge": False},
+                "reverse_command": [
+                    "gh",
+                    "api",
+                    "-X",
+                    "PATCH",
+                    "repos/o/ledger",
+                    "-F",
+                    "allow_squash_merge=true",
+                ],
+            }
+        ],
+    },
+    "findings": ["ruleset: Resource not accessible (HTTP 403)"],
+}
+SUMMARY_PASS = "lint               pass             ruff\ntest               pass             pytest\n"
+SUMMARY_FAIL = (
+    "lint               FAIL             ruff\n"
+    "                     apps/ledger/src/rates.py:3 F401\n"
+    "test               unavailable      no test runner found\n"
+)
+
+
+class ReportTests(unittest.TestCase):
+    """The final report's deterministic lines, rendered from recorded JSON."""
+
+    def _render(
+        self, directory: str, summary: str, **inputs: object
+    ) -> tuple[list[str], list[str]]:
+        arguments = ["report", "--repository", "o/ledger"]
+        for name, value in inputs.items():
+            flag = "--" + name.replace("_", "-")
+            if isinstance(value, dict):
+                path = Path(directory) / f"{name}.json"
+                path.write_text(json.dumps(value))
+                arguments += [flag, str(path)]
+            elif value is True:
+                arguments.append(flag)
+            else:
+                arguments += [flag, str(value)]
+        (Path(directory) / "summary.txt").write_text(summary)
+        output = Path(directory) / "report.md"
+        result = run(
+            *arguments,
+            "--summary",
+            "scripts/check",
+            str(Path(directory) / "summary.txt"),
+            "--output",
+            str(output),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return output.read_text().splitlines(), json.loads(result.stdout)["slots"]
+
+    def test_renders_a_finished_run_from_every_subcommand(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            lines, slots = self._render(
+                directory,
+                SUMMARY_PASS,
+                proofs=PROOFS,
+                hooks=HOOKS,
+                sweep=SWEEP,
+                hosted_read=HOSTED_READ,
+                hosted_apply=HOSTED_APPLY,
+                pull_request="https://github.com/o/ledger/pull/9",
+            )
+
+            for line in (
+                "- Status: finished",
+                "- Pull request: https://github.com/o/ledger/pull/9",
+                f"- Template: not previously generated -> {'a' * 40}",
+                "- Layout plan: src/rates.py -> apps/ledger/src/rates.py: moved",
+                (
+                    "- Authored surface: CLAUDE.md (merged), scripts/check (extended), "
+                    ".repo-template.json, apps/ledger/tests/test_rates.py "
+                    "(moved from tests/test_rates.py, +1/-0)"
+                ),
+                "- Destination visibility: private",
+                "- Merge settings (merge commit only, head branches deleted): enabled",
+                "- Push protection: unavailable (not offered for the plan)",
+                "- Branch ruleset: unavailable (permissions gap)",
+                "- Runner variable: not requested",
+                (
+                    '- merge-settings: was {"allow_squash_merge": true} -> '
+                    '{"allow_squash_merge": false}; reverse with '
+                    "`gh api -X PATCH repos/o/ledger -F allow_squash_merge=true`"
+                ),
+                "- Permissions gap: ruleset: Resource not accessible (HTTP 403)",
+                "- `scripts/check`: pass",
+                (
+                    "- Copied paths byte-identical to their source: 61/63; the rest are "
+                    "the authored surface, under File list. An overridden path is in "
+                    "neither count, under Reconciliation instead"
+                ),
+                "- Moved paths byte-identical to their pre-move blob: 1/2",
+                "- Bar: met",
+                "- Candidate: removed from /r/tmp/ledger, branch retrofit/aaaaaaaaaaaa deleted",
+                (
+                    "- Scratch outside the candidate: /r/tmp/ledger-hooks: removed, "
+                    "/r/tmp/ledger.writes.json: removed"
+                ),
+                (
+                    "- Left for the operator: retrofit/000000000000: an earlier run at "
+                    "another payload commit; pull request "
+                    "https://github.com/o/ledger/pull/3 (open)"
+                ),
+            ):
+                self.assertIn(line, lines)
+            self.assertTrue(
+                any(
+                    line.startswith("- Issue tracker: [[FILL: ")
+                    and line.endswith(
+                        "labels: created (wayfinder:map); renamed to the payload's "
+                        "spelling (Bug -> bug; label search is case-sensitive, so "
+                        "anything pinned to the old string stops matching); already "
+                        "present (enhancement)"
+                    )
+                    for line in lines
+                )
+            )
+            self.assertIn(
+                "- Destination hooks after merge: shims in /home/op/ledger/.git/hooks, "
+                "`core.hooksPath` pinned local to it, moved aside: pre-commit -> "
+                "pre-commit.legacy, global hooks: commit-msg duplicate, verified by "
+                "default_branch_refused, malformed_subject_refused, trailer_rewritten",
+                lines,
+            )
+            self.assertEqual(lines[-1], "none")
+            self.assertNotIn("### Resumption", lines)
+            filled = sum(line.count("[[FILL: ") for line in lines)
+            self.assertEqual(filled, len(slots))
+            self.assertIn("check-suite result", slots)
+
+    def test_renders_a_stopped_unmet_bar_with_nothing_hosted(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            lines, slots = self._render(
+                directory,
+                SUMMARY_FAIL,
+                proofs=PROOFS,
+                stopped="the bar is unmet",
+            )
+
+            for line in (
+                "- Status: stopped (the bar is unmet)",
+                "- Pull request: not created",
+                "- `scripts/check`: fail (lint)",
+                "  - lint: apps/ledger/src/rates.py:3 F401",
+                (
+                    "- Bar: UNMET: lint: fail; test: unavailable (no test runner found); "
+                    "stopped before the pull request, zero hosted writes performed"
+                ),
+                "- Default branch after merge: n/a (nothing merged)",
+                "- Destination hooks after merge: n/a (merge declined)",
+                "- Merge settings (merge commit only, head branches deleted): not requested",
+                "- none performed",
+                "- Permissions gap: none",
+            ):
+                self.assertIn(line, lines)
+            self.assertTrue(
+                any(
+                    line.startswith("- Candidate: left standing at [[FILL: ")
+                    for line in lines
+                )
+            )
+            self.assertTrue(lines[-1].startswith("[[FILL: "))
+            self.assertIn("the unmet-bar outcome, in the Report additions shape", slots)
+
+    def test_adds_resumption_naming_the_writes_read_from_the_log(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            apply = {
+                **HOSTED_APPLY,
+                "writes": {"merge-settings": "logged"},
+                "findings": [],
+            }
+            lines, _ = self._render(
+                directory, SUMMARY_PASS, proofs=PROOFS, hosted_apply=apply, resumed=True
+            )
+
+            self.assertIn("### Resumption", lines)
+            self.assertTrue(
+                any(
+                    line.startswith(
+                        "- Taken from the resume record: hosted writes merge-settings; "
+                    )
+                    for line in lines
+                )
+            )

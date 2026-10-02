@@ -10,13 +10,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+import shlex
 import shutil
 import subprocess
 import sys
 import urllib.parse
 from collections.abc import Mapping
 from pathlib import Path
-from typing import NoReturn
+from typing import Any, NoReturn
 
 import preflight
 from preflight import PreflightError, git_output, nul_fields, run_git
@@ -587,6 +589,15 @@ def sweep(arguments: argparse.Namespace) -> dict[str, object]:
         "operation": "sweep",
         "clone": {"path": str(clone), "default_branch": default},
         "candidate": {"path": str(candidate), "branch": branch},
+        "scratch": {
+            stage: str(path)
+            for stage, path in (
+                ("hooks_dir", arguments.hooks_dir),
+                ("resume_record", arguments.resume_record),
+                ("write_log", arguments.write_log),
+            )
+            if path is not None
+        },
         "stages": stages,
         "left_for_the_operator": left,
         "findings": findings,
@@ -1015,6 +1026,356 @@ def hosted_apply(arguments: argparse.Namespace) -> dict[str, object]:
     }
 
 
+SUMMARY_ROW = re.compile(
+    r"^([A-Za-z0-9_-]+) +(pass|not-applicable|unavailable|FAIL|would-run)(?: +(.*))?$"
+)
+SETTING_WRITES = {
+    "merge-settings": "Merge settings (merge commit only, head branches deleted)",
+    "dependabot-alerts": "Dependabot alerts",
+    "security-updates": "Dependabot security updates",
+    "push-protection": "Push protection",
+    "ruleset": "Branch ruleset",
+    "runner-variable": "Runner variable",
+}
+
+
+class Report:
+    """The final report's lines, with every judgement left as a marked slot."""
+
+    def __init__(self) -> None:
+        self.lines: list[str] = []
+        self.slots: list[str] = []
+
+    def slot(self, what: str) -> str:
+        self.slots.append(what)
+        return f"[[FILL: {what}]]"
+
+    def add(self, *lines: str) -> None:
+        self.lines.extend(lines)
+
+    def section(self, heading: str) -> None:
+        self.lines += ["", heading]
+
+
+def read_summary(path: Path) -> list[dict[str, Any]]:
+    """`scripts/summarize` rows: a state line, then the findings indented under it."""
+    rows: list[dict[str, Any]] = []
+    for line in path.read_text().splitlines():
+        matched = SUMMARY_ROW.match(line)
+        if matched:
+            check, state, detail = matched.groups()
+            rows.append(
+                {"check": check, "state": state, "detail": detail or "", "findings": []}
+            )
+        elif line[:1].isspace() and line.strip() and rows:
+            rows[-1]["findings"].append(line.strip())
+    return rows
+
+
+def failing(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [row for row in rows if row["state"] in ("FAIL", "unavailable")]
+
+
+def command_result(rows: list[dict[str, Any]]) -> str:
+    failed = [row["check"] for row in rows if row["state"] == "FAIL"]
+    if failed:
+        return f"fail ({', '.join(map(str, failed))})"
+    unavailable = [f"{row['check']}: {row['detail']}" for row in failing(rows)]
+    if unavailable:
+        return f"unavailable ({'; '.join(unavailable)})"
+    return "pass"
+
+
+def joined(items: list[str]) -> str:
+    return ", ".join(items) if items else "none"
+
+
+def load(path: Path | None) -> Any:
+    return json.loads(path.read_text()) if path is not None else {}
+
+
+def render_report(arguments: argparse.Namespace) -> dict[str, object]:
+    """Render the deterministic lines of a retrofit's final report.
+
+    The shape is reporting.md's Final report with retrofit.md's Report
+    additions in place. Every count, setting, write, check result and cleanup
+    outcome is read from the JSON the other subcommands wrote; everything the
+    flow decided or judged is a `[[FILL: ...]]` slot for the session to fill.
+    """
+    proofs = load(arguments.proofs)
+    hooks_result = load(arguments.hooks)
+    swept = load(arguments.sweep)
+    hosted_state = load(arguments.hosted_read)
+    applied = load(arguments.hosted_apply)
+    summaries = [
+        (command, read_summary(Path(path))) for command, path in arguments.summary
+    ]
+    report = Report()
+    r = report.slot
+
+    copy = proofs["copy"]
+    purity = proofs["rename_purity"]
+    moves = purity["moves"]
+    writes = applied.get("writes", {})
+    entries = applied.get("write_log", {}).get("entries", [])
+    bar_failures = [
+        (command, row) for command, rows in summaries for row in failing(rows)
+    ]
+
+    report.add(
+        "## Repo Builder Result",
+        "",
+        f"- Status: stopped ({arguments.stopped})"
+        if arguments.stopped
+        else "- Status: finished",
+        "- Operation: retrofit",
+        f"- Pull request: {arguments.pull_request or 'not created'}",
+        f"- Template: not previously generated -> {proofs['template']['commit']}",
+        f"- Destination: {arguments.repository}",
+    )
+
+    report.section("### Reconciliation")
+    report.add(
+        f"- Applied: {r('payload paths written because they were absent, or none')}",
+        f"- Preserved: {r('paths kept as the destination had them, or none')}",
+        f"- Renamed/deleted: {r('paths, or none')}",
+        f"- Conflicted: {r('paths and competing intents, or none')}",
+        f"- Superseded: {r('each superseded path, what it did and what carries it now, or none')}",
+        f"- Partially covered, not cut: {r('script paths and the parts already covered, or none')}",
+        f"- Overridden: {r('each overridden path and its recorded reason, or none')}",
+    )
+    if moves:
+        report.add(
+            *(f"- Layout plan: {move['from']} -> {move['to']}: moved" for move in moves)
+        )
+    report.add(
+        f"- Layout plan: {r('each move the operator corrected or declined, or delete this line')}"
+        if moves
+        else "- Layout plan: none",
+        f"- Unmovable: {r('each path that could not move and why, or none')}",
+        f"- References repaired: {r('each file and the moved path rewritten in it, or none')}",
+        f"- References reported, not rewritten: {r('each file and the prose describing the old structure, or none')}",
+        f"- Ignore rules the payload does not cover: {r('each rule and what it ignored, or none')}",
+    )
+
+    report.section("### Application boundaries")
+    report.add(
+        f"- ADRs written: {r('paths, or none')}",
+        f"- Unit map: {r('one line per unit, in the Report additions shape')}",
+        f"- Ships nothing for want of an adapter: {r('unit and language, or none')}",
+        f"- Declared but not built: {r('deployable, its descriptor and owning unit, or none')}",
+    )
+
+    authored = [f"{item['path']} ({item['class']})" for item in copy["differing"]]
+    authored += list(proofs["authored"])
+    authored += [
+        f"{move['to']} (moved from {move['from']}, +{move['added']}/-{move['removed']})"
+        for move in moves
+        if not move["identical"]
+    ]
+    report.section("### File list")
+    report.add(
+        f"- {r('payload paths accounted for, and every difference named as intended or as a defect')}",
+        f"- Authored surface: {joined(authored)}",
+    )
+
+    report.section("### Addon adoption")
+    report.add(
+        f"- Already held: {r('addon-shaped paths the destination brought with it, or none')}"
+    )
+
+    report.section("### Repository settings")
+    report.add(
+        f"- Destination visibility: {hosted_state.get('visibility') or r('public or private, read from the API')}"
+    )
+    for write, name in SETTING_WRITES.items():
+        outcome = writes.get(write)
+        if outcome in ("done", "already set", "logged"):
+            report.add(f"- {name}: enabled")
+        elif outcome is None:
+            report.add(f"- {name}: not requested")
+        elif str(outcome).startswith("not offered:"):
+            report.add(
+                f"- {name}: unavailable ({str(outcome).removeprefix('not offered: ')})"
+            )
+        elif outcome == "not offered":
+            report.add(f"- {name}: unavailable (not offered for the plan)")
+        else:
+            report.add(f"- {name}: unavailable ({outcome})")
+    labels = writes.get("labels")
+    if isinstance(labels, dict):
+        parts = []
+        if labels["created"]:
+            parts.append(f"created ({', '.join(labels['created'])})")
+        if labels["renamed"]:
+            renames = ", ".join(
+                f"{item['from']} -> {item['to']}" for item in labels["renamed"]
+            )
+            parts.append(
+                f"renamed to the payload's spelling ({renames}; label search is "
+                "case-sensitive, so anything pinned to the old string stops matching)"
+            )
+        if labels["skipped"]:
+            parts.append(
+                f"already present ({', '.join(item['label'] for item in labels['skipped'])})"
+            )
+        label_line = "; ".join(parts)
+    else:
+        label_line = f"none created ({r('reason no labels were created')})"
+    report.add(
+        f"- Issue tracker: {r('tracker, recorded in docs/agents/issue-tracker.md, shipped by the payload or kept from the destination')}; labels: {label_line}"
+    )
+
+    report.section("### Hosted writes, reversible")
+    for entry in entries:
+        report.add(
+            f"- {entry['write']}: was {json.dumps(entry['before'])} -> "
+            f"{json.dumps(entry['after'])}; reverse with `{shlex.join(entry['reverse_command'])}`"
+        )
+    report.add(
+        f"- {r('each write the operator declined, with the reason, recorded in generation.features; or delete this line')}"
+    )
+    if not entries:
+        report.add("- none performed")
+
+    gaps = [
+        finding
+        for finding in applied.get("findings", [])
+        if writes.get(str(finding).split(":", 1)[0]) == "permissions gap"
+    ]
+    report.section("### Hosted writes, irreversible")
+    report.add(
+        f"- {r('each irreversible write, its before-state, applied value and cost; or none')}",
+        "- Ruleset enforcement: unproven; the probe is not performed against a live "
+        "default branch, as the hosted-write gate directs",
+        f"- Permissions gap: {'; '.join(gaps) if gaps else 'none'}",
+    )
+
+    report.section("### Verification")
+    for command, rows in summaries:
+        report.add(f"- `{command}`: {command_result(rows)}")
+        for row in failing(rows):
+            report.add(
+                *(f"  - {row['check']}: {finding}" for finding in row["findings"])
+            )
+    report.add(
+        f"- Hooks: installed at worktree scope into {swept.get('scratch', {}).get('hooks_dir') or r('the candidate hooks directory')}; "
+        f"`extensions.worktreeConfig` set on {swept.get('clone', {}).get('path') or r('the clone')} and left set",
+        f"- Copied paths byte-identical to their source: {copy['identical']}/{copy['total']}; "
+        "the rest are the authored surface, under File list. An overridden path is "
+        "in neither count, under Reconciliation instead",
+        f"- Workflows the pull-request event never ran: {r('names, or none')}",
+        f"- Code review: {r('the axes that ran over the authored surface, the findings corrected or recorded as incorrectly identified, and the Reviewed-Head sha, or why no sign-off was written')}",
+        f"- Default branch after merge: {r('check-suite result')}"
+        if hooks_result
+        else "- Default branch after merge: n/a (nothing merged)",
+        f"- Moved paths byte-identical to their pre-move blob: {purity['identical']}/{purity['total']}",
+        f"- Directories emptied by a move: {r('each directory and whether it is gone, or none')}",
+        f"- Untracked at the bar: {r('none, or the paths and how they were disposed')}",
+        f"- Declared facts executed: {r('per unit, the scripts/package and scripts/run results')}",
+        f"- Tool declaration: {r('per manifest, what was added, kept or declined')}",
+        f"- Configuration boundary: {r('one row per language')}",
+        f"- Autofix: {r('what scripts/fix cleared, and in which commit')}",
+        f"- Autofix settings resolution: {r('every tool resolved inside the candidate, or SKIPPED and why')}",
+        f"- Payload paths the autofix rewrote: {r('each path and the rule that rewrote it, or none')}",
+    )
+    if bar_failures:
+        unmet = "; ".join(
+            f"{row['check']}: {'fail' if row['state'] == 'FAIL' else 'unavailable'}"
+            + (f" ({row['detail']})" if row["state"] == "unavailable" else "")
+            for _, row in bar_failures
+        )
+        report.add(
+            f"- Bar: UNMET: {unmet}; stopped before the pull request, zero hosted writes performed",
+            f"- Destination fix prepared: {r('the unmet-bar outcome, in the Report additions shape')}",
+            f"- Destination fix published: {r('the unmet-bar outcome, in the Report additions shape')}",
+        )
+    else:
+        report.add("- Bar: met")
+    if hooks_result:
+        moved_aside = [
+            f"{item['from']} -> {item['to']}" for item in hooks_result["moved_aside"]
+        ]
+        linked = [
+            f"{item['hook']} {item['disposition']}"
+            + (f" as {item['as']}" if item.get("as") else "")
+            for item in hooks_result["global_hooks"]
+        ]
+        checks = hooks_result["checks"]
+        observed = [name for name, held in checks.items() if held]
+        failed = [name for name, held in checks.items() if not held]
+        report.add(
+            f"- Destination hooks after merge: shims in {hooks_result['hooks_path']}, "
+            f"`core.hooksPath` pinned local to it, moved aside: {joined(moved_aside)}, "
+            f"global hooks: {joined(linked)}, verified by {joined(observed)}"
+            + (f"; NOT observed: {', '.join(failed)}" if failed else "")
+        )
+    else:
+        report.add("- Destination hooks after merge: n/a (merge declined)")
+
+    report.section("### Cleanup")
+    stages = swept.get("stages", {})
+    if not swept:
+        report.add(
+            f"- Candidate: left standing at {r('candidate path')}, because the flow stopped and resumes from it"
+        )
+    else:
+        candidate = swept["candidate"]
+        if (
+            stages.get("worktree") in ("done", "absent")
+            and stages.get("branch") == "deleted"
+        ):
+            report.add(
+                f"- Candidate: removed from {candidate['path']}, branch {candidate['branch']} deleted"
+            )
+        elif stages.get("worktree") in ("done", "absent"):
+            report.add(
+                f"- Candidate: worktree removed from {candidate['path']}, branch "
+                f"{candidate['branch']} kept for the pull request still open"
+            )
+        else:
+            report.add(
+                f"- Candidate: left standing at {candidate['path']}, because its removal was refused"
+            )
+        scratch = [
+            f"{path}: {stages.get(stage)}"
+            for stage, path in swept.get("scratch", {}).items()
+        ]
+        report.add(f"- Scratch outside the candidate: {joined(scratch)}")
+    left = [
+        f"{item['branch']}: {item['reason']}"
+        + "".join(
+            f"; pull request {request['url']} ({'merged' if request['merged'] else request['state']})"
+            for request in item["pull_requests"] or []
+        )
+        for item in swept.get("left_for_the_operator", [])
+    ]
+    left += [str(finding) for finding in swept.get("findings", [])]
+    left += [str(finding) for finding in hooks_result.get("findings", [])]
+    report.add(f"- Left for the operator: {joined(left)}")
+    report.add(
+        f"- Left for the operator: {r('any other path left in place and why; or delete this line')}"
+    )
+
+    if arguments.resumed:
+        logged = [write for write, outcome in writes.items() if outcome == "logged"]
+        report.section("### Resumption")
+        report.add(
+            f"- Re-observed as already done: {r('what live state showed complete')}",
+            f"- Taken from the resume record: hosted writes {joined(logged)}; {r('the issues and decisions read back')}",
+            f"- Redone: {r('anything performed again and why, or none')}",
+            f"- Retries: {r('transient failures retried and their outcomes, or none')}",
+        )
+
+    report.section("### Pending action")
+    report.add(
+        r("the exact decision or authorization needed") if arguments.stopped else "none"
+    )
+
+    arguments.output.write_text("\n".join(report.lines) + "\n")
+    return {"operation": "report", "path": str(arguments.output), "slots": report.slots}
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -1085,6 +1446,32 @@ def build_parser() -> argparse.ArgumentParser:
         "--replace-ruleset", type=int, help="the id of a ruleset to repair in place"
     )
     apply.set_defaults(handler=hosted_apply)
+
+    render = subparsers.add_parser(
+        "report", help="render the final report's deterministic lines"
+    )
+    render.add_argument("--repository", required=True, help="owner/name")
+    render.add_argument("--output", type=Path, required=True)
+    render.add_argument("--proofs", type=Path, required=True)
+    render.add_argument(
+        "--summary",
+        nargs=2,
+        action="append",
+        default=[],
+        required=True,
+        metavar=("COMMAND", "FILE"),
+        help="a check command and the file holding its scripts/summarize output",
+    )
+    render.add_argument(
+        "--hooks", type=Path, help="absent where the merge was declined"
+    )
+    render.add_argument("--sweep", type=Path, help="absent on a stopped run")
+    render.add_argument("--hosted-read", type=Path)
+    render.add_argument("--hosted-apply", type=Path)
+    render.add_argument("--pull-request", help="its URL, where one was opened")
+    render.add_argument("--stopped", help="what remains, on a stopped run")
+    render.add_argument("--resumed", action="store_true")
+    render.set_defaults(handler=render_report)
     return parser
 
 
