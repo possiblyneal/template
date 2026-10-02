@@ -73,12 +73,13 @@ python3 apps/repo-builder/src/scripts/retrofit.py sweep \
   --default-branch <default-branch> \
   --repository <owner>/<name> \
   --hooks-dir <hooksdir> \
-  --resume-record <resume record>
+  --resume-record <resume record> \
+  --write-log <write log>
 ```
 
-It fetches `origin/<default-branch>` for the containment test, runs the candidate's own `scripts/clean` where it ships one, removes the worktree and prunes, removes the hooks directory and the resume record, and deletes the branch only where `merge-base --is-ancestor` proves `origin/<default-branch>` contains it. It reports:
+It fetches `origin/<default-branch>` for the containment test, runs the candidate's own `scripts/clean` where it ships one, removes the worktree and prunes, removes the hooks directory, the resume record and step 8's write log, and deletes the branch only where `merge-base --is-ancestor` proves `origin/<default-branch>` contains it. It reports:
 
-- `stages` — each stage's outcome: `fetch`, `clean`, `worktree` and `prune` are `done` or `refused`, `clean` is `not shipped` where the destination has none, `hooks_dir` and `resume_record` are `removed`, `absent` or `skipped`, and `branch` is `deleted`, `kept`, `skipped`, `refused` or `absent`
+- `stages` — each stage's outcome: `fetch`, `clean`, `worktree` and `prune` are `done` or `refused`, `clean` is `not shipped` where the destination has none, `hooks_dir`, `resume_record` and `write_log` are `removed`, `absent` or `skipped`, and `branch` is `deleted`, `kept`, `skipped`, `refused` or `absent`
 - `left_for_the_operator` — every `retrofit/*` branch still standing, with why and its pull requests read from GitHub
 - `findings` — every refusal, and every pull-request lookup that failed
 
@@ -278,14 +279,30 @@ This is a deliberate divergence from [generate](generate.md), which reaches [Rem
 
 Five writes, in this order, the last of them conditional.
 
-**1. Merge settings, in one call.** `allow_merge_commit`, `allow_squash_merge`, `allow_rebase_merge`, and `delete_branch_on_merge` go in a single `PATCH`, for the reason generate's step 5 gives: sent separately the second call can be refused after the first has landed, and a half-applied merge policy is worse than one never started. State the destination's four current values out loud before overwriting them, since this is somebody's deliberate choice being replaced. Read them from the same endpoint the write goes to, so the read and the write name the fields the same way:
+Read the gate's question in one call and perform what it approved in a second; the rename under 2 is the one write neither touches, because it stays a step the flow runs itself:
 
 ```bash
-gh api "repos/<owner>/<repository>" \
-  --jq '{allow_merge_commit,allow_squash_merge,allow_rebase_merge,delete_branch_on_merge}'
+python3 apps/repo-builder/src/scripts/retrofit.py hosted read --repository <owner>/<repository>
+
+python3 apps/repo-builder/src/scripts/retrofit.py hosted apply \
+  --repository <owner>/<repository> \
+  --write-log <absolute path to this repository>/tmp/<repository-name>.writes.json \
+  --approve <write> [--approve <write> ...] \
+  [--label <name> ...] [--keep-case-variants] \
+  [--ruleset <body.json> [--replace-ruleset <id>]]
 ```
 
-The other route to these four is `gh repo view --json mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed,deleteBranchOnMerge`, and its names are not interchangeable with these: [Step 5 — Configure the repository settings](generate.md#step-5--configure-the-repository-settings) has the rule, which is that the wrong field set returns `null` for every field rather than erroring. All four reading `null` here is the signature of the wrong spelling, not of a destination with every merge method disabled — GitHub does not permit that state. Declinable, and a refusal is recorded in `generation.features` with its reason.
+`read` reports `visibility`, `admin`, `default_branch`, `merge_settings` (REST's four field names), `labels`, `dependabot` (`alerts`, `security_updates`), `push_protection`, `rulesets` and `runner` (the `dev-<repository>` runner's status). A reading the host refused carries `refused` in its place: `not offered` for the upgrade message, `permissions gap` for any other 403.
+
+`apply` takes `--approve` once per write the gate approved — `merge-settings`, `labels`, `dependabot-alerts`, `security-updates`, `push-protection`, `ruleset`, `runner-variable` — performs them in that order and nothing else, and reports:
+
+- `writes` — each approved write's outcome: `done`, `already set`, `logged` (performed by an earlier run, so not repeated), `not offered`, `permissions gap` or `refused`; `labels` reports `created`, `renamed` and `skipped` per label instead, and `runner-variable` reports `not offered` with which of its two conditions failed
+- `write_log` — its path and every entry: `{write, before, after, reverse_command}`, one per write performed, where `reverse_command` is the argument list that puts `before` back
+- `findings` — every refusal other than `not offered`
+
+The write log is a sibling of the candidate, like the resume record and for its reason. `--label` names the labels in force, given under 3; `--keep-case-variants` is for a destination whose own `triage-labels.md` is in force. `--ruleset` is the body composed under 4, and `--replace-ruleset` names the destination's own ruleset it repairs in place, whose before-state is saved beside the log because restoring it needs the whole document.
+
+**1. Merge settings, in one call.** `allow_merge_commit`, `allow_squash_merge`, `allow_rebase_merge`, and `delete_branch_on_merge` go in a single `PATCH`, for the reason generate's step 5 gives: sent separately the second call can be refused after the first has landed, and a half-applied merge policy is worse than one never started. State the destination's four current values out loud before overwriting them, since this is somebody's deliberate choice being replaced. `merge_settings` in the snapshot is that reading, taken from the same endpoint the write goes to so the two name the fields the same way. The other route to these four is `gh repo view --json mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed,deleteBranchOnMerge`, and its names are not interchangeable with these: [Step 5 — Configure the repository settings](generate.md#step-5--configure-the-repository-settings) has the rule, which is that the wrong field set returns `null` for every field rather than erroring. All four reading `null` here is the signature of the wrong spelling, not of a destination with every merge method disabled — GitHub does not permit that state. Declinable, and a refusal is recorded in `generation.features` with its reason.
 
 **2. The default-branch rename.** **Declining is a hard stop.** The payload's workflows pin the branch name literally and [the automation directory](lifecycle.md#the-automation-directory-is-replaced-not-reconciled) is replaced whole, so a destination left on the old name receives CI that never fires: green by absence, which is the one failure mode the check surface cannot report. The bar cannot be met that way, so there is nothing to publish.
 
@@ -402,7 +419,7 @@ Two whole sections are added after **Repository settings**, and they are named a
 
 ### Hosted writes, reversible
 
-One line per write the gate authorized and performed, with the state it replaced and the command that puts it back.
+One line per write log entry, with its `before`, its `after`, and its `reverse_command`.
 
 - <write>: was <before-state> -> <applied value>; reverse with `<exact command>` | declined by the operator (<reason>), recorded in `generation.features`
 

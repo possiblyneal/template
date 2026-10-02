@@ -432,6 +432,8 @@ A resumed run **re-observes** rather than replays. Almost everything a flow does
 
 `source_commit` is in the record for the same reason, though it looks derivable. The invocation may have named a branch, and re-resolving that branch on the resume gives whatever it points at now, which is a different commit from the one already materialized as the candidate on disk. Read the record's commit and resolve nothing.
 
+A retrofit's hosted writes are the other case. Each one's before-state is gone once it lands, so a resumed run reads it from the write log `retrofit.py hosted apply` keeps, under [Step 8 — The hosted-write gate](retrofit.md#step-8--the-hosted-write-gate), and `apply` reports a write already in the log as `logged` rather than performing it again.
+
 It is not a journal of everything the flow did. A record that grows a line per step is a second source of truth about state the API already answers, and the first time the two disagree the flow believes the wrong one.
 
 **The record lives beside the candidate, never inside it** — a sibling of the candidate directory, not a file within the tree. Inside, it would enter the candidate diff, reach the copy proof as an authored path, and fail the structure audit as a root file nobody permitted, and each of those is a defect reported against a destination that did not cause it.

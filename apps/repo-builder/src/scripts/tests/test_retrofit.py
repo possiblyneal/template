@@ -392,6 +392,7 @@ class SweepTests(unittest.TestCase):
         (candidate / "build/output").write_text("built\n")
         (Path(directory) / "candidate-hooks").mkdir()
         (Path(directory) / "candidate.resume.json").write_text("{}\n")
+        (Path(directory) / "candidate.writes.json").write_text("[]\n")
         return clone, candidate
 
     def _merge(self, clone: Path) -> None:
@@ -438,6 +439,8 @@ class SweepTests(unittest.TestCase):
             str(Path(directory) / "candidate-hooks"),
             "--resume-record",
             str(Path(directory) / "candidate.resume.json"),
+            "--write-log",
+            str(Path(directory) / "candidate.writes.json"),
             env=env,
         )
 
@@ -459,6 +462,7 @@ class SweepTests(unittest.TestCase):
                     "prune": "done",
                     "hooks_dir": "removed",
                     "resume_record": "removed",
+                    "write_log": "removed",
                     "branch": "deleted",
                 },
             )
@@ -516,6 +520,7 @@ class SweepTests(unittest.TestCase):
             self.assertNotIn("prune", report["stages"])
             self.assertEqual(report["stages"]["hooks_dir"], "skipped")
             self.assertEqual(report["stages"]["resume_record"], "skipped")
+            self.assertEqual(report["stages"]["write_log"], "skipped")
             self.assertEqual(report["stages"]["branch"], "skipped")
             self.assertTrue(
                 any("worktree refused" in finding for finding in report["findings"])
@@ -557,4 +562,255 @@ class SweepTests(unittest.TestCase):
                     "repos/owner/ledger/pulls?head=owner:retrofit/old0000&state=all",
                 ],
                 [call[:2] for call in gh_calls(directory)],
+            )
+
+
+UPGRADE = {
+    "stdout": json.dumps(
+        {
+            "message": "Upgrade to GitHub Pro or make this repository public to "
+            "enable this feature.",
+            "status": "403",
+        }
+    ),
+    "status": 1,
+}
+FORBIDDEN = {
+    "stdout": json.dumps({"message": "Resource not accessible", "status": "403"}),
+    "status": 1,
+}
+NOT_FOUND = {
+    "stdout": json.dumps({"message": "Not Found", "status": "404"}),
+    "status": 1,
+}
+REPO = "repos/owner/ledger"
+
+
+class HostedTests(unittest.TestCase):
+    """The hosted-write gate's snapshot, and the writes it approved."""
+
+    def _responses(self) -> list[dict[str, object]]:
+        repo = {
+            "visibility": "private",
+            "default_branch": "main",
+            "permissions": {"admin": True},
+            "allow_merge_commit": False,
+            "allow_squash_merge": True,
+            "allow_rebase_merge": True,
+            "delete_branch_on_merge": False,
+            "security_and_analysis": {},
+        }
+        return [
+            {"args": ["api", REPO], "stdout": json.dumps(repo)},
+            {
+                "args": ["api", "--paginate", f"{REPO}/labels"],
+                "stdout": json.dumps([{"name": "bug"}, {"name": "Needs-Triage"}]),
+            },
+            {"args": ["api", f"{REPO}/vulnerability-alerts"], **NOT_FOUND},
+            {
+                "args": ["api", f"{REPO}/automated-security-fixes"],
+                "stdout": json.dumps({"enabled": False, "paused": False}),
+            },
+            {"args": ["api", f"{REPO}/rulesets"], **UPGRADE},
+            {"args": ["api", f"{REPO}/actions/runners"], **FORBIDDEN},
+            {"args": ["api", "-X", "PATCH"], "stdout": "{}"},
+            {"args": ["api", "-X", "POST"], "stdout": "{}"},
+            {"args": ["api", "-X", "PUT", f"{REPO}/vulnerability-alerts"], **FORBIDDEN},
+            {
+                "args": ["api", "-X", "PUT", f"{REPO}/automated-security-fixes"],
+                **UPGRADE,
+            },
+        ]
+
+    def _apply(
+        self, directory: str, *arguments: str
+    ) -> subprocess.CompletedProcess[str]:
+        return run(
+            "hosted",
+            "apply",
+            "--repository",
+            "owner/ledger",
+            "--write-log",
+            str(Path(directory) / "candidate.writes.json"),
+            *arguments,
+            env=stub_gh(directory, self._responses()),
+        )
+
+    def test_reads_the_gate_snapshot_and_classifies_each_refusal(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = run(
+                "hosted",
+                "read",
+                "--repository",
+                "owner/ledger",
+                env=stub_gh(directory, self._responses()),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["visibility"], "private")
+            self.assertEqual(
+                report["merge_settings"],
+                {
+                    "allow_merge_commit": False,
+                    "allow_squash_merge": True,
+                    "allow_rebase_merge": True,
+                    "delete_branch_on_merge": False,
+                },
+            )
+            self.assertEqual(report["labels"], ["bug", "Needs-Triage"])
+            self.assertEqual(
+                report["dependabot"],
+                {
+                    "alerts": False,
+                    "security_updates": {"enabled": False, "paused": False},
+                },
+            )
+            self.assertEqual(report["push_protection"], "not offered")
+            self.assertEqual(report["rulesets"]["refused"], "not offered")
+            self.assertEqual(report["runner"]["refused"], "permissions gap")
+            self.assertFalse(any("-X" in call for call in gh_calls(directory)))
+
+    def test_performs_only_the_approved_writes_and_logs_each_reverse(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = self._apply(
+                directory,
+                "--approve",
+                "merge-settings",
+                "--approve",
+                "labels",
+                "--label",
+                "bug",
+                "--label",
+                "needs-triage",
+                "--label",
+                "wayfinder:map",
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["writes"]["merge-settings"], "done")
+            self.assertEqual(
+                report["writes"]["labels"],
+                {
+                    "created": ["wayfinder:map"],
+                    "renamed": [{"from": "Needs-Triage", "to": "needs-triage"}],
+                    "skipped": [{"label": "bug", "reason": "exists"}],
+                },
+            )
+            self.assertEqual(report["findings"], [])
+            writes = [call for call in gh_calls(directory) if "-X" in call]
+            self.assertEqual(
+                [call[3] for call in writes],
+                [REPO, f"{REPO}/labels/Needs-Triage", f"{REPO}/labels"],
+            )
+            self.assertFalse(
+                any("default_branch" in " ".join(call) for call in gh_calls(directory))
+            )
+            log = json.loads((Path(directory) / "candidate.writes.json").read_text())
+            self.assertEqual(
+                [entry["write"] for entry in log],
+                ["merge-settings", "label:needs-triage", "label:wayfinder:map"],
+            )
+            self.assertEqual(
+                log[2]["reverse_command"],
+                ["gh", "api", "-X", "DELETE", f"{REPO}/labels/wayfinder%3Amap"],
+            )
+
+    def test_a_logged_reverse_command_sends_the_recorded_before_state(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            self._apply(directory, "--approve", "merge-settings")
+            log = json.loads((Path(directory) / "candidate.writes.json").read_text())
+            entry = log[0]
+
+            reverse_dir = Path(directory) / "reverse"
+            reverse_dir.mkdir()
+            subprocess.run(
+                entry["reverse_command"],
+                check=True,
+                capture_output=True,
+                env=stub_gh(str(reverse_dir), self._responses()),
+            )
+
+            sent = gh_calls(str(reverse_dir))[0]
+            self.assertEqual(sent[:4], ["api", "-X", "PATCH", REPO])
+            self.assertEqual(
+                {
+                    field: json.loads(value)
+                    for field, value in (flag.split("=", 1) for flag in sent[5::2])
+                },
+                entry["before"],
+            )
+
+    def test_names_an_upgrade_refusal_not_offered_and_a_403_a_gap(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = self._apply(
+                directory,
+                "--approve",
+                "dependabot-alerts",
+                "--approve",
+                "security-updates",
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(
+                report["writes"],
+                {
+                    "dependabot-alerts": "permissions gap",
+                    "security-updates": "not offered",
+                },
+            )
+            self.assertEqual(len(report["findings"]), 1)
+            self.assertTrue(report["findings"][0].startswith("dependabot-alerts:"))
+            self.assertFalse((Path(directory) / "candidate.writes.json").exists())
+
+    def test_a_resumed_apply_never_repeats_a_logged_write(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            self._apply(directory, "--approve", "merge-settings")
+            first = json.loads((Path(directory) / "candidate.writes.json").read_text())
+            (Path(directory) / "gh.log").unlink()
+            shutil.rmtree(Path(directory) / "bin")
+
+            result = self._apply(directory, "--approve", "merge-settings")
+
+            self.assertEqual(
+                json.loads(result.stdout)["writes"], {"merge-settings": "logged"}
+            )
+            self.assertEqual(gh_calls(directory), [])
+            self.assertEqual(
+                json.loads((Path(directory) / "candidate.writes.json").read_text()),
+                first,
+            )
+
+    def test_a_created_ruleset_is_reversed_by_deleting_its_id(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            body = Path(directory) / "ruleset.json"
+            body.write_text('{"name": "main"}\n')
+            responses: list[dict[str, object]] = [
+                *self._responses(),
+                {
+                    "args": ["api", "-X", "POST", f"{REPO}/rulesets"],
+                    "stdout": '{"id": 42}',
+                },
+            ]
+            result = run(
+                "hosted",
+                "apply",
+                "--repository",
+                "owner/ledger",
+                "--write-log",
+                str(Path(directory) / "candidate.writes.json"),
+                "--approve",
+                "ruleset",
+                "--ruleset",
+                str(body),
+                env=stub_gh(directory, responses),
+            )
+
+            self.assertEqual(json.loads(result.stdout)["writes"], {"ruleset": "done"})
+            log = json.loads((Path(directory) / "candidate.writes.json").read_text())
+            self.assertEqual(
+                log[0]["reverse_command"],
+                ["gh", "api", "-X", "DELETE", f"{REPO}/rulesets/42"],
             )

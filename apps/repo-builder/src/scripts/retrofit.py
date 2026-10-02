@@ -13,6 +13,8 @@ import json
 import shutil
 import subprocess
 import sys
+import urllib.parse
+from collections.abc import Mapping
 from pathlib import Path
 from typing import NoReturn
 
@@ -521,11 +523,12 @@ def sweep(arguments: argparse.Namespace) -> dict[str, object]:
     if not worktree_refused:
         refused("prune", run_git(clone, "worktree", "prune", check=False))
 
-    # The hooks directory and the record are siblings of the candidate rather
-    # than files in it, so the removal above does not take them.
+    # The hooks directory, the record and the write log are siblings of the
+    # candidate rather than files in it, so the removal above does not take them.
     for stage, path in (
         ("hooks_dir", arguments.hooks_dir),
         ("resume_record", arguments.resume_record),
+        ("write_log", arguments.write_log),
     ):
         if path is None:
             continue
@@ -590,6 +593,428 @@ def sweep(arguments: argparse.Namespace) -> dict[str, object]:
     }
 
 
+MERGE_SETTINGS = {
+    "allow_merge_commit": True,
+    "allow_squash_merge": False,
+    "allow_rebase_merge": False,
+    "delete_branch_on_merge": True,
+}
+UPGRADE_MESSAGE = "Upgrade to GitHub"
+HOSTED_WRITES = (
+    "merge-settings",
+    "labels",
+    "dependabot-alerts",
+    "security-updates",
+    "push-protection",
+    "ruleset",
+    "runner-variable",
+)
+
+
+class Refusal(Exception):
+    """The host answered a request with an error rather than a body."""
+
+    def __init__(self, status: str, message: str) -> None:
+        super().__init__(f"{message} (HTTP {status})")
+        self.status = status
+        self.message = message
+
+    @property
+    def outcome(self) -> str:
+        """An upgrade message means the plan lacks the feature; any other 403
+        means this credential does, which is a different finding."""
+        if self.status == "403" and self.message.startswith(UPGRADE_MESSAGE):
+            return "not offered"
+        if self.status == "403":
+            return "permissions gap"
+        return "refused"
+
+
+def gh(*arguments: str) -> object:
+    """A `gh` call's JSON body, or a Refusal carrying the host's status.
+
+    `gh api` prints GitHub's error document to stdout and exits 1 on any HTTP
+    error, so the body is read either way and its status tells a 404 from a
+    403, the same reading `scripts/repo-settings` makes.
+    """
+    called = run_tool(Path.cwd(), "gh", *arguments)
+    try:
+        body = json.loads(called.stdout) if called.stdout.strip() else None
+    except json.JSONDecodeError:
+        body = None
+    if called.returncode == 0:
+        return body
+    if isinstance(body, dict):
+        raise Refusal(str(body.get("status", "")), str(body.get("message", "")))
+    raise Refusal("", called.stderr.strip() or "gh printed no JSON")
+
+
+def gh_or_refusal(*arguments: str) -> object:
+    """A reading, or the refusal's outcome in its place."""
+    try:
+        return gh(*arguments)
+    except Refusal as refusal:
+        return {"refused": refusal.outcome, "detail": str(refusal)}
+
+
+def enabled_by_status(endpoint: str) -> object:
+    """An endpoint that answers 204 when a feature is on and 404 when it is off."""
+    try:
+        gh("api", endpoint)
+    except Refusal as refusal:
+        if refusal.status == "404":
+            return False
+        return {"refused": refusal.outcome, "detail": str(refusal)}
+    return True
+
+
+def runner_status(repository: str) -> object:
+    name = f"dev-{repository.split('/', 1)[1]}"
+    runners = gh_or_refusal("api", f"repos/{repository}/actions/runners")
+    if not isinstance(runners, dict) or "refused" in runners:
+        return runners
+    for runner in runners.get("runners", []):
+        if runner.get("name") == name:
+            return runner.get("status")
+    return "absent"
+
+
+def hosted_read(arguments: argparse.Namespace) -> dict[str, object]:
+    """Everything the hosted-write gate's question is built from, in one call."""
+    repository = arguments.repository
+    try:
+        repo = gh("api", f"repos/{repository}")
+    except Refusal as refusal:
+        raise PreflightError(f"{repository} cannot be read: {refusal}") from refusal
+    assert isinstance(repo, dict)
+    analysis = repo.get("security_and_analysis") or {}
+    # Absent for a plan that does not offer it, "unavailable" for one that
+    # offers it only on another visibility; only an admin is shown the key.
+    push_protection = analysis.get("secret_scanning_push_protection", {}).get(
+        "status", "not offered" if repo.get("permissions", {}).get("admin") else None
+    )
+    labels = gh_or_refusal("api", "--paginate", f"repos/{repository}/labels")
+    rulesets = gh_or_refusal("api", f"repos/{repository}/rulesets")
+    return {
+        "operation": "hosted read",
+        "repository": repository,
+        "visibility": repo.get("visibility"),
+        "admin": repo.get("permissions", {}).get("admin"),
+        "default_branch": repo.get("default_branch"),
+        "merge_settings": {field: repo.get(field) for field in MERGE_SETTINGS},
+        "labels": [label["name"] for label in labels]
+        if isinstance(labels, list)
+        else labels,
+        "dependabot": {
+            "alerts": enabled_by_status(f"repos/{repository}/vulnerability-alerts"),
+            "security_updates": gh_or_refusal(
+                "api", f"repos/{repository}/automated-security-fixes"
+            ),
+        },
+        "push_protection": "not offered"
+        if push_protection == "unavailable"
+        else push_protection,
+        "rulesets": [
+            {key: ruleset.get(key) for key in ("id", "name", "target", "enforcement")}
+            for ruleset in rulesets
+        ]
+        if isinstance(rulesets, list)
+        else rulesets,
+        "runner": runner_status(repository),
+    }
+
+
+class WriteLog:
+    """The resume record's write list: one entry per hosted write performed.
+
+    A write's before-state is unobservable once it has landed, so a write
+    already logged is never repeated: repeating it would log the applied value
+    as the one to restore.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self.entries: list[dict[str, object]] = (
+            json.loads(path.read_text()) if path.exists() else []
+        )
+
+    def logged(self, write: str) -> bool:
+        return any(entry["write"] == write for entry in self.entries)
+
+    def append(
+        self, write: str, before: object, after: object, reverse: list[str]
+    ) -> None:
+        self.entries.append(
+            {
+                "write": write,
+                "before": before,
+                "after": after,
+                "reverse_command": reverse,
+            }
+        )
+        self.path.write_text(json.dumps(self.entries, indent=2) + "\n")
+
+
+def flags(values: Mapping[str, object]) -> list[str]:
+    flagged: list[str] = []
+    for field, value in values.items():
+        flagged += ["-F", f"{field}={json.dumps(value)}"]
+    return flagged
+
+
+def write_merge_settings(repository: str, log: WriteLog) -> str:
+    """The four in one PATCH: sent apart, the host can refuse the second after
+    the first has landed, and refuses outright to leave no merge method."""
+    repo = gh("api", f"repos/{repository}")
+    assert isinstance(repo, dict)
+    before = {field: repo.get(field) for field in MERGE_SETTINGS}
+    if before == MERGE_SETTINGS:
+        return "already set"
+    gh("api", "-X", "PATCH", f"repos/{repository}", *flags(MERGE_SETTINGS))
+    log.append(
+        "merge-settings",
+        before,
+        MERGE_SETTINGS,
+        ["gh", "api", "-X", "PATCH", f"repos/{repository}", *flags(before)],
+    )
+    return "done"
+
+
+def write_labels(
+    repository: str, names: list[str], rename: bool, log: WriteLog
+) -> dict[str, list[object]]:
+    """Create what is missing; the host matches names case-insensitively, so a
+    case variant is renamed to the given spelling, or kept where `rename` is off
+    because the destination's own vocabulary file is the one in force."""
+    listed = gh("api", "--paginate", f"repos/{repository}/labels")
+    assert isinstance(listed, list)
+    existing = {label["name"].casefold(): label["name"] for label in listed}
+    outcome: dict[str, list[object]] = {"created": [], "renamed": [], "skipped": []}
+    for name in names:
+        write = f"label:{name}"
+        present = existing.get(name.casefold())
+        if log.logged(write) or present == name:
+            outcome["skipped"].append({"label": name, "reason": "exists"})
+        elif present is not None and not rename:
+            outcome["skipped"].append(
+                {"label": name, "reason": f"exists as {present}, kept"}
+            )
+        elif present is not None:
+            quoted = urllib.parse.quote(present, safe="")
+            gh(
+                "api",
+                "-X",
+                "PATCH",
+                f"repos/{repository}/labels/{quoted}",
+                "-f",
+                f"new_name={name}",
+            )
+            log.append(
+                write,
+                present,
+                name,
+                [
+                    "gh",
+                    "api",
+                    "-X",
+                    "PATCH",
+                    f"repos/{repository}/labels/{urllib.parse.quote(name, safe='')}",
+                    "-f",
+                    f"new_name={present}",
+                ],
+            )
+            outcome["renamed"].append({"from": present, "to": name})
+        else:
+            gh("api", "-X", "POST", f"repos/{repository}/labels", "-f", f"name={name}")
+            log.append(
+                write,
+                None,
+                name,
+                [
+                    "gh",
+                    "api",
+                    "-X",
+                    "DELETE",
+                    f"repos/{repository}/labels/{urllib.parse.quote(name, safe='')}",
+                ],
+            )
+            outcome["created"].append(name)
+    return outcome
+
+
+def write_toggle(repository: str, write: str, endpoint: str, log: WriteLog) -> str:
+    """A feature switched on by PUT and off by DELETE on the same endpoint."""
+    try:
+        answer = gh("api", endpoint)
+    except Refusal as refusal:
+        if refusal.status != "404":
+            raise
+        answer = False
+    # vulnerability-alerts answers 204 with no body when on and 404 when off;
+    # automated-security-fixes answers a body that names its state.
+    before = answer.get("enabled") if isinstance(answer, dict) else answer is None
+    if before:
+        return "already set"
+    gh("api", "-X", "PUT", endpoint)
+    log.append(write, False, True, ["gh", "api", "-X", "DELETE", endpoint])
+    return "done"
+
+
+def write_push_protection(repository: str, log: WriteLog) -> str:
+    field = "security_and_analysis[secret_scanning_push_protection][status]"
+    repo = gh("api", f"repos/{repository}")
+    assert isinstance(repo, dict)
+    before = (
+        (repo.get("security_and_analysis") or {})
+        .get("secret_scanning_push_protection", {})
+        .get("status")
+    )
+    if before == "enabled":
+        return "already set"
+    if before in (None, "unavailable"):
+        raise Refusal("403", f"{UPGRADE_MESSAGE}: push protection is not offered")
+    gh("api", "-X", "PATCH", f"repos/{repository}", "-f", f"{field}=enabled")
+    log.append(
+        "push-protection",
+        before,
+        "enabled",
+        ["gh", "api", "-X", "PATCH", f"repos/{repository}", "-f", f"{field}={before}"],
+    )
+    return "done"
+
+
+def write_ruleset(
+    repository: str, body: Path, replaces: int | None, log: WriteLog
+) -> str:
+    """Create the ruleset, or repair the destination's own in place.
+
+    The body is the flow's to compose from the references, since which contexts
+    it requires and which branch it names are judgements this command does not
+    make. A ruleset replaced keeps its before-state beside the log, because the
+    command that restores it needs the whole document as its input.
+    """
+    if replaces is None:
+        created = gh(
+            "api", "-X", "POST", f"repos/{repository}/rulesets", "--input", str(body)
+        )
+        assert isinstance(created, dict)
+        log.append(
+            "ruleset",
+            None,
+            created["id"],
+            [
+                "gh",
+                "api",
+                "-X",
+                "DELETE",
+                f"repos/{repository}/rulesets/{created['id']}",
+            ],
+        )
+        return "done"
+    endpoint = f"repos/{repository}/rulesets/{replaces}"
+    before = gh("api", endpoint)
+    saved = log.path.with_name(f"{log.path.stem}.ruleset-{replaces}.json")
+    saved.write_text(json.dumps(before, indent=2) + "\n")
+    gh("api", "-X", "PUT", endpoint, "--input", str(body))
+    log.append(
+        "ruleset",
+        str(saved),
+        str(body),
+        ["gh", "api", "-X", "PUT", endpoint, "--input", str(saved)],
+    )
+    return "done"
+
+
+def write_runner_variable(repository: str, log: WriteLog) -> str:
+    """Set only where the repository is private and its runner reads online,
+    both read here rather than trusted from the gate's snapshot."""
+    repo = gh("api", f"repos/{repository}")
+    assert isinstance(repo, dict)
+    if repo.get("visibility") != "private":
+        return f"not offered: the repository is {repo.get('visibility')}"
+    runner = runner_status(repository)
+    if runner != "online":
+        return f"not offered: the dev runner is {runner}"
+    try:
+        current = gh("api", f"repos/{repository}/actions/variables/RUNNER")
+        before = current.get("value") if isinstance(current, dict) else None
+    except Refusal as refusal:
+        if refusal.status != "404":
+            raise
+        before = None
+    if before == "self-hosted":
+        return "already set"
+    run = ["variable", "set", "RUNNER", "--body", "self-hosted", "-R", repository]
+    gh(*run)
+    log.append(
+        "runner-variable",
+        before,
+        "self-hosted",
+        ["gh", "variable", "delete", "RUNNER", "-R", repository]
+        if before is None
+        else ["gh", "variable", "set", "RUNNER", "--body", before, "-R", repository],
+    )
+    return "done"
+
+
+def hosted_apply(arguments: argparse.Namespace) -> dict[str, object]:
+    """Perform the writes the gate approved, in the gate's order, and no others.
+
+    There is no default-branch write here: the rename is a hard stop when
+    declined and repairs every clone, so it stays a step the flow runs itself.
+    """
+    repository, approved = arguments.repository, set(arguments.approve)
+    if "labels" in approved and not arguments.label:
+        raise PreflightError("labels approved with no --label to create")
+    if "ruleset" in approved and arguments.ruleset is None:
+        raise PreflightError("ruleset approved with no --ruleset body")
+    log = WriteLog(arguments.write_log)
+    writes: dict[str, object] = {}
+    findings: list[str] = []
+    performers = {
+        "merge-settings": lambda: write_merge_settings(repository, log),
+        "labels": lambda: write_labels(
+            repository, arguments.label, not arguments.keep_case_variants, log
+        ),
+        "dependabot-alerts": lambda: write_toggle(
+            repository,
+            "dependabot-alerts",
+            f"repos/{repository}/vulnerability-alerts",
+            log,
+        ),
+        "security-updates": lambda: write_toggle(
+            repository,
+            "security-updates",
+            f"repos/{repository}/automated-security-fixes",
+            log,
+        ),
+        "push-protection": lambda: write_push_protection(repository, log),
+        "ruleset": lambda: write_ruleset(
+            repository, arguments.ruleset, arguments.replace_ruleset, log
+        ),
+        "runner-variable": lambda: write_runner_variable(repository, log),
+    }
+    for write in HOSTED_WRITES:
+        if write not in approved:
+            continue
+        if write != "labels" and log.logged(write):
+            writes[write] = "logged"
+            continue
+        try:
+            writes[write] = performers[write]()
+        except Refusal as refusal:
+            writes[write] = refusal.outcome
+            if refusal.outcome != "not offered":
+                findings.append(f"{write}: {refusal}")
+    return {
+        "operation": "hosted apply",
+        "repository": repository,
+        "writes": writes,
+        "write_log": {"path": str(arguments.write_log), "entries": log.entries},
+        "findings": findings,
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -631,7 +1056,35 @@ def build_parser() -> argparse.ArgumentParser:
     teardown.add_argument("--repository", required=True, help="owner/name")
     teardown.add_argument("--hooks-dir", type=Path, help="the candidate's own")
     teardown.add_argument("--resume-record", type=Path)
+    teardown.add_argument("--write-log", type=Path, help="hosted apply's")
     teardown.set_defaults(handler=sweep)
+
+    hosted = subparsers.add_parser(
+        "hosted", help="read the gate's snapshot, or perform the approved writes"
+    )
+    hosted_commands = hosted.add_subparsers(dest="hosted_command", required=True)
+    read = hosted_commands.add_parser("read", help="snapshot the hosted state")
+    read.add_argument("--repository", required=True, help="owner/name")
+    read.set_defaults(handler=hosted_read)
+    apply = hosted_commands.add_parser("apply", help="perform the approved writes")
+    apply.add_argument("--repository", required=True, help="owner/name")
+    apply.add_argument(
+        "--approve", action="append", choices=HOSTED_WRITES, default=[], required=True
+    )
+    apply.add_argument(
+        "--write-log", type=Path, required=True, help="beside the candidate"
+    )
+    apply.add_argument("--label", action="append", default=[])
+    apply.add_argument(
+        "--keep-case-variants",
+        action="store_true",
+        help="the destination's own label vocabulary is the one in force",
+    )
+    apply.add_argument("--ruleset", type=Path, help="the ruleset body, as JSON")
+    apply.add_argument(
+        "--replace-ruleset", type=int, help="the id of a ruleset to repair in place"
+    )
+    apply.set_defaults(handler=hosted_apply)
     return parser
 
 
