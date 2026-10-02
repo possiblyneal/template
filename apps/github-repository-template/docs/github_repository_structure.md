@@ -99,7 +99,9 @@ The specific operating parameters for the AI agent.
 
 `deploy/`: Convention (not a shipped directory) for deployment definitions, holding only `compose/`, `containerfile/`, `env/`, `quadlet/`, and `systemd/`. Valid at the repository root and beside a unit's `src/`.
 
-`assets/`: Convention (not a shipped directory) for static assets — images, fonts, fixtures — at the root or scoped to the unit that uses them.
+`assets/`: Convention (not a shipped directory) for static assets — images, fonts, fixtures — at the root or scoped to the unit that uses them. Only what a program reads; a file it writes while it runs goes in its unit's `state/`.
+
+`state/`: Convention (not a shipped directory) for the files a unit's program writes while it runs, at the unit's root and excluded by `.gitignore` as `/apps/*/state/`.
 
 `tmp/`: Git-ignored scratch space for temporary files, holding a `.gitkeep` so it survives being empty.
 

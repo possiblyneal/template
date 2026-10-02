@@ -29,6 +29,10 @@ service-account*.json
 .claude/settings.local.json
 CLAUDE.local.md
 
+# What a unit's program writes while it runs. Anchored to the unit root so a
+# source package named state/ stays tracked.
+/apps/*/state/
+
 # Local scratch
 tmp/*
 !tmp/.gitkeep
