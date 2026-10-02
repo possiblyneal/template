@@ -1,6 +1,18 @@
 # Retrofit
 
-Read [`lifecycle.md`](lifecycle.md) first — the manifest, ownership, check reporting, the remote gates, failure behavior, and the report shape are there and apply throughout.
+Read these sections of [`lifecycle.md`](lifecycle.md) first rather than the whole file, each with the subsections under it — `sed -n '/^## Manifest$/,/^## /p'` and its equivalent per heading. They apply throughout:
+
+- the paragraph on quoting a `<placeholder>`, at the top of the file
+- `## Manifest`
+- `## Ownership`, with `### Overridden paths` and `### The payload's mode travels with the payload's content`
+- `## Dependabot entries follow the manifests present`
+- `## Running the destination's checks`, with `### Tools the first manifest must declare`, `### Working hooks in a candidate`, and `### Working hooks in the destination after a merge`
+- `## The runner variable is set only where it is safe and answerable`
+- `## Remote action gates`
+- `## Reviewing and reporting`
+- `### Resuming`, only when this run re-enters a stopped one
+
+Every other lifecycle section this file links is read where the link sits, by its heading.
 
 A retrofit brings a repository that was never generated from this template under it: the destination has content and carries no record. Everything a generate builds from nothing, a retrofit has to reconcile against something somebody is already shipping.
 
@@ -241,31 +253,7 @@ python3 apps/repo-builder/src/scripts/retrofit.py proofs --template-repo . \
 
 **An unmet bar is a failed retrofit and it stops before the pull request**, naming the capability that could not pass and why. No partial retrofit is published with the gap written into the description, and the fix does not ride along in the candidate, where it would arrive as this flow's judgment about code this flow does not own — the same reason the pass above is bounded to what a tool will do on its own.
 
-**The flow prepares that fix rather than handing back a list.** The debt belongs to the destination, so it is written against the pre-retrofit layout those paths still carry there — which means a second linked worktree, branched off `origin/<default-branch>` the way step 2 branched the candidate, never the clone's own checkout. Step 2 promises that working directory is untouched for the whole run and step 1 hard-stops on a dirty one; branching and committing in it would break both, and a stopped run is the worst moment to move an operator's checkout out from under them. The branch is `retrofit/fix-<first 12 of the payload commit>` and the worktree `tmp/<repository-name>-fix`, derived rather than chosen for the reason step 2 gives: re-invoking the flow *is* the resume, the debt is by definition still unfixed on that re-run, and a freshly named branch each session leaves the flow preparing a second fix it cannot find the first of. The name matches step 2's `retrofit/*` reporting so a resumed run sees it, and a branch already there is reused — `git -C <clone> worktree add` without `-b`, since `-b` fails on a branch that exists. One commit per coherent fix — two sites of one rule in one file are one fix, not two — naming the rule it clears. The findings arrive at the candidate's paths and the commits are written at the destination's, so translate each one back through step 6's move list; a finding at a path the retrofit itself created has no pre-retrofit home and is reported outstanding rather than fixed here.
-
-**That worktree comes down on every path out of this step**, and not at step 2's sweep, which runs on a flow that finished where this one exists only on a flow that stopped. Whether the commits were pushed, the gate declined, the gate never answered, or nothing publishable was ever committed, remove it with the pair step 2's sweep runs:
-
-```bash
-# Empty it first, for step 2's reason: `worktree remove` refuses on modified or
-# untracked-and-unignored files, and the destination's harnesses run in this tree.
-# By hand, unless the destination ships a `scripts/clean` of its own.
-git -C <clone> worktree remove <absolute path to this repository>/tmp/<repository-name>-fix
-git -C <clone> worktree prune
-```
-
-**Removing the harness output by hand is the ordinary case here**, which is where this parts from step 2. Step 2's clean is `scripts/clean`, and that works because the candidate holds the payload; this worktree is branched from `origin/<default-branch>` and holds the pre-retrofit tree, which by definition does not have the payload yet — so the one command step 2 reaches for is the one command this tree almost never carries. Use it where the destination ships a `scripts/clean` of its own, and otherwise delete what the harnesses wrote. Never `--force`: a refusal that survives the emptying is a finding, not an obstacle.
-
-The branch outlives it and is what the gate below offers; report it under **Left for the operator** wherever the push did not happen, the same way a declined merge's branch is reported.
-
-**Verify it twice, because that worktree's own tools see less than the candidate's.** The first reading is the destination's own harnesses over the files touched, and it is measured as a delta rather than against zero: that tree is by hypothesis carrying repository-wide debt, and the inverse case below is findings this step is told to leave alone, so the test is that nothing the harness reported before the commit is new after it. Report both outputs rather than a verdict on them. Where the destination has no harness at all — common, since the check surface is largely what the retrofit is adding — report that and rest the fix on the second reading alone.
-
-The second reading is the rule itself, under the target version the candidate's declaration sets: `ruff check --target-version py311` where the candidate's `requires-python` says `>=3.11`. ruff is the only tool with such a flag, and one language sometimes needs none: `cargo clippy` reads a declared minimum of its own — `rust-version` in `Cargo.toml`, or `msrv` in `clippy.toml` — so where the candidate carries one of those, Rust's second reading is the ordinary one. The other four have no such input at all: eslint, ktlint and `swift format` read no declared language version, and `go vet` reads the `go` directive with nothing that overrides it. For those the second reading is taken in the candidate instead: apply the same edits there, re-run the capability that failed the bar, and revert them, since the candidate is the tree the retrofit's own declarations and configuration sit in, so it reads the rule at the version the destination is headed for by construction. Rust goes that way too where neither declaration is there, and the flow cannot close that case itself: `lifecycle.md`'s tool declaration for Rust is `none`, so no MSRV is written into the candidate the way `requires-python` is for Python. Verify the revert with `git -C <candidate> status --porcelain` rather than assuming it: the candidate is left standing on this stop and a resumed run re-enters it, so an edit incompletely reverted means the next run measures its bar over a candidate carrying the destination's fix — the ride-along this step refuses, arriving by the back door. Report which of the two readings was used. Where ruff is the tool the flag is used rather than the candidate's own configuration, because what is being read is the destination's files under the version the retrofit will give them and nothing else about the candidate. A finding gated on that declaration does not fire where none is declared, so a clean lint in the destination's own tree proves nothing by itself. Report both counts, before and after. **A non-zero after is not publishable**, because a branch offered as the fix for a rule it does not clear is worse than no branch: fix what the second reading still shows or drop that commit, and where neither is possible report the finding as outstanding and offer nothing for it.
-
-**The configuration guard above covers this worktree too**, and it bites harder here. The fix worktree sits under this repository's `tmp/` like the candidate, so a tool that discovers settings by walking upward finds *this* repository's configuration — and unlike the candidate it holds the *pre-retrofit* layout, which by hypothesis carries none of the boundaries the tool declaration writes. So read each tool's resolved settings path here the same way, `ruff check --show-settings .` and each language's equivalent, before the worktree's first commit rather than before either reading — the remedy is that nothing is prepared, and the commits are ordered earlier than the readings are. Resolved outside this worktree, or unreadable, nothing is prepared: report the tool and the path and leave every finding outstanding. Supplying the missing boundary instead would commit this flow's configuration choice to the operator's default branch, which is the same judgment about code this flow does not own that the whole step refuses.
-
-**The inverse case is left alone.** A finding that fires in the destination's tree and not under the candidate's target version is not this retrofit's blocker and gets no commit — the bar is measured in the candidate, and a branch against the operator's default branch for a rule the retrofit never needed is unasked-for work on code this flow does not own.
-
-**Publishing that branch is a remote action and takes its own gate** — the only remote write a stopped retrofit may make, and not a hosted write: it changes no state of the destination's that a pull request cannot carry, which is what step 8 holds. So it belongs to [Remote action gates](lifecycle.md#remote-action-gates) rather than to step 8, and its two lines are there. Offer the push and the pull request here, by exact command and target, and leave the merge to the operator's own process. Ungated or declined, the branch stays local and the report names it and its commit. The retrofit is re-run once the fix is on the default branch; a run stopping here has made no hosted write at all, which is what keeps that re-run cheap. Report the measurement either way: what the autofix cleared, what is left, the file and rule for each, and what the prepared branch does about each one.
+**The rest of the unmet-bar path is in [`retrofit-unmet-bar.md`](retrofit-unmet-bar.md)**: preparing the destination's own fix, verifying it, and the gate that offers it. Read it when the bar is unmet; a run that meets the bar never needs it.
 
 ### Step 8 — The hosted-write gate
 
