@@ -380,6 +380,29 @@ class HooksTests(unittest.TestCase):
             self.assertEqual(resumed["chained"], report["chained"])
             self.assertTrue(local_fired.exists())
 
+    def test_reads_a_local_hooks_path_symlinked_to_its_own_hooks_in_place(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            destination = self._merged(directory)
+            fired = Path(directory) / "fired"
+            hooks = destination / ".git/hooks"
+            write_hooks(hooks, {"pre-commit": f'#!/bin/sh\ntouch "{fired}"\n'})
+            link = Path(directory) / "hooks-link"
+            link.symlink_to(hooks)
+            git("config", "core.hooksPath", str(link), cwd=destination)
+            result = self._hooks(destination, self._env(directory))
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self._assert_proved(report, destination)
+            # Chained in place rather than renamed dormant and linked to itself.
+            self.assertEqual(
+                report["moved_aside"][0]["to"], str(hooks / "pre-commit.legacy")
+            )
+            self.assertEqual(report["chained"], [])
+            self.assertTrue(fired.exists())
+
     def test_reports_a_worktree_it_could_not_remove_and_forces_nothing(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             destination = self._merged(directory)
