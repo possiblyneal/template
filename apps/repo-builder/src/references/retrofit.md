@@ -399,7 +399,7 @@ Added under **Reconciliation**:
 
 - Layout plan: <old path> -> <new path>: moved | corrected by the operator to <path> | declined | none
 - Unmovable: <path>: <why it could not move>; no allowlist entry written | none
-- Data split: <file>: read, to `assets/` | written, to `state/`, and the operator copies their live file there before pulling the merge | none
+- Data split: <file>: read, to `assets/` | written, to `state/`, and the operator copies their live file there before pulling the merge | written, to `state/`, with its finished record snapshotted to `assets/` | none
 - References repaired: <file>: <the moved path rewritten> | none
 - References reported, not rewritten: <file>: <the prose describing the old structure> | none
 - Ignore rules the payload does not cover: <rule>: <what it ignored>, reported and not re-added | restored by the operator (<reason>), so the ignore file is authored and no override entry is recorded | none
