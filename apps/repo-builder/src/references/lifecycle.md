@@ -304,12 +304,23 @@ That matters because of what the pull request landed. **A retrofit merges a `.pr
 
 So where the operator takes the merge at retrofit's second gate, install the hooks in the destination clone before the final report, and report the result in it. Declining the merge installs nothing, and not because the shims would misbehave — they skip a missing config and exit zero. It is that they would not be free: the recipe below moves aside hooks the clone already had and pins `core.hooksPath` at local scope, both durable changes to the operator's own tree, bought for a config that never landed.
 
-The recipe is [Working hooks in a candidate](#working-hooks-in-a-candidate)'s, with `<hooksdir>` the clone's own `.git` and `<scope>` `--local`:
+The recipe is [Working hooks in a candidate](#working-hooks-in-a-candidate)'s, with `<hooksdir>` the clone's own `.git` and `<scope>` `--local`, and the retrofit helper runs it:
 
-```sh
-pre-commit init-templatedir -t <each configured type> <clone>/.git
-git -C <clone> config --local core.hooksPath "<clone>/.git/hooks"
+```bash
+python3 apps/repo-builder/src/scripts/retrofit.py hooks \
+  --clone <path-to-destination-clone> \
+  --default-branch <default-branch> \
+  --scratch <absolute path to this repository>/tmp/<repository-name>-hooks
 ```
+
+It fetches the default branch and refuses, exiting 2, where that branch carries no `.pre-commit-config.yaml`: the merge has not landed, and there is nothing to install. Otherwise it prints:
+
+- `hook_types` — read through the branch's own `pre_commit_hook_types`.
+- `hooks_path` — the shims' directory, now `core.hooksPath` at local scope; `previous_local_hooks_path` is what the key held before, or `null`.
+- `moved_aside` — each hook the clone already had, with where it was and the `<type>.legacy` it is chained from now.
+- `global_hooks` — each hook in the operator's global `core.hooksPath` directory, `linked` with the path it was linked as, or `duplicate`.
+- `checks` — the three outcome checks below, each `true` where the hooks did what the destination's documentation promises.
+- `worktree_removed` and `findings` — a refusal anywhere, including a throwaway worktree git would not remove, is a finding and nothing is forced.
 
 Three things about that clone decide what differs from the candidate's version of it:
 
@@ -317,9 +328,9 @@ Three things about that clone decide what differs from the candidate's version o
 - **The clone is not on the merged branch**, and does not need to be. The operator was working somewhere when the flow began and is still there. `init-templatedir` writes repository-independent shims and reads no config, so nothing has to be checked out for it, and the shims resolve `--config=.pre-commit-config.yaml` relative to whatever tree invokes them rather than pinning the branch installed from.
 - **Branches in flight predate the config.** Every one of them lacks `.pre-commit-config.yaml`, and a shim finding none would refuse every commit on work this flow does not own. `init-templatedir` allows a missing config by default, printing `Skipping pre-commit` and exiting zero, so those branches pass through untouched while the default branch gets the full surface. Do not pass `--no-allow-missing-config`.
 
-Writing into `.git/hooks` is the one place this recipe can destroy something, and the loss is not the one the section above describes. That section's `<type>.legacy` chaining is about hooks git stops reading once the key is pinned; here the shims are written *into* the directory those hooks live in, with overwrite and writing no `.legacy`, so a hook the clone already had at `.git/hooks/<type>` is gone rather than chained. Move each one aside to `<type>.legacy` before installing. Hooks in the operator's *global* `core.hooksPath` directory are the other case and are never chained by anything: pinning the key stops git reading them for this clone, so link in each one the payload's shims do not already do the job of, and name in the report any skipped as a duplicate.
+Writing into `.git/hooks` is the one place this recipe can destroy something. The shims are written *into* the directory the clone's own hooks live in, and `init-templatedir` installs with overwrite, which deletes `<type>.legacy` after moving an existing hook there — so moving a hook aside to `.legacy` before installing loses it exactly as not moving it does. The helper holds each one under another name across the install and puts it at `<type>.legacy` afterwards. Hooks in the operator's *global* `core.hooksPath` directory are the other case: pinning the key stops git reading them for this clone, so each is linked in unless it duplicates the payload's. A message hook is a duplicate when it rewrites a probe message exactly as the payload's stage does; any other is linked, because keeping a hook the payload already covers costs a second run and dropping one it does not costs the operator a check.
 
-Verify by outcome, never by exit status, and verify it the way the destination will experience it: a commit on the default branch is refused, a malformed subject fails commitlint, and a `Co-Authored-By` trailer comes back rewritten. Do it in a throwaway worktree and remove it, so the proof costs the operator nothing.
+The checks verify by outcome the way the destination will experience it, in a throwaway worktree the helper removes: a commit on the default branch is refused, a malformed subject fails commitlint, and a `Co-Authored-By` trailer comes back rewritten. The test file goes under `docs/`, since the structure audit refuses an unpermitted root file and would refuse all three for the wrong reason, and the default branch is stood in for by a per-worktree ref of the same name, so a hook that failed to refuse would advance a ref that leaves with the worktree rather than the clone's own branch.
 
 ## The runner variable is set only where it is safe and answerable
 
