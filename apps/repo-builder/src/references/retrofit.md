@@ -66,32 +66,29 @@ Because the name carries the payload commit, a run at a later commit gets a diff
 `tmp/` is resolved against this repository rather than against the directory the session was invoked from, and `tmp/*` in `.gitignore` is what keeps a candidate from being committed here by accident. The candidate stands for as long as the flow can still be resumed from it, because it is the evidence the report cites. It comes down at the end of the flow rather than being handed to the operator as a command, and the end is reached once the pull request is open, its verification read, and step 9's merge offer settled **either way** — a declined merge is a finished flow, not a stop, so the sweep runs on the default path and not only on the rare one:
 
 ```bash
-# Refreshes origin/<default-branch> for the containment test at the end of
-# this block. Not step 2's build fetch above, which aims the worktree.
-git -C <clone> fetch origin <default-branch>
-
-# Refuses on a worktree holding modified or untracked-and-unignored files.
-# Ignored output does not block it, so the checks' own leavings usually do not;
-# what blocks is a file some step wrote and no step committed, and the clean
-# reaches it only where the destination's ignore rules do not cover it. Cheap
-# either way. Never --force: a refusal that survives the clean is a finding,
-# not an obstacle.
-( cd <absolute path to this repository>/tmp/<repository-name> && scripts/clean )
-git -C <clone> worktree remove <absolute path to this repository>/tmp/<repository-name>
-git -C <clone> worktree prune
-rm -rf <hooksdir> <resume record>
-
-# Only where the merge was taken, and only against proved containment.
-git -C <clone> merge-base --is-ancestor \
-      retrofit/<first 12 of the payload commit> origin/<default-branch> \
-  && git -C <clone> branch -d retrofit/<first 12 of the payload commit>
+python3 apps/repo-builder/src/scripts/retrofit.py sweep \
+  --clone <clone> \
+  --candidate <absolute path to this repository>/tmp/<repository-name> \
+  --branch retrofit/<first 12 of the payload commit> \
+  --default-branch <default-branch> \
+  --repository <owner>/<name> \
+  --hooks-dir <hooksdir> \
+  --resume-record <resume record>
 ```
+
+It fetches `origin/<default-branch>` for the containment test, runs the candidate's own `scripts/clean` where it ships one, removes the worktree and prunes, removes the hooks directory and the resume record, and deletes the branch only where `merge-base --is-ancestor` proves `origin/<default-branch>` contains it. It reports:
+
+- `stages` — each stage's outcome: `fetch`, `clean`, `worktree` and `prune` are `done` or `refused`, `clean` is `not shipped` where the destination has none, `hooks_dir` and `resume_record` are `removed`, `absent` or `skipped`, and `branch` is `deleted`, `kept`, `skipped`, `refused` or `absent`
+- `left_for_the_operator` — every `retrofit/*` branch still standing, with why and its pull requests read from GitHub
+- `findings` — every refusal, and every pull-request lookup that failed
+
+Nothing is forced. `worktree remove` refuses on a file some step wrote and no step committed, and ignored output does not block it; a refusal that survives the clean is a finding, not an obstacle, and it leaves the hooks directory, the record and the branch standing with the worktree, since the run can still be resumed from it. The command exits 0 with the refusal in `findings`.
 
 `<hooksdir>` is the candidate's own, made for it under [Working hooks in a candidate](lifecycle.md#working-hooks-in-a-candidate) and pinned by nothing once the worktree is gone — the `core.hooksPath` naming it was set at `--worktree` scope and leaves with the worktree. It is not the hooks surface a taken merge owes the destination clone, which is a different directory and stays. The resume record is a sibling of the candidate rather than a file inside it, under [Resuming](lifecycle.md#resuming), so removing the worktree does not take it.
 
-**`-d` is not the containment guard, which is why `merge-base --is-ancestor` runs ahead of it.** `git branch -d` compares the branch against its upstream where one is set and against HEAD otherwise — never against the remote-tracking ref of the default branch. Both readings are wrong here. With no upstream it compares against a local default branch this flow deliberately never moved, so it refuses a branch the merge *did* carry; with an upstream set by a push it compares against that same branch on the remote, which trivially contains it, so it deletes a branch merged nowhere with only a warning. The fetch above is what makes the ancestry test read the merge, and the test is what makes the delete safe; `-d` rather than `-D` stays as the second line of defence. A non-zero exit from the test deletes nothing and is a finding to report rather than something to force past.
+**`-d` is not the containment guard, which is why `merge-base --is-ancestor` runs ahead of it.** `git branch -d` compares the branch against its upstream where one is set and against HEAD otherwise — never against the remote-tracking ref of the default branch. Both readings are wrong here. With no upstream it compares against a local default branch this flow deliberately never moved, so it refuses a branch the merge *did* carry; with an upstream set by a push it compares against that same branch on the remote, which trivially contains it, so it deletes a branch merged nowhere with only a warning. The sweep's own fetch is what makes the ancestry test read the merge, and the test is what makes the delete safe; `-d` rather than `-D` stays as the second line of defence. A failed test deletes nothing and reports the branch `kept`.
 
-Where the merge was declined the branch stays, because it is the local counterpart of a pull request the destination's own people still have open; report it under **Left for the operator** with that reason. A branch left that way outlives its worktree, so a later run at the same payload commit reuses it — `git -C <clone> worktree add` without `-b`, since `-b` fails on a branch that already exists.
+Where the merge was declined the branch stays, because it is the local counterpart of a pull request the destination's own people still have open; report each entry of `left_for_the_operator` under **Left for the operator**. A branch left that way outlives its worktree, so a later run at the same payload commit reuses it — `git -C <clone> worktree add` without `-b`, since `-b` fails on a branch that already exists.
 
 A run that stops before the pull request leaves the whole candidate standing and says so. That is the only case the operator is handed a removal to make.
 
@@ -245,7 +242,7 @@ python3 apps/repo-builder/src/scripts/retrofit.py proofs --template-repo . \
 
 **The flow prepares that fix rather than handing back a list.** The debt belongs to the destination, so it is written against the pre-retrofit layout those paths still carry there — which means a second linked worktree, branched off `origin/<default-branch>` the way step 2 branched the candidate, never the clone's own checkout. Step 2 promises that working directory is untouched for the whole run and step 1 hard-stops on a dirty one; branching and committing in it would break both, and a stopped run is the worst moment to move an operator's checkout out from under them. The branch is `retrofit/fix-<first 12 of the payload commit>` and the worktree `tmp/<repository-name>-fix`, derived rather than chosen for the reason step 2 gives: re-invoking the flow *is* the resume, the debt is by definition still unfixed on that re-run, and a freshly named branch each session leaves the flow preparing a second fix it cannot find the first of. The name matches step 2's `retrofit/*` reporting so a resumed run sees it, and a branch already there is reused — `git -C <clone> worktree add` without `-b`, since `-b` fails on a branch that exists. One commit per coherent fix — two sites of one rule in one file are one fix, not two — naming the rule it clears. The findings arrive at the candidate's paths and the commits are written at the destination's, so translate each one back through step 6's move list; a finding at a path the retrofit itself created has no pre-retrofit home and is reported outstanding rather than fixed here.
 
-**That worktree comes down on every path out of this step**, and not at step 2's sweep, which runs on a flow that finished where this one exists only on a flow that stopped. Whether the commits were pushed, the gate declined, the gate never answered, or nothing publishable was ever committed, remove it with step 2's own pair:
+**That worktree comes down on every path out of this step**, and not at step 2's sweep, which runs on a flow that finished where this one exists only on a flow that stopped. Whether the commits were pushed, the gate declined, the gate never answered, or nothing publishable was ever committed, remove it with the pair step 2's sweep runs:
 
 ```bash
 # Empty it first, for step 2's reason: `worktree remove` refuses on modified or

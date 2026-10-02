@@ -459,6 +459,137 @@ def hooks(arguments: argparse.Namespace) -> dict[str, object]:
     }
 
 
+def pull_requests(clone: Path, repository: str, branch: str) -> list[object] | None:
+    """Every pull request whose head is the branch, or None when unreadable."""
+    owner = repository.split("/", 1)[0]
+    listed = run_tool(
+        clone,
+        "gh",
+        "api",
+        f"repos/{repository}/pulls?head={owner}:{branch}&state=all",
+        "--jq",
+        "[.[] | {number, state, merged: (.merged_at != null), url: .html_url}]",
+    )
+    if listed.returncode != 0:
+        return None
+    return json.loads(listed.stdout)
+
+
+def sweep(arguments: argparse.Namespace) -> dict[str, object]:
+    """Take down what the flow created, in the order each stage needs.
+
+    Nothing is forced. Each refusal is a finding and stops the stages that
+    depend on it: a worktree git will not remove keeps its hooks directory,
+    its resume record and its branch, because it may still be resumed from.
+    """
+    clone = preflight.require_git_repository(arguments.clone, "clone")
+    candidate = arguments.candidate.resolve()
+    branch, default = arguments.branch, arguments.default_branch
+    stages: dict[str, str] = {}
+    findings: list[str] = []
+
+    def refused(stage: str, result: subprocess.CompletedProcess[str]) -> bool:
+        if result.returncode == 0:
+            stages[stage] = "done"
+            return False
+        stages[stage] = "refused"
+        detail = result.stderr.strip() or result.stdout.strip()
+        findings.append(f"{stage} refused: {detail}")
+        return True
+
+    # Refreshes the remote-tracking ref the containment test reads; the build
+    # fetch at step 2 aimed the worktree and is stale by now.
+    fetch_refused = refused(
+        "fetch", run_git(clone, "fetch", "-q", "origin", default, check=False)
+    )
+
+    # Ignored output does not block the removal; a file some step wrote and no
+    # step committed does, and the destination's own clean reaches it only
+    # where its ignore rules do not cover it.
+    if not candidate.is_dir():
+        stages["clean"] = stages["worktree"] = "absent"
+    elif not (candidate / "scripts/clean").is_file():
+        stages["clean"] = "not shipped"
+    else:
+        refused("clean", run_tool(candidate, "scripts/clean"))
+    worktree_refused = False
+    if candidate.is_dir():
+        worktree_refused = refused(
+            "worktree",
+            run_git(clone, "worktree", "remove", str(candidate), check=False),
+        )
+    if not worktree_refused:
+        refused("prune", run_git(clone, "worktree", "prune", check=False))
+
+    # The hooks directory and the record are siblings of the candidate rather
+    # than files in it, so the removal above does not take them.
+    for stage, path in (
+        ("hooks_dir", arguments.hooks_dir),
+        ("resume_record", arguments.resume_record),
+    ):
+        if path is None:
+            continue
+        if worktree_refused:
+            stages[stage] = "skipped"
+        elif not path.exists():
+            stages[stage] = "absent"
+        else:
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+            stages[stage] = "removed"
+
+    # `branch -d` compares against an upstream or HEAD, never against the
+    # fetched default branch, so the ancestry test is the containment guard
+    # and `-d` the second line behind it.
+    exists = blob(clone, f"refs/heads/{branch}") is not None
+    if not exists:
+        stages["branch"] = "absent"
+    elif worktree_refused or fetch_refused:
+        stages["branch"] = "skipped"
+    elif (
+        run_git(
+            clone,
+            "merge-base",
+            "--is-ancestor",
+            branch,
+            f"origin/{default}",
+            check=False,
+        ).returncode
+        != 0
+    ):
+        stages["branch"] = "kept"
+    else:
+        refused("branch", run_git(clone, "branch", "-d", branch, check=False))
+        if stages["branch"] == "done":
+            stages["branch"] = "deleted"
+
+    left: list[dict[str, object]] = []
+    for name in git_output(
+        clone, "branch", "--list", "--format=%(refname:short)", "retrofit/*"
+    ).splitlines():
+        if name == branch and stages["branch"] == "skipped":
+            reason = "left standing with its worktree, which can still be resumed"
+        elif name == branch:
+            reason = f"not contained in origin/{default}, so its merge was declined"
+        else:
+            reason = "an earlier run at another payload commit"
+        requests = pull_requests(clone, arguments.repository, name)
+        if requests is None:
+            findings.append(f"could not read the pull requests for {name}")
+        left.append({"branch": name, "reason": reason, "pull_requests": requests})
+
+    return {
+        "operation": "sweep",
+        "clone": {"path": str(clone), "default_branch": default},
+        "candidate": {"path": str(candidate), "branch": branch},
+        "stages": stages,
+        "left_for_the_operator": left,
+        "findings": findings,
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -489,6 +620,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="where the throwaway worktree goes; must not exist",
     )
     install.set_defaults(handler=hooks)
+
+    teardown = subparsers.add_parser(
+        "sweep", help="remove what the flow created, forcing nothing"
+    )
+    teardown.add_argument("--clone", type=Path, required=True)
+    teardown.add_argument("--candidate", type=Path, required=True)
+    teardown.add_argument("--branch", required=True, help="the retrofit branch")
+    teardown.add_argument("--default-branch", required=True)
+    teardown.add_argument("--repository", required=True, help="owner/name")
+    teardown.add_argument("--hooks-dir", type=Path, help="the candidate's own")
+    teardown.add_argument("--resume-record", type=Path)
+    teardown.set_defaults(handler=sweep)
     return parser
 
 

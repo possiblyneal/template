@@ -317,3 +317,244 @@ class HooksTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+GH_STUB = """#!/usr/bin/env python3
+import json, os, sys
+
+arguments = sys.argv[1:]
+with open(os.environ["GH_STUB_LOG"], "a") as log:
+    log.write(json.dumps(arguments) + "\\n")
+matches = [
+    response
+    for response in json.loads(os.environ["GH_STUB_RESPONSES"])
+    if arguments[: len(response["args"])] == response["args"]
+]
+if not matches:
+    sys.stderr.write("gh stub: no recorded response\\n")
+    sys.exit(1)
+response = max(matches, key=lambda response: len(response["args"]))
+sys.stdout.write(response.get("stdout", ""))
+sys.stderr.write(response.get("stderr", ""))
+sys.exit(response.get("status", 0))
+"""
+
+
+def stub_gh(directory: str, responses: list[dict[str, object]]) -> dict[str, str]:
+    """An environment whose `gh` replays recorded responses and logs each call.
+
+    The longest recorded argument prefix wins, and a call matching none exits
+    1, so a request the subcommand was not expected to make fails the run.
+    """
+    bin_dir = Path(directory) / "bin"
+    bin_dir.mkdir()
+    gh = bin_dir / "gh"
+    gh.write_text(GH_STUB)
+    gh.chmod(0o755)
+    return {
+        **os.environ,
+        "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+        "GH_STUB_RESPONSES": json.dumps(responses),
+        "GH_STUB_LOG": str(Path(directory) / "gh.log"),
+    }
+
+
+def gh_calls(directory: str) -> list[list[str]]:
+    log = Path(directory) / "gh.log"
+    if not log.exists():
+        return []
+    return [json.loads(line) for line in log.read_text().splitlines()]
+
+
+class SweepTests(unittest.TestCase):
+    """The flow's own residue, taken down after the pull request is decided."""
+
+    BRANCH = "retrofit/abc1234"
+
+    def _candidate(self, directory: str) -> tuple[Path, Path]:
+        """A retrofit worktree with one commit, its hooks dir and resume record."""
+        fixture = retrofit_fixture(directory)
+        clone = Path(fixture["destination"])
+        candidate = Path(directory) / "candidate"
+        git("worktree", "add", "-q", "-b", self.BRANCH, str(candidate), cwd=clone)
+        (candidate / "scripts").mkdir(exist_ok=True)
+        # The destination's own clean, which removes ignored build output the
+        # worktree removal would otherwise trip over were it not ignored.
+        clean = candidate / "scripts/clean"
+        clean.write_text("#!/bin/sh\nrm -rf build\n")
+        clean.chmod(0o755)
+        (candidate / ".gitignore").write_text("build/\n")
+        git("add", "-A", cwd=candidate)
+        git("commit", "-q", "-m", "chore: retrofit", cwd=candidate)
+        # Step 9's publish, which sets the upstream `branch -d` then reads.
+        git("push", "-q", "-u", "origin", self.BRANCH, cwd=candidate)
+        (candidate / "build").mkdir()
+        (candidate / "build/output").write_text("built\n")
+        (Path(directory) / "candidate-hooks").mkdir()
+        (Path(directory) / "candidate.resume.json").write_text("{}\n")
+        return clone, candidate
+
+    def _merge(self, clone: Path) -> None:
+        """GitHub's merge; the clone's own main is never moved."""
+        git("push", "-q", "origin", f"{self.BRANCH}:main", cwd=clone)
+
+    def _sweep(
+        self, directory: str, clone: Path, candidate: Path
+    ) -> subprocess.CompletedProcess[str]:
+        env = stub_gh(
+            directory,
+            [
+                {
+                    "args": [
+                        "api",
+                        f"repos/owner/ledger/pulls?head=owner:{self.BRANCH}&state=all",
+                    ],
+                    "stdout": json.dumps(
+                        [
+                            {
+                                "number": 7,
+                                "state": "closed",
+                                "merged": False,
+                                "url": "https://github.com/owner/ledger/pull/7",
+                            }
+                        ]
+                    ),
+                },
+            ],
+        )
+        return run(
+            "sweep",
+            "--clone",
+            str(clone),
+            "--candidate",
+            str(candidate),
+            "--branch",
+            self.BRANCH,
+            "--default-branch",
+            "main",
+            "--repository",
+            "owner/ledger",
+            "--hooks-dir",
+            str(Path(directory) / "candidate-hooks"),
+            "--resume-record",
+            str(Path(directory) / "candidate.resume.json"),
+            env=env,
+        )
+
+    def test_deletes_a_merged_branch_after_its_worktree(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            clone, candidate = self._candidate(directory)
+            self._merge(clone)
+
+            result = self._sweep(directory, clone, candidate)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(
+                report["stages"],
+                {
+                    "fetch": "done",
+                    "clean": "done",
+                    "worktree": "done",
+                    "prune": "done",
+                    "hooks_dir": "removed",
+                    "resume_record": "removed",
+                    "branch": "deleted",
+                },
+            )
+            self.assertEqual(report["left_for_the_operator"], [])
+            self.assertEqual(report["findings"], [])
+            self.assertFalse(candidate.exists())
+            self.assertFalse((Path(directory) / "candidate-hooks").exists())
+            self.assertEqual(
+                git_output("branch", "--list", "retrofit/*", cwd=clone), ""
+            )
+
+    def test_keeps_a_declined_branch_and_names_its_pull_request(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            clone, candidate = self._candidate(directory)
+
+            result = self._sweep(directory, clone, candidate)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["stages"]["worktree"], "done")
+            self.assertEqual(report["stages"]["branch"], "kept")
+            self.assertEqual(
+                report["left_for_the_operator"],
+                [
+                    {
+                        "branch": self.BRANCH,
+                        "reason": "not contained in origin/main, so its merge "
+                        "was declined",
+                        "pull_requests": [
+                            {
+                                "number": 7,
+                                "state": "closed",
+                                "merged": False,
+                                "url": "https://github.com/owner/ledger/pull/7",
+                            }
+                        ],
+                    }
+                ],
+            )
+            self.assertIn(
+                self.BRANCH, git_output("branch", "--list", "retrofit/*", cwd=clone)
+            )
+
+    def test_refuses_a_dirty_worktree_and_leaves_what_depends_on_it(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            clone, candidate = self._candidate(directory)
+            self._merge(clone)
+            (candidate / "uncommitted").write_text("a step wrote this\n")
+
+            result = self._sweep(directory, clone, candidate)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["stages"]["worktree"], "refused")
+            self.assertNotIn("prune", report["stages"])
+            self.assertEqual(report["stages"]["hooks_dir"], "skipped")
+            self.assertEqual(report["stages"]["resume_record"], "skipped")
+            self.assertEqual(report["stages"]["branch"], "skipped")
+            self.assertTrue(
+                any("worktree refused" in finding for finding in report["findings"])
+            )
+            self.assertTrue((candidate / "uncommitted").exists())
+            self.assertTrue((Path(directory) / "candidate-hooks").exists())
+            self.assertEqual(
+                report["left_for_the_operator"][0]["reason"],
+                "left standing with its worktree, which can still be resumed",
+            )
+
+    def test_names_a_pull_request_lookup_it_could_not_make(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            clone, candidate = self._candidate(directory)
+            git("branch", "retrofit/old0000", cwd=clone)
+            self._merge(clone)
+
+            result = self._sweep(directory, clone, candidate)
+
+            report = json.loads(result.stdout)
+            self.assertEqual(report["stages"]["branch"], "deleted")
+            self.assertEqual(
+                report["left_for_the_operator"],
+                [
+                    {
+                        "branch": "retrofit/old0000",
+                        "reason": "an earlier run at another payload commit",
+                        "pull_requests": None,
+                    }
+                ],
+            )
+            self.assertEqual(
+                report["findings"],
+                ["could not read the pull requests for retrofit/old0000"],
+            )
+            self.assertIn(
+                [
+                    "api",
+                    "repos/owner/ledger/pulls?head=owner:retrofit/old0000&state=all",
+                ],
+                [call[:2] for call in gh_calls(directory)],
+            )
