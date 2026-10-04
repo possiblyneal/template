@@ -113,7 +113,7 @@ def template_payload(repo: Path) -> None:
     write(
         repo,
         "base-repo/docs/agents/domain.md",
-        "# Domain\n\nThe glossary lives in `CONTEXT.md`; ADRs live in `docs/adrs/`.\n",
+        "# Domain\n\nThe glossary lives in `GLOSSARY.md`; ADRs live in `docs/adrs/`.\n",
     )
     write(
         repo,

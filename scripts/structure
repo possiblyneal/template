@@ -54,7 +54,7 @@ root_files=(
   .structure-allow
 
   # The domain model.
-  CONTEXT.md CONTEXT-MAP.md
+  GLOSSARY.md GLOSSARY-MAP.md
 
   # Additions by occasion, held back in the template's repository-addons.
   404.html AUTHORS CHANGELOG.md CITATION.cff CODEOWNERS CODE_OF_CONDUCT.md
