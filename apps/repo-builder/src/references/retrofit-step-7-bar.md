@@ -52,7 +52,7 @@ The ownership array is the payload's default. **A destination path still matchin
 
 ## Normalize, prove, commit
 
-**The candidate carries no untracked file when the bar is measured.** Read `git status --porcelain` for `??` entries *before* staging, since staging turns them into `A`. The usual cause is step 6's ignore-file replacement; dispose it under that step's ignore rule. Where the payload ships no `.gitignore`, generated output such as `__pycache__` is the cause: never stage it. Removal alone does not stop a re-run regenerating it, so remove what exists, append one exclude pathspec per generated path to every `git add -A` below (`-- . ':(exclude,glob)**/__pycache__/**'`), and report the paths. Not `info/exclude`: it sits in the clone's common git dir, and the clone stays untouched.
+**The candidate carries no untracked file when the bar is measured**, other than the generated output the exclude pathspec below keeps out of the index. Read `git status --porcelain` for `??` entries *before* staging, since staging turns them into `A`. The usual cause is step 6's ignore-file replacement; dispose it under that step's ignore rule. Where the payload ships no `.gitignore`, generated output such as `__pycache__` is the cause: never stage it. Removal alone does not stop a re-run regenerating it, so remove what exists, append one exclude pathspec per generated path to every `git add -A` below (`-- . ':(exclude,glob)**/__pycache__/**'`), and report the paths. Not `info/exclude`: it sits in the clone's common git dir, and the clone stays untouched.
 
 Then stage everything, normalize it, and measure both proofs, from this repository:
 
