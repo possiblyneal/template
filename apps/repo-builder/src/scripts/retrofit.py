@@ -1514,8 +1514,12 @@ def hosted_apply(arguments: argparse.Namespace) -> dict[str, object]:
 
     There is no default-branch write here: the rename is a hard stop when
     declined and repairs every clone, so it stays a step the flow runs itself.
+    A write approved later in the run, such as the runner variable once its
+    runner comes online, is a second call; what the earlier call recorded for
+    the writes this one does not approve is kept, so the report sees both.
     """
     approved = set(arguments.approve)
+    earlier = arguments.previous
     if "labels" in approved and not arguments.label:
         raise PreflightError("labels approved with no --label to create")
     if "ruleset" in approved and arguments.ruleset is None:
@@ -1526,6 +1530,15 @@ def hosted_apply(arguments: argparse.Namespace) -> dict[str, object]:
     findings: list[str] = []
     for write in HOSTED_WRITES:
         if write.name not in approved:
+            if write.name in earlier.get("writes", {}):
+                writes[write.name] = earlier["writes"][write.name]
+                if write.name in earlier.get("reasons", {}):
+                    reasons[write.name] = earlier["reasons"][write.name]
+                findings.extend(
+                    finding
+                    for finding in earlier.get("findings", [])
+                    if finding.startswith(f"{write.name}: ")
+                )
             continue
         if write.name != "labels" and log.logged(write.name):
             writes[write.name] = Outcome.LOGGED
@@ -2473,6 +2486,22 @@ def fail(message: str, status: int = 2) -> NoReturn:
 def main() -> int:
     arguments = build_parser().parse_args()
     record = getattr(arguments, "record", None)
+    if record == "hosted-apply":
+        # Read before the unlink, for the one step that builds on its own
+        # earlier record: `hosted apply` run again later in the same flow.
+        # One the sweep postdates belongs to a finished run, and an unreadable
+        # one, left by an interrupted write, counts as none.
+        earlier = record_path(arguments.records, f"{record}.json")
+        sweep = record_path(arguments.records, "sweep.json")
+        swept = (
+            earlier.is_file()
+            and sweep.is_file()
+            and sweep.stat().st_mtime >= earlier.stat().st_mtime
+        )
+        try:
+            arguments.previous = {} if swept else load(arguments.records, record)
+        except (ValueError, PreflightError):
+            arguments.previous = {}
     if record:
         # A step that fails leaves no record, so the renderers never read an
         # earlier run's result as this one's.

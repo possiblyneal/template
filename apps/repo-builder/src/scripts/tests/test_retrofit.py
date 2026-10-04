@@ -1445,6 +1445,65 @@ class HostedTests(unittest.TestCase):
                 first,
             )
 
+    def test_a_later_apply_keeps_the_writes_an_earlier_one_recorded(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            self._apply(directory, "--approve", "runner-variable")
+            shutil.rmtree(Path(directory) / "bin")
+
+            result = self._apply(directory, "--approve", "merge-settings")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            record = json.loads(
+                (Path(directory) / "candidate.hosted-apply.json").read_text()
+            )
+            self.assertEqual(
+                record["writes"],
+                {"merge-settings": "done", "runner-variable": "not offered"},
+            )
+            self.assertIn("runner-variable", record["reasons"])
+            self.assertEqual(
+                [entry["write"] for entry in record["write_log"]["entries"]],
+                ["merge-settings"],
+            )
+
+    def test_an_apply_after_the_sweep_does_not_build_on_the_last_run(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            self._apply(directory, "--approve", "runner-variable")
+            shutil.rmtree(Path(directory) / "bin")
+            (Path(directory) / "candidate.sweep.json").write_text("{}\n")
+
+            result = self._apply(directory, "--approve", "merge-settings")
+
+            self.assertEqual(
+                json.loads(result.stdout)["writes"], {"merge-settings": "done"}
+            )
+
+    def test_a_sweep_from_an_earlier_run_does_not_stop_the_carry(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            sweep = Path(directory) / "candidate.sweep.json"
+            sweep.write_text("{}\n")
+            os.utime(sweep, (0, 0))
+            self._apply(directory, "--approve", "runner-variable")
+            shutil.rmtree(Path(directory) / "bin")
+
+            result = self._apply(directory, "--approve", "merge-settings")
+
+            self.assertEqual(
+                json.loads(result.stdout)["writes"],
+                {"merge-settings": "done", "runner-variable": "not offered"},
+            )
+
+    def test_an_unreadable_earlier_apply_record_counts_as_none(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / "candidate.hosted-apply.json").write_text('{"wri')
+
+            result = self._apply(directory, "--approve", "merge-settings")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                json.loads(result.stdout)["writes"], {"merge-settings": "done"}
+            )
+
     def test_a_created_ruleset_is_reversed_by_deleting_its_id(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             body = Path(directory) / "ruleset.json"
