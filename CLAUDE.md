@@ -66,7 +66,7 @@ Where a new file goes, restated for a reader. Every rule here that is a question
 - `gradle/` — the Gradle wrapper, which Gradle itself writes and locates by that name
 - `tmp/` — gitignored scratch space
 
-Root *files* are permitted by name rather than by pattern: the eight the template ships, `.repo-template.json`, `.structure-allow`, `CONTEXT.md` and `CONTEXT-MAP.md`, every addition by occasion, and the root workspace manifests and lockfiles of five of the six supported languages — Swift has no root manifest, for the reason the orphan-manifest rule below gives. `.gitkeep` is permitted anywhere, since holding an empty directory open is what it is for. Anything else needs permission, recorded in `.structure-allow`.
+Root *files* are permitted by name rather than by pattern: the eight the template ships, `.repo-template.json`, `.structure-allow`, `GLOSSARY.md` and `GLOSSARY-MAP.md`, every addition by occasion, and the root workspace manifests and lockfiles of five of the six supported languages — Swift has no root manifest, for the reason the orphan-manifest rule below gives. `.gitkeep` is permitted anywhere, since holding an empty directory open is what it is for. Anything else needs permission, recorded in `.structure-allow`.
 
 **`apps/` breaks the project into its smallest deployable units.** There may be only one.
 
@@ -132,7 +132,7 @@ The seven canonical roles, unrenamed. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
-Single-context: `CONTEXT.md` at the root, ADRs in `docs/adrs/`. See `docs/agents/domain.md`.
+Single-context: `GLOSSARY.md` at the root, ADRs in `docs/adrs/`. See `docs/agents/domain.md`.
 
 ## Child Index
 
