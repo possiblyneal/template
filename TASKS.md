@@ -13,3 +13,7 @@ color: gray
   - id: 3k8d
   - created: 2026-10-04
   - acceptance: ~/code/inference-runtime-broker has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
+- [ ] Retrofit m3u-wizard under the template | inbox #retrofit
+  - id: tjx4
+  - created: 2026-10-04
+  - acceptance: ~/code/m3u-wizard has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
