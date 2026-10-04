@@ -21,12 +21,6 @@ color: gray
   - id: kmv6
   - created: 2026-10-04
   - acceptance: ~/code/personal-podcast has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
-- [ ] Retrofit rom-file-utils under the template | doing #retrofit
-  - id: s199
-  - created: 2026-10-04
-  - acceptance: ~/code/rom-file-utils has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
-
-  m3u-wizard was folded into this repo under m3u-wizard/ (df4870e) and its GitHub repo deleted
 - [ ] Retrofit taskmaster under the template | inbox #retrofit
   - id: 2jx3
   - created: 2026-10-04
@@ -41,3 +35,10 @@ color: gray
   - acceptance: ~/code/investing is a git repo with a GitHub remote and .repo-template.json on origin/main via a merged /repo-builder retrofit PR
 
   investing is not yet a git repo: git init it and create its GitHub remote, then retrofit it under the template
+- [x] Retrofit rom-file-utils under the template | done #retrofit
+  - id: s199
+  - created: 2026-10-04
+  - acceptance: ~/code/rom-file-utils has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
+  - ended: 2026-10-04
+
+  m3u-wizard was folded into this repo under m3u-wizard/ (df4870e) and its GitHub repo deleted
