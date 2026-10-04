@@ -115,6 +115,25 @@ class ProofsTests(unittest.TestCase):
             self.assertEqual(copy["missing"], [])
             self.assertEqual(copy["total"], copy["identical"] + 1)
             self.assertIn(".gitignore", report["authored"])
+            self.assertEqual(report["replaced"], [])
+
+    def test_names_a_destination_file_an_exact_copy_replaced(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = retrofit_fixture(directory)
+            destination = Path(fixture["destination"])
+            lessons = destination / "docs/LESSONS.md"
+            lessons.parent.mkdir(parents=True, exist_ok=True)
+            lessons.write_text("# Our own lessons\n")
+            git("add", "-A", cwd=destination)
+            git("commit", "-q", "-m", "docs: lessons", cwd=destination)
+            fixture = {
+                **fixture,
+                "base": git_output("rev-parse", "HEAD", cwd=destination),
+            }
+            self._overlay(fixture)
+            report = json.loads(self._proofs(fixture).stdout)
+
+            self.assertEqual(report["replaced"], ["docs/LESSONS.md"])
 
     def test_accounts_for_applied_emptied_and_untriggered_paths(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1628,6 +1647,7 @@ PROOFS = {
     "applied": 58,
     "unchanged": 1,
     "preserved": [".gitignore"],
+    "replaced": ["README.md"],
     "overridden": [{"path": "README.md", "reason": "the product's own front page"}],
     "emptied": [
         {"path": "docs/adr", "residue": []},
@@ -2149,7 +2169,8 @@ class PullRequestBodyTests(unittest.TestCase):
             self.assertIn("lint               pass             ruff", body)
             self.assertIn(
                 "- Deletes or overwrites existing data: yes — deleted: "
-                "docs/adr/0001-one-ledger.md; merged over: CLAUDE.md",
+                "docs/adr/0001-one-ledger.md; merged over: CLAUDE.md; "
+                "replaced by the payload: README.md",
                 body,
             )
             self.assertIn(

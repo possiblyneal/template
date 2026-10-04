@@ -117,7 +117,7 @@ def emptied_directories(candidate: Path, removed: list[str]) -> list[dict[str, o
 
 # `pull_request` outside a comment and not as `pull_request_target`, whose run
 # reads the base branch's workflow rather than this pull request's.
-PULL_REQUEST_TRIGGER = re.compile(r"^[^#\n]*\bpull_request\b(?!_)", re.MULTILINE)
+PULL_REQUEST_TRIGGER = re.compile(r"^[^#\n]*\bpull_request\b", re.MULTILINE)
 
 
 def workflows_without_pull_request(candidate: Path) -> list[str]:
@@ -175,6 +175,7 @@ def proofs(arguments: argparse.Namespace) -> dict[str, object]:
     differing: list[dict[str, object]] = []
     missing: list[str] = []
     preserved: list[str] = []
+    replaced: list[str] = []
     for path in payload:
         # Settled once already, so neither proof measures it.
         if path in overridden_set:
@@ -197,6 +198,9 @@ def proofs(arguments: argparse.Namespace) -> dict[str, object]:
             applied += 1
         if actual == expected:
             identical += 1
+            # The destination's own version is gone, though the copy is exact.
+            if at_base:
+                replaced.append(path)
             continue
         differing.append(
             {
@@ -241,6 +245,7 @@ def proofs(arguments: argparse.Namespace) -> dict[str, object]:
         "applied": applied,
         "unchanged": unchanged,
         "preserved": preserved,
+        "replaced": replaced,
         "overridden": overridden,
         "copy": {
             "identical": identical,
@@ -2203,6 +2208,11 @@ def data_risk(proofs: dict) -> str:
     found = [
         *([f"deleted: {', '.join(proofs['deleted'])}"] if proofs["deleted"] else []),
         *([f"merged over: {', '.join(merged)}"] if merged else []),
+        *(
+            [f"replaced by the payload: {', '.join(proofs['replaced'])}"]
+            if proofs["replaced"]
+            else []
+        ),
     ]
     return f"yes — {'; '.join(found)}" if found else "no"
 

@@ -12,7 +12,7 @@ Part of [Retrofit](retrofit.md). This step turns the destination's tree into the
 
 **A readme below the root is documentation and moves with it**, into the nearest owning `docs/` under a name describing what it is about. The root readme stays, as an addon the destination already holds.
 
-**A move that empties a directory can leave it standing in the operator's clone**, held open by ignored residue the candidate never had. The proofs record lists each such directory under `emptied`, with the residue read from the clone. Report each one and remove none of it: a file the destination's own ignore rules cover is theirs to delete.
+**A move that empties a directory can leave it standing in the operator's clone**, held open by untracked or ignored residue the candidate never had. The proofs record lists each such directory under `emptied`, with the residue read from the clone. Report each one and remove none of it: a file git never tracked is the operator's, and only they know whether it is still wanted.
 
 **The flow writes no `.structure-allow` entry.** A path that cannot be moved is reported with the reason; the operator may write the entry themselves afterwards, outside the flow.
 
