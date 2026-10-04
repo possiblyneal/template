@@ -73,8 +73,9 @@ def emptied_directories(candidate: Path, removed: list[str]) -> list[dict[str, o
     """Each topmost directory the staged removals leave with nothing tracked.
 
     Git tracks no directories, so the residue that holds one open after the
-    merge is never in the candidate's diff: it is ignored output in the
-    operator's clone, read from there while the tracked file still names it.
+    merge is never in the candidate's diff: it is untracked or ignored output
+    in the operator's clone, read from there while the tracked file still
+    names it.
     """
     emptied: set[str] = set()
     for path in removed:
@@ -98,13 +99,25 @@ def emptied_directories(candidate: Path, removed: list[str]) -> list[dict[str, o
             "residue": [
                 entry[3:]
                 for entry in nul_fields(
-                    clone, "status", "--ignored", "--porcelain", "-z", "--", path
+                    clone,
+                    "status",
+                    "--ignored",
+                    "--untracked-files=all",
+                    "--porcelain",
+                    "-z",
+                    "--",
+                    path,
                 )
-                if entry.startswith("!! ")
+                if entry.startswith(("!! ", "?? "))
             ],
         }
         for path in topmost
     ]
+
+
+# `pull_request` outside a comment and not as `pull_request_target`, whose run
+# reads the base branch's workflow rather than this pull request's.
+PULL_REQUEST_TRIGGER = re.compile(r"^[^#\n]*\bpull_request\b(?!_)", re.MULTILINE)
 
 
 def workflows_without_pull_request(candidate: Path) -> list[str]:
@@ -112,7 +125,7 @@ def workflows_without_pull_request(candidate: Path) -> list[str]:
     return sorted(
         str(path.relative_to(candidate))
         for path in (candidate / ".github/workflows").glob("*.y*ml")
-        if "pull_request" not in path.read_text()
+        if not PULL_REQUEST_TRIGGER.search(path.read_text())
     )
 
 
@@ -156,11 +169,16 @@ def proofs(arguments: argparse.Namespace) -> dict[str, object]:
         preflight.listed_paths(candidate, "--others", "--ignored", "--exclude-standard")
     )
 
-    identical = applied = 0
+    overridden = overrides(candidate)
+    overridden_set = {entry["path"] for entry in overridden}
+    identical = applied = unchanged = 0
     differing: list[dict[str, object]] = []
     missing: list[str] = []
     preserved: list[str] = []
     for path in payload:
+        # Settled once already, so neither proof measures it.
+        if path in overridden_set:
+            continue
         if not (candidate / path).is_file():
             missing.append(path)
             continue
@@ -171,8 +189,11 @@ def proofs(arguments: argparse.Namespace) -> dict[str, object]:
             # Untouched since the base: the destination's version stands.
             if actual != expected:
                 preserved.append(path)
+            else:
+                unchanged += 1
             continue
-        if not at_base:
+        # An ignored copy is on disk only, so it is no path the branch writes.
+        if not at_base and path not in excluded:
             applied += 1
         if actual == expected:
             identical += 1
@@ -218,8 +239,9 @@ def proofs(arguments: argparse.Namespace) -> dict[str, object]:
         },
         "payload_total": len(payload),
         "applied": applied,
+        "unchanged": unchanged,
         "preserved": preserved,
-        "overridden": overrides(candidate),
+        "overridden": overridden,
         "copy": {
             "identical": identical,
             "total": identical + len(differing),
@@ -269,8 +291,18 @@ def index_entries(candidate: Path, paths: list[str]) -> dict[str, tuple[str, str
     return entries
 
 
-def restage_rewritten(candidate: Path) -> list[str]:
-    rewritten = nul_fields(candidate, "diff", "--name-only", "-z")
+def untracked(candidate: Path) -> set[str]:
+    return set(
+        nul_fields(candidate, "ls-files", "--others", "--exclude-standard", "-z")
+    )
+
+
+def restage_rewritten(candidate: Path, untracked_before: set[str]) -> list[str]:
+    # A hook can write a file from nothing, as adr-index does its index; an
+    # untracked file it did not write is the bar's to dispose, not this step's.
+    rewritten = nul_fields(candidate, "diff", "--name-only", "-z") + sorted(
+        untracked(candidate) - untracked_before
+    )
     if rewritten:
         run_git(candidate, "add", "--", *rewritten)
     return rewritten
@@ -295,34 +327,43 @@ def normalize(arguments: argparse.Namespace) -> dict[str, object]:
     after = index_entries(candidate, paths)
     renormalized = [path for path in paths if before[path][1] != after[path][1]]
 
+    # A text file with no shebang has nothing to execute it; a binary, read
+    # as git does by a NUL in its first 8000 bytes, may be a real program.
     cleared = []
     for path, (mode, _) in after.items():
         file = candidate / path
-        if mode == "100755" and not file.read_bytes().startswith(b"#!"):
+        head = file.read_bytes()[:8000]
+        if mode == "100755" and not head.startswith(b"#!") and b"\0" not in head:
             file.chmod(file.stat().st_mode & ~0o111)
             cleared.append(path)
     if cleared:
-        run_git(candidate, "add", "--", *cleared)
+        # `add` skips a mode change where `core.fileMode` is false.
+        run_git(candidate, "update-index", "--chmod=-x", "--", *cleared)
 
     config = candidate / ".pre-commit-config.yaml"
     configured = config.read_text() if config.is_file() else ""
     hook_ids = [
         hook
         for hook in NORMALIZING_HOOKS
-        if re.search(rf"id:\s*{re.escape(hook)}\s*$", configured, re.MULTILINE)
+        if re.search(
+            rf"^\s*(?:-\s*)?id:\s*([\"']?){re.escape(hook)}\1\s*(?:#.*)?$",
+            configured,
+            re.MULTILINE,
+        )
     ]
+    untracked_before = untracked(candidate)
     rewritten: list[str] = []
     still_failing: list[str] = []
     failed = []
     for hook in hook_ids:
         if run_tool(candidate, "pre-commit", "run", hook, "--files", *paths).returncode:
             failed.append(hook)
-    rewritten += restage_rewritten(candidate)
+    rewritten += restage_rewritten(candidate, untracked_before)
     # A rewriting hook fails the run that rewrites; only a second failure is a finding.
     for hook in failed:
         if run_tool(candidate, "pre-commit", "run", hook, "--files", *paths).returncode:
             still_failing.append(hook)
-    rewritten += restage_rewritten(candidate)
+    rewritten += restage_rewritten(candidate, untracked_before)
 
     return {
         "operation": "normalize",
@@ -335,7 +376,9 @@ def normalize(arguments: argparse.Namespace) -> dict[str, object]:
     }
 
 
-NO_MANIFEST = "No project manifest found here"
+# The payload's `scripts/run` and `scripts/package` both open with this when a
+# unit has no manifest, and both exit zero.
+NO_MANIFEST = "No project manifest found"
 
 
 def tail(output: str) -> str:
@@ -343,13 +386,22 @@ def tail(output: str) -> str:
     return lines[-1].strip() if lines else ""
 
 
+def executed_fact(result: subprocess.CompletedProcess[str]) -> dict[str, object]:
+    output = result.stdout + result.stderr
+    return {
+        "exit": result.returncode,
+        "tail": tail(output),
+        "no_manifest": NO_MANIFEST in output,
+    }
+
+
 def facts(arguments: argparse.Namespace) -> dict[str, object]:
     """Execute each unit's declared run and ship facts once.
 
     Neither command is in the check surface, so a declaration contradicting
     the tree passes every capability and fails the first time it is used.
-    `scripts/run` reports a unit that starts nothing and exits zero, which is
-    why its output is read rather than its status.
+    `scripts/run` and `scripts/package` report a unit with no manifest and
+    exit zero, which is why their output is read rather than their status.
     """
     candidate = preflight.require_git_repository(arguments.candidate, "candidate")
     shipped = all(
@@ -360,27 +412,14 @@ def facts(arguments: argparse.Namespace) -> dict[str, object]:
     for declaration in declarations:
         unit = declaration.parent.name
         packaged = run_tool(candidate, "scripts/package", unit)
-        ran = subprocess.run(
-            ["scripts/run", unit],
-            cwd=candidate,
-            text=True,
-            capture_output=True,
-            check=False,
-            env={**os.environ, "CI_DRY_RUN": "1"},
+        ran = run_tool(
+            candidate, "scripts/run", unit, env={**os.environ, "CI_DRY_RUN": "1"}
         )
-        ran_output = ran.stdout + ran.stderr
         units.append(
             {
                 "unit": unit,
-                "package": {
-                    "exit": packaged.returncode,
-                    "tail": tail(packaged.stdout + packaged.stderr),
-                },
-                "run": {
-                    "exit": ran.returncode,
-                    "tail": tail(ran_output),
-                    "starts_nothing": NO_MANIFEST in ran_output,
-                },
+                "package": executed_fact(packaged),
+                "run": executed_fact(ran),
             }
         )
     return {
@@ -453,11 +492,20 @@ MESSAGE_HOOK_TYPES = ("prepare-commit-msg", "commit-msg")
 
 
 def run_tool(
-    cwd: Path, *command: str, stdin: str | None = None
+    cwd: Path,
+    *command: str,
+    stdin: str | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     try:
         return subprocess.run(
-            command, cwd=cwd, input=stdin, text=True, capture_output=True, check=False
+            command,
+            cwd=cwd,
+            input=stdin,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=env,
         )
     except FileNotFoundError as error:
         raise PreflightError(f"{command[0]} is required but was not found") from error
@@ -831,9 +879,10 @@ def sweep(arguments: argparse.Namespace) -> dict[str, object]:
     branch, default = arguments.branch, arguments.default_branch
     scratch: dict[str, Path] = {
         stage: path
-        for stage in ("hooks_dir", "resume_record", "write_log")
+        for stage in ("hooks_dir", "resume_record")
         if (path := getattr(arguments, stage)) is not None
     }
+    scratch["write_log"] = write_log_path(arguments.records)
     stages: dict[str, str] = {}
     findings: list[str] = []
 
@@ -1466,7 +1515,7 @@ def hosted_apply(arguments: argparse.Namespace) -> dict[str, object]:
         raise PreflightError("labels approved with no --label to create")
     if "ruleset" in approved and arguments.ruleset is None:
         raise PreflightError("ruleset approved with no --ruleset body")
-    log = WriteLog(arguments.write_log)
+    log = WriteLog(write_log_path(arguments.records))
     writes: dict[str, object] = {}
     reasons: dict[str, str] = {}
     findings: list[str] = []
@@ -1500,7 +1549,7 @@ def hosted_apply(arguments: argparse.Namespace) -> dict[str, object]:
         "repository": arguments.repository,
         "writes": writes,
         "reasons": reasons,
-        "write_log": {"path": str(arguments.write_log), "entries": log.entries},
+        "write_log": {"path": str(log.path), "entries": log.entries},
         "findings": findings,
     }
 
@@ -1590,11 +1639,24 @@ def record_path(prefix: Path, suffix: str) -> Path:
     return prefix.with_name(f"{prefix.name}.{suffix}")
 
 
+def write_log_path(prefix: Path) -> Path:
+    """Hosted apply's log of each write's before-state, which a resumed run reads."""
+    return record_path(prefix, "writes.json")
+
+
 def required_record(prefix: Path, suffix: str) -> Path:
     path = record_path(prefix, suffix)
     if not path.is_file():
         raise PreflightError(f"{path} is missing; the step that writes it has not run")
     return path
+
+
+def load_required(prefix: Path, name: str) -> dict:
+    return json.loads(required_record(prefix, f"{name}.json").read_text())
+
+
+def write_entries(apply_record: dict) -> list[dict]:
+    return apply_record.get("write_log", {}).get("entries", [])
 
 
 def load(prefix: Path, name: str) -> dict:
@@ -1631,16 +1693,17 @@ def header(report: Report, arguments: argparse.Namespace, proofs: dict) -> None:
     )
 
 
-def overridden_paths(proofs: dict) -> set[str]:
-    return {entry["path"] for entry in proofs["overridden"]}
-
-
-def conflicted_line(report: Report, proofs: dict) -> str:
-    merged = [
+def merged_paths(proofs: dict) -> list[str]:
+    """Payload paths the destination already held, merged rather than copied."""
+    return [
         item["path"]
         for item in proofs["copy"]["differing"]
         if item["class"] == "merged"
     ]
+
+
+def conflicted_line(report: Report, proofs: dict) -> str:
+    merged = merged_paths(proofs)
     if not merged:
         return "- Conflicted: none"
     return (
@@ -1654,12 +1717,10 @@ def reconciliation(report: Report, proofs: dict) -> None:
     moves = proofs["rename_purity"]["moves"]
     renamed = [f"{move['from']} -> {move['to']}" for move in moves]
     deleted = [f"{path} deleted" for path in proofs["deleted"]]
-    overridden = overridden_paths(proofs)
-    preserved = [path for path in proofs["preserved"] if path not in overridden]
     report.section("### Reconciliation")
     report.add(
         f"- Applied: {proofs['applied']} payload paths, written because the destination lacked them",
-        f"- Preserved: {joined(preserved)}",
+        f"- Preserved: {joined(proofs['preserved'])}",
         f"- Renamed/deleted: {joined(renamed + deleted)}",
         conflicted_line(report, proofs),
         f"- Superseded: {fill('each superseded path, what it did and what carries it now, or none')}",
@@ -1712,13 +1773,12 @@ def file_list(report: Report, proofs: dict) -> None:
         if not move["identical"]
     ]
     copy = proofs["copy"]
-    overridden = overridden_paths(proofs)
-    preserved = [path for path in proofs["preserved"] if path not in overridden]
     report.section("### File list")
     report.add(
         f"- Payload paths: {proofs['payload_total']}, the placeholder unit left out: "
-        f"{copy['identical']} byte-identical copies, {len(copy['differing'])} authored, "
-        f"{len(preserved)} preserved, {len(overridden)} overridden; "
+        f"{copy['identical']} byte-identical copies, {proofs['unchanged']} already "
+        f"identical in the destination, {len(copy['differing'])} authored, "
+        f"{len(proofs['preserved'])} preserved, {len(proofs['overridden'])} overridden; "
         f"missing: {joined(copy['missing'])}",
         f"- Authored surface: {joined(authored)}",
     )
@@ -1774,12 +1834,12 @@ def labels_line(report: Report, labels: object) -> str:
 
 
 def repository_settings(
-    report: Report, hosted_state: dict, applied: dict, stopped: str | None
+    report: Report, hosted_state: dict, apply_record: dict, stopped: str | None
 ) -> None:
-    writes, reasons = applied.get("writes", {}), applied.get("reasons", {})
+    writes, reasons = apply_record.get("writes", {}), apply_record.get("reasons", {})
     # The gate opens with `hosted read`, so its JSON marks a run that reached
     # the gate even where it stopped there with nothing applied.
-    gate_reached = bool(hosted_state or applied) or not stopped
+    gate_reached = bool(hosted_state or apply_record) or not stopped
     report.section("### Repository settings")
     report.add(
         f"- Destination visibility: {hosted_state.get('visibility') or report.fill('public or private, read from the API')}"
@@ -1828,9 +1888,9 @@ def ruleset_enforcement(
 
 
 def irreversible_writes(
-    report: Report, applied: dict, pull_request: str | None
+    report: Report, apply_record: dict, pull_request: str | None
 ) -> None:
-    writes, reasons = applied.get("writes", {}), applied.get("reasons", {})
+    writes, reasons = apply_record.get("writes", {}), apply_record.get("reasons", {})
     gaps = [
         f"{write}: {reasons[write]}"
         for write, outcome in writes.items()
@@ -1926,7 +1986,7 @@ def verification(
         f"- Declared facts executed: {facts_line(executed)}",
         f"- Tool declaration: {fill('per manifest, what was added, kept or declined')}",
         f"- Configuration boundary: {fill('one row per language')}",
-        f"- Autofix: {autofix_line(fixed)}",
+        f"- Autofix: {autofix_line(report, fixed)}",
         f"- Autofix settings resolution: {fill('every tool resolved inside the candidate, or SKIPPED and why')}",
         f"- Payload paths the autofix rewrote: {reverted_line(report, fixed)}",
     )
@@ -1952,38 +2012,36 @@ def facts_line(executed: dict) -> str:
     if not executed["shipped"]:
         return "the payload ships neither command, so both facts are written and unexecuted"
 
-    def outcome(result: dict) -> str:
-        return "pass" if result["exit"] == 0 else f"fail ({result['tail']})"
+    def outcome(result: dict, passed: str) -> str:
+        if result["exit"]:
+            return f"fail ({result['tail']})"
+        return f"does nothing ({result['tail']})" if result["no_manifest"] else passed
 
     return "; ".join(
-        f"{unit['unit']}: `scripts/package` {outcome(unit['package'])}, `scripts/run` "
-        + (
-            f"starts nothing ({NO_MANIFEST})"
-            if unit["run"]["starts_nothing"]
-            else f"{outcome(unit['run'])} under CI_DRY_RUN"
-        )
+        f"{unit['unit']}: `scripts/package` {outcome(unit['package'], 'pass')}, "
+        f"`scripts/run` {outcome(unit['run'], 'pass under CI_DRY_RUN')}"
         for unit in executed["units"]
     )
 
 
-def autofix_line(fixed: dict) -> str:
+def autofix_line(report: Report, fixed: dict) -> str:
     if not fixed:
         return "no pass ran"
     if not fixed["shipped"]:
         return (
             "the payload ships no `scripts/fix`, so the bar was measured without a pass"
         )
-    if not fixed["rewritten"]:
-        return f"nothing to fix ({fixed['passes']} pass)"
+    passes = f"{fixed['passes']} pass{'es' if fixed['passes'] > 1 else ''}"
     remaining = (
         "; findings it could not fix remained for the bar"
         if fixed["exit_status"]
         else ""
     )
+    if not fixed["rewritten"]:
+        return f"nothing rewritten outside the payload ({passes}){remaining}"
     return (
-        f"`scripts/fix` rewrote {', '.join(fixed['rewritten'])} in "
-        f"{fixed['passes']} pass{'es' if fixed['passes'] > 1 else ''}, "
-        f"committed by itself{remaining}"
+        f"`scripts/fix` rewrote {', '.join(fixed['rewritten'])} in {passes}, "
+        f"committed by itself in {report.fill('the commit sha')}{remaining}"
     )
 
 
@@ -2045,7 +2103,7 @@ def cleanup(report: Report, swept: dict, hooks_result: dict, proofs: dict) -> No
     left += [str(finding) for finding in swept.get("findings", [])]
     left += [str(finding) for finding in hooks_result.get("findings", [])]
     left += [
-        f"{item['path']}: {', '.join(item['residue'])}, ignored residue a move left"
+        f"{item['path']}: {', '.join(item['residue'])}, untracked residue a move left"
         for item in proofs["emptied"]
         if item["residue"]
     ]
@@ -2078,20 +2136,22 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
     or judged is a `[[FILL: ...]]` slot for the session to fill.
     """
     prefix = arguments.records
-    proofs = json.loads(required_record(prefix, "proofs.json").read_text())
+    proofs = load_required(prefix, "proofs")
     summaries = [("scripts/check", read_summary(required_record(prefix, "check.txt")))]
     hooks_result = load(prefix, "hooks")
     swept = load(prefix, "sweep")
-    applied = load(prefix, "hosted-apply")
+    apply_record = load(prefix, "hosted-apply")
     report = Report()
     header(report, arguments, proofs)
     reconciliation(report, proofs)
     application_boundaries(report, proofs)
     file_list(report, proofs)
     addon_adoption(report, load(prefix, "preflight"))
-    repository_settings(report, load(prefix, "hosted-read"), applied, arguments.stopped)
-    reversible_writes(report, applied.get("write_log", {}).get("entries", []))
-    irreversible_writes(report, applied, arguments.pull_request)
+    repository_settings(
+        report, load(prefix, "hosted-read"), apply_record, arguments.stopped
+    )
+    reversible_writes(report, write_entries(apply_record))
+    irreversible_writes(report, apply_record, arguments.pull_request)
     verification(
         report,
         arguments,
@@ -2104,7 +2164,7 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
     )
     cleanup(report, swept, hooks_result, proofs)
     if arguments.resumed:
-        resumption(report, applied.get("writes", {}))
+        resumption(report, apply_record.get("writes", {}))
     report.section("### Pending action")
     report.add(
         report.fill("the exact decision or authorization needed")
@@ -2118,7 +2178,7 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
 
 
 def proof_lines(
-    proofs: dict, normalized: dict, executed: dict, fixed: dict
+    report: Report, proofs: dict, normalized: dict, executed: dict, fixed: dict
 ) -> list[str]:
     copy, purity = proofs["copy"], proofs["rename_purity"]
     lines = [
@@ -2133,9 +2193,18 @@ def proof_lines(
         )
     lines += [
         f"- Declared facts executed: {facts_line(executed)}",
-        f"- Autofix: {autofix_line(fixed)}",
+        f"- Autofix: {autofix_line(report, fixed)}",
     ]
     return lines
+
+
+def data_risk(proofs: dict) -> str:
+    merged = merged_paths(proofs)
+    found = [
+        *([f"deleted: {', '.join(proofs['deleted'])}"] if proofs["deleted"] else []),
+        *([f"merged over: {', '.join(merged)}"] if merged else []),
+    ]
+    return f"yes — {'; '.join(found)}" if found else "no"
 
 
 def rollback_lines(entries: list[dict]) -> list[str]:
@@ -2158,9 +2227,9 @@ def render_pr_body(arguments: argparse.Namespace) -> dict[str, object]:
     decisions and the scope are `[[FILL: ...]]` slots.
     """
     prefix = arguments.records
-    proofs = json.loads(required_record(prefix, "proofs.json").read_text())
+    proofs = load_required(prefix, "proofs")
     check = required_record(prefix, "check.txt").read_text().rstrip()
-    entries = load(prefix, "hosted-apply").get("write_log", {}).get("entries", [])
+    entries = write_entries(load(prefix, "hosted-apply"))
     report = Report()
     fill = report.fill
     report.add(
@@ -2185,6 +2254,7 @@ def render_pr_body(arguments: argparse.Namespace) -> dict[str, object]:
         "```",
         "",
         *proof_lines(
+            report,
             proofs,
             load(prefix, "normalize"),
             load(prefix, "facts"),
@@ -2208,12 +2278,7 @@ def render_pr_body(arguments: argparse.Namespace) -> dict[str, object]:
         "gitleaks, a dependency audit, CodeQL and Dependabot",
         f"- Public API, CLI, or on-disk format changed in a way existing callers would notice: {fill('yes / no')}",
         f"- Dependencies added, removed, or upgraded: {fill('yes / no')}",
-        "- Deletes or overwrites existing data: "
-        + (
-            f"yes — deleted: {', '.join(proofs['deleted'])}"
-            if proofs["deleted"]
-            else "no"
-        ),
+        f"- Deletes or overwrites existing data: {data_risk(proofs)}",
         "",
         fill(
             "for every yes, what specifically changed and what happens if it is wrong"
@@ -2254,7 +2319,10 @@ def build_parser() -> argparse.ArgumentParser:
     # and the pull-request body find it without a flag per file.
     recorded = argparse.ArgumentParser(add_help=False)
     recorded.add_argument(
-        "--records", type=Path, help="the run's record prefix, tmp/<repo>.<commit>"
+        "--records",
+        type=Path,
+        required=True,
+        help="the run's record prefix, tmp/<repo>.<commit>",
     )
 
     def payload_arguments(command: argparse.ArgumentParser) -> None:
@@ -2332,7 +2400,6 @@ def build_parser() -> argparse.ArgumentParser:
     teardown.add_argument("--repository", required=True, help="owner/name")
     teardown.add_argument("--hooks-dir", type=Path, help="the candidate's own")
     teardown.add_argument("--resume-record", type=Path)
-    teardown.add_argument("--write-log", type=Path, help="hosted apply's")
     teardown.set_defaults(handler=sweep, record="sweep")
 
     hosted = subparsers.add_parser(
@@ -2355,9 +2422,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         required=True,
     )
-    apply.add_argument(
-        "--write-log", type=Path, required=True, help="beside the candidate"
-    )
     apply.add_argument("--label", action="append", default=[])
     apply.add_argument(
         "--keep-case-variants",
@@ -2370,25 +2434,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     apply.set_defaults(handler=hosted_apply, record="hosted-apply")
 
-    def rendered(command: argparse.ArgumentParser) -> None:
-        command.add_argument("--repository", required=True, help="owner/name")
-        command.add_argument(
-            "--records", type=Path, required=True, help="the run's record prefix"
-        )
-
     render = subparsers.add_parser(
-        "report", help="render the final report's deterministic lines"
+        "report",
+        parents=[recorded],
+        help="render the final report's deterministic lines",
     )
-    rendered(render)
+    render.add_argument("--repository", required=True, help="owner/name")
     render.add_argument("--pull-request", help="its URL, where one was opened")
     render.add_argument("--stopped", help="what remains, on a stopped run")
     render.add_argument("--resumed", action="store_true")
     render.set_defaults(handler=render_report)
 
     body = subparsers.add_parser(
-        "pr-body", help="fill the payload's pull-request template from the records"
+        "pr-body",
+        parents=[recorded],
+        help="fill the payload's pull-request template from the records",
     )
-    rendered(body)
+    body.add_argument("--repository", required=True, help="owner/name")
     body.set_defaults(handler=render_pr_body)
     return parser
 
@@ -2400,6 +2462,11 @@ def fail(message: str, status: int = 2) -> NoReturn:
 
 def main() -> int:
     arguments = build_parser().parse_args()
+    record = getattr(arguments, "record", None)
+    if record:
+        # A step that fails leaves no record, so the renderers never read an
+        # earlier run's result as this one's.
+        record_path(arguments.records, f"{record}.json").unlink(missing_ok=True)
     try:
         result = arguments.handler(arguments)
     except PreflightError as error:
@@ -2409,8 +2476,7 @@ def main() -> int:
         indent=2,
         sort_keys=True,
     )
-    record = getattr(arguments, "record", None)
-    if record and arguments.records:
+    if record:
         record_path(arguments.records, f"{record}.json").write_text(output + "\n")
     print(output)
     return 0

@@ -28,7 +28,6 @@ python3 apps/repo-builder/src/scripts/retrofit.py sweep \
   --repository <owner>/<name> \
   --hooks-dir <hooksdir> \
   --resume-record <resume record> \
-  --write-log <records>.writes.json \
   --records <records>
 ```
 

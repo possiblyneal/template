@@ -14,7 +14,6 @@ python3 apps/repo-builder/src/scripts/retrofit.py hosted read \
 
 python3 apps/repo-builder/src/scripts/retrofit.py hosted apply \
   --repository <owner>/<repository> --records <records> \
-  --write-log <records>.writes.json \
   --approve <write> [--approve <write> ...] \
   [--label <name> ...] [--keep-case-variants] \
   [--ruleset <body.json> [--replace-ruleset <id>]]

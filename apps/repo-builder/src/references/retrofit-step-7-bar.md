@@ -83,7 +83,7 @@ git -C <candidate> add -A
 python3 apps/repo-builder/src/scripts/retrofit.py facts --candidate <candidate> --records <records>
 ```
 
-Per unit it runs `scripts/package <unit>` for real and `scripts/run <unit>` under `CI_DRY_RUN`, and flags a run that printed `No project manifest found here` as starting nothing, which exits zero. Neither command is in the check surface, so a declaration that contradicts the tree passes the bar and fails the first time somebody uses it. A failure is a wrong fact or a missing descriptor: fix it, and re-read it with the operator where the fix changes a fact they confirmed.
+Per unit it runs `scripts/package <unit>` for real and `scripts/run <unit>` under `CI_DRY_RUN`, and flags either one that printed `No project manifest found` as doing nothing, since both exit zero there. Neither command is in the check surface, so a declaration that contradicts the tree passes the bar and fails the first time somebody uses it. A failure is a wrong fact or a missing descriptor: fix it, and re-read it with the operator where the fix changes a fact they confirmed.
 
 **An unmet bar is a failed retrofit and it stops before the pull request**, naming the capability that could not pass and why. The fix does not ride along in the candidate. **The rest of that path is in [`retrofit-unmet-bar.md`](retrofit-unmet-bar.md)**; a run that meets the bar never reads it.
 
