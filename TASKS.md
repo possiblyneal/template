@@ -33,3 +33,7 @@ color: gray
   - id: 2jx3
   - created: 2026-10-04
   - acceptance: ~/code/taskmaster has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
+- [ ] Retrofit wall-collage under the template | inbox #retrofit
+  - id: i0d0
+  - created: 2026-10-04
+  - acceptance: ~/code/wall-collage has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
