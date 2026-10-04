@@ -872,9 +872,17 @@ PULL_REQUESTS_NOT_APPLICABLE = {
 }
 
 
-def is_github_slug(repository: str) -> bool:
-    """Whether `--repository` is `owner/name`, rather than the origin path."""
-    return re.fullmatch(r"[\w.-]+/[\w.-]+", repository) is not None
+def is_github_slug(clone: Path, repository: str) -> bool:
+    """Whether `--repository` is `owner/name`, rather than the origin path.
+
+    An owner is letters, digits and hyphens, so `../origin` and `./origin`
+    fail the pattern; `remote/x` passes it and is a path only if it exists,
+    resolved from the clone as git resolves a relative remote.
+    """
+    slug = r"[A-Za-z0-9][A-Za-z0-9-]*/(?!\.\.?$)[\w.-]+"
+    return (
+        re.fullmatch(slug, repository) is not None and not (clone / repository).exists()
+    )
 
 
 def pull_requests(clone: Path, repository: str, branch: str) -> list[object] | None:
@@ -985,7 +993,7 @@ def sweep(arguments: argparse.Namespace) -> dict[str, object]:
             stages["branch"] = "deleted"
 
     left: list[dict[str, object]] = []
-    on_github = is_github_slug(arguments.repository)
+    on_github = is_github_slug(clone, arguments.repository)
     for name in git_output(
         clone, "branch", "--list", "--format=%(refname:short)", "retrofit/*"
     ).splitlines():

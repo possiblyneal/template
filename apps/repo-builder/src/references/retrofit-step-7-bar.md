@@ -52,12 +52,12 @@ The ownership array is the payload's default. **A destination path still matchin
 
 ## Normalize, prove, commit
 
-**The candidate carries no untracked file when the bar is measured.** Read `git status --porcelain` for `??` entries *before* staging, since staging turns them into `A`. The usual cause is step 6's ignore-file replacement; dispose it under that step's ignore rule. Where the payload ships no `.gitignore`, generated output such as `__pycache__` is the cause: never stage it. Removal alone does not stop a re-run regenerating it before `git add -A`, so before staging write each generated path the payload ships no ignore for into the candidate's `.git/info/exclude` (`git -C <candidate> rev-parse --git-path info/exclude`, which resolves in a worktree), remove what exists, and report the paths.
+**The candidate carries no untracked file when the bar is measured.** Read `git status --porcelain` for `??` entries *before* staging, since staging turns them into `A`. The usual cause is step 6's ignore-file replacement; dispose it under that step's ignore rule. Where the payload ships no `.gitignore`, generated output such as `__pycache__` is the cause: never stage it. Removal alone does not stop a re-run regenerating it, so remove what exists, append one exclude pathspec per generated path to every `git add -A` below (`-- . ':(exclude,glob)**/__pycache__/**'`), and report the paths. Not `info/exclude`: it sits in the clone's common git dir, and the clone stays untouched.
 
 Then stage everything, normalize it, and measure both proofs, from this repository:
 
 ```bash
-git -C <candidate> add -A
+git -C <candidate> add -A [-- . '<exclude pathspec>'...]
 python3 apps/repo-builder/src/scripts/retrofit.py normalize \
   --candidate <candidate> --records <records>
 python3 apps/repo-builder/src/scripts/retrofit.py proofs --template-repo . \
@@ -92,7 +92,7 @@ Where the destination's test capability collects anything, report its result on 
 **The bar is the destination's own check surface passing on the candidate**, read by [Running the destination's checks](lifecycle.md#running-the-destinations-checks). `FAIL` and `unavailable` block; `not-applicable` does not. Stage before every run, re-runs included, since `scripts/structure` enumerates the index:
 
 ```bash
-git -C <candidate> add -A
+git -C <candidate> add -A [-- . '<exclude pathspec>'...]
 (cd <candidate> && scripts/summarize scripts/check) > <records>.check.txt
 ```
 

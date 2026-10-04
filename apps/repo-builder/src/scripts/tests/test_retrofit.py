@@ -1124,12 +1124,19 @@ class SweepTests(unittest.TestCase):
             )
 
     def test_makes_no_github_call_for_an_origin_that_is_a_path(self) -> None:
+        for origin in ("/srv/ledger", "../origin", "./origin", "remote/x"):
+            with self.subTest(origin=origin):
+                self._sweeps_a_path_origin_without_github(origin)
+
+    def _sweeps_a_path_origin_without_github(self, origin: str) -> None:
         with tempfile.TemporaryDirectory() as directory:
             clone, candidate = self._candidate(directory)
             git("branch", "retrofit/old0000", cwd=clone)
             self._merge(clone)
+            if origin == "remote/x":
+                (clone / "remote" / "x").mkdir(parents=True)
 
-            result = self._sweep(directory, clone, candidate, "/srv/ledger")
+            result = self._sweep(directory, clone, candidate, origin)
 
             self.assertEqual(result.returncode, 0, result.stderr)
             report = json.loads(result.stdout)
