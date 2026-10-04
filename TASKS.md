@@ -5,10 +5,6 @@ color: gray
   - id: dhk4
   - created: 2026-10-04
   - acceptance: ~/code/agentmemory-sqlite has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
-- [ ] Retrofit curator under the template | inbox #retrofit
-  - id: 5qlr
-  - created: 2026-10-04
-  - acceptance: ~/code/curator has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
 - [ ] Retrofit inference-runtime-broker under the template | inbox #retrofit
   - id: 3k8d
   - created: 2026-10-04
@@ -42,3 +38,8 @@ color: gray
   - ended: 2026-10-04
 
   m3u-wizard was folded into this repo under m3u-wizard/ (df4870e) and its GitHub repo deleted
+- [x] Retrofit curator under the template | done #retrofit
+  - id: 5qlr
+  - created: 2026-10-04
+  - acceptance: ~/code/curator has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
+  - ended: 2026-10-04
