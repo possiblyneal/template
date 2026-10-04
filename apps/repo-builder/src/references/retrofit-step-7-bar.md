@@ -1,6 +1,6 @@
 # Step 7 — Dispose the collisions, write both records, meet the bar
 
-Part of [Retrofit](retrofit.md). Nothing here reaches the network. In order: the collisions, the two records, the unit declarations, the instruction file, the tool declaration, normalization and the proofs, the autofix pass, the bar, the declared facts, and the review.
+Part of [Retrofit](retrofit.md). Nothing here reaches the network. In order: the two records, the unit declarations, the remaining collisions, the instruction file, the tool declaration, normalization and the proofs, the autofix pass, the bar, the declared facts, and the review.
 
 ## The records and the collisions
 
@@ -19,13 +19,13 @@ Part of [Retrofit](retrofit.md). Nothing here reaches the network. In order: the
 
 **Then write each unit's `.unit.json`** at the unit root, from the pair step 5 confirmed, with `ships.targets` only where the kind is `executable`. Nothing earlier writes it, and `scripts/structure`'s `unit-declaration` cannot pass without it.
 
-**Then write the merged `CLAUDE.md`**, which step 6 left, so it describes the whole run and the bar measures it.
-
-**Propose and dispose every remaining collision, per file.** Diff the destination's version against the payload's, state what each says, and let the operator pick payload, destination, or a merge. No path-matching rule stands in for this. A disposition the payload wins writes the payload's mode too, under [The payload's mode travels with the payload's content](lifecycle.md#the-payloads-mode-travels-with-the-payloads-content).
+**Then propose and dispose every remaining collision, per file**, `CLAUDE.md` included. Diff the destination's version against the payload's, state what each says, and let the operator pick payload, destination, or a merge. No path-matching rule stands in for this. A disposition the payload wins writes the payload's mode too, under [The payload's mode travels with the payload's content](lifecycle.md#the-payloads-mode-travels-with-the-payloads-content).
 
 **Where this run invalidated the destination's stated reason, propose the payload's version and name the step that invalidated it**, so the operator can refuse it on the merits.
 
 **A destination version chosen at a managed path is an [overridden path](lifecycle.md#overridden-paths)**, recorded with the reason it won. One that wins at a product path is already the destination's: report it with its reason and record nothing.
+
+**Then write the `CLAUDE.md` the disposition chose**, merged where it chose a merge, so it describes the whole run and the bar measures it. It is written before the bar and after its collision is disposed.
 
 The ownership array is the payload's default. **A destination path still matching a managed pattern is a layout failure to fix in step 6**, never an ownership exception written here.
 
@@ -52,7 +52,7 @@ The ownership array is the payload's default. **A destination path still matchin
 
 ## Normalize, prove, commit
 
-**The candidate carries no untracked file when the bar is measured.** Read `git status --porcelain` for `??` entries *before* staging, since staging turns them into `A`. The usual cause is step 6's ignore-file replacement; dispose it under that step's ignore rule. Where the payload ships no `.gitignore`, generated output such as `__pycache__` is the cause: remove it from the candidate, never stage it.
+**The candidate carries no untracked file when the bar is measured.** Read `git status --porcelain` for `??` entries *before* staging, since staging turns them into `A`. The usual cause is step 6's ignore-file replacement; dispose it under that step's ignore rule. Where the payload ships no `.gitignore`, generated output such as `__pycache__` is the cause: never stage it. Removal alone does not stop a re-run regenerating it before `git add -A`, so before staging write each generated path the payload ships no ignore for into the candidate's `.git/info/exclude` (`git -C <candidate> rev-parse --git-path info/exclude`, which resolves in a worktree), remove what exists, and report the paths.
 
 Then stage everything, normalize it, and measure both proofs, from this repository:
 
