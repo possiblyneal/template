@@ -801,7 +801,9 @@ def hooks(arguments: argparse.Namespace) -> dict[str, object]:
     """Install the destination's hooks in the operator's clone, and prove them.
 
     Only where the merge was taken: the config this installs arrived with it.
-    A payload that ships no `.pre-commit-config.yaml` records `not-applicable`.
+    The merge has landed once `.repo-template.json` is on the default branch,
+    and refusing otherwise. A landed payload that ships no
+    `.pre-commit-config.yaml` records `not-applicable`.
     """
     clone = preflight.require_git_repository(arguments.clone, "clone")
     scratch = arguments.scratch.resolve()
@@ -810,8 +812,13 @@ def hooks(arguments: argparse.Namespace) -> dict[str, object]:
     branch = arguments.default_branch
     run_git(clone, "fetch", "-q", "origin", branch)
     base = preflight.resolve_commit(clone, f"origin/{branch}")
+    if blob(clone, f"{base}:.repo-template.json") is None:
+        raise PreflightError(
+            f"origin/{branch} carries no .repo-template.json; install only "
+            "after the merge has landed"
+        )
     if blob(clone, f"{base}:.pre-commit-config.yaml") is None:
-        # A payload that ships no hooks leaves nothing to install or prove.
+        # A landed merge whose payload ships no hooks leaves nothing to install.
         return {
             "operation": "hooks",
             "outcome": "not-applicable",

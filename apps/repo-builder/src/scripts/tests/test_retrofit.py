@@ -578,6 +578,8 @@ class HooksTests(unittest.TestCase):
         destination = Path(fixture["destination"])
         git("rm", "-rq", ".", cwd=destination)
         shutil.copytree(PAYLOAD, destination, dirs_exist_ok=True)
+        # The record a landed retrofit merge puts on the default branch.
+        (destination / ".repo-template.json").write_text("{}\n")
         git("add", "-A", cwd=destination)
         git("commit", "-q", "-m", "build: land the payload", cwd=destination)
         git("push", "-q", "origin", "main", cwd=destination)
@@ -797,12 +799,26 @@ class HooksTests(unittest.TestCase):
             self.assertIn("not removed", report["findings"][0])
             self.assertTrue((destination.parent / "hook-test/stray").exists())
 
+    def test_refuses_before_the_merge_has_landed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = retrofit_fixture(directory)
+            destination = Path(fixture["destination"])
+            result = self._hooks(destination, self._env(directory))
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn(".repo-template.json", result.stderr)
+
     def test_reports_not_applicable_where_the_payload_ships_no_hooks_config(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = retrofit_fixture(directory)
             destination = Path(fixture["destination"])
+            # The merge landed: its record is on the default branch, no hooks config.
+            (destination / ".repo-template.json").write_text("{}\n")
+            git("add", ".repo-template.json", cwd=destination)
+            git("commit", "-q", "-m", "build: land the record", cwd=destination)
+            git("push", "-q", "origin", "main", cwd=destination)
             result = self._hooks(destination, self._env(directory))
 
             self.assertEqual(result.returncode, 0, result.stderr)
