@@ -1,6 +1,6 @@
 # Step 7 — Dispose the collisions, write both records, meet the bar
 
-Part of [Retrofit](retrofit.md). Nothing here reaches the network. In order: the collisions, the two records, the tool declaration, normalization and the proofs, the autofix pass, the bar, the declared facts, and the review.
+Part of [Retrofit](retrofit.md). Nothing here reaches the network. In order: the collisions, the two records, the unit declarations, the instruction file, the tool declaration, normalization and the proofs, the autofix pass, the bar, the declared facts, and the review.
 
 ## The records and the collisions
 
@@ -17,6 +17,10 @@ Part of [Retrofit](retrofit.md). Nothing here reaches the network. In order: the
 
 **Every path inside it is repository-relative**, since it sits at the root and covers every unit.
 
+**Then write each unit's `.unit.json`** at the unit root, from the pair step 5 confirmed, with `ships.targets` only where the kind is `executable`. Nothing earlier writes it, and `scripts/structure`'s `unit-declaration` cannot pass without it.
+
+**Then write the merged `CLAUDE.md`**, which step 6 left, so it describes the whole run and the bar measures it.
+
 **Propose and dispose every remaining collision, per file.** Diff the destination's version against the payload's, state what each says, and let the operator pick payload, destination, or a merge. No path-matching rule stands in for this. A disposition the payload wins writes the payload's mode too, under [The payload's mode travels with the payload's content](lifecycle.md#the-payloads-mode-travels-with-the-payloads-content).
 
 **Where this run invalidated the destination's stated reason, propose the payload's version and name the step that invalidated it**, so the operator can refuse it on the merits.
@@ -29,7 +33,7 @@ The ownership array is the payload's default. **A destination path still matchin
 
 ## The tool declaration and dependabot
 
-**The tool declaration adds only what is missing**, at the template's floors, keeping any specifier the destination already declares and any settings it already has. [Tools the first manifest must declare](lifecycle.md#tools-the-first-manifest-must-declare) is the per-language list: tool lines and the configuration boundaries it names, nothing else; making moved code build or import is step 6's repair.
+**The tool declaration adds only what is missing**, at the template's floors, keeping any specifier the destination already declares and any settings it already has. [Tools the first manifest must declare](lifecycle.md#tools-the-first-manifest-must-declare) is the per-language list: tool lines and the configuration boundaries it names, nothing else; making moved code build or import is step 6's repair. The language adapter wins where it differs: write the line it reads (for instance `test = "unittest"`) in the root manifest, where the adapter's own pattern finds it, instead of the list's tools.
 
 - The file is product-owned, not an overridden path.
 - Report each line added.
@@ -48,7 +52,7 @@ The ownership array is the payload's default. **A destination path still matchin
 
 ## Normalize, prove, commit
 
-**The candidate carries no untracked file when the bar is measured.** Read `git status --porcelain` for `??` entries *before* staging, since staging turns them into `A`. The usual cause is step 6's ignore-file replacement; dispose it under that step's ignore rule.
+**The candidate carries no untracked file when the bar is measured.** Read `git status --porcelain` for `??` entries *before* staging, since staging turns them into `A`. The usual cause is step 6's ignore-file replacement; dispose it under that step's ignore rule. Where the payload ships no `.gitignore`, generated output such as `__pycache__` is the cause: remove it from the candidate, never stage it.
 
 Then stage everything, normalize it, and measure both proofs, from this repository:
 

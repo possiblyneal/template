@@ -29,10 +29,10 @@ Part of [Retrofit](retrofit.md). Turn the destination's tree into the template's
 
 **Two collisions the overlay skipped are settled here.**
 
-The ignore file is replaced outright, at the payload's mode as well as its content, under [The payload's mode travels with the payload's content](lifecycle.md#the-payloads-mode-travels-with-the-payloads-content). Report destination rules the payload does not cover; do not re-add them. Where un-ignoring a generated directory makes the candidate fail its own check surface (run under [Running the destination's checks](lifecycle.md#running-the-destinations-checks)), stop; the operator decides which rule survives.
+Where the payload ships no `.gitignore`, there is nothing to replace: report that and keep the destination's. Otherwise the ignore file is replaced outright, at the payload's mode as well as its content, under [The payload's mode travels with the payload's content](lifecycle.md#the-payloads-mode-travels-with-the-payloads-content). Report destination rules the payload does not cover; do not re-add them. Where un-ignoring a generated directory makes the candidate fail its own check surface (run under [Running the destination's checks](lifecycle.md#running-the-destinations-checks)), stop; the operator decides which rule survives.
 
 **A rule the operator restores gets no [overridden path](lifecycle.md#overridden-paths) entry**: the entry would make every later update skip the ignore file. The restored rule surfaces as a collision at the next update instead. Report it, and report that the ignore file is no longer byte-identical to the payload's.
 
-The instruction file is merged, but re-established near the end of the whole retrofit rather than here, so it describes what this run did. This step takes the merge only as far as the layout facts.
+The instruction file is merged in step 7, after the records and before the bar is measured, so it describes what this run did and the bar reads it. This step takes the merge only as far as the layout facts.
 
-**What this step promises.** For a checkable destination, `scripts/structure` passes on zero allowlist entries afterwards. It says nothing about the destination's own checks; step 7 measures those.
+**What this step promises.** For a checkable destination, `scripts/structure` passes on zero allowlist entries once step 7 has written the `.unit.json` declarations. It says nothing about the destination's own checks; step 7 measures those.

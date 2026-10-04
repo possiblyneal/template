@@ -1774,6 +1774,7 @@ def application_boundaries(report: Report, proofs: dict) -> None:
     report.section("### Application boundaries")
     report.add(
         f"- ADRs written: {joined(records)}",
+        f"- ADR fields defaulted: {fill('each ADR path and field set to the payload template default, or none')}",
         f"- Unit map: {fill('one line per unit, in the Report additions shape')}",
         f"- Ships nothing for want of an adapter: {fill('unit and language, or none')}",
         f"- Declared but not built: {fill('deployable, its descriptor and owning unit, or none')}",
@@ -2462,7 +2463,9 @@ def build_parser() -> argparse.ArgumentParser:
         parents=[recorded],
         help="render the final report's deterministic lines",
     )
-    render.add_argument("--repository", required=True, help="owner/name")
+    render.add_argument(
+        "--repository", required=True, help="owner/name, or the origin path"
+    )
     render.add_argument("--pull-request", help="its URL, where one was opened")
     render.add_argument("--stopped", help="what remains, on a stopped run")
     render.add_argument("--resumed", action="store_true")

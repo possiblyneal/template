@@ -1924,6 +1924,20 @@ class ReportTests(unittest.TestCase):
             self.assertEqual(filled, len(slots))
             self.assertIn("check-suite result", slots)
 
+    def test_names_a_destination_whose_origin_is_a_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            lines, _ = render_report(
+                self, directory, SUMMARY_PASS, proofs=PROOFS, repository="/srv/ledger"
+            )
+
+            self.assertIn("- Destination: /srv/ledger", lines)
+            self.assertTrue(
+                any(
+                    line.startswith("- ADR fields defaulted: [[FILL: ")
+                    for line in lines
+                )
+            )
+
     def test_renders_a_run_stopped_at_the_gate_as_reaching_it(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             lines, _ = render_report(
