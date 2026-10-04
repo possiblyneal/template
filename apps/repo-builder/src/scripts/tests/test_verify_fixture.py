@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 
 from test_preflight import git
 
@@ -13,7 +14,7 @@ SETUP = Path(__file__).parents[2] / "evals" / "setup_fixture.py"
 VERIFY = Path(__file__).parents[2] / "evals" / "verify_fixture.py"
 
 
-def build_fixture(directory: str, scenario: str) -> tuple[Path, dict[str, str]]:
+def build_fixture(directory: str, scenario: str) -> tuple[Path, dict[str, Any]]:
     root = Path(directory) / "fixture"
     subprocess.run(
         ["python3", str(SETUP), scenario, str(root)],
@@ -23,7 +24,7 @@ def build_fixture(directory: str, scenario: str) -> tuple[Path, dict[str, str]]:
     return root / "fixture.json", json.loads((root / "fixture.json").read_text())
 
 
-def stage_candidate(fixture: dict[str, str]) -> Path:
+def stage_candidate(fixture: dict[str, Any]) -> Path:
     """The worktree step 2 adds, holding what steps 3 to 7 leave in it."""
     destination = Path(fixture["destination"])
     candidate = destination.parent / "candidate"
@@ -42,11 +43,12 @@ def stage_candidate(fixture: dict[str, str]) -> Path:
         dirs_exist_ok=True,
     )
     shutil.rmtree(candidate / "apps/app-name")
-    unit = candidate / "apps/ledger"
+    unit_path = fixture["unit"]
+    unit = candidate / unit_path
     (unit / "scripts").mkdir(parents=True)
-    git("mv", "src", "apps/ledger/src", cwd=candidate)
-    git("mv", "tests", "apps/ledger/tests", cwd=candidate)
-    git("mv", "scripts/build.py", "apps/ledger/scripts/build.py", cwd=candidate)
+    git("mv", "src", f"{unit_path}/src", cwd=candidate)
+    git("mv", "tests", f"{unit_path}/tests", cwd=candidate)
+    git("mv", "scripts/build.py", f"{unit_path}/scripts/build.py", cwd=candidate)
     git(
         "mv",
         "docs/adr/0001-one-ledger-per-currency.md",
@@ -81,14 +83,25 @@ def stage_candidate(fixture: dict[str, str]) -> Path:
     return candidate
 
 
-def verify(fixture_path: Path) -> tuple[int, dict[str, object]]:
-    result = subprocess.run(
+def run_verify(fixture_path: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
         ["python3", str(VERIFY), str(fixture_path)],
         text=True,
         capture_output=True,
         check=False,
     )
+
+
+def verify(fixture_path: Path) -> tuple[int, dict[str, object]]:
+    result = run_verify(fixture_path)
     return result.returncode, json.loads(result.stdout) if result.stdout else {}
+
+
+def rewrite_ownership(candidate: Path, extra: dict[str, str]) -> None:
+    path = candidate / ".repo-template.json"
+    manifest = json.loads(path.read_text())
+    manifest["ownership"].append(extra)
+    path.write_text(json.dumps(manifest))
 
 
 def outcomes(report: dict[str, object]) -> dict[str, bool]:
@@ -113,7 +126,9 @@ class VerifyRetrofitTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path, fixture = build_fixture(directory, "retrofit")
             candidate = stage_candidate(fixture)
-            (candidate / "apps/ledger/src/ledger/rates.py").write_text("# edited\n")
+            (candidate / fixture["unit"] / "src/ledger/rates.py").write_text(
+                "# edited\n"
+            )
 
             status, report = verify(path)
 
@@ -139,6 +154,69 @@ class VerifyRetrofitTests(unittest.TestCase):
 
             self.assertFalse(outcomes(report)["candidate exists"])
             self.assertEqual(status, 1)
+
+    def test_a_pushed_retrofit_branch_fails_no_push(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path, fixture = build_fixture(directory, "retrofit")
+            stage_candidate(fixture)
+            branch = f"retrofit/{fixture['target_commit'][:12]}"
+            git("push", "origin", branch, cwd=Path(fixture["destination"]))
+
+            status, report = verify(path)
+
+            self.assertFalse(outcomes(report)["no push"])
+            self.assertEqual(status, 1)
+
+    def test_a_candidate_without_scripts_check_does_not_meet_the_red_bar(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path, fixture = build_fixture(directory, "retrofit-red")
+            candidate = stage_candidate(fixture)
+            (candidate / "scripts/check").unlink()
+
+            status, report = verify(path)
+
+            self.assertFalse(outcomes(report)["scripts/check exists"])
+            self.assertFalse(outcomes(report)["bar unmet"])
+            self.assertEqual(status, 1)
+
+    def test_an_ownership_entry_naming_a_moved_path_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path, fixture = build_fixture(directory, "retrofit")
+            candidate = stage_candidate(fixture)
+            rewrite_ownership(candidate, {"path": "notes/", "mode": "product"})
+
+            status, report = verify(path)
+
+            self.assertFalse(
+                outcomes(report)[
+                    "ownership names no destination path; CLAUDE.md managed"
+                ]
+            )
+            self.assertEqual(status, 1)
+
+    def test_a_listed_but_missing_candidate_directory_is_a_failed_check(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path, fixture = build_fixture(directory, "retrofit")
+            candidate = stage_candidate(fixture)
+            shutil.rmtree(candidate)
+
+            result = run_verify(path)
+
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertEqual(result.stderr, "")
+            self.assertFalse(outcomes(json.loads(result.stdout))["candidate exists"])
+
+    def test_a_malformed_record_is_a_failed_check_not_a_crash(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path, fixture = build_fixture(directory, "retrofit")
+            candidate = stage_candidate(fixture)
+            (candidate / ".repo-template.json").write_text("{not json")
+            (candidate / fixture["unit"] / ".unit.json").write_text("[1]")
+
+            result = run_verify(path)
+
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertEqual(result.stderr, "")
 
 
 if __name__ == "__main__":
