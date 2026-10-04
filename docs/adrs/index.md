@@ -8,3 +8,4 @@
 | [0002](0002-ship-agent-skill-configuration-in-the-payload.md) | Ship Agent Skill Configuration in the Template Payload | accepted |
 | [0003](0003-order-the-repository-ahead-of-wayfinding.md) | Create the Destination Repository Before Wayfinding Runs, and End the Generate at Charting | accepted |
 | [0004](0004-select-the-runner-through-a-repository-variable.md) | Select the Runner Through a Repository Variable | accepted |
+| [0005](0005-stage-a-retrofit-locally-and-write-the-host-last.md) | Stage a Retrofit Locally and Write to the Host Last | accepted |

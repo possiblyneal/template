@@ -27,6 +27,22 @@ def retrofit_fixture(directory: str) -> dict[str, str]:
     return fixture
 
 
+def payload_arguments(fixture: dict[str, str]) -> list[str]:
+    return [
+        "--template-repo",
+        fixture["template_repo"],
+        "--target",
+        fixture["target_commit"],
+        "--subtree",
+        fixture["subtree"],
+    ]
+
+
+def records(candidate: Path) -> list[str]:
+    """A record prefix beside the candidate, where a step's JSON lands."""
+    return ["--records", str(candidate.parent / "records")]
+
+
 def run(
     *arguments: str, env: dict[str, str] | None = None
 ) -> subprocess.CompletedProcess[str]:
@@ -65,19 +81,22 @@ class ProofsTests(unittest.TestCase):
         return destination
 
     def _proofs(self, fixture: dict[str, str]) -> subprocess.CompletedProcess[str]:
-        return run(
+        return run(*self._arguments(fixture))
+
+    def _arguments(
+        self, fixture: dict[str, str], records: Path | None = None
+    ) -> list[str]:
+        destination = Path(fixture["destination"])
+        return [
             "proofs",
-            "--template-repo",
-            fixture["template_repo"],
-            "--target",
-            fixture["target_commit"],
-            "--subtree",
-            fixture["subtree"],
+            "--records",
+            str(records or destination.parent / "records"),
+            *payload_arguments(fixture),
             "--candidate",
             fixture["destination"],
             "--base",
             fixture["base"],
-        )
+        ]
 
     def test_counts_copies_and_names_what_differs(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -96,6 +115,64 @@ class ProofsTests(unittest.TestCase):
             self.assertEqual(copy["missing"], [])
             self.assertEqual(copy["total"], copy["identical"] + 1)
             self.assertIn(".gitignore", report["authored"])
+            self.assertEqual(report["replaced"], [])
+
+    def test_names_a_destination_file_an_exact_copy_replaced(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = retrofit_fixture(directory)
+            destination = Path(fixture["destination"])
+            lessons = destination / "docs/LESSONS.md"
+            lessons.parent.mkdir(parents=True, exist_ok=True)
+            lessons.write_text("# Our own lessons\n")
+            git("add", "-A", cwd=destination)
+            git("commit", "-q", "-m", "docs: lessons", cwd=destination)
+            fixture = {
+                **fixture,
+                "base": git_output("rev-parse", "HEAD", cwd=destination),
+            }
+            self._overlay(fixture)
+            report = json.loads(self._proofs(fixture).stdout)
+
+            self.assertEqual(report["replaced"], ["docs/LESSONS.md"])
+
+    def test_accounts_for_applied_emptied_and_untriggered_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = retrofit_fixture(directory)
+            destination = self._overlay(fixture)
+            residue = destination / "src/__pycache__"
+            residue.mkdir(parents=True)
+            (residue / "rates.pyc").write_bytes(b"")
+            with (destination / ".git/info/exclude").open("a") as exclude:
+                exclude.write("__pycache__/\n")
+            workflows = destination / ".github/workflows"
+            workflows.mkdir(parents=True)
+            (workflows / "ci.yml").write_text("on: [push, pull_request]\n")
+            (workflows / "release.yml").write_text(
+                "# not on pull_request\non: [push, pull_request_target]\n"
+            )
+            git("add", "-A", cwd=destination)
+            # Untracked and not ignored holds the directory open just the same.
+            (destination / "src/notes.txt").write_text("mine\n")
+            prefix = Path(directory) / "ledger.aaaaaaaaaaaa"
+            result = run(*self._arguments(fixture, prefix))
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(Path(f"{prefix}.proofs.json").read_text(), result.stdout)
+            self.assertEqual(report["payload_total"], report["copy"]["total"])
+            # The destination ignores docs/agents/domain.md, so the branch never
+            # carries that copy.
+            self.assertEqual(report["applied"], report["copy"]["total"] - 1)
+            self.assertEqual(report["unchanged"], 0)
+            self.assertEqual(report["preserved"], [])
+            emptied = {item["path"]: item["residue"] for item in report["emptied"]}
+            self.assertEqual(emptied["tests"], [])
+            self.assertIn("src/notes.txt", emptied["src"])
+            self.assertTrue(all(path.startswith("src/") for path in emptied["src"]))
+            self.assertEqual(
+                report["workflows_without_pull_request"],
+                [".github/workflows/release.yml"],
+            )
 
     def test_reads_a_payload_path_the_destination_ignores_from_disk(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -107,6 +184,32 @@ class ProofsTests(unittest.TestCase):
             self.assertIn(
                 {"class": "extended", "ignored": True, "path": "docs/agents/domain.md"},
                 report["copy"]["differing"],
+            )
+
+    def test_leaves_an_overridden_path_out_of_every_count(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = retrofit_fixture(directory)
+            destination = self._overlay(fixture)
+            (destination / ".repo-template.json").write_text(
+                json.dumps(
+                    {
+                        "generation": {
+                            "overrides": [{"path": "scripts/check", "reason": "ours"}]
+                        }
+                    }
+                )
+            )
+            git("add", "-A", cwd=destination)
+            report = json.loads(self._proofs(fixture).stdout)
+
+            self.assertEqual(report["copy"]["differing"], [])
+            self.assertEqual(
+                report["payload_total"],
+                report["copy"]["total"]
+                + report["unchanged"]
+                + len(report["preserved"])
+                + len(report["overridden"])
+                + len(report["copy"]["missing"]),
             )
 
     def test_names_a_payload_path_that_never_landed(self) -> None:
@@ -178,6 +281,256 @@ class ProofsTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 2)
             self.assertIn("commits past its base", result.stderr)
+
+
+def candidate_repository(directory: str, files: dict[str, bytes]) -> Path:
+    """A committed repository holding `files`, standing in for a candidate."""
+    candidate = Path(directory) / "candidate"
+    candidate.mkdir()
+    git("init", "-q", cwd=candidate)
+    git("config", "core.autocrlf", "false", cwd=candidate)
+    for name, content in files.items():
+        path = candidate / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+    git("add", "-A", cwd=candidate)
+    git("commit", "-q", "-m", "chore: base", cwd=candidate)
+    return candidate
+
+
+def write_script(path: Path, body: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"#!/bin/sh\n{body}\n")
+    path.chmod(0o755)
+
+
+class NormalizeTests(unittest.TestCase):
+    """The rewrites the first commit would make, made before the proofs."""
+
+    def test_renormalizes_line_endings_and_clears_stray_executable_bits(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            candidate = candidate_repository(directory, {"notes.txt": b"x\r\n"})
+            (candidate / ".gitattributes").write_text("* text=auto eol=lf\n")
+            (candidate / "docs").mkdir()
+            git("mv", "notes.txt", "docs/notes.txt", cwd=candidate)
+            write_script(candidate / "scripts/tool", "true")
+            (candidate / "data.json").write_text("{}\n")
+            (candidate / "data.json").chmod(0o755)
+            # A NUL in its head reads as binary, which may be a real program.
+            (candidate / "tool.bin").write_bytes(b"\x7fELF\0\0")
+            (candidate / "tool.bin").chmod(0o755)
+            git("add", "-A", cwd=candidate)
+            result = run(
+                "normalize", "--candidate", str(candidate), *records(candidate)
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["renormalized"], ["docs/notes.txt"])
+            self.assertEqual(report["executable_cleared"], ["data.json"])
+            staged_binary = git_output("ls-files", "-s", "tool.bin", cwd=candidate)
+            self.assertTrue(staged_binary.startswith("100755"))
+            self.assertEqual(report["hooks_run"], [])
+            staged = git_output("ls-files", "-s", "data.json", cwd=candidate)
+            self.assertTrue(staged.startswith("100644"))
+
+    def test_clears_an_executable_bit_where_git_ignores_file_modes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            candidate = candidate_repository(directory, {"README.md": b"base\n"})
+            (candidate / "data.json").write_text("{}\n")
+            (candidate / "data.json").chmod(0o755)
+            git("add", "-A", cwd=candidate)
+            git("commit", "-q", "-m", "chore: data", cwd=candidate)
+            git("config", "core.fileMode", "false", cwd=candidate)
+            (candidate / "assets").mkdir()
+            git("mv", "data.json", "assets/data.json", cwd=candidate)
+            result = run(
+                "normalize", "--candidate", str(candidate), *records(candidate)
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            staged = git_output("ls-files", "-s", "assets/data.json", cwd=candidate)
+            self.assertTrue(staged.startswith("100644"))
+
+    @unittest.skipUnless(shutil.which("pre-commit"), "pre-commit is not installed")
+    def test_stages_a_file_a_hook_wrote_and_no_other_untracked_one(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            candidate = candidate_repository(directory, {"README.md": b"base\n"})
+            (candidate / ".pre-commit-config.yaml").write_text(
+                "repos:\n"
+                "  - repo: local\n"
+                "    hooks:\n"
+                "      - id: 'adr-index'  # writes the index\n"
+                "        name: adr-index\n"
+                "        entry: sh -c 'echo index > index.md'\n"
+                "        language: system\n"
+                "        pass_filenames: false\n"
+            )
+            git("add", "-A", cwd=candidate)
+            (candidate / "operator.txt").write_text("the bar disposes of this\n")
+            result = run(
+                "normalize", "--candidate", str(candidate), *records(candidate)
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["hooks_run"], ["adr-index"])
+            self.assertEqual(report["rewritten"], ["index.md"])
+            self.assertEqual(
+                git_output("ls-files", "--others", "--exclude-standard", cwd=candidate),
+                "operator.txt",
+            )
+
+    @unittest.skipUnless(shutil.which("pre-commit"), "pre-commit is not installed")
+    def test_runs_a_configured_rewriting_hook_and_restages(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            candidate = candidate_repository(directory, {"README.md": b"base\n"})
+            (candidate / ".pre-commit-config.yaml").write_text(
+                "repos:\n"
+                "  - repo: local\n"
+                "    hooks:\n"
+                "      - id: trailing-whitespace\n"
+                "        name: trailing-whitespace\n"
+                "        entry: sed -i -e 's/[[:space:]]*$//'\n"
+                "        language: system\n"
+                "        types: [text]\n"
+            )
+            (candidate / "notes.md").write_text("trailing   \n")
+            git("add", "-A", cwd=candidate)
+            result = run(
+                "normalize", "--candidate", str(candidate), *records(candidate)
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["hooks_run"], ["trailing-whitespace"])
+            self.assertEqual(report["rewritten"], ["notes.md"])
+            self.assertEqual(report["still_failing"], [])
+            self.assertEqual(git_output("show", ":notes.md", cwd=candidate), "trailing")
+
+
+class FactsTests(unittest.TestCase):
+    """Each unit's declared facts, executed once."""
+
+    def test_reads_the_message_the_payloads_commands_print(self) -> None:
+        for command in ("run", "package"):
+            with self.subTest(command=command):
+                script = (PAYLOAD / "scripts" / command).read_text()
+                self.assertIn('echo "No project manifest found', script)
+
+    def test_a_failed_step_leaves_no_earlier_record_behind(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            candidate = candidate_repository(directory, {"README.md": b"base\n"})
+            stale = candidate.parent / "records.facts.json"
+            stale.write_text("{}\n")
+            result = run(
+                "facts", "--candidate", str(candidate / "absent"), *records(candidate)
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(stale.exists())
+
+    def test_records_each_units_package_and_run(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            candidate = candidate_repository(
+                directory, {"apps/ledger/.unit.json": b"{}\n"}
+            )
+            write_script(candidate / "scripts/package", 'echo "boom $1"; exit 1')
+            write_script(
+                candidate / "scripts/run",
+                'echo "No project manifest found here ($CI_DRY_RUN)"',
+            )
+            result = run("facts", "--candidate", str(candidate), *records(candidate))
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertTrue(report["shipped"])
+            self.assertEqual(
+                report["units"],
+                [
+                    {
+                        "unit": "ledger",
+                        "package": {
+                            "exit": 1,
+                            "tail": "boom ledger",
+                            "no_manifest": False,
+                        },
+                        "run": {
+                            "exit": 0,
+                            "tail": "No project manifest found here (1)",
+                            "no_manifest": True,
+                        },
+                    }
+                ],
+            )
+
+    def test_reports_a_payload_that_ships_neither_command(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            candidate = candidate_repository(
+                directory, {"apps/ledger/.unit.json": b"{}\n"}
+            )
+            report = json.loads(
+                run("facts", "--candidate", str(candidate), *records(candidate)).stdout
+            )
+
+            self.assertEqual((report["shipped"], report["units"]), (False, []))
+
+
+class AutofixTests(unittest.TestCase):
+    """The destination's own autofix, with payload copies held to the payload."""
+
+    def _arguments(self, fixture: dict[str, str], candidate: Path) -> list[str]:
+        return [
+            "autofix",
+            *payload_arguments(fixture),
+            "--candidate",
+            str(candidate),
+            "--records",
+            str(candidate.parent / "records"),
+        ]
+
+    def _candidate(self, directory: str, fixture: dict[str, str]) -> Path:
+        copy = git_output(
+            "show",
+            f"{fixture['target_commit']}:{fixture['subtree']}/docs/agents/domain.md",
+            cwd=fixture["template_repo"],
+        )
+        candidate = candidate_repository(
+            directory,
+            {"docs/agents/domain.md": f"{copy}\n".encode(), "rates.py": b"x=1\n"},
+        )
+        write_script(
+            candidate / "scripts/fix",
+            "echo '# fixed' >> rates.py; echo '# fixed' >> docs/agents/domain.md",
+        )
+        git("add", "-A", cwd=candidate)
+        git("commit", "-q", "-m", "chore: fix script", cwd=candidate)
+        return candidate
+
+    def test_reverts_a_payload_copy_the_pass_rewrote(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = retrofit_fixture(directory)
+            candidate = self._candidate(directory, fixture)
+            result = run(*self._arguments(fixture, candidate))
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["rewritten"], ["rates.py"])
+            self.assertEqual(report["reverted"], ["docs/agents/domain.md"])
+            self.assertEqual(report["passes"], 2)
+            self.assertEqual(
+                git_output("status", "--porcelain", cwd=candidate), "M rates.py"
+            )
+
+    def test_refuses_uncommitted_tracked_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = retrofit_fixture(directory)
+            candidate = self._candidate(directory, fixture)
+            (candidate / "rates.py").write_text("x = 2\n")
+            result = run(*self._arguments(fixture, candidate))
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("uncommitted changes", result.stderr)
 
 
 def hook_environments_unavailable() -> str | None:
@@ -268,6 +621,8 @@ class HooksTests(unittest.TestCase):
             str(destination.parent / "record.json"),
             "--scratch",
             str(destination.parent / "hook-test"),
+            "--records",
+            str(destination.parent / "records"),
             env=env,
         )
 
@@ -624,8 +979,8 @@ class SweepTests(unittest.TestCase):
             str(Path(directory) / "candidate-hooks"),
             "--resume-record",
             str(Path(directory) / "candidate.resume.json"),
-            "--write-log",
-            str(Path(directory) / "candidate.writes.json"),
+            "--records",
+            str(Path(directory) / "candidate"),
             env=env,
         )
 
@@ -840,8 +1195,8 @@ class HostedTests(unittest.TestCase):
             "apply",
             "--repository",
             "owner/ledger",
-            "--write-log",
-            str(Path(directory) / "candidate.writes.json"),
+            "--records",
+            str(Path(directory) / "candidate"),
             *arguments,
             env=stub_gh(directory, self._responses()),
         )
@@ -853,6 +1208,8 @@ class HostedTests(unittest.TestCase):
                 "read",
                 "--repository",
                 "owner/ledger",
+                "--records",
+                str(Path(directory) / "candidate"),
                 env=stub_gh(directory, self._responses()),
             )
 
@@ -976,8 +1333,8 @@ class HostedTests(unittest.TestCase):
                 "apply",
                 "--repository",
                 "owner/ledger",
-                "--write-log",
-                str(Path(directory) / "candidate.writes.json"),
+                "--records",
+                str(Path(directory) / "candidate"),
                 "--approve",
                 "push-protection",
                 env=stub_gh(directory, responses),
@@ -1021,8 +1378,8 @@ class HostedTests(unittest.TestCase):
                 "apply",
                 "--repository",
                 "owner/ledger",
-                "--write-log",
-                str(Path(directory) / "candidate.writes.json"),
+                "--records",
+                str(Path(directory) / "candidate"),
                 "--approve",
                 "runner-variable",
                 env=stub_gh(directory, responses),
@@ -1104,8 +1461,8 @@ class HostedTests(unittest.TestCase):
                 "apply",
                 "--repository",
                 "owner/ledger",
-                "--write-log",
-                str(Path(directory) / "candidate.writes.json"),
+                "--records",
+                str(Path(directory) / "candidate"),
                 "--approve",
                 "ruleset",
                 "--ruleset",
@@ -1128,8 +1485,8 @@ class HostedTests(unittest.TestCase):
                 "apply",
                 "--repository",
                 "owner/ledger",
-                "--write-log",
-                str(Path(directory) / "candidate.writes.json"),
+                "--records",
+                str(Path(directory) / "candidate"),
                 "--approve",
                 "push-protection",
                 env=stub_gh(
@@ -1166,8 +1523,8 @@ class HostedTests(unittest.TestCase):
                 "apply",
                 "--repository",
                 "owner/ledger",
-                "--write-log",
-                str(Path(directory) / "candidate.writes.json"),
+                "--records",
+                str(Path(directory) / "candidate"),
                 "--approve",
                 "ruleset",
                 "--ruleset",
@@ -1206,8 +1563,8 @@ class HostedTests(unittest.TestCase):
                 "apply",
                 "--repository",
                 "owner/ledger",
-                "--write-log",
-                str(Path(directory) / "candidate.writes.json"),
+                "--records",
+                str(Path(directory) / "candidate"),
                 "--approve",
                 "labels",
                 "--label",
@@ -1286,6 +1643,17 @@ PROOFS = {
     },
     "authored": [".repo-template.json", "docs/adrs/0001-one-ledger.md"],
     "deleted": ["docs/adr/0001-one-ledger.md"],
+    "payload_total": 66,
+    "applied": 58,
+    "unchanged": 1,
+    "preserved": [".gitignore"],
+    "replaced": ["README.md"],
+    "overridden": [{"path": "README.md", "reason": "the product's own front page"}],
+    "emptied": [
+        {"path": "docs/adr", "residue": []},
+        {"path": "src", "residue": []},
+    ],
+    "workflows_without_pull_request": [".github/workflows/release.yml"],
 }
 HOOKS = {
     "operation": "hooks",
@@ -1379,39 +1747,36 @@ SUMMARY_FAIL = (
 )
 
 
+def render_report(
+    case: unittest.TestCase, directory: str, summary: str, **inputs: object
+) -> tuple[list[str], list[str]]:
+    """Render the report from `inputs`: a dict is a record, anything else a flag."""
+    # A fresh prefix per render, so one render's records never reach the next.
+    prefix = Path(tempfile.mkdtemp(dir=directory)) / "ledger.aaaaaaaaaaaa"
+    arguments = ["report", "--repository", "o/ledger", "--records", str(prefix)]
+    for name, value in inputs.items():
+        if isinstance(value, dict):
+            record = name.replace("_", "-")
+            Path(f"{prefix}.{record}.json").write_text(json.dumps(value))
+        elif value is True:
+            arguments.append("--" + name.replace("_", "-"))
+        else:
+            arguments += ["--" + name.replace("_", "-"), str(value)]
+    Path(f"{prefix}.check.txt").write_text(summary)
+    result = run(*arguments)
+    case.assertEqual(result.returncode, 0, result.stderr)
+    output = Path(json.loads(result.stdout)["path"])
+    case.assertEqual(output, Path(f"{prefix}.report.md"))
+    return output.read_text().splitlines(), json.loads(result.stdout)["slots"]
+
+
 class ReportTests(unittest.TestCase):
     """The final report's deterministic lines, rendered from recorded JSON."""
 
-    def _render(
-        self, directory: str, summary: str, **inputs: object
-    ) -> tuple[list[str], list[str]]:
-        arguments = ["report", "--repository", "o/ledger"]
-        for name, value in inputs.items():
-            flag = "--" + name.replace("_", "-")
-            if isinstance(value, dict):
-                path = Path(directory) / f"{name}.json"
-                path.write_text(json.dumps(value))
-                arguments += [flag, str(path)]
-            elif value is True:
-                arguments.append(flag)
-            else:
-                arguments += [flag, str(value)]
-        (Path(directory) / "summary.txt").write_text(summary)
-        output = Path(directory) / "report.md"
-        result = run(
-            *arguments,
-            "--summary",
-            "scripts/check",
-            str(Path(directory) / "summary.txt"),
-            "--output",
-            str(output),
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        return output.read_text().splitlines(), json.loads(result.stdout)["slots"]
-
     def test_renders_a_finished_run_from_every_subcommand(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            lines, slots = self._render(
+            lines, slots = render_report(
+                self,
                 directory,
                 SUMMARY_PASS,
                 proofs=PROOFS,
@@ -1502,7 +1867,8 @@ class ReportTests(unittest.TestCase):
 
     def test_renders_a_run_stopped_at_the_gate_as_reaching_it(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            lines, _ = self._render(
+            lines, _ = render_report(
+                self,
                 directory,
                 SUMMARY_PASS,
                 proofs=PROOFS,
@@ -1515,7 +1881,8 @@ class ReportTests(unittest.TestCase):
 
     def test_renders_a_stopped_unmet_bar_with_nothing_hosted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            lines, slots = self._render(
+            lines, slots = render_report(
+                self,
                 directory,
                 SUMMARY_FAIL,
                 proofs=PROOFS,
@@ -1571,8 +1938,12 @@ class ReportTests(unittest.TestCase):
                     "pre_commit_config": False,
                 },
             }
-            lines, slots = self._render(
-                directory, SUMMARY_PASS, proofs=proofs, stopped="awaiting the gate"
+            lines, slots = render_report(
+                self,
+                directory,
+                SUMMARY_PASS,
+                proofs=proofs,
+                stopped="awaiting the gate",
             )
 
             self.assertIn(
@@ -1584,7 +1955,8 @@ class ReportTests(unittest.TestCase):
 
     def test_a_nonzero_exit_outside_the_result_table_fails_the_bar(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            lines, _ = self._render(
+            lines, _ = render_report(
+                self,
                 directory,
                 SUMMARY_PASS
                 + "\nscripts/check exited 1 with no failing result line: the "
@@ -1614,7 +1986,8 @@ class ReportTests(unittest.TestCase):
             }
             stages = {**SWEEP_STAGES, "branch": "refused"}
             sweep = {**SWEEP, "stages": stages}
-            lines, slots = self._render(
+            lines, slots = render_report(
+                self,
                 directory,
                 SUMMARY_PASS,
                 proofs=PROOFS,
@@ -1634,8 +2007,8 @@ class ReportTests(unittest.TestCase):
                 lines,
             )
 
-            lines, _ = self._render(
-                directory, SUMMARY_PASS, proofs=PROOFS, hosted_apply=HOSTED_APPLY
+            lines, _ = render_report(
+                self, directory, SUMMARY_PASS, proofs=PROOFS, hosted_apply=HOSTED_APPLY
             )
             self.assertIn("- Ruleset enforcement: n/a (no ruleset written)", lines)
 
@@ -1646,8 +2019,13 @@ class ReportTests(unittest.TestCase):
                 "writes": {"merge-settings": "logged"},
                 "findings": [],
             }
-            lines, _ = self._render(
-                directory, SUMMARY_PASS, proofs=PROOFS, hosted_apply=apply, resumed=True
+            lines, _ = render_report(
+                self,
+                directory,
+                SUMMARY_PASS,
+                proofs=PROOFS,
+                hosted_apply=apply,
+                resumed=True,
             )
 
             self.assertIn("### Resumption", lines)
@@ -1658,4 +2036,151 @@ class ReportTests(unittest.TestCase):
                     )
                     for line in lines
                 )
+            )
+
+
+FACTS = {
+    "operation": "facts",
+    "shipped": True,
+    "units": [
+        {
+            "unit": "ledger",
+            "package": {"exit": 0, "tail": "packaged", "no_manifest": False},
+            "run": {
+                "exit": 0,
+                "tail": "No project manifest found here",
+                "no_manifest": True,
+            },
+        }
+    ],
+}
+AUTOFIX = {
+    "operation": "autofix",
+    "shipped": True,
+    "passes": 1,
+    "exit_status": 0,
+    "rewritten": ["apps/ledger/src/rates.py"],
+    "reverted": ["docs/agents/domain.md"],
+}
+
+
+class RecordedLinesTests(unittest.TestCase):
+    """Report lines the records settle that the session used to fill."""
+
+    def test_reads_an_autofix_that_rewrote_nothing_and_left_findings(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            autofix = {**AUTOFIX, "passes": 2, "exit_status": 1, "rewritten": []}
+            lines, _ = render_report(
+                self, directory, SUMMARY_PASS, proofs=PROOFS, autofix=autofix
+            )
+
+            self.assertIn(
+                "- Autofix: nothing rewritten outside the payload (2 passes); "
+                "findings it could not fix remained for the bar",
+                lines,
+            )
+
+    def test_reads_reconciliation_facts_and_autofix_from_their_records(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            proofs = {
+                **PROOFS,
+                "emptied": [{"path": "src", "residue": ["src/__pycache__/"]}],
+            }
+            lines, _ = render_report(
+                self,
+                directory,
+                SUMMARY_PASS,
+                proofs=proofs,
+                preflight={"addons_present": ["CHANGELOG.md"]},
+                facts=FACTS,
+                autofix=AUTOFIX,
+                stopped="awaiting the gate",
+            )
+
+            for line in (
+                "- Applied: 58 payload paths, written because the destination lacked them",
+                "- Preserved: .gitignore",
+                "- Conflicted: CLAUDE.md, each merged; [[FILL: the competing intents each merge settled]]",
+                "- Overridden: README.md (the product's own front page)",
+                "- ADRs written: docs/adrs/0001-one-ledger.md",
+                (
+                    "- Payload paths: 66, the placeholder unit left out: 61 byte-identical "
+                    "copies, 1 already identical in the destination, 2 authored, "
+                    "1 preserved, 1 overridden; missing: none"
+                ),
+                "- Already held: CHANGELOG.md",
+                "- Workflows the pull-request event never ran: .github/workflows/release.yml",
+                (
+                    "- Directories emptied by a move: src: held open by src/__pycache__/, "
+                    "which is the destination's own and is left in place, named under "
+                    "Left for the operator"
+                ),
+                (
+                    "- Declared facts executed: ledger: `scripts/package` pass, "
+                    "`scripts/run` does nothing (No project manifest found here)"
+                ),
+                (
+                    "- Autofix: `scripts/fix` rewrote apps/ledger/src/rates.py in 1 pass, "
+                    "committed by itself in [[FILL: the commit sha]]"
+                ),
+            ):
+                self.assertIn(line, lines)
+            self.assertTrue(
+                any(
+                    line.startswith(
+                        "- Payload paths the autofix rewrote: docs/agents/domain.md, "
+                        "reverted in the candidate"
+                    )
+                    for line in lines
+                )
+            )
+            self.assertTrue(
+                any(
+                    line.startswith("- Left for the operator: src: src/__pycache__/")
+                    for line in lines
+                )
+            )
+
+
+class PullRequestBodyTests(unittest.TestCase):
+    """The pull-request body, in the payload template's shape."""
+
+    def _render(self, directory: str, **records: dict) -> str:
+        prefix = Path(directory) / "ledger.aaaaaaaaaaaa"
+        Path(f"{prefix}.check.txt").write_text(SUMMARY_PASS)
+        for name, value in {"proofs": PROOFS, **records}.items():
+            Path(f"{prefix}.{name.replace('_', '-')}.json").write_text(
+                json.dumps(value)
+            )
+        result = run("pr-body", "--repository", "o/ledger", "--records", str(prefix))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["path"], f"{prefix}.pr-body.md")
+        return Path(f"{prefix}.pr-body.md").read_text()
+
+    def test_follows_the_payload_templates_headings(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            body = self._render(directory)
+            template = (PAYLOAD / ".github/PULL_REQUEST_TEMPLATE.md").read_text()
+
+            def headings(text: str) -> list[str]:
+                return [line for line in text.splitlines() if line.startswith("## ")]
+
+            self.assertEqual(headings(body), headings(template))
+            self.assertIn("lint               pass             ruff", body)
+            self.assertIn(
+                "- Deletes or overwrites existing data: yes — deleted: "
+                "docs/adr/0001-one-ledger.md; merged over: CLAUDE.md; "
+                "replaced by the payload: README.md",
+                body,
+            )
+            self.assertIn(
+                "Revert the merge commit. No hosted setting was written.", body
+            )
+
+    def test_rollback_lists_each_logged_reverse_command(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            body = self._render(directory, hosted_apply=HOSTED_APPLY)
+
+            self.assertIn(
+                "gh api -X PATCH repos/o/ledger -F allow_squash_merge=true", body
             )
