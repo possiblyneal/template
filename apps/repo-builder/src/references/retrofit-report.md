@@ -4,7 +4,7 @@ Part of [Retrofit](retrofit.md), read once the flow ends or stops.
 
 ## Report additions
 
-**Run the renderer, then fill its slots.** It writes the shape [Final report](reporting.md#final-report) fixes, with every count, setting, hosted write and reverse command, check result and cleanup outcome read from the records at `<records>`:
+**Run the renderer, then fill its slots.** It writes the [Final report](reporting.md#final-report) shape, reading every count, setting, hosted write and reverse command, check result and cleanup outcome from the records at `<records>`:
 
 ```bash
 python3 apps/repo-builder/src/scripts/retrofit.py report \
@@ -12,9 +12,13 @@ python3 apps/repo-builder/src/scripts/retrofit.py report \
   [--pull-request <URL>] [--stopped "<what remains>"] [--resumed]
 ```
 
-It requires the proofs record and `<records>.check.txt`, and reads every other record that exists; a record that is absent is a subcommand that did not run, rendered as such. It writes `<records>.report.md` and reports `path` and `slots`: the judgement lines left as `[[FILL: <what goes here>]]`. Fill every slot from what this run decided, delete the ones marked optional that do not apply, and change no rendered line; a rendered line that reads wrong is a defect in the record it came from. The finished report holds no `[[FILL:`.
+It requires the proofs record and `<records>.check.txt` and reads every other record that exists; an absent record renders as a subcommand that did not run. It writes `<records>.report.md` and reports `path` and `slots`, the judgement lines left as `[[FILL: <what goes here>]]`. Fill every slot from this run's decisions, delete optional slots that do not apply, and change no rendered line; a wrong rendered line is a defect in its record. The finished report holds no `[[FILL:`.
 
-Three of the shape's lines read differently here. **Code review** is never `skipped`: it carries the axes step 7's scan ran, the findings corrected, any recorded as incorrectly identified, and the `Reviewed-Head:` sha step 9 signed off, or that no sign-off was written and why. The renderer leaves out the choke-point and Wayfinding lines, since a retrofit chooses neither. A unit map the operator rejected with no correction is reported as the proposal and the rejection, with **Pending action** carrying the correction the flow is stopped for.
+Three lines differ from the shape:
+
+- **Code review** is never `skipped`: it carries the axes step 7's scan ran, the findings corrected, any recorded as incorrectly identified, and the `Reviewed-Head:` sha step 9 signed off, or that no sign-off was written and why.
+- The renderer omits the choke-point and Wayfinding lines; a retrofit chooses neither.
+- A unit map the operator rejected without a correction is reported as the proposal and the rejection, with **Pending action** carrying the correction the flow is stopped for.
 
 ## Slot shapes
 

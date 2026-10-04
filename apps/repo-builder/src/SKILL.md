@@ -31,11 +31,7 @@ Read `references/lifecycle.md` before acting; a retrofit reads only the sections
 
 A generate whose destination holds content is still a generate, but its collisions are decided by hand and it never resolves one by deleting. `references/generate.md` carries those rules; read them before writing to a non-empty destination. What separates it from the retrofit above is the record the destination is headed for: a generate writes the payload's own tree and its manifest as the repository's first template state, where a retrofit reconciles a tree somebody else laid out and writes the record at the end, around what it found.
 
-A generate derives its application boundaries rather than collecting them. How many `apps/<name>/` directories the repository gets, what each is called, and what each is written in come out of wayfinding, run with the user once the candidate is materialized and the destination repository exists — the repository being what the payload's `docs/agents/issue-tracker.md` resolves against — and before the candidate is personalized. It is two questions asked in one structured prompt — what ships separately, and what binds first for each — with your reading of the request as the options. Skip it entirely when the invocation already names every deployable and its language, and report that it was skipped.
-
-The payload ships `docs/agents/`, read by path rather than through any index, and step 6 creates the labels those files name; `references/generate.md` step 6 gives the ordering.
-
-When those two questions do not settle it, the rest is the full method in `references/choosing_a_language.md`, and that is `/wayfinder`'s job rather than this skill's. Against the triggers `references/wayfinding.md` names, invoke `/wayfinder` with the destination and notes it specifies, and stop once the map is charted — leaving the candidate and the repository in place to resume against. Name no effort directory, do not work a ticket, and do not answer the six steps yourself. `docs/adrs/0003-order-the-repository-ahead-of-wayfinding.md` records why the repository exists before wayfinding runs and why charting ends the generate.
+A generate derives its application boundaries with the user at [Generate](references/generate.md) step 7, as `references/wayfinding.md` directs, including when to hand off to `/wayfinder` and stop.
 
 ## Preflight before editing
 
