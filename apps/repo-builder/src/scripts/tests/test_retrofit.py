@@ -824,7 +824,10 @@ class HooksTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             report = json.loads(result.stdout)
             self.assertEqual(report["outcome"], "not-applicable")
-            self.assertIn(".pre-commit-config.yaml", report["reason"])
+            self.assertEqual(
+                report["reason"],
+                "the default branch carries no .pre-commit-config.yaml",
+            )
             record = json.loads((destination.parent / "records.hooks.json").read_text())
             self.assertEqual(record, report)
 
@@ -959,7 +962,11 @@ class SweepTests(unittest.TestCase):
         git("push", "-q", "origin", f"{self.BRANCH}:main", cwd=clone)
 
     def _sweep(
-        self, directory: str, clone: Path, candidate: Path
+        self,
+        directory: str,
+        clone: Path,
+        candidate: Path,
+        repository: str = "owner/ledger",
     ) -> subprocess.CompletedProcess[str]:
         env = stub_gh(
             directory,
@@ -993,7 +1000,7 @@ class SweepTests(unittest.TestCase):
             "--default-branch",
             "main",
             "--repository",
-            "owner/ledger",
+            repository,
             "--hooks-dir",
             str(Path(directory) / "candidate-hooks"),
             "--resume-record",
@@ -1115,6 +1122,27 @@ class SweepTests(unittest.TestCase):
                 report["left_for_the_operator"][0]["reason"],
                 "contained in origin/main, but `branch -d` refused it",
             )
+
+    def test_makes_no_github_call_for_an_origin_that_is_a_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            clone, candidate = self._candidate(directory)
+            git("branch", "retrofit/old0000", cwd=clone)
+            self._merge(clone)
+
+            result = self._sweep(directory, clone, candidate, "/srv/ledger")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["stages"]["branch"], "deleted")
+            self.assertEqual(
+                report["pull_requests"],
+                {
+                    "outcome": "not-applicable",
+                    "reason": "origin is a local path, not a GitHub repository",
+                },
+            )
+            self.assertEqual(report["findings"], [])
+            self.assertEqual(gh_calls(directory), [])
 
     def test_names_a_pull_request_lookup_it_could_not_make(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1957,6 +1985,33 @@ class ReportTests(unittest.TestCase):
                 )
             )
 
+    def test_renders_a_sweep_without_pull_requests_as_not_applicable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            sweep = {
+                **SWEEP,
+                "pull_requests": {
+                    "outcome": "not-applicable",
+                    "reason": "origin is a local path, not a GitHub repository",
+                },
+                "left_for_the_operator": [],
+            }
+            lines, _ = render_report(
+                self,
+                directory,
+                SUMMARY_PASS,
+                proofs=PROOFS,
+                sweep=sweep,
+                repository="/srv/ledger",
+            )
+
+            left = next(
+                line for line in lines if line.startswith("- Left for the operator")
+            )
+            self.assertIn(
+                "pull requests: n/a (origin is a local path, not a GitHub repository)",
+                left,
+            )
+
     def test_renders_a_run_stopped_at_the_gate_as_reaching_it(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             lines, _ = render_report(
@@ -2032,13 +2087,13 @@ class ReportTests(unittest.TestCase):
                 hooks={
                     "operation": "hooks",
                     "outcome": "not-applicable",
-                    "reason": "the payload ships no .pre-commit-config.yaml",
+                    "reason": "the default branch carries no .pre-commit-config.yaml",
                 },
             )
 
             self.assertIn(
-                "- Destination hooks after merge: n/a (the payload ships no "
-                "hooks config)",
+                "- Destination hooks after merge: n/a (no hooks config on the "
+                "default branch)",
                 lines,
             )
 

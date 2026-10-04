@@ -802,7 +802,7 @@ def hooks(arguments: argparse.Namespace) -> dict[str, object]:
 
     Only where the merge was taken: the config this installs arrived with it.
     The merge has landed once `.repo-template.json` is on the default branch,
-    and refusing otherwise. A landed payload that ships no
+    and refusing otherwise. A landed default branch with no
     `.pre-commit-config.yaml` records `not-applicable`.
     """
     clone = preflight.require_git_repository(arguments.clone, "clone")
@@ -822,7 +822,7 @@ def hooks(arguments: argparse.Namespace) -> dict[str, object]:
         return {
             "operation": "hooks",
             "outcome": "not-applicable",
-            "reason": f"origin/{branch} carries no .pre-commit-config.yaml",
+            "reason": "the default branch carries no .pre-commit-config.yaml",
         }
     # Unobservable once the key is pinned, so a resumed run reads it back.
     record = arguments.resume_record
@@ -864,6 +864,17 @@ def hooks(arguments: argparse.Namespace) -> dict[str, object]:
         "worktree_removed": removed.returncode == 0,
         "findings": findings,
     }
+
+
+PULL_REQUESTS_NOT_APPLICABLE = {
+    "outcome": "not-applicable",
+    "reason": "origin is a local path, not a GitHub repository",
+}
+
+
+def is_github_slug(repository: str) -> bool:
+    """Whether `--repository` is `owner/name`, rather than the origin path."""
+    return re.fullmatch(r"[\w.-]+/[\w.-]+", repository) is not None
 
 
 def pull_requests(clone: Path, repository: str, branch: str) -> list[object] | None:
@@ -974,6 +985,7 @@ def sweep(arguments: argparse.Namespace) -> dict[str, object]:
             stages["branch"] = "deleted"
 
     left: list[dict[str, object]] = []
+    on_github = is_github_slug(arguments.repository)
     for name in git_output(
         clone, "branch", "--list", "--format=%(refname:short)", "retrofit/*"
     ).splitlines():
@@ -985,12 +997,15 @@ def sweep(arguments: argparse.Namespace) -> dict[str, object]:
             reason = f"not contained in origin/{default}, so its merge was declined"
         else:
             reason = "an earlier run at another payload commit"
+        if not on_github:
+            left.append({"branch": name, "reason": reason, "pull_requests": []})
+            continue
         requests = pull_requests(clone, arguments.repository, name)
         if requests is None:
             findings.append(f"could not read the pull requests for {name}")
         left.append({"branch": name, "reason": reason, "pull_requests": requests})
 
-    return {
+    record: dict[str, object] = {
         "operation": "sweep",
         "clone": {"path": str(clone), "default_branch": default},
         "candidate": {"path": str(candidate), "branch": branch},
@@ -999,6 +1014,9 @@ def sweep(arguments: argparse.Namespace) -> dict[str, object]:
         "left_for_the_operator": left,
         "findings": findings,
     }
+    if not on_github:
+        record["pull_requests"] = PULL_REQUESTS_NOT_APPLICABLE
+    return record
 
 
 MERGE_SETTINGS = {
@@ -1963,7 +1981,8 @@ def destination_hooks_line(hooks_result: dict, stopped: str | None) -> str:
         return "- Destination hooks after merge: n/a (merge declined)"
     if hooks_result.get("outcome") == "not-applicable":
         return (
-            "- Destination hooks after merge: n/a (the payload ships no hooks config)"
+            "- Destination hooks after merge: n/a "
+            "(no hooks config on the default branch)"
         )
     moved_aside = [
         f"{item['from']} -> {item['to']}" for item in hooks_result["moved_aside"]
@@ -2134,6 +2153,8 @@ def cleanup(report: Report, swept: dict, hooks_result: dict, proofs: dict) -> No
         for item in swept.get("left_for_the_operator", [])
     ]
     left += [str(finding) for finding in swept.get("findings", [])]
+    if swept.get("pull_requests", {}).get("outcome") == "not-applicable":
+        left.append(f"pull requests: n/a ({swept['pull_requests']['reason']})")
     left += [str(finding) for finding in hooks_result.get("findings", [])]
     left += [
         f"{item['path']}: {', '.join(item['residue'])}, untracked residue a move left"
@@ -2435,7 +2456,9 @@ def build_parser() -> argparse.ArgumentParser:
     teardown.add_argument("--candidate", type=Path, required=True)
     teardown.add_argument("--branch", required=True, help="the retrofit branch")
     teardown.add_argument("--default-branch", required=True)
-    teardown.add_argument("--repository", required=True, help="owner/name")
+    teardown.add_argument(
+        "--repository", required=True, help="owner/name, or the origin path"
+    )
     teardown.add_argument("--hooks-dir", type=Path, help="the candidate's own")
     teardown.add_argument("--resume-record", type=Path)
     teardown.set_defaults(handler=sweep, record="sweep")
