@@ -9,3 +9,7 @@ color: gray
   - id: 5qlr
   - created: 2026-10-04
   - acceptance: ~/code/curator has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
+- [ ] Retrofit inference-runtime-broker under the template | inbox #retrofit
+  - id: 3k8d
+  - created: 2026-10-04
+  - acceptance: ~/code/inference-runtime-broker has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
