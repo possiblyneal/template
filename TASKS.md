@@ -17,3 +17,7 @@ color: gray
   - id: tjx4
   - created: 2026-10-04
   - acceptance: ~/code/m3u-wizard has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
+- [ ] Retrofit medical-researcher under the template | inbox #retrofit
+  - id: fuzc
+  - created: 2026-10-04
+  - acceptance: ~/code/medical-researcher has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
