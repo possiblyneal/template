@@ -21,3 +21,7 @@ color: gray
   - id: fuzc
   - created: 2026-10-04
   - acceptance: ~/code/medical-researcher has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
+- [ ] Retrofit personal-podcast under the template | inbox #retrofit
+  - id: kmv6
+  - created: 2026-10-04
+  - acceptance: ~/code/personal-podcast has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
