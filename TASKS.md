@@ -5,3 +5,7 @@ color: gray
   - id: dhk4
   - created: 2026-10-04
   - acceptance: ~/code/agentmemory-sqlite has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
+- [ ] Retrofit curator under the template | inbox #retrofit
+  - id: 5qlr
+  - created: 2026-10-04
+  - acceptance: ~/code/curator has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
