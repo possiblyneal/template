@@ -1,18 +1,14 @@
 # Retrofit
 
-Read these sections of [`lifecycle.md`](lifecycle.md) first rather than the whole file, each with the subsections under it — `sed -n '/^## Manifest$/,/^## /p'` and its equivalent per heading. They apply throughout:
+Read these parts of [`lifecycle.md`](lifecycle.md) first rather than the whole file — `sed -n '/^## Ownership$/,/^## /p'` and its equivalent per heading. They apply throughout:
 
 - the paragraph on quoting a `<placeholder>`, at the top of the file
-- `## Manifest`
 - `## Ownership`, with `### Overridden paths` and `### The payload's mode travels with the payload's content`
-- `## Dependabot entries follow the manifests present`
-- `## Running the destination's checks`, with `### Tools the first manifest must declare`, `### Working hooks in a candidate`, and `### Working hooks in the destination after a merge`
-- `## The runner variable is set only where it is safe and answerable`
-- `## Remote action gates`
-- `## Reviewing and reporting`
 - `### Resuming`, only when this run re-enters a stopped one
 
-Every other lifecycle section a step links is read where the link sits, by its heading. Shared mechanics stay in [`generate.md`](generate.md) and are cited by heading; follow a citation with `sed -n '/^### Step 3 /,/^### /p'` rather than opening the whole file.
+Every other lifecycle section a retrofit needs is linked from the step that uses it and read there: `## Manifest` at step 5, `## Dependabot entries follow the manifests present` and `## Running the destination's checks` at step 7, `## The runner variable is set only where it is safe and answerable` and `## Remote action gates` at step 8. `## Reviewing and reporting` only routes to `reporting.md`, which steps 7 and 9 link directly.
+
+Shared mechanics stay in [`generate.md`](generate.md) and are cited by heading; follow a citation with `sed -n '/^### Step 3 /,/^### /p'` rather than opening the whole file.
 
 A retrofit brings a repository that was never generated from this template under it: the destination has content and carries no record. Everything a generate builds from nothing, a retrofit reconciles against something somebody is already shipping. `docs/adrs/0005-stage-a-retrofit-locally-and-write-the-host-last.md` records why the flow is shaped this way.
 
