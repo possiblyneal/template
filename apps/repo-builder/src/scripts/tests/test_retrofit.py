@@ -1478,6 +1478,21 @@ class HostedTests(unittest.TestCase):
                 json.loads(result.stdout)["writes"], {"merge-settings": "done"}
             )
 
+    def test_a_sweep_from_an_earlier_run_does_not_stop_the_carry(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            sweep = Path(directory) / "candidate.sweep.json"
+            sweep.write_text("{}\n")
+            os.utime(sweep, (0, 0))
+            self._apply(directory, "--approve", "runner-variable")
+            shutil.rmtree(Path(directory) / "bin")
+
+            result = self._apply(directory, "--approve", "merge-settings")
+
+            self.assertEqual(
+                json.loads(result.stdout)["writes"],
+                {"merge-settings": "done", "runner-variable": "not offered"},
+            )
+
     def test_an_unreadable_earlier_apply_record_counts_as_none(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             (Path(directory) / "candidate.hosted-apply.json").write_text('{"wri')
