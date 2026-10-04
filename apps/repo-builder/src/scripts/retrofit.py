@@ -1519,7 +1519,10 @@ def hosted_apply(arguments: argparse.Namespace) -> dict[str, object]:
     the writes this one does not approve is kept, so the report sees both.
     """
     approved = set(arguments.approve)
-    earlier = arguments.previous
+    # Once the sweep has run the write log is gone and the run is over, so a
+    # record left at this prefix is an earlier run's and is not built on.
+    swept = record_path(arguments.records, "sweep.json").is_file()
+    earlier = {} if swept else arguments.previous
     if "labels" in approved and not arguments.label:
         raise PreflightError("labels approved with no --label to create")
     if "ruleset" in approved and arguments.ruleset is None:
@@ -2486,10 +2489,15 @@ def fail(message: str, status: int = 2) -> NoReturn:
 def main() -> int:
     arguments = build_parser().parse_args()
     record = getattr(arguments, "record", None)
-    if record:
+    if record == "hosted-apply":
         # Read before the unlink, for the one step that builds on its own
         # earlier record: `hosted apply` run again later in the same flow.
-        arguments.previous = load(arguments.records, record)
+        # An unreadable one, left by an interrupted write, counts as none.
+        try:
+            arguments.previous = load(arguments.records, record)
+        except (ValueError, PreflightError):
+            arguments.previous = {}
+    if record:
         # A step that fails leaves no record, so the renderers never read an
         # earlier run's result as this one's.
         record_path(arguments.records, f"{record}.json").unlink(missing_ok=True)
