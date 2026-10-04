@@ -37,3 +37,9 @@ color: gray
   - id: i0d0
   - created: 2026-10-04
   - acceptance: ~/code/wall-collage has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
+- [ ] Make investing a git repo and retrofit it under the template | inbox #retrofit
+  - id: kr0g
+  - created: 2026-10-04
+  - acceptance: ~/code/investing is a git repo with a GitHub remote and .repo-template.json on origin/main via a merged /repo-builder retrofit PR
+
+  investing is not yet a git repo: git init it and create its GitHub remote, then retrofit it under the template
