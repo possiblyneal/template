@@ -12,7 +12,9 @@ Read `references/lifecycle.md` before acting; a retrofit reads only the sections
 - `references/update.md` — carry a bounded template delta into a repository already generated from it
 - `references/adopt.md` — land a held-back repository addon whose condition has arrived
 - `references/retrofit.md` — bring a repository that was never generated from the payload under it
-- `references/retrofit-unmet-bar.md` — prepare the destination's own fix when a retrofit's bar is unmet, read from `retrofit.md` step 7 only then
+- `references/retrofit-step-1-preflight.md` through `references/retrofit-step-9-publish.md` — one file per retrofit step, read as `references/retrofit.md` reaches each
+- `references/retrofit-unmet-bar.md` — prepare the destination's own fix when a retrofit's bar is unmet, read from step 7 only then
+- `references/retrofit-report.md` — the retrofit report's renderer and the lines it leaves to fill
 - `references/wayfinding.md` — derive the application boundaries, read from `generate.md` step 7
 - `references/addon-adoption.md` — finish an addon after copying it, read from `generate.md` step 2 and `adopt.md` step 4
 - `references/reporting.md` — how the pull request is reviewed and the shape every flow ends in, read when a flow reaches its review
@@ -44,7 +46,7 @@ Use `scripts/preflight.py` for deterministic validation and retain its JSON in t
 - `adopt` validates provenance, repository identities, a clean destination, and each requested addon at the recorded commit: it exists in `repository-addons/`, carries an `addon-adoption.json` entry, completes its pair, is not requested alongside the addon it excludes, and the destination holds neither it nor that addon.
 - `retrofit` validates the source commit, the destination's identity against its origin, tracked cleanliness, and the absence of a record, then reports the payload path list, every collision, the difference between the two in `absent_paths`, and every addon-shaped path the destination already holds. That last list is a finding and never a stop: a retrofit adopts no addon. It reaches git and nothing else, so its collisions are evidence for a decision the flow makes later rather than a classification.
 
-The helper is read-only and only authorizes the next stage. A retrofit's fixed steps after it run through `scripts/retrofit.py`, which `references/retrofit.md` names at each step. Claude owns personalization and semantic reconciliation; do not replace judgment with a blind copy, overlay, or text merge. Keep provenance, ancestry, ownership, validation, and remote-action gates even when simplifying the work. Unless preflight rejects the operation or reconciliation finds a real conflict, continue through materialization, local edits, manifest advancement, and verification. A preflight report alone is not a completed build or update.
+The helper is read-only and only authorizes the next stage. A retrofit's fixed steps after it run through `scripts/retrofit.py`, which `references/retrofit.md` and each step file name. Claude owns personalization and semantic reconciliation; do not replace judgment with a blind copy, overlay, or text merge. Keep provenance, ancestry, ownership, validation, and remote-action gates even when simplifying the work. Unless preflight rejects the operation or reconciliation finds a real conflict, continue through materialization, local edits, manifest advancement, and verification. A preflight report alone is not a completed build or update.
 
 ## Publish an empty base, build locally, then publish content
 

@@ -30,6 +30,6 @@ Report every region as done or as outstanding. An addon left with an unfilled sl
 
 ## This reference binds adopt alone
 
-Everything above is the [adopt](adopt.md) flow's, and no other flow reads it as an instruction to take an addon. [Generate](generate.md) holds every addon back by definition, since the condition each answers has not arrived in a repository that does not exist yet; an [update](update.md) carries a template delta and an addon is not in one; and a [retrofit](retrofit.md) adopts none, for the reasons that reference gives. Each of those may still *offer* an addon afterwards by invoking adopt, which is a separate run against a destination that now exists.
+Everything above is the [adopt](adopt.md) flow's, and no other flow reads it as an instruction to take an addon. [Generate](generate.md) holds every addon back by definition, since the condition each answers has not arrived in a repository that does not exist yet; an [update](update.md) carries a template delta and an addon is not in one; and a [retrofit](retrofit.md) adopts none, for the reasons [The retrofit adopts no addon](retrofit-step-1-preflight.md#the-retrofit-adopts-no-addon) gives. Each of those may still *offer* an addon afterwards by invoking adopt, which is a separate run against a destination that now exists.
 
 Stated because the file otherwise reads as the repository's whole addon policy, and a flow meeting a destination that already holds an addon-shaped file would find its instructions here and follow them.
