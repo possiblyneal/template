@@ -1,3 +1,7 @@
 # Tasks
 color: gray
 <!-- Agents: change this file only through the `tasks` CLI (run `tasks` for its verbs, `tasks list -json` to read). -->
+- [ ] Retrofit agentmemory-sqlite under the template | inbox #retrofit
+  - id: dhk4
+  - created: 2026-10-04
+  - acceptance: ~/code/agentmemory-sqlite has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
