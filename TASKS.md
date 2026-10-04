@@ -25,6 +25,8 @@ color: gray
   - id: s199
   - created: 2026-10-04
   - acceptance: ~/code/rom-file-utils has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
+
+  m3u-wizard was folded into this repo under m3u-wizard/ (df4870e) and its GitHub repo deleted
 - [ ] Retrofit taskmaster under the template | inbox #retrofit
   - id: 2jx3
   - created: 2026-10-04
