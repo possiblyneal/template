@@ -565,18 +565,15 @@ def write_hooks(directory: Path, hooks: dict[str, str]) -> None:
 class HooksTests(unittest.TestCase):
     """The destination clone's hooks, installed after the merge and proved."""
 
-    @classmethod
-    def setUpClass(cls) -> None:
-        reason = hook_environments_unavailable()
-        if reason:
-            raise unittest.SkipTest(reason)
-
     def _merged(self, directory: str) -> Path:
         """The fixture clone once the merge landed the payload, on a feature branch.
 
         The payload itself stands in for the merged tree, because it is a tree
         its own hooks pass and the retrofit fixture's foreign layout is not.
         """
+        reason = hook_environments_unavailable()
+        if reason:
+            self.skipTest(reason)
         fixture = retrofit_fixture(directory)
         destination = Path(fixture["destination"])
         git("rm", "-rq", ".", cwd=destination)
@@ -800,14 +797,20 @@ class HooksTests(unittest.TestCase):
             self.assertIn("not removed", report["findings"][0])
             self.assertTrue((destination.parent / "hook-test/stray").exists())
 
-    def test_refuses_before_the_merge_has_landed(self) -> None:
+    def test_reports_not_applicable_where_the_payload_ships_no_hooks_config(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = retrofit_fixture(directory)
             destination = Path(fixture["destination"])
             result = self._hooks(destination, self._env(directory))
 
-            self.assertEqual(result.returncode, 2)
-            self.assertIn("no .pre-commit-config.yaml", result.stderr)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["outcome"], "not-applicable")
+            self.assertIn(".pre-commit-config.yaml", report["reason"])
+            record = json.loads((destination.parent / "records.hooks.json").read_text())
+            self.assertEqual(record, report)
 
 
 if __name__ == "__main__":
@@ -2000,6 +2003,28 @@ class ReportTests(unittest.TestCase):
             )
             self.assertTrue(lines[-1].startswith("[[FILL: "))
             self.assertIn("the unmet-bar outcome, in the Report additions shape", slots)
+
+    def test_reports_destination_hooks_not_applicable_where_the_payload_ships_none(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            lines, _ = render_report(
+                self,
+                directory,
+                SUMMARY_PASS,
+                proofs=PROOFS,
+                hooks={
+                    "operation": "hooks",
+                    "outcome": "not-applicable",
+                    "reason": "the payload ships no .pre-commit-config.yaml",
+                },
+            )
+
+            self.assertIn(
+                "- Destination hooks after merge: n/a (the payload ships no "
+                "hooks config)",
+                lines,
+            )
 
     def test_reports_no_hooks_where_the_candidate_carries_no_config(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

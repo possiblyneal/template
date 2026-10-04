@@ -801,6 +801,7 @@ def hooks(arguments: argparse.Namespace) -> dict[str, object]:
     """Install the destination's hooks in the operator's clone, and prove them.
 
     Only where the merge was taken: the config this installs arrived with it.
+    A payload that ships no `.pre-commit-config.yaml` records `not-applicable`.
     """
     clone = preflight.require_git_repository(arguments.clone, "clone")
     scratch = arguments.scratch.resolve()
@@ -810,10 +811,12 @@ def hooks(arguments: argparse.Namespace) -> dict[str, object]:
     run_git(clone, "fetch", "-q", "origin", branch)
     base = preflight.resolve_commit(clone, f"origin/{branch}")
     if blob(clone, f"{base}:.pre-commit-config.yaml") is None:
-        raise PreflightError(
-            f"origin/{branch} carries no .pre-commit-config.yaml; install only "
-            "after the merge has landed"
-        )
+        # A payload that ships no hooks leaves nothing to install or prove.
+        return {
+            "operation": "hooks",
+            "outcome": "not-applicable",
+            "reason": f"origin/{branch} carries no .pre-commit-config.yaml",
+        }
     # Unobservable once the key is pinned, so a resumed run reads it back.
     record = arguments.resume_record
     recorded = json.loads(record.read_text()) if record.exists() else {}
@@ -1951,6 +1954,10 @@ def destination_hooks_line(hooks_result: dict, stopped: str | None) -> str:
         if stopped:
             return "- Destination hooks after merge: n/a (stopped before the merge was offered)"
         return "- Destination hooks after merge: n/a (merge declined)"
+    if hooks_result.get("outcome") == "not-applicable":
+        return (
+            "- Destination hooks after merge: n/a (the payload ships no hooks config)"
+        )
     moved_aside = [
         f"{item['from']} -> {item['to']}" for item in hooks_result["moved_aside"]
     ]
