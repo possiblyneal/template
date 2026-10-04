@@ -701,6 +701,171 @@ def update(root: Path, fixture: dict[str, object], scenario: str) -> list[Check]
     return checks
 
 
+def retrofit_candidate(fixture: dict[str, object]) -> Path | None:
+    """The candidate worktree the retrofit flow staged, found the way it names it.
+
+    Step 2 adds a linked worktree of the destination clone on the branch
+    `retrofit/<first 12 of the payload commit>`, so the clone's own worktree
+    list answers where it sits without this script knowing the `tmp/` path of
+    the repository that ran the flow.
+    """
+    destination = Path(str(fixture["destination"]))
+    branch = f"refs/heads/retrofit/{str(fixture['target_commit'])[:12]}"
+    path: str | None = None
+    for line in git(destination, "worktree", "list", "--porcelain").splitlines():
+        if line.startswith("worktree "):
+            path = line.removeprefix("worktree ")
+        elif line == f"branch {branch}" and path is not None:
+            return Path(path)
+    return None
+
+
+def candidate_exits_zero(candidate: Path, script: str) -> bool:
+    path = candidate / script
+    if not path.is_file():
+        return False
+    return (
+        subprocess.run(
+            [str(path)], cwd=candidate, check=False, capture_output=True
+        ).returncode
+        == 0
+    )
+
+
+def retrofit_record_checks(candidate: Path, fixture: dict[str, object]) -> list[Check]:
+    manifest_path = candidate / ".repo-template.json"
+    manifest = json.loads(manifest_path.read_text()) if manifest_path.is_file() else {}
+    template = manifest.get("template", {})
+    ownership = manifest.get("ownership", [])
+    # The payload default names payload paths only; a destination's own file
+    # or folder in the array is the exception the flow must never record.
+    destination_only = ("ledger", "notes", "Makefile", "build.py")
+    ownership_is_default = (
+        isinstance(ownership, list)
+        and bool(ownership)
+        and all(
+            isinstance(entry, dict)
+            and set(entry) == {"path", "mode"}
+            and not any(word in str(entry["path"]) for word in destination_only)
+            for entry in ownership
+        )
+        and {"path": "CLAUDE.md", "mode": "managed"} in ownership
+    )
+    unit_path = candidate / "apps/ledger/.unit.json"
+    unit = json.loads(unit_path.read_text()) if unit_path.is_file() else {}
+    pyproject = candidate / "pyproject.toml"
+    declared = pyproject.read_text(encoding="utf-8") if pyproject.is_file() else ""
+    return [
+        (
+            "record names the target",
+            template.get("commit") == fixture["target_commit"]
+            and template.get("subtree") == fixture["subtree"],
+            "manifest template commit and subtree match fixture",
+        ),
+        (
+            "ownership is the payload default",
+            ownership_is_default,
+            "path/mode entries only, none naming a destination file, CLAUDE.md managed",
+        ),
+        (
+            "unit declared as disposed",
+            unit.get("run") == "none"
+            and unit.get("ships", {}).get("kind") == "none"
+            and not (candidate / "apps/app-name").exists(),
+            "apps/ledger/.unit.json is run none, ships none; no apps/app-name",
+        ),
+        (
+            "manifest tools declared, specifiers kept",
+            'test = "unittest"' in declared
+            and 'name = "ledger"' in declared
+            and 'version = "0.1.0"' in declared,
+            "pyproject.toml declares the test tool and keeps name and version",
+        ),
+    ]
+
+
+def retrofit(fixture: dict[str, object], scenario: str) -> list[Check]:
+    destination = Path(str(fixture["destination"]))
+    remote = Path(str(fixture["destination_remote"]))
+    candidate = retrofit_candidate(fixture)
+    if candidate is None:
+        return [("candidate exists", False, "no retrofit worktree on the clone")]
+    checks: list[Check] = [
+        ("candidate exists", True, str(candidate)),
+        (
+            "remote unchanged",
+            git(remote, "rev-parse", "refs/heads/main")
+            == git(destination, "rev-parse", "refs/heads/main"),
+            "bare remote main still equals the clone's main",
+        ),
+        (
+            "no allowance written",
+            not (candidate / ".structure-allow").exists(),
+            "candidate has no .structure-allow",
+        ),
+    ]
+    if scenario == "retrofit":
+        moved_hashes = cast("dict[str, str]", fixture["moved_hashes"])
+        checks += [
+            (
+                "check surface green",
+                candidate_exits_zero(candidate, "scripts/check"),
+                "scripts/check exits 0 in the candidate",
+            ),
+            (
+                "layout audit passes",
+                candidate_exits_zero(candidate, "scripts/structure"),
+                "scripts/structure exits 0 in the candidate",
+            ),
+            (
+                "moved files byte-identical",
+                all(
+                    (candidate / "apps/ledger" / old).is_file()
+                    and digest(candidate / "apps/ledger" / old) == expected
+                    for old, expected in moved_hashes.items()
+                ),
+                "moved blobs match the recorded hashes under apps/ledger",
+            ),
+            (
+                "records migrated",
+                git(candidate, "ls-files", "docs/adr") == ""
+                and any((candidate / "docs/adrs").glob("*one-ledger-per-currency*")),
+                "no tracked file under docs/adr; its record sits in docs/adrs",
+            ),
+            *retrofit_record_checks(candidate, fixture),
+        ]
+    else:
+        rates = candidate / "apps/ledger/src/ledger/rates.py"
+        suite = candidate / "apps/ledger/tests/test_rates.py"
+        checks += [
+            (
+                "bar unmet",
+                not candidate_exits_zero(candidate, "scripts/check"),
+                "scripts/check exits non-zero in the candidate",
+            ),
+            (
+                "unmovable file left",
+                (candidate / "Makefile").is_file(),
+                "root Makefile still sits in the candidate",
+            ),
+            (
+                "destination untouched",
+                git(destination, "status", "--porcelain") == ""
+                and not (destination / ".repo-template.json").exists(),
+                "clone worktree clean, no record in the clone",
+            ),
+            (
+                "failing behavior unchanged",
+                rates.is_file()
+                and suite.is_file()
+                and "annual / 10" in rates.read_text(encoding="utf-8")
+                and "monthly_rate(0.12), 0.01" in suite.read_text(encoding="utf-8"),
+                "divisor 10 and the 0.01 assertion remain",
+            ),
+        ]
+    return checks
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("fixture", type=Path, help="path to fixture.json")
@@ -714,6 +879,8 @@ def main() -> int:
         checks = generation_multi(fixture_path.parent, fixture)
     elif scenario == "generation-handoff":
         checks = generation_handoff(fixture_path.parent, fixture)
+    elif scenario in ("retrofit", "retrofit-red"):
+        checks = retrofit(fixture, scenario)
     else:
         checks = update(fixture_path.parent, fixture, scenario)
     result = {
