@@ -29,7 +29,7 @@ Part of [Retrofit](retrofit.md). Turn the destination's tree into the template's
 
 **Two collisions the overlay skipped are settled here.**
 
-The ignore file is replaced outright, at the payload's mode as well as its content, under [The payload's mode travels with the payload's content](lifecycle.md#the-payloads-mode-travels-with-the-payloads-content). Report destination rules the payload does not cover; do not re-add them. Where un-ignoring a generated directory makes the candidate fail its own check surface, stop; the operator decides which rule survives.
+The ignore file is replaced outright, at the payload's mode as well as its content, under [The payload's mode travels with the payload's content](lifecycle.md#the-payloads-mode-travels-with-the-payloads-content). Report destination rules the payload does not cover; do not re-add them. Where un-ignoring a generated directory makes the candidate fail its own check surface, run under [Running the destination's checks](lifecycle.md#running-the-destinations-checks), stop; the operator decides which rule survives.
 
 **A rule the operator restores gets no [overridden path](lifecycle.md#overridden-paths) entry**: the entry would make every later update skip the ignore file. The restored rule surfaces as a collision at the next update instead. Report it, and report that the ignore file is no longer byte-identical to the payload's.
 

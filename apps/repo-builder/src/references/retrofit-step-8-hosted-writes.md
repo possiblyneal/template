@@ -46,7 +46,7 @@ git remote set-head origin -a
 
 **4. Security settings and the branch ruleset** — dependency alerts, security updates, push protection, and the ruleset generate creates. Declinable and recorded. Push protection refused on a private destination on a free plan is reported, not failed.
 
-Name required checks by check run, not job id: `CI`, not `ci`; [Step 5 — Configure the repository settings](generate.md#step-5--configure-the-repository-settings) has the full set. A misspelled context silently blocks every pull request; step 9's `mergeable`/`mergeStateStatus` pair catches it.
+Name required checks by check run, not job id: `CI`, not `ci`; [Step 5 — Configure the repository settings](generate.md#step-5--configure-the-repository-settings) has the full set. A misspelled context writes without error and silently blocks every pull request; step 9's `mergeable`/`mergeStateStatus` pair catches it.
 
 An existing ruleset requires contexts from workflows that [the automation directory](lifecycle.md#the-automation-directory-is-replaced-not-reconciled) replaced. Read its required contexts before writing, name at the gate every one the payload's workflows do not report, and repair it in place to the contexts that now exist.
 
