@@ -1,6 +1,6 @@
 # Step 7 — Dispose the collisions, write both records, meet the bar
 
-Part of [Retrofit](retrofit.md). Nothing here reaches the network. In order: the collisions, the two records, the tool declaration, normalization and the proofs, the autofix pass, the bar, the declared facts, and the review.
+Part of [Retrofit](retrofit.md). Nothing here reaches the network. In order: the two records, the unit declarations, the remaining collisions, the instruction file, the tool declaration, normalization and the proofs, the autofix pass, the bar, the declared facts, and the review.
 
 ## The records and the collisions
 
@@ -17,11 +17,15 @@ Part of [Retrofit](retrofit.md). Nothing here reaches the network. In order: the
 
 **Every path inside it is repository-relative**, since it sits at the root and covers every unit.
 
-**Propose and dispose every remaining collision, per file.** Diff the destination's version against the payload's, state what each says, and let the operator pick payload, destination, or a merge. No path-matching rule stands in for this. A disposition the payload wins writes the payload's mode too, under [The payload's mode travels with the payload's content](lifecycle.md#the-payloads-mode-travels-with-the-payloads-content).
+**Then write each unit's `.unit.json`** at the unit root, from the pair step 5 confirmed, with `ships.targets` only where the kind is `executable`. Nothing earlier writes it, and `scripts/structure`'s `unit-declaration` cannot pass without it.
+
+**Then propose and dispose every remaining collision, per file**, `CLAUDE.md` included. Diff the destination's version against the payload's, state what each says, and let the operator pick payload, destination, or a merge. No path-matching rule stands in for this. A disposition the payload wins writes the payload's mode too, under [The payload's mode travels with the payload's content](lifecycle.md#the-payloads-mode-travels-with-the-payloads-content).
 
 **Where this run invalidated the destination's stated reason, propose the payload's version and name the step that invalidated it**, so the operator can refuse it on the merits.
 
 **A destination version chosen at a managed path is an [overridden path](lifecycle.md#overridden-paths)**, recorded with the reason it won. One that wins at a product path is already the destination's: report it with its reason and record nothing.
+
+**Then write the `CLAUDE.md` the disposition chose**, merged where it chose a merge, so it describes the whole run and the bar measures it. It is written before the bar and after its collision is disposed.
 
 The ownership array is the payload's default. **A destination path still matching a managed pattern is a layout failure to fix in step 6**, never an ownership exception written here.
 
@@ -29,7 +33,7 @@ The ownership array is the payload's default. **A destination path still matchin
 
 ## The tool declaration and dependabot
 
-**The tool declaration adds only what is missing**, at the template's floors, keeping any specifier the destination already declares and any settings it already has. [Tools the first manifest must declare](lifecycle.md#tools-the-first-manifest-must-declare) is the per-language list: tool lines and the configuration boundaries it names, nothing else; making moved code build or import is step 6's repair.
+**The tool declaration adds only what is missing**, at the template's floors, keeping any specifier the destination already declares and any settings it already has. [Tools the first manifest must declare](lifecycle.md#tools-the-first-manifest-must-declare) is the per-language list: tool lines and the configuration boundaries it names, nothing else; making moved code build or import is step 6's repair. The language adapter wins where it differs: write the line it reads (for instance `test = "unittest"`) in the root manifest, where the adapter's own pattern finds it, instead of the list's tools.
 
 - The file is product-owned, not an overridden path.
 - Report each line added.
@@ -48,12 +52,12 @@ The ownership array is the payload's default. **A destination path still matchin
 
 ## Normalize, prove, commit
 
-**The candidate carries no untracked file when the bar is measured.** Read `git status --porcelain` for `??` entries *before* staging, since staging turns them into `A`. The usual cause is step 6's ignore-file replacement; dispose it under that step's ignore rule.
+**The candidate carries no untracked file when the bar is measured**, other than the generated output the exclude pathspec below keeps out of the index. Read `git status --porcelain` for `??` entries *before* staging, since staging turns them into `A`. The usual cause is step 6's ignore-file replacement; dispose it under that step's ignore rule. Where the payload ships no `.gitignore`, generated output such as `__pycache__` is the cause: never stage it. Removal alone does not stop a re-run regenerating it, so remove what exists, append one exclude pathspec per generated path to every `git add -A` below (`-- . ':(exclude,glob)**/__pycache__/**'`), and report the paths. Not `info/exclude`: it sits in the clone's common git dir, and the clone stays untouched.
 
 Then stage everything, normalize it, and measure both proofs, from this repository:
 
 ```bash
-git -C <candidate> add -A
+git -C <candidate> add -A [-- . '<exclude pathspec>'...]
 python3 apps/repo-builder/src/scripts/retrofit.py normalize \
   --candidate <candidate> --records <records>
 python3 apps/repo-builder/src/scripts/retrofit.py proofs --template-repo . \
@@ -88,7 +92,7 @@ Where the destination's test capability collects anything, report its result on 
 **The bar is the destination's own check surface passing on the candidate**, read by [Running the destination's checks](lifecycle.md#running-the-destinations-checks). `FAIL` and `unavailable` block; `not-applicable` does not. Stage before every run, re-runs included, since `scripts/structure` enumerates the index:
 
 ```bash
-git -C <candidate> add -A
+git -C <candidate> add -A [-- . '<exclude pathspec>'...]
 (cd <candidate> && scripts/summarize scripts/check) > <records>.check.txt
 ```
 

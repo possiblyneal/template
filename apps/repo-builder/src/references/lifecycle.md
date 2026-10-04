@@ -248,7 +248,7 @@ An update owes nothing here; the root manifest is product-owned and never enters
 
 ### Working hooks in a candidate
 
-The check surface's first gate fails when the hooks git will consult are missing, so every flow installs them first, by this recipe.
+The check surface's first gate fails when the hooks git will consult are missing, so every flow installs them first, by this recipe; a payload with no `.pre-commit-config.yaml` installs nothing and the report says not-applicable.
 
 A machine-wide `core.hooksPath` makes `pre-commit install` refuse, and breaks it again inside throwaway fixture repositories the repository's tests create, since fixtures inherit global config. Check `git config --global core.hooksPath` before treating either failure as a repository defect; a control run against the template repository's current HEAD reproduces the same failure when this is the cause.
 
@@ -299,6 +299,8 @@ Report a global `core.hooksPath` with its key and value; it is not a stop. Do no
 For retrofit the candidate and the operator's clone differ: its key is set at `--worktree` scope on a candidate removed at the flow's end, so the hooks go with it.
 
 **A retrofit merges a `.pre-commit-config.yaml` into a clone that did not have one**, with an instruction file promising linted, attributed commits refused on the default branch. Nothing else installs it, which would leave a promised hook surface that does not exist.
+
+A payload with no `.pre-commit-config.yaml` leaves the merged default branch without one, so nothing installs and `retrofit.py hooks` records not-applicable.
 
 So where the operator takes the merge at retrofit's second gate, install the hooks in the destination clone before the final report, and report the result in it. Declining the merge installs nothing: the recipe moves aside existing hooks and pins `core.hooksPath` at local scope, durable changes not worth making for a config that never landed.
 

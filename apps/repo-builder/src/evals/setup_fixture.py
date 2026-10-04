@@ -727,6 +727,14 @@ def build_retrofit(root: Path, scenario: str) -> dict[str, object]:
     destination, remote = create_retrofit_destination(
         root, red=scenario == "retrofit-red"
     )
+    red = scenario == "retrofit-red"
+    unit = "apps/ledger"
+    moved = ("src/ledger/rates.py", "tests/test_rates.py")
+    payload_files = {
+        path.removeprefix("base-repo/")
+        for path in run(template, "ls-files", "base-repo", capture=True).split("\n")
+    }
+    destination_files = run(destination, "ls-files", capture=True).split("\n")
     return {
         "scenario": scenario,
         "template_repo": str(template),
@@ -734,12 +742,47 @@ def build_retrofit(root: Path, scenario: str) -> dict[str, object]:
         "target_commit": target,
         "destination": str(destination),
         "destination_remote": str(remote),
+        # What the destination and its remote held before the run, so "no push"
+        # and "the clone did not advance" are graded against a recorded state.
+        "original_main": run(destination, "rev-parse", "main", capture=True),
+        "remote_refs": run(
+            remote,
+            "for-each-ref",
+            "--format=%(refname) %(objectname)",
+            capture=True,
+        ).split("\n"),
         # The blobs the layout step moves rather than writes. A retrofit proves
         # a move is a move, so the scorer needs what the file was beforehand.
-        "moved_hashes": {
-            "src/ledger/rates.py": sha256(destination / "src/ledger/rates.py"),
-            "tests/test_rates.py": sha256(destination / "tests/test_rates.py"),
+        "moved_hashes": {path: sha256(destination / path) for path in moved},
+        "unit": unit,
+        # Paths only the destination has: files it holds that the payload does
+        # not ship, and where the moved ones land. No ownership entry may name
+        # one of these or a folder above one.
+        "destination_only_paths": sorted(
+            {
+                *(path for path in destination_files if path not in payload_files),
+                *(f"{unit}/{path}" for path in moved),
+                unit,
+            }
+        ),
+        "records": {
+            "old_dir": "docs/adr",
+            "new_dir": "docs/adrs",
+            "name_fragment": "one-ledger-per-currency",
         },
+        "manifest_declarations": [
+            'test = "unittest"',
+            'name = "ledger"',
+            'version = "0.1.0"',
+        ],
+        "unmovable_file": "Makefile",
+        # Behavior the red scenario must leave exactly as it found it.
+        "unchanged_behavior": [
+            {"path": f"{unit}/src/ledger/rates.py", "text": "annual / 10"},
+            {"path": f"{unit}/tests/test_rates.py", "text": "monthly_rate(0.12), 0.01"},
+        ]
+        if red
+        else [],
     }
 
 

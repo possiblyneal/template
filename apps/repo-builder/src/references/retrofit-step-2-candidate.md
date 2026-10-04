@@ -2,7 +2,7 @@
 
 Part of [Retrofit](retrofit.md). The candidate is a linked worktree of the operator's destination clone, checked out into this repository's `tmp/`. It is neither [generate's payload-only tree](generate.md#step-3--materialize-the-candidate) nor an update's in-place branch; `docs/adrs/0005-stage-a-retrofit-locally-and-write-the-host-last.md` records why.
 
-Resolve the default branch from the API, never a local ref: a destination may lack `origin/HEAD` or use `master`.
+Resolve the default branch from the API, never a local ref: a destination may lack `origin/HEAD` or use `master`. Where `gh repo view` is unavailable or origin is a path, `git -C <clone> ls-remote --symref origin HEAD` names it, in the `ref: refs/heads/<branch>` line.
 
 ```bash
 default_branch=$(gh repo view <owner/name> --json defaultBranchRef -q .defaultBranchRef.name)

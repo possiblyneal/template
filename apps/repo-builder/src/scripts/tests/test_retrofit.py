@@ -565,22 +565,21 @@ def write_hooks(directory: Path, hooks: dict[str, str]) -> None:
 class HooksTests(unittest.TestCase):
     """The destination clone's hooks, installed after the merge and proved."""
 
-    @classmethod
-    def setUpClass(cls) -> None:
-        reason = hook_environments_unavailable()
-        if reason:
-            raise unittest.SkipTest(reason)
-
     def _merged(self, directory: str) -> Path:
         """The fixture clone once the merge landed the payload, on a feature branch.
 
         The payload itself stands in for the merged tree, because it is a tree
         its own hooks pass and the retrofit fixture's foreign layout is not.
         """
+        reason = hook_environments_unavailable()
+        if reason:
+            self.skipTest(reason)
         fixture = retrofit_fixture(directory)
         destination = Path(fixture["destination"])
         git("rm", "-rq", ".", cwd=destination)
         shutil.copytree(PAYLOAD, destination, dirs_exist_ok=True)
+        # The record a landed retrofit merge puts on the default branch.
+        (destination / ".repo-template.json").write_text("{}\n")
         git("add", "-A", cwd=destination)
         git("commit", "-q", "-m", "build: land the payload", cwd=destination)
         git("push", "-q", "origin", "main", cwd=destination)
@@ -807,7 +806,30 @@ class HooksTests(unittest.TestCase):
             result = self._hooks(destination, self._env(directory))
 
             self.assertEqual(result.returncode, 2)
-            self.assertIn("no .pre-commit-config.yaml", result.stderr)
+            self.assertIn(".repo-template.json", result.stderr)
+
+    def test_reports_not_applicable_where_the_payload_ships_no_hooks_config(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = retrofit_fixture(directory)
+            destination = Path(fixture["destination"])
+            # The merge landed: its record is on the default branch, no hooks config.
+            (destination / ".repo-template.json").write_text("{}\n")
+            git("add", ".repo-template.json", cwd=destination)
+            git("commit", "-q", "-m", "build: land the record", cwd=destination)
+            git("push", "-q", "origin", "main", cwd=destination)
+            result = self._hooks(destination, self._env(directory))
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["outcome"], "not-applicable")
+            self.assertEqual(
+                report["reason"],
+                "the default branch carries no .pre-commit-config.yaml",
+            )
+            record = json.loads((destination.parent / "records.hooks.json").read_text())
+            self.assertEqual(record, report)
 
 
 if __name__ == "__main__":
@@ -940,7 +962,11 @@ class SweepTests(unittest.TestCase):
         git("push", "-q", "origin", f"{self.BRANCH}:main", cwd=clone)
 
     def _sweep(
-        self, directory: str, clone: Path, candidate: Path
+        self,
+        directory: str,
+        clone: Path,
+        candidate: Path,
+        repository: str = "owner/ledger",
     ) -> subprocess.CompletedProcess[str]:
         env = stub_gh(
             directory,
@@ -974,7 +1000,7 @@ class SweepTests(unittest.TestCase):
             "--default-branch",
             "main",
             "--repository",
-            "owner/ledger",
+            repository,
             "--hooks-dir",
             str(Path(directory) / "candidate-hooks"),
             "--resume-record",
@@ -1096,6 +1122,34 @@ class SweepTests(unittest.TestCase):
                 report["left_for_the_operator"][0]["reason"],
                 "contained in origin/main, but `branch -d` refused it",
             )
+
+    def test_makes_no_github_call_for_an_origin_that_is_a_path(self) -> None:
+        for origin in ("/srv/ledger", "../origin", "./origin", "remote/x"):
+            with self.subTest(origin=origin):
+                self._sweeps_a_path_origin_without_github(origin)
+
+    def _sweeps_a_path_origin_without_github(self, origin: str) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            clone, candidate = self._candidate(directory)
+            git("branch", "retrofit/old0000", cwd=clone)
+            self._merge(clone)
+            if origin == "remote/x":
+                (clone / "remote" / "x").mkdir(parents=True)
+
+            result = self._sweep(directory, clone, candidate, origin)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["stages"]["branch"], "deleted")
+            self.assertEqual(
+                report["pull_requests"],
+                {
+                    "outcome": "not-applicable",
+                    "reason": "origin is a local path, not a GitHub repository",
+                },
+            )
+            self.assertEqual(report["findings"], [])
+            self.assertEqual(gh_calls(directory), [])
 
     def test_names_a_pull_request_lookup_it_could_not_make(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1924,6 +1978,47 @@ class ReportTests(unittest.TestCase):
             self.assertEqual(filled, len(slots))
             self.assertIn("check-suite result", slots)
 
+    def test_names_a_destination_whose_origin_is_a_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            lines, _ = render_report(
+                self, directory, SUMMARY_PASS, proofs=PROOFS, repository="/srv/ledger"
+            )
+
+            self.assertIn("- Destination: /srv/ledger", lines)
+            self.assertTrue(
+                any(
+                    line.startswith("- ADR fields defaulted: [[FILL: ")
+                    for line in lines
+                )
+            )
+
+    def test_renders_a_sweep_without_pull_requests_as_not_applicable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            sweep = {
+                **SWEEP,
+                "pull_requests": {
+                    "outcome": "not-applicable",
+                    "reason": "origin is a local path, not a GitHub repository",
+                },
+                "left_for_the_operator": [],
+            }
+            lines, _ = render_report(
+                self,
+                directory,
+                SUMMARY_PASS,
+                proofs=PROOFS,
+                sweep=sweep,
+                repository="/srv/ledger",
+            )
+
+            left = next(
+                line for line in lines if line.startswith("- Left for the operator")
+            )
+            self.assertIn(
+                "pull requests: n/a (origin is a local path, not a GitHub repository)",
+                left,
+            )
+
     def test_renders_a_run_stopped_at_the_gate_as_reaching_it(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             lines, _ = render_report(
@@ -1986,6 +2081,28 @@ class ReportTests(unittest.TestCase):
             )
             self.assertTrue(lines[-1].startswith("[[FILL: "))
             self.assertIn("the unmet-bar outcome, in the Report additions shape", slots)
+
+    def test_reports_destination_hooks_not_applicable_where_the_payload_ships_none(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            lines, _ = render_report(
+                self,
+                directory,
+                SUMMARY_PASS,
+                proofs=PROOFS,
+                hooks={
+                    "operation": "hooks",
+                    "outcome": "not-applicable",
+                    "reason": "the default branch carries no .pre-commit-config.yaml",
+                },
+            )
+
+            self.assertIn(
+                "- Destination hooks after merge: n/a (no hooks config on the "
+                "default branch)",
+                lines,
+            )
 
     def test_reports_no_hooks_where_the_candidate_carries_no_config(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

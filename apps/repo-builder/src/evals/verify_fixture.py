@@ -701,6 +701,267 @@ def update(root: Path, fixture: dict[str, object], scenario: str) -> list[Check]
     return checks
 
 
+def retrofit_candidate(fixture: dict[str, object]) -> Path | None:
+    """The candidate worktree the retrofit flow staged, found the way it names it.
+
+    Step 2 adds a linked worktree of the destination clone on the branch
+    `retrofit/<first 12 of the payload commit>`, so the clone's own worktree
+    list answers where it sits without this script knowing the `tmp/` path of
+    the repository that ran the flow.
+    """
+    destination = Path(str(fixture["destination"]))
+    branch = f"refs/heads/retrofit/{str(fixture['target_commit'])[:12]}"
+    path: str | None = None
+    for line in git(destination, "worktree", "list", "--porcelain").splitlines():
+        if line.startswith("worktree "):
+            path = line.removeprefix("worktree ")
+        elif line == f"branch {branch}" and path is not None:
+            return Path(path)
+    return None
+
+
+def read_json_object(path: Path) -> dict[str, object]:
+    """A JSON object from `path`, or `{}` for a missing, unreadable or malformed file.
+
+    The checks that read a record fail on the empty answer, which is what a
+    run that wrote a broken record should score.
+    """
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return cast("dict[str, object]", value) if isinstance(value, dict) else {}
+
+
+SCRIPT_TIMEOUT_SECONDS = 600
+
+
+def run_script(candidate: Path, script: str) -> int | None:
+    """The script's exit status, or None when it does not exist or times out."""
+    path = candidate / script
+    if not path.is_file():
+        return None
+    try:
+        return subprocess.run(
+            [str(path)],
+            cwd=candidate,
+            check=False,
+            capture_output=True,
+            timeout=SCRIPT_TIMEOUT_SECONDS,
+        ).returncode
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+
+
+def exits_zero_check(candidate: Path, name: str, script: str) -> list[Check]:
+    """A script that must exist, then a script that must exit 0."""
+    return [
+        (
+            f"{script} exists",
+            (candidate / script).is_file(),
+            f"{script} is a file in the candidate",
+        ),
+        (
+            name,
+            run_script(candidate, script) == 0,
+            f"{script} exits 0 in the candidate",
+        ),
+    ]
+
+
+def names_destination_path(entry_path: str, destination_only: list[str]) -> bool:
+    """Whether an ownership path is, or is a folder above, a destination-only path.
+
+    Compared literally: `scripts/**` is a payload rule that happens to reach
+    the destination's old `scripts/build.py`, and is not an entry naming it.
+    """
+    entry = entry_path.rstrip("/")
+    return any(
+        path == entry or path.startswith(f"{entry}/") for path in destination_only
+    )
+
+
+def retrofit_record_checks(candidate: Path, fixture: dict[str, object]) -> list[Check]:
+    manifest = read_json_object(candidate / ".repo-template.json")
+    template = manifest.get("template")
+    template = template if isinstance(template, dict) else {}
+    ownership = manifest.get("ownership")
+    destination_only = cast("list[str]", fixture["destination_only_paths"])
+    ownership_names_no_destination_path = (
+        isinstance(ownership, list)
+        and bool(ownership)
+        and all(
+            isinstance(entry, dict)
+            and set(entry) == {"path", "mode"}
+            and not names_destination_path(str(entry["path"]), destination_only)
+            for entry in ownership
+        )
+        and {"path": "CLAUDE.md", "mode": "managed"} in ownership
+    )
+    unit = read_json_object(candidate / str(fixture["unit"]) / ".unit.json")
+    ships = unit.get("ships")
+    pyproject = candidate / "pyproject.toml"
+    declared = pyproject.read_text(encoding="utf-8") if pyproject.is_file() else ""
+    return [
+        (
+            "record names the target",
+            template.get("commit") == fixture["target_commit"]
+            and template.get("subtree") == fixture["subtree"],
+            "manifest template commit and subtree match fixture",
+        ),
+        (
+            "ownership names no destination path; CLAUDE.md managed",
+            ownership_names_no_destination_path,
+            (
+                "path/mode entries only, none equal to or above a destination-only path,"
+                " CLAUDE.md managed"
+            ),
+        ),
+        (
+            "unit declared as disposed",
+            unit.get("run") == "none"
+            and isinstance(ships, dict)
+            and ships.get("kind") == "none"
+            and not (candidate / "apps/app-name").exists(),
+            f"{fixture['unit']}/.unit.json is run none, ships none; no apps/app-name",
+        ),
+        (
+            "manifest tools declared, specifiers kept",
+            all(
+                text in declared
+                for text in cast("list[str]", fixture["manifest_declarations"])
+            ),
+            "pyproject.toml declares the test tool and keeps name and version",
+        ),
+    ]
+
+
+def worktrees(destination: Path) -> list[str]:
+    return [
+        line.removeprefix("worktree ")
+        for line in git(destination, "worktree", "list", "--porcelain").splitlines()
+        if line.startswith("worktree ")
+    ]
+
+
+def retrofit_common_checks(candidate: Path, fixture: dict[str, object]) -> list[Check]:
+    remote = Path(str(fixture["destination_remote"]))
+    remote_refs = git(
+        remote, "for-each-ref", "--format=%(refname) %(objectname)"
+    ).splitlines()
+    return [
+        ("candidate exists", True, str(candidate)),
+        (
+            "no push",
+            sorted(remote_refs) == sorted(cast("list[str]", fixture["remote_refs"])),
+            "the bare remote holds exactly the refs it held before the run",
+        ),
+        (
+            "no allowance written",
+            not (candidate / ".structure-allow").exists(),
+            "candidate has no .structure-allow",
+        ),
+    ]
+
+
+def locate_candidate(fixture: dict[str, object]) -> Path | list[Check]:
+    candidate = retrofit_candidate(fixture)
+    if candidate is None or not candidate.is_dir():
+        return [("candidate exists", False, "no retrofit worktree on the clone")]
+    return candidate
+
+
+def retrofit_green(fixture: dict[str, object]) -> list[Check]:
+    candidate = locate_candidate(fixture)
+    if isinstance(candidate, list):
+        return candidate
+    moved_hashes = cast("dict[str, str]", fixture["moved_hashes"])
+    unit = candidate / str(fixture["unit"])
+    records = cast("dict[str, str]", fixture["records"])
+    return [
+        *retrofit_common_checks(candidate, fixture),
+        *exits_zero_check(candidate, "check surface green", "scripts/check"),
+        *exits_zero_check(candidate, "layout audit passes", "scripts/structure"),
+        (
+            "moved files byte-identical",
+            all(
+                (unit / old).is_file() and digest(unit / old) == expected
+                for old, expected in moved_hashes.items()
+            ),
+            f"moved blobs match the recorded hashes under {fixture['unit']}",
+        ),
+        (
+            "records migrated",
+            git(candidate, "ls-files", records["old_dir"]) == ""
+            and any(
+                (candidate / records["new_dir"]).glob(f"*{records['name_fragment']}*")
+            ),
+            (
+                f"no tracked file under {records['old_dir']}; its record sits in"
+                f" {records['new_dir']}"
+            ),
+        ),
+        *retrofit_record_checks(candidate, fixture),
+    ]
+
+
+def retrofit_red(fixture: dict[str, object]) -> list[Check]:
+    candidate = locate_candidate(fixture)
+    if isinstance(candidate, list):
+        return candidate
+    destination = Path(str(fixture["destination"]))
+    branch = f"retrofit/{str(fixture['target_commit'])[:12]}"
+    heads = git(
+        destination, "for-each-ref", "--format=%(refname:short)", "refs/heads"
+    ).splitlines()
+    status = run_script(candidate, "scripts/check")
+    behavior = cast("list[dict[str, str]]", fixture["unchanged_behavior"])
+    unmovable = str(fixture["unmovable_file"])
+    return [
+        *retrofit_common_checks(candidate, fixture),
+        (
+            "scripts/check exists",
+            (candidate / "scripts/check").is_file(),
+            "scripts/check is a file in the candidate",
+        ),
+        (
+            "bar unmet",
+            status is not None and status != 0,
+            "scripts/check exists and exits non-zero in the candidate",
+        ),
+        (
+            "unmovable file left",
+            (candidate / unmovable).is_file(),
+            f"root {unmovable} still sits in the candidate",
+        ),
+        (
+            "destination untouched",
+            git(destination, "status", "--porcelain") == ""
+            and git(destination, "rev-parse", "refs/heads/main")
+            == fixture["original_main"]
+            and not (destination / ".repo-template.json").exists(),
+            "clone worktree clean, main at its original commit, no record in the clone",
+        ),
+        (
+            "candidate is the only tree written",
+            sorted(heads) == sorted(["main", branch])
+            and len(worktrees(destination)) == 2,
+            "clone holds only main and the candidate branch, and one extra worktree",
+        ),
+        (
+            "failing behavior unchanged",
+            bool(behavior)
+            and all(
+                (candidate / item["path"]).is_file()
+                and item["text"]
+                in (candidate / item["path"]).read_text(encoding="utf-8")
+                for item in behavior
+            ),
+            "divisor 10 and the 0.01 assertion remain",
+        ),
+    ]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("fixture", type=Path, help="path to fixture.json")
@@ -714,6 +975,10 @@ def main() -> int:
         checks = generation_multi(fixture_path.parent, fixture)
     elif scenario == "generation-handoff":
         checks = generation_handoff(fixture_path.parent, fixture)
+    elif scenario == "retrofit":
+        checks = retrofit_green(fixture)
+    elif scenario == "retrofit-red":
+        checks = retrofit_red(fixture)
     else:
         checks = update(fixture_path.parent, fixture, scenario)
     result = {

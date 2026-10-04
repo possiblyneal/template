@@ -24,7 +24,7 @@ Where the confirmed pair and the check surface disagree, report the disagreement
 
 **The map is the operator's to confirm.** Present every proposed unit with: its name and the name's source, the evidence for each half of the delivery test, the proposed run and ship pair with its evidence, any domains with each boundary, and every declared-but-not-built deployable. A rejected map with no correction stops the flow and is reported.
 
-**This step moves nothing**: no `apps/<name>/` created, no tree relocated, no `.unit.json` written. Step 6 owns every move; step 7 writes the record and the declarations against settled paths.
+**This step moves nothing**: no `apps/<name>/` created, no tree relocated, no `.unit.json` written. Step 6 owns every move; [step 7 writes the record and the declarations](retrofit-step-7-bar.md#the-records-and-the-collisions) against settled paths.
 
 ## What the decomposition record will say
 
@@ -32,5 +32,5 @@ Step 7 writes it; its content is decided here.
 
 - **One record covers the whole decomposition**, not one per unit as [generate's Step 7 — Derive the application boundaries](generate.md#step-7--derive-the-application-boundaries) writes. `docs/adrs/0005-stage-a-retrofit-locally-and-write-the-host-last.md` records why.
 - **The choke point is stated as observed, not chosen**, per unit. Record *none of these bind* as a finding rather than omitting it, so an absent constraint is distinguishable from an unmeasured one.
-- **Existing architecture records are normalized to the payload's frontmatter**, carrying corresponding destination fields across. Leave `generated` empty: the retrofit relocated the decision, not authored it. Location: [Architecture records live at the root documentation path](lifecycle.md#architecture-records-live-at-the-root-documentation-path).
+- **Existing architecture records are normalized to the payload's frontmatter**, carrying corresponding destination fields across. Leave `generated` empty: the retrofit relocated the decision, not authored it. Fill every field the payload ADR template has and the destination's ADR lacks, not only `status` and `tags`, only from evidence in the ADR itself; with none, use the template's default for it (`status: proposed`, `tags: []`) and report the field as defaulted. Location: [Architecture records live at the root documentation path](lifecycle.md#architecture-records-live-at-the-root-documentation-path).
 - **The manifest records unit names and nothing else**, per [Manifest](lifecycle.md#manifest). Run and ship facts live in the unit declarations; the evidence lives in this record.
