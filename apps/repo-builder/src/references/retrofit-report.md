@@ -12,7 +12,7 @@ python3 apps/repo-builder/src/scripts/retrofit.py report \
   [--pull-request <URL>] [--stopped "<what remains>"] [--resumed]
 ```
 
-It requires the proofs record and `<records>.check.txt` and reads every other record that exists; an absent record renders as a subcommand that did not run. It writes `<records>.report.md` and reports `path` and `slots`, the judgement lines left as `[[FILL: <what goes here>]]`. Fill every slot from this run's decisions, delete optional slots that do not apply, and change no rendered line; a wrong rendered line is a defect in its record. The finished report holds no `[[FILL:`.
+`--repository` is `<owner>/<repository>`, or the origin path where origin is one. It requires the proofs record and `<records>.check.txt` and reads every other record that exists; an absent record renders as a subcommand that did not run. It writes `<records>.report.md` and reports `path` and `slots`, the judgement lines left as `[[FILL: <what goes here>]]`. Fill every slot from this run's decisions, delete optional slots that do not apply, and change no rendered line; a wrong rendered line is a defect in its record. The finished report holds no `[[FILL:`.
 
 Three lines differ from the shape:
 
@@ -33,18 +33,19 @@ Under **Reconciliation**:
 
 Under **Application boundaries**:
 
+- ADR fields defaulted: <ADR path>: <field> set to the payload template's <value>, no evidence in the ADR | none
 - Unit map: <unit>: name from <the source it came from>, built by <evidence>, installed by <evidence>; run <value> and ships <value>, each <proposed from <evidence>, confirmed | corrected by the operator>; domains <names and the boundary the destination draws for each, or none>
 - Ships nothing for want of an adapter: <unit>: <language> has no packaging adapter | none
 - Declared but not built: <deployable>: declared by <the descriptor naming it>, filed under <the owning unit> | none
 
 Under **Verification**:
 
-- Untracked at the bar: none | <paths>: <the ignore rule step 6 replaced>, disposed by <the operator's decision>
+- Untracked at the bar: none | <paths>: <the ignore rule step 6 replaced>, disposed by <the operator's decision> | <paths>: generated output, the payload ships no `.gitignore`, removed
 - Tool declaration: <manifest>: added <tool at the template's floor> | kept <the specifier the destination already declared> | declined by the operator, so <capability> cannot reach the bar | nothing missing
 - Configuration boundary: one row per language — <manifest> carries <the boundary the list names> | already declared by the destination, kept | the list names none for <language>, whose tools walk upward
 - Autofix settings resolution: every tool resolved inside the candidate | SKIPPED: <tool> resolved `<path>`, outside the candidate — or no settings path could be read for <tool> — so no pass ran and the bar was measured under those settings
-- Destination fix prepared (unmet bar only): branch <name> in <clone>, <commit> clearing <rule> at <paths>, worktree removed; <the rule count before and after under the candidate's target version>, read <by flag | in the candidate, revert verified clean>, <the harness delta | no harness exists in the destination> | partly prepared: <the same>, and left outstanding: <file and rule for each>, because <what the second reading still showed | the path exists only in the candidate> | nothing to prepare: <the capability was unavailable rather than failing> | nothing prepared: <tool> resolved `<path>`, outside the fix worktree — or no path could be read for it — so every finding is left outstanding, worktree removed
-- Destination fix published (unmet bar only): push and pull request offered and awaiting the gate | authorized and performed, at <URL>, merged at <sha> and the run resumed | authorized and performed, at <URL>, left open because <what kept it from merging> | declined or never answered, branch left local | not reached, because nothing was prepared
+- Destination fix prepared (unmet bar only): branch <name> in <clone>, <commit> clearing <rule> at <paths>, worktree removed; <the rule count before and after under the candidate's target version>, read <by flag | in the candidate, revert verified clean>, <the harness delta | no harness exists in the destination> | partly prepared: <the same>, and left outstanding: <file and rule for each>, because <what the second reading still showed | the path exists only in the candidate> | nothing to prepare: <the capability was unavailable rather than failing> | nothing prepared: <tool> resolved `<path>`, outside the fix worktree — or no path could be read for it — so every finding is left outstanding, worktree removed | declined by the operator, so no worktree or branch was prepared
+- Destination fix published (unmet bar only): push and pull request offered and awaiting the gate | authorized and performed, at <URL>, merged at <sha> and the run resumed | authorized and performed, at <URL>, left open because <what kept it from merging> | declined or never answered, branch left local | not reached, because nothing was prepared or the operator declined the fix
 
 Under **Hosted writes, irreversible**:
 

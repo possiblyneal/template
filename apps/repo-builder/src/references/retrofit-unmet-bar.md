@@ -2,7 +2,7 @@
 
 Read from [Step 7 — Dispose the collisions, write both records, meet the bar](retrofit-step-7-bar.md#the-bar) only when the bar is unmet. This continues that step: every step number names a file listed in [`retrofit.md`](retrofit.md), and the pass and the configuration guard named here are [the autofix pass](retrofit-step-7-bar.md#the-autofix-pass).
 
-**The flow prepares that fix rather than handing back a list.** Write it against the destination's pre-retrofit layout, in a second linked worktree branched off `origin/<default-branch>` the way step 2 branched the candidate. Never use the clone's own checkout: step 2 promises it stays untouched and step 1 hard-stops on a dirty one.
+**The flow prepares that fix rather than handing back a list**, unless the invocation or the operator declines a fix for the debt: then it prepares no worktree and no branch, and the report says the operator declined it. Write it against the destination's pre-retrofit layout, in a second linked worktree branched off `origin/<default-branch>` the way step 2 branched the candidate. Never use the clone's own checkout: step 2 promises it stays untouched and step 1 hard-stops on a dirty one.
 
 - The branch is `retrofit/fix-<first 12 of the payload commit>` and the worktree `tmp/<repository-name>-fix`. Both are derived, not chosen: re-invoking the flow is the resume, and a fresh name would leave it unable to find the first fix. The `retrofit/*` name lets step 2's reporting see it on a resumed run.
 - Reuse a branch that already exists: `git -C <clone> worktree add` without `-b`, since `-b` fails on an existing branch.
