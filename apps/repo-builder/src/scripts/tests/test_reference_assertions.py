@@ -99,9 +99,10 @@ def unfenced_lines(path):
 def headings(path):
     """`(level, anchor, line number)` for a file's headings, as GitHub anchors them.
 
-    Closing `#`s are not part of the heading. Lowercase, drop everything but letters (any script), digits, underscores,
-    spaces and hyphens, then turn each space into a hyphen -- so ` — ` becomes
-    two hyphens. A heading whose anchor repeats gets `-1`, `-2`, ... in order.
+    Closing `#`s are not part of the heading. Lowercase, drop everything but
+    letters (any script), digits, underscores, spaces and hyphens, then turn
+    each space into a hyphen -- so ` — ` becomes two hyphens. A heading whose
+    anchor repeats gets `-1`, `-2`, ... in order.
     """
     seen = {}
     found = []
