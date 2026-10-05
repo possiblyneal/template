@@ -25,12 +25,6 @@ color: gray
   - id: i0d0
   - created: 2026-10-04
   - acceptance: ~/code/wall-collage has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
-- [ ] Make investing a git repo and retrofit it under the template | inbox #retrofit
-  - id: kr0g
-  - created: 2026-10-04
-  - acceptance: ~/code/investing is a git repo with a GitHub remote and .repo-template.json on origin/main via a merged /repo-builder retrofit PR
-
-  retrofit PR possiblyneal/investing#2 merged at 2e3dae2
 - [x] Retrofit rom-file-utils under the template | done #retrofit
   - id: s199
   - created: 2026-10-04
@@ -43,3 +37,10 @@ color: gray
   - created: 2026-10-04
   - acceptance: ~/code/curator has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
   - ended: 2026-10-04
+- [x] Make investing a git repo and retrofit it under the template | done #retrofit
+  - id: kr0g
+  - created: 2026-10-04
+  - acceptance: ~/code/investing is a git repo with a GitHub remote and .repo-template.json on origin/main via a merged /repo-builder retrofit PR
+  - ended: 2026-10-05
+
+  retrofit PR possiblyneal/investing#2 merged at 2e3dae2
