@@ -969,6 +969,22 @@ def hook_outcomes(tree: Path, default_branch: str) -> dict[str, bool]:
     }
 
 
+def landed_base(clone: Path, branch: str, action: str) -> str:
+    """The default branch's tip, refused until the retrofit's merge is on it.
+
+    The merge has landed once `.repo-template.json` is on the default branch,
+    since preflight refuses a destination already carrying one.
+    """
+    run_git(clone, "fetch", "-q", "origin", branch)
+    base = preflight.resolve_commit(clone, f"origin/{branch}")
+    if blob(clone, f"{base}:.repo-template.json") is None:
+        raise PreflightError(
+            f"origin/{branch} carries no .repo-template.json; {action} only "
+            "after the merge has landed"
+        )
+    return base
+
+
 def hooks(arguments: argparse.Namespace) -> dict[str, object]:
     """Install the destination's hooks in the operator's clone, and prove them.
 
@@ -982,13 +998,7 @@ def hooks(arguments: argparse.Namespace) -> dict[str, object]:
     if scratch.exists():
         raise PreflightError(f"the throwaway worktree path already exists: {scratch}")
     branch = arguments.default_branch
-    run_git(clone, "fetch", "-q", "origin", branch)
-    base = preflight.resolve_commit(clone, f"origin/{branch}")
-    if blob(clone, f"{base}:.repo-template.json") is None:
-        raise PreflightError(
-            f"origin/{branch} carries no .repo-template.json; install only "
-            "after the merge has landed"
-        )
+    base = landed_base(clone, branch, "install")
     if blob(clone, f"{base}:.pre-commit-config.yaml") is None:
         # A landed merge whose payload ships no hooks leaves nothing to install.
         return {
@@ -1041,30 +1051,29 @@ def hooks(arguments: argparse.Namespace) -> dict[str, object]:
 def sync(arguments: argparse.Namespace) -> dict[str, object]:
     """Bring the operator's clone onto the merge, and remove what the moves stranded.
 
-    Fast-forwards the default branch only where the clone has it checked out
-    and the merge applies without overwriting a change, then deletes each
-    directory the proofs record as emptied that the pulled tree still leaves
-    with nothing tracked. Its residue is re-read from disk first, so the record
-    names what was actually removed.
+    Fast-forwards the default branch only where the clone is clean with it
+    checked out, then deletes each directory the proofs record as emptied that
+    the pulled tree still leaves with nothing tracked. A directory holding
+    anything the proofs record did not name is left: that file arrived after
+    the plan was read, so its removal is not this flow's call.
     """
     clone = preflight.require_git_repository(arguments.clone, "clone")
+    # The proofs record's paths are relative to the top, not to a subdirectory.
+    clone = Path(git_output(clone, "rev-parse", "--show-toplevel"))
     branch = arguments.default_branch
-    run_git(clone, "fetch", "-q", "origin", branch)
-    base = preflight.resolve_commit(clone, f"origin/{branch}")
-    if blob(clone, f"{base}:.repo-template.json") is None:
-        raise PreflightError(
-            f"origin/{branch} carries no .repo-template.json; sync only "
-            "after the merge has landed"
-        )
+    base = landed_base(clone, branch, "sync")
     findings: list[str] = []
     checked_out = run_git(
         clone, "symbolic-ref", "--quiet", "--short", "HEAD", check=False
-    )
-    if checked_out.stdout.strip() != branch:
+    ).stdout.strip()
+    if checked_out != branch:
         findings.append(
-            f"the clone has {checked_out.stdout.strip() or 'a detached HEAD'} out, "
+            f"the clone has {checked_out or 'a detached HEAD'} out, "
             f"not {branch}; not pulled"
         )
+        pulled = False
+    elif git_output(clone, "status", "--porcelain", "--untracked-files=no"):
+        findings.append("the clone has uncommitted changes; not pulled")
         pulled = False
     else:
         merged = run_git(
@@ -1075,20 +1084,36 @@ def sync(arguments: argparse.Namespace) -> dict[str, object]:
             findings.append(f"fast-forward refused: {merged.stderr.strip()}")
 
     removed: list[dict[str, object]] = []
-    for item in load_required(arguments.records, "proofs")["emptied"]:
+    gone: list[str] = []
+    for item in load_required(arguments.records, "proofs")["emptied"] if pulled else []:
         path = item["path"]
         directory = clone / path
-        if (
-            not pulled
-            or not directory.is_dir()
-            or git_output(clone, "ls-files", "--", path)
+        if directory.is_symlink() or git_output(
+            clone, "ls-files", "--", f":(literal){path}"
         ):
+            continue
+        if not directory.is_dir():
+            gone.append(path)
             continue
         residue = sorted(
             str(file.relative_to(clone))
             for file in directory.rglob("*")
             if not file.is_dir()
         )
+        unplanned = [
+            file
+            for file in residue
+            if not any(
+                file == named or (named.endswith("/") and file.startswith(named))
+                for named in item["residue"]
+            )
+        ]
+        if unplanned:
+            findings.append(
+                f"{path}: not removed, since it holds {', '.join(unplanned)}, "
+                "which the plan did not name"
+            )
+            continue
         shutil.rmtree(directory)
         removed.append({"path": path, "residue": residue})
     return {
@@ -1097,6 +1122,7 @@ def sync(arguments: argparse.Namespace) -> dict[str, object]:
         "pulled": pulled,
         "head": git_output(clone, "rev-parse", "HEAD"),
         "removed": removed,
+        "gone": gone,
         "findings": findings,
     }
 
@@ -2393,11 +2419,14 @@ def verification(
 
 def emptied_line(emptied: list[dict], synced: dict) -> str:
     removed = {item["path"]: item["residue"] for item in synced.get("removed", [])}
+    gone = set(synced.get("gone", []))
     return joined(
         [
             f"{item['path']}: removed from the clone after the pull, with "
             f"{', '.join(removed[item['path']]) or 'nothing'} inside"
             if item["path"] in removed
+            else f"{item['path']}: gone after the pull"
+            if item["path"] in gone
             else f"{item['path']}: held open by {', '.join(item['residue'])}, which is "
             "the destination's own and is left in place, named under Left for the operator"
             if item["residue"]
@@ -2520,11 +2549,12 @@ def cleanup(
         left.append(f"pull requests: n/a ({swept['pull_requests']['reason']})")
     left += [str(finding) for finding in hooks_result.get("findings", [])]
     left += [str(finding) for finding in synced.get("findings", [])]
-    removed = {item["path"] for item in synced.get("removed", [])}
+    cleared = {item["path"] for item in synced.get("removed", [])}
+    cleared |= set(synced.get("gone", []))
     left += [
         f"{item['path']}: {', '.join(item['residue'])}, untracked residue a move left"
         for item in proofs["emptied"]
-        if item["residue"] and item["path"] not in removed
+        if item["residue"] and item["path"] not in cleared
     ]
     others = report.fill(
         "any other path left in place and why, or delete this entry"

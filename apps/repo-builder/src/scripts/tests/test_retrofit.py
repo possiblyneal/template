@@ -1032,6 +1032,50 @@ class SyncTests(unittest.TestCase):
             )
             self.assertTrue((clone / "src/notes.txt").is_file())
 
+    def test_leaves_a_clone_with_uncommitted_changes_untouched(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            clone = self._merged(directory)
+            with (clone / "README.md").open("a") as readme:
+                readme.write("edited\n")
+
+            report = self._sync(directory, clone)
+
+            self.assertFalse(report["pulled"])
+            self.assertEqual(
+                report["findings"], ["the clone has uncommitted changes; not pulled"]
+            )
+            self.assertTrue((clone / "src/notes.txt").is_file())
+
+    def test_keeps_a_directory_holding_a_file_the_plan_did_not_name(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            clone = self._merged(directory)
+            (clone / "src/save.dat").write_text("live\n")
+
+            report = self._sync(directory, clone)
+
+            self.assertTrue(report["pulled"])
+            self.assertEqual(report["removed"], [])
+            self.assertEqual(
+                report["findings"],
+                [
+                    (
+                        "src: not removed, since it holds src/save.dat, "
+                        "which the plan did not name"
+                    )
+                ],
+            )
+            self.assertTrue((clone / "src/save.dat").is_file())
+
+    def test_a_rerun_records_a_removed_directory_as_gone(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            clone = self._merged(directory)
+            self._sync(directory, clone)
+
+            report = self._sync(directory, clone)
+
+            self.assertEqual(report["removed"], [])
+            self.assertEqual(report["gone"], ["src", "tests"])
+
     def test_refuses_before_the_merge_has_landed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             clone = Path(retrofit_fixture(directory)["destination"])
@@ -2679,6 +2723,30 @@ class RecordedLinesTests(unittest.TestCase):
                 lines,
             )
             self.assertIn("- Operator's clone: fast-forwarded to 1234567890ab", lines)
+            self.assertFalse(
+                any("untracked residue a move left" in line for line in lines)
+            )
+
+    def test_reads_a_directory_already_gone_after_the_pull(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            proofs = {
+                **PROOFS,
+                "emptied": [{"path": "src", "residue": ["src/__pycache__/"]}],
+            }
+            synced = {
+                "pulled": True,
+                "head": "1234567890ab" + "0" * 28,
+                "removed": [],
+                "gone": ["src"],
+                "findings": [],
+            }
+            lines, _ = render_report(
+                self, directory, SUMMARY_PASS, proofs=proofs, hooks=HOOKS, sync=synced
+            )
+
+            self.assertIn(
+                "- Directories emptied by a move: src: gone after the pull", lines
+            )
             self.assertFalse(
                 any("untracked residue a move left" in line for line in lines)
             )
