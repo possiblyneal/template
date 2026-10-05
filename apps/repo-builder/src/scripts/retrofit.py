@@ -548,8 +548,9 @@ def references(arguments: argparse.Namespace) -> dict[str, object]:
     """Find tracked lines naming a moved path or a script that now has an entry.
 
     The moves come from the proofs record, unioned with those the earlier
-    references record searched: a repair can push a move below git's rename
-    threshold, and the rerun's proofs then no longer lists it. The console
+    references record searched that still hold in the candidate: a repair can
+    push a move below git's rename threshold, and the rerun's proofs then no
+    longer lists it, while a move the operator dropped is searched no more. The console
     scripts come from the units' manifests. A hit carries the replacement a fix
     would write, or the candidates where a basename or a console-script stem is
     shared and no single one is right; the flow fixes them in the candidate
@@ -558,9 +559,11 @@ def references(arguments: argparse.Namespace) -> dict[str, object]:
     """
     candidate = preflight.require_git_repository(arguments.candidate, "candidate")
     proofs_record = load_required(arguments.records, "proofs")
+    tracked_paths = set(nul_fields(candidate, "ls-files", "-z"))
     searched: dict[str, str] = {
         str(move["from"]): str(move["to"])
         for move in arguments.previous.get("moves", [])
+        if move["from"] not in tracked_paths and move["to"] in tracked_paths
     }
     searched.update(
         (str(move["from"]), str(move["to"]))
@@ -580,7 +583,7 @@ def references(arguments: argparse.Namespace) -> dict[str, object]:
     ]
 
     hits: list[dict[str, object]] = []
-    for tracked in nul_fields(candidate, "ls-files", "-z"):
+    for tracked in sorted(tracked_paths):
         if (
             is_historical(tracked)
             or tracked in copies
@@ -1694,7 +1697,8 @@ def observe_push_protection(state: dict) -> str | None:
 def observe_ruleset(state: dict) -> str | None:
     rulesets = state.get("rulesets")
     if isinstance(rulesets, list) and any(
-        ruleset.get("enforcement") == "active" for ruleset in rulesets
+        ruleset.get("target") == "branch" and ruleset.get("enforcement") == "active"
+        for ruleset in rulesets
     ):
         return ALREADY_ON
     return refused_line(rulesets)

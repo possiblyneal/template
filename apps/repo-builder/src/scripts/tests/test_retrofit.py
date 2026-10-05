@@ -2132,6 +2132,30 @@ class ReportTests(unittest.TestCase):
                 "- Branch ruleset: enabled (already set before the retrofit)", lines
             )
 
+    def test_a_tag_ruleset_is_not_a_branch_ruleset(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            lines, _ = render_report(
+                self,
+                directory,
+                SUMMARY_PASS,
+                proofs=PROOFS,
+                hosted_read={
+                    "operation": "hosted read",
+                    "visibility": "private",
+                    "rulesets": [
+                        {
+                            "id": 1,
+                            "name": "releases",
+                            "target": "tag",
+                            "enforcement": "active",
+                        }
+                    ],
+                },
+                hosted_apply={"operation": "hosted apply", "writes": {}},
+            )
+
+            self.assertIn("- Branch ruleset: not requested", lines)
+
     def test_a_disabled_ruleset_is_not_on(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             lines, _ = render_report(
@@ -2687,6 +2711,18 @@ class ReferencesTests(unittest.TestCase):
                 json.loads(second.stdout)["moves"],
                 [{"from": "tools/gen.py", "to": "docs/gen.md"}],
             )
+
+    def test_a_move_the_operator_dropped_is_not_carried_over(self) -> None:
+        files = {"README.md": "Run tools/gen.py first.\n", "docs/gen.md": "x\n"}
+        with tempfile.TemporaryDirectory() as directory:
+            self._run_references(directory, files, [("tools/gen.py", "docs/gen.md")])
+
+            # The old path is tracked again: the move was undone.
+            second = self._run_references(
+                directory, {**files, "tools/gen.py": "y\n"}, []
+            )
+            self.assertEqual(json.loads(second.stdout)["moves"], [])
+            self.assertEqual(json.loads(second.stdout)["hits"], [])
 
     def test_a_finished_runs_references_record_is_not_carried_over(self) -> None:
         files = {"README.md": "Run tools/gen.py first.\n", "docs/gen.md": "x\n"}

@@ -82,20 +82,24 @@ def unfenced_lines(path):
     """`(line number, line)` for every line outside a fenced code block.
 
     A fence may be indented, so the opener and closer are matched after
-    stripping leading space.
+    stripping leading space. A fence closes only on the marker that opened
+    it, so a ``` line inside a ~~~ block is content.
     """
-    fenced = False
+    opener = None
     for number, line in enumerate(path.read_text().splitlines(), start=1):
-        if line.lstrip().startswith(FENCE):
-            fenced = not fenced
-        elif not fenced:
+        marker = next((m for m in FENCE if line.lstrip().startswith(m)), None)
+        if opener is None and marker is not None:
+            opener = marker
+        elif marker is not None and marker == opener:
+            opener = None
+        elif opener is None:
             yield number, line
 
 
 def headings(path):
     """`(level, anchor, line number)` for a file's headings, as GitHub anchors them.
 
-    Lowercase, drop everything but letters (any script), digits, underscores,
+    Closing `#`s are not part of the heading. Lowercase, drop everything but letters (any script), digits, underscores,
     spaces and hyphens, then turn each space into a hyphen -- so ` — ` becomes
     two hyphens. A heading whose anchor repeats gets `-1`, `-2`, ... in order.
     """
@@ -106,6 +110,7 @@ def headings(path):
         if heading is None:
             continue
         text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", heading.group(2))
+        text = re.sub(r" +#+ *$", "", text)
         anchor = re.sub(r"[^\w -]", "", text.replace("`", "").strip().lower())
         anchor = anchor.replace(" ", "-")
         count = seen.get(anchor, 0)
@@ -402,6 +407,14 @@ class AnchorHelpers(unittest.TestCase):
         )
         self.assertEqual(heading_slugs(root / "a.md"), {"real"})
         self.assertEqual(broken_anchor_links([root / "a.md"]), [])
+
+    def test_closing_hashes_are_not_part_of_an_anchor(self):
+        root = self._tree({"a.md": "## Step ##\n"})
+        self.assertEqual(heading_slugs(root / "a.md"), {"step"})
+
+    def test_a_backtick_fence_inside_a_tilde_fence_is_content(self):
+        root = self._tree({"a.md": "~~~\n```\n# Fake\n~~~\n# Real\n"})
+        self.assertEqual(heading_slugs(root / "a.md"), {"real"})
 
     def test_an_extract_span_the_source_section_lacks_is_reported(self):
         root = self._tree(
