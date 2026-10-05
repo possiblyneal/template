@@ -1845,27 +1845,78 @@ def addon_adoption(report: Report, preflight_result: dict) -> None:
     report.add(
         f"- Already held: {joined(held)}"
         if held is not None
-        else f"- Already held: {report.fill('addon-shaped paths the destination brought with it, or none')}"
+        else "- Already held: unknown (preflight did not run)"
     )
 
 
+def refused_line(reading: object) -> str | None:
+    """A reading the host refused, as a settings line's value."""
+    if not isinstance(reading, dict) or "refused" not in reading:
+        return None
+    if reading["refused"] == Outcome.NOT_OFFERED:
+        return "unavailable (not offered for the plan)"
+    return f"unavailable ({reading['refused']})"
+
+
+def observed_state(write: str, state: dict) -> str | None:
+    """What `hosted read` shows of a setting `hosted apply` wrote nothing for.
+
+    None where the reading leaves the setting open to be requested, which is
+    the only case that is the operator declining it.
+    """
+    already_on = "enabled (already set before the retrofit)"
+    dependabot = state.get("dependabot", {})
+    if write == "merge-settings":
+        return already_on if state.get("merge_settings") == MERGE_SETTINGS else None
+    if write == "dependabot-alerts":
+        alerts = dependabot.get("alerts")
+        return already_on if alerts is True else refused_line(alerts)
+    if write == "security-updates":
+        updates = dependabot.get("security_updates")
+        if isinstance(updates, dict) and updates.get("enabled"):
+            return already_on
+        return refused_line(updates)
+    if write == "push-protection":
+        reading = state.get("push_protection")
+        if reading == "enabled":
+            return already_on
+        return refused_line({"refused": reading}) if reading == "not offered" else None
+    if write == "ruleset":
+        return refused_line(state.get("rulesets"))
+    if write == "runner-variable":
+        visibility, runner = state.get("visibility"), state.get("runner")
+        if visibility is not None and visibility != "private":
+            return f"not offered (the repository is {visibility})"
+        if isinstance(runner, str) and runner != "online":
+            return f"not offered (the dev runner is {runner})"
+    return None
+
+
 def setting_line(
-    name: str, outcome: object, reason: str | None, gate_reached: bool
+    name: str,
+    outcome: object,
+    reason: str | None,
+    gate_reached: bool,
+    observed: str | None,
 ) -> str:
     if outcome in (Outcome.DONE, Outcome.ALREADY_SET, Outcome.LOGGED):
         return f"- {name}: enabled"
     if not gate_reached:
         return f"- {name}: not reached (stopped before the gate)"
     if outcome is None:
-        return f"- {name}: not requested"
+        return f"- {name}: {observed or 'not requested'}"
     if outcome == Outcome.NOT_OFFERED:
         return f"- {name}: unavailable ({reason or 'not offered for the plan'})"
     return f"- {name}: unavailable ({outcome})"
 
 
-def labels_line(report: Report, labels: object) -> str:
+def labels_line(report: Report, labels: object, apply_ran: bool) -> str:
     if not isinstance(labels, dict):
-        return f"none created ({report.fill('reason no labels were created')})"
+        return (
+            f"none created ({report.fill('reason no labels were created')})"
+            if apply_ran
+            else "none created (hosted apply did not run)"
+        )
     parts = []
     if labels["created"]:
         parts.append(f"created ({', '.join(labels['created'])})")
@@ -1897,7 +1948,7 @@ def repository_settings(
     gate_reached = bool(hosted_state or apply_record) or not stopped
     report.section("### Repository settings")
     report.add(
-        f"- Destination visibility: {hosted_state.get('visibility') or report.fill('public or private, read from the API')}"
+        f"- Destination visibility: {hosted_state.get('visibility') or 'unknown (hosted read did not run)'}"
     )
     for write in HOSTED_WRITES:
         if write.setting is not None:
@@ -1907,9 +1958,12 @@ def repository_settings(
                     writes.get(write.name),
                     reasons.get(write.name),
                     gate_reached,
+                    observed_state(write.name, hosted_state)
+                    if hosted_state
+                    else "unknown (hosted read did not run)",
                 )
             )
-    labels = labels_line(report, writes.get("labels"))
+    labels = labels_line(report, writes.get("labels"), bool(apply_record))
     report.add(
         f"- Issue tracker: {report.fill('tracker, recorded in docs/agents/issue-tracker.md, shipped by the payload or kept from the destination')}; labels: {labels}"
     )
@@ -2022,6 +2076,7 @@ def verification(
     swept: dict,
     executed: dict,
     fixed: dict,
+    preflight_result: dict,
 ) -> None:
     fill = report.fill
     copy, purity = proofs["copy"], proofs["rename_purity"]
@@ -2031,7 +2086,7 @@ def verification(
         for row in failing(rows):
             report.add(*(f"  - {row.check}: {finding}" for finding in row.findings))
     report.add(
-        candidate_hooks_line(report, proofs, swept),
+        candidate_hooks_line(proofs, swept, preflight_result),
         f"- Copied paths byte-identical to their source: {copy['identical']}/{copy['total']}; "
         "the rest are the authored surface, under File list. An overridden path is "
         "in neither count, under Reconciliation instead",
@@ -2115,23 +2170,29 @@ def reverted_line(report: Report, fixed: dict) -> str:
     )
 
 
-def candidate_hooks_line(report: Report, proofs: dict, swept: dict) -> str:
+def candidate_hooks_line(proofs: dict, swept: dict, preflight_result: dict) -> str:
     if not proofs["candidate"]["pre_commit_config"]:
         return (
             "- Hooks: none installed, because the candidate carries no "
             "`.pre-commit-config.yaml` to read hook types from"
         )
     hooks_dir = swept.get("scratch", {}).get("hooks_dir")
-    clone = swept.get("clone", {}).get("path")
+    clone = swept.get("clone", {}).get("path") or preflight_result.get(
+        "destination", {}
+    ).get("path")
     return (
-        f"- Hooks: installed at worktree scope into {hooks_dir or report.fill('the candidate hooks directory')}; "
-        f"`extensions.worktreeConfig` set on {clone or report.fill('the clone')} and left set"
+        "- Hooks: installed at worktree scope into "
+        f"{hooks_dir or 'a directory the sweep records (sweep did not run)'}; "
+        f"`extensions.worktreeConfig` set on {clone or 'the clone (preflight did not run)'} and left set"
     )
 
 
-def candidate_line(report: Report, swept: dict) -> str:
+def candidate_line(proofs: dict, swept: dict) -> str:
     if not swept:
-        return f"- Candidate: left standing at {report.fill('candidate path')}, because the flow stopped and resumes from it"
+        return (
+            f"- Candidate: left standing at {proofs['candidate']['path']}, "
+            "because the flow stopped and resumes from it"
+        )
     candidate, stages = swept["candidate"], swept["stages"]
     if stages.get("worktree") not in ("done", "absent"):
         return f"- Candidate: left standing at {candidate['path']}, because its removal was refused"
@@ -2145,7 +2206,7 @@ def candidate_line(report: Report, swept: dict) -> str:
 
 def cleanup(report: Report, swept: dict, hooks_result: dict, proofs: dict) -> None:
     report.section("### Cleanup")
-    report.add(candidate_line(report, swept))
+    report.add(candidate_line(proofs, swept))
     if swept:
         scratch = [
             f"{path}: {swept['stages'].get(stage)}"
@@ -2208,7 +2269,8 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
     reconciliation(report, proofs)
     application_boundaries(report, proofs)
     file_list(report, proofs)
-    addon_adoption(report, load(prefix, "preflight"))
+    preflight_result = load(prefix, "preflight")
+    addon_adoption(report, preflight_result)
     repository_settings(
         report, load(prefix, "hosted-read"), apply_record, arguments.stopped
     )
@@ -2223,6 +2285,7 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
         swept,
         load(prefix, "facts"),
         load(prefix, "autofix"),
+        preflight_result,
     )
     cleanup(report, swept, hooks_result, proofs)
     if arguments.resumed:

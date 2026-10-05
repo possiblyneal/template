@@ -95,7 +95,7 @@ Two flows add lines to this shape rather than filling it as given, and each keep
 - <addons offered and not taken, on one line>
 
 ### Repository settings
-- <setting>: enabled | unavailable (<reason>) | not requested | not reached (stopped before the gate)
+- <setting>: enabled (already set before the retrofit, retrofit only) | enabled | unavailable (<reason>) | not offered (<the condition that failed>, runner variable) | not requested | not reached (stopped before the gate)
 - Drift (update and adopt): <setting>: <current> -> <proposed>: patched | declined by user | none found | not checked (<reason>)
 - Merge settings overwritten (generate into existing content only): <setting>: <prior value> -> <applied value> | declined by user, recorded in `generation.features`
 - Issue tracker: <GitHub | GitLab | local markdown | other>, recorded in `docs/agents/issue-tracker.md`, shipped by the payload | kept from the destination; labels: created (<names>) | renamed to the payload's spelling (<old -> new>; label search is case-sensitive, so anything pinned to the old string stops matching) | already present | none created (<reason>)
