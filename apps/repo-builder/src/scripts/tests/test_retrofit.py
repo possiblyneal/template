@@ -2033,6 +2033,66 @@ class ReportTests(unittest.TestCase):
             self.assertIn("- Runner variable: not requested", lines)
             self.assertNotIn("not reached", "\n".join(lines))
 
+    def test_renders_settings_nothing_was_written_for_from_the_hosted_read(
+        self,
+    ) -> None:
+        hosted_read = {
+            "operation": "hosted read",
+            "visibility": "private",
+            "merge_settings": {
+                "allow_merge_commit": True,
+                "allow_squash_merge": True,
+                "allow_rebase_merge": True,
+                "delete_branch_on_merge": False,
+            },
+            "dependabot": {
+                "alerts": True,
+                "security_updates": {"enabled": True, "paused": False},
+            },
+            "push_protection": "not offered",
+            "rulesets": {"refused": "not offered", "detail": "Upgrade (HTTP 403)"},
+            "runner": "absent",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            lines, _ = render_report(
+                self,
+                directory,
+                SUMMARY_PASS,
+                proofs=PROOFS,
+                hosted_read=hosted_read,
+                hosted_apply={"operation": "hosted apply", "writes": {}},
+            )
+
+            for line in (
+                "- Merge settings (merge commit only, head branches deleted): not requested",
+                "- Dependabot alerts: enabled (already set before the retrofit)",
+                "- Dependabot security updates: enabled (already set before the retrofit)",
+                "- Push protection: unavailable (not offered for the plan)",
+                "- Branch ruleset: unavailable (not offered for the plan)",
+                "- Runner variable: not offered (the dev runner is absent)",
+            ):
+                self.assertIn(line, lines)
+
+    def test_renders_a_runner_variable_on_a_public_destination_as_not_offered(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            lines, _ = render_report(
+                self,
+                directory,
+                SUMMARY_PASS,
+                proofs=PROOFS,
+                hosted_read={
+                    "operation": "hosted read",
+                    "visibility": "public",
+                    "runner": "online",
+                },
+            )
+
+            self.assertIn(
+                "- Runner variable: not offered (the repository is public)", lines
+            )
+
     def test_renders_a_stopped_unmet_bar_with_nothing_hosted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             lines, slots = render_report(

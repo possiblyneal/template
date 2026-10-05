@@ -1849,15 +1849,62 @@ def addon_adoption(report: Report, preflight_result: dict) -> None:
     )
 
 
+def refused_line(reading: object) -> str | None:
+    """A reading the host refused, as a settings line's value."""
+    if not isinstance(reading, dict) or "refused" not in reading:
+        return None
+    if reading["refused"] == Outcome.NOT_OFFERED:
+        return "unavailable (not offered for the plan)"
+    return f"unavailable ({reading['refused']})"
+
+
+def observed_state(write: str, state: dict) -> str | None:
+    """What `hosted read` shows of a setting `hosted apply` wrote nothing for.
+
+    None where the reading leaves the setting open to be requested, which is
+    the only case that is the operator declining it.
+    """
+    already_on = "enabled (already set before the retrofit)"
+    dependabot = state.get("dependabot", {})
+    if write == "merge-settings":
+        return already_on if state.get("merge_settings") == MERGE_SETTINGS else None
+    if write == "dependabot-alerts":
+        alerts = dependabot.get("alerts")
+        return already_on if alerts is True else refused_line(alerts)
+    if write == "security-updates":
+        updates = dependabot.get("security_updates")
+        if isinstance(updates, dict) and updates.get("enabled"):
+            return already_on
+        return refused_line(updates)
+    if write == "push-protection":
+        reading = state.get("push_protection")
+        if reading == "enabled":
+            return already_on
+        return refused_line({"refused": reading}) if reading == "not offered" else None
+    if write == "ruleset":
+        return refused_line(state.get("rulesets"))
+    if write == "runner-variable":
+        visibility, runner = state.get("visibility"), state.get("runner")
+        if visibility is not None and visibility != "private":
+            return f"not offered (the repository is {visibility})"
+        if isinstance(runner, str) and runner != "online":
+            return f"not offered (the dev runner is {runner})"
+    return None
+
+
 def setting_line(
-    name: str, outcome: object, reason: str | None, gate_reached: bool
+    name: str,
+    outcome: object,
+    reason: str | None,
+    gate_reached: bool,
+    observed: str | None,
 ) -> str:
     if outcome in (Outcome.DONE, Outcome.ALREADY_SET, Outcome.LOGGED):
         return f"- {name}: enabled"
     if not gate_reached:
         return f"- {name}: not reached (stopped before the gate)"
     if outcome is None:
-        return f"- {name}: not requested"
+        return f"- {name}: {observed or 'not requested'}"
     if outcome == Outcome.NOT_OFFERED:
         return f"- {name}: unavailable ({reason or 'not offered for the plan'})"
     return f"- {name}: unavailable ({outcome})"
@@ -1907,6 +1954,7 @@ def repository_settings(
                     writes.get(write.name),
                     reasons.get(write.name),
                     gate_reached,
+                    observed_state(write.name, hosted_state),
                 )
             )
     labels = labels_line(report, writes.get("labels"))
