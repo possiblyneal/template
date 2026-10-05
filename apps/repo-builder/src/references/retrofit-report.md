@@ -18,7 +18,7 @@ python3 apps/repo-builder/src/scripts/retrofit.py report \
 
 Every slot left after the renderer runs is one no record can fill, for the reason beside it. A value a record holds is rendered, and a defect in that line is fixed in the record's subcommand.
 
-- Reconciliation, **Conflicted** (intents each merge settled), **Superseded**, **Partially covered, not cut**: the reading of what a file did and what carries it now is the flow's, and the proofs record holds paths and classes, never intent.
+- Reconciliation, **Merged** (the payload change and destination text each merged path carries; the paths themselves are rendered), **Conflicted** (paths with competing intents the flow could not settle), **Superseded**, **Partially covered, not cut**: the reading of what a file did and what carries it now is the flow's, and the proofs record holds paths and classes, never intent.
 - **Layout plan** (corrections and declines), **Unmovable**, **Data split**, **Ignore rules the payload does not cover**: each is the operator's answer to a question the flow asked, and no subcommand records an answer.
 - **References repaired**: the rewrite is an edit the flow made by hand, and the references record is rewritten after it, so it holds only what remains.
 - Application boundaries, **ADR fields defaulted**, **Unit map**, **Ships nothing for want of an adapter**, **Declared but not built**: the evidence behind each is read from the destination's files by the flow, and the proofs record holds only the ADR paths written.

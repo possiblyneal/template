@@ -173,6 +173,7 @@ def proofs(arguments: argparse.Namespace) -> dict[str, object]:
     overridden = overrides(candidate)
     overridden_set = {entry["path"] for entry in overridden}
     identical = applied = unchanged = 0
+    identical_paths: list[str] = []
     differing: list[dict[str, object]] = []
     missing: list[str] = []
     preserved: list[str] = []
@@ -193,12 +194,14 @@ def proofs(arguments: argparse.Namespace) -> dict[str, object]:
                 preserved.append(path)
             else:
                 unchanged += 1
+                identical_paths.append(path)
             continue
         # An ignored copy is on disk only, so it is no path the branch writes.
         if not at_base and path not in excluded:
             applied += 1
         if actual == expected:
             identical += 1
+            identical_paths.append(path)
             # The destination's own version is gone, though the copy is exact.
             if at_base:
                 replaced.append(path)
@@ -250,6 +253,9 @@ def proofs(arguments: argparse.Namespace) -> dict[str, object]:
         "overridden": overridden,
         "copy": {
             "identical": identical,
+            # Every payload path whose content is the payload's, copied this
+            # run or already held: the files a rewrite must leave alone.
+            "identical_paths": sorted(identical_paths),
             "total": identical + len(differing),
             "differing": differing,
             "missing": missing,
@@ -436,12 +442,14 @@ def facts(arguments: argparse.Namespace) -> dict[str, object]:
     }
 
 
-# Records of what the tree used to be, so a mention there is correct as it stands.
+# Records of what the tree used to be, so a mention there is correct as it
+# stands: ADRs and plans at any depth, and every changelog.
 HISTORICAL_DIRECTORIES = ("docs/adrs/", "docs/plans/")
+HISTORICAL_FILE = "CHANGELOG.md"
 
 
 def is_historical(path: str) -> bool:
-    return any(
+    return Path(path).name == HISTORICAL_FILE or any(
         path.startswith(directory) or f"/{directory}" in path
         for directory in HISTORICAL_DIRECTORIES
     )
@@ -463,36 +471,100 @@ def console_scripts(candidate: Path) -> list[dict[str, str]]:
     return scripts
 
 
+# A name ends where no word character, hyphen or `.<word>` extension follows,
+# so `main.py.bak` is another file while a sentence-final period still ends one.
+NAME_END = r"(?![\w-]|\.\w)"
+
+
 def invocation_pattern(script: dict[str, str]) -> re.Pattern[str]:
     """`./<file>.py`, `python <file>.py` or `python3 <file>.py`, with any directory."""
     stems = "|".join(
         re.escape(stem) for stem in {script["stem"], script["name"].replace("-", "_")}
     )
     return re.compile(
-        r"(?:(?<![\w./-])\./|\bpython3?\s+)(?:[\w.-]+/)*(?:" + stems + r")\.py(?![\w-])"
+        r"(?:(?<![\w./-])\./|\bpython3?\s+)(?:[\w.-]+/)*(?:"
+        + stems
+        + r")\.py"
+        + NAME_END
     )
 
 
 def mention_pattern(path: str) -> re.Pattern[str]:
     # Not preceded by a path character, so a mention of the new path (which
     # ends in the old one) is not a mention of the old.
-    return re.compile(r"(?<![\w./-])(?:\./)?" + re.escape(path) + r"(?![\w-])")
+    return re.compile(r"(?<![\w./-])(?:\./)?" + re.escape(path) + NAME_END)
+
+
+def settled(kind: str, matched: str, replacements: list[str]) -> dict[str, object]:
+    """One hit; where the match could be several moves or scripts, one marked ambiguous."""
+    if len(replacements) == 1:
+        return {"kind": kind, "matched": matched, "replacement": replacements[0]}
+    return {
+        "kind": kind,
+        "matched": matched,
+        "replacement": None,
+        "ambiguous": True,
+        "candidates": replacements,
+    }
+
+
+def line_hits(
+    line: str,
+    scripts: list[tuple[dict[str, str], re.Pattern[str]]],
+    paths: list[tuple[re.Pattern[str], str]],
+) -> list[dict[str, object]]:
+    """Every hit on a line. Matches of one span are one hit, whatever claims it."""
+    invocations: dict[tuple[int, int], tuple[str, list[str]]] = {}
+    for script, pattern in scripts:
+        replacement = f"scripts/run {script['unit']} --entry {script['name']}"
+        for match in pattern.finditer(line):
+            matched, replacements = invocations.setdefault(
+                match.span(), (match.group(0), [])
+            )
+            if replacement not in replacements:
+                replacements.append(replacement)
+    moved: dict[tuple[int, int], tuple[str, list[str]]] = {}
+    for pattern, new in paths:
+        for match in pattern.finditer(line):
+            start, end = match.span()
+            if any(a <= start and end <= b for a, b in invocations):
+                continue
+            matched, replacements = moved.setdefault(match.span(), (match.group(0), []))
+            if new not in replacements:
+                replacements.append(new)
+    return [
+        settled("invocation", matched, replacements)
+        for matched, replacements in invocations.values()
+    ] + [
+        settled("moved-path", matched, replacements)
+        for matched, replacements in moved.values()
+    ]
 
 
 def references(arguments: argparse.Namespace) -> dict[str, object]:
     """Find tracked lines naming a moved path or a script that now has an entry.
 
-    The moves come from the proofs record and the console scripts from the
-    units' manifests. A hit carries the replacement a fix would write; the
-    flow fixes them in the candidate before review, and what remains is the
-    record `report` renders. ADRs and plans record the tree as it was and are
-    never searched.
+    The moves come from the proofs record, unioned with those the earlier
+    references record searched: a repair can push a move below git's rename
+    threshold, and the rerun's proofs then no longer lists it. The console
+    scripts come from the units' manifests. A hit carries the replacement a fix
+    would write, or the candidates where a basename or a console-script stem is
+    shared and no single one is right; the flow fixes them in the candidate
+    before review, and what remains is the record `report` renders. ADRs,
+    plans, changelogs and byte-identical payload copies are never searched.
     """
     candidate = preflight.require_git_repository(arguments.candidate, "candidate")
-    moves = [
+    proofs_record = load_required(arguments.records, "proofs")
+    searched: dict[str, str] = {
+        str(move["from"]): str(move["to"])
+        for move in arguments.previous.get("moves", [])
+    }
+    searched.update(
         (str(move["from"]), str(move["to"]))
-        for move in load_required(arguments.records, "proofs")["rename_purity"]["moves"]
-    ]
+        for move in proofs_record["rename_purity"]["moves"]
+    )
+    moves = list(searched.items())
+    copies = set(proofs_record.get("copy", {}).get("identical_paths", []))
     paths = [(mention_pattern(old), new) for old, new in moves] + [
         (mention_pattern(Path(old).name), new) for old, new in moves
     ]
@@ -502,42 +574,27 @@ def references(arguments: argparse.Namespace) -> dict[str, object]:
 
     hits: list[dict[str, object]] = []
     for tracked in nul_fields(candidate, "ls-files", "-z"):
-        if is_historical(tracked) or not (candidate / tracked).is_file():
+        if (
+            is_historical(tracked)
+            or tracked in copies
+            or not (candidate / tracked).is_file()
+        ):
             continue
         try:
             lines = (candidate / tracked).read_text().splitlines()
         except UnicodeDecodeError:
             continue
         for number, line in enumerate(lines, start=1):
-            claimed: list[tuple[int, int]] = []
-            found: list[dict[str, str]] = []
-            for script, pattern in scripts:
-                for match in pattern.finditer(line):
-                    claimed.append(match.span())
-                    found.append(
-                        {
-                            "kind": "invocation",
-                            "matched": match.group(0),
-                            "replacement": f"scripts/run {script['unit']} --entry {script['name']}",
-                        }
-                    )
-            for pattern, new in paths:
-                for match in pattern.finditer(line):
-                    start, end = match.span()
-                    hit = {
-                        "kind": "moved-path",
-                        "matched": match.group(0),
-                        "replacement": new,
-                    }
-                    if hit not in found and not any(
-                        a <= start and end <= b for a, b in claimed
-                    ):
-                        found.append(hit)
             hits.extend(
                 {"path": tracked, "line": number, "text": line.strip(), **hit}
-                for hit in found
+                for hit in line_hits(line, scripts, paths)
             )
-    return {"operation": "references", "candidate": str(candidate), "hits": hits}
+    return {
+        "operation": "references",
+        "candidate": str(candidate),
+        "moves": [{"from": old, "to": new} for old, new in moves],
+        "hits": hits,
+    }
 
 
 def worktree_state(candidate: Path) -> str:
@@ -1861,17 +1918,25 @@ def merged_paths(proofs: dict) -> list[str]:
     ]
 
 
-def conflicted_line(report: Report, proofs: dict) -> str:
+def merged_line(report: Report, proofs: dict) -> str:
     merged = merged_paths(proofs)
     if not merged:
-        return "- Conflicted: none"
+        return "- Merged: none"
     return (
-        f"- Conflicted: {', '.join(merged)}, each merged; "
-        f"{report.fill('the competing intents each merge settled')}"
+        f"- Merged: {', '.join(merged)}; "
+        f"{report.fill('the payload change and the destination text each carries')}"
     )
 
 
-def reconciliation(report: Report, proofs: dict, found: dict | None) -> None:
+def reference_hit_line(hit: dict) -> str:
+    where = f"{hit['path']}:{hit['line']}: `{hit['matched']}`"
+    if hit.get("ambiguous"):
+        candidates = ", ".join(f"`{candidate}`" for candidate in hit["candidates"])
+        return f"{where}, ambiguous between {candidates}"
+    return f"{where}, suggested `{hit['replacement']}`"
+
+
+def reconciliation(report: Report, proofs: dict, reference_record: dict | None) -> None:
     fill = report.fill
     moves = proofs["rename_purity"]["moves"]
     renamed = [f"{move['from']} -> {move['to']}" for move in moves]
@@ -1881,7 +1946,8 @@ def reconciliation(report: Report, proofs: dict, found: dict | None) -> None:
         f"- Applied: {proofs['applied']} payload paths, written because the destination lacked them",
         f"- Preserved: {joined(proofs['preserved'])}",
         f"- Renamed/deleted: {joined(renamed + deleted)}",
-        conflicted_line(report, proofs),
+        merged_line(report, proofs),
+        f"- Conflicted: {fill('paths with competing intents the flow could not settle, or none')}",
         f"- Superseded: {fill('each superseded path, what it did and what carries it now, or none')}",
         f"- Partially covered, not cut: {fill('script paths and the parts already covered, or none')}",
         "- Overridden: "
@@ -1902,13 +1968,8 @@ def reconciliation(report: Report, proofs: dict, found: dict | None) -> None:
         f"- References repaired: {fill('each file and the moved path rewritten in it, or none')}",
         "- References reported, not rewritten: "
         + (
-            joined(
-                [
-                    f"{hit['path']}:{hit['line']}: `{hit['matched']}`, suggested `{hit['replacement']}`"
-                    for hit in found["hits"]
-                ]
-            )
-            if found
+            joined([reference_hit_line(hit) for hit in reference_record["hits"]])
+            if reference_record
             else "unknown (references did not run)"
         ),
         f"- Ignore rules the payload does not cover: {fill('each rule and what it ignored, or none')}",
@@ -1997,11 +2058,18 @@ def observed_state(write: str, state: dict) -> str | None:
             return already_on
         return refused_line({"refused": reading}) if reading == "not offered" else None
     if write == "ruleset":
-        return refused_line(state.get("rulesets"))
+        rulesets = state.get("rulesets")
+        if isinstance(rulesets, list) and any(
+            ruleset.get("enforcement") == "active" for ruleset in rulesets
+        ):
+            return already_on
+        return refused_line(rulesets)
     if write == "runner-variable":
         visibility, runner = state.get("visibility"), state.get("runner")
         if visibility is not None and visibility != "private":
             return f"not offered (the repository is {visibility})"
+        if refused_line(runner):
+            return refused_line(runner)
         if isinstance(runner, str) and runner != "online":
             return f"not offered (the dev runner is {runner})"
     return None
@@ -2603,13 +2671,13 @@ def build_parser() -> argparse.ArgumentParser:
     executed.add_argument("--candidate", type=Path, required=True)
     executed.set_defaults(handler=facts, record="facts")
 
-    found = subparsers.add_parser(
+    referenced = subparsers.add_parser(
         "references",
         parents=[recorded],
         help="find mentions of moved paths and old invocations outside ADRs and plans",
     )
-    found.add_argument("--candidate", type=Path, required=True)
-    found.set_defaults(handler=references, record="references")
+    referenced.add_argument("--candidate", type=Path, required=True)
+    referenced.set_defaults(handler=references, record="references")
 
     fixed = subparsers.add_parser(
         "autofix",
@@ -2717,14 +2785,19 @@ def fail(message: str, status: int = 2) -> NoReturn:
     raise SystemExit(status)
 
 
+# The records whose subcommand reads its own earlier one as `arguments.previous`.
+EARLIER_RECORD_READERS = ("hosted-apply", "references")
+
+
 def main() -> int:
     arguments = build_parser().parse_args()
     record = getattr(arguments, "record", None)
-    if record == "hosted-apply":
-        # Read before the unlink, for the one step that builds on its own
-        # earlier record: `hosted apply` run again later in the same flow.
-        # One the sweep postdates belongs to a finished run, and an unreadable
-        # one, left by an interrupted write, counts as none.
+    if record in EARLIER_RECORD_READERS:
+        # Read before the unlink, for the steps that build on their own
+        # earlier record: `hosted apply` run again later in the same flow, and
+        # `references` rerun after its repairs. One the sweep postdates belongs
+        # to a finished run, and an unreadable one, left by an interrupted
+        # write, counts as none.
         earlier = record_path(arguments.records, f"{record}.json")
         sweep = record_path(arguments.records, "sweep.json")
         swept = (

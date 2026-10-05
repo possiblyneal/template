@@ -6,7 +6,7 @@ compatibility: Requires Python 3, Git, and gh for authorized GitHub repository a
 
 # Repo Builder
 
-Read `references/lifecycle.md` before acting; a retrofit reads only the sections `references/retrofit.md` lists at its top. It defines the manifest, ownership rules, how checks are run and reported, remote confirmation gates, and failure behavior, and it routes to the one flow being performed:
+Read `references/lifecycle.md` before acting; a retrofit reads no lifecycle section whole, since `references/retrofit.md` states the rules it needs inline, each with an anchor link to the section for the reasoning. It defines the manifest, ownership rules, how checks are run and reported, remote confirmation gates, and failure behavior, and it routes to the one flow being performed:
 
 - `references/generate.md` — build a repository from the payload, including into a destination that already has content
 - `references/update.md` — carry a bounded template delta into a repository already generated from it

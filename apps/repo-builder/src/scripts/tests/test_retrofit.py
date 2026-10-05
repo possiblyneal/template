@@ -135,6 +135,20 @@ class ProofsTests(unittest.TestCase):
             report = json.loads(self._proofs(fixture).stdout)
 
             self.assertEqual(report["replaced"], ["docs/LESSONS.md"])
+            self.assertIn("docs/LESSONS.md", report["copy"]["identical_paths"])
+
+    def test_lists_every_byte_identical_copy_by_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = retrofit_fixture(directory)
+            self._overlay(fixture)
+            report = json.loads(self._proofs(fixture).stdout)
+
+            paths = report["copy"]["identical_paths"]
+            self.assertEqual(paths, sorted(paths))
+            self.assertEqual(
+                len(paths), report["copy"]["identical"] + report["unchanged"]
+            )
+            self.assertNotIn("scripts/check", paths)
 
     def test_accounts_for_applied_emptied_and_untriggered_paths(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -2074,6 +2088,73 @@ class ReportTests(unittest.TestCase):
             ):
                 self.assertIn(line, lines)
 
+    def test_a_refused_runner_reading_is_not_a_decline(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            lines, _ = render_report(
+                self,
+                directory,
+                SUMMARY_PASS,
+                proofs=PROOFS,
+                hosted_read={
+                    "operation": "hosted read",
+                    "visibility": "private",
+                    "runner": {"refused": "permissions gap", "detail": "403"},
+                },
+                hosted_apply={"operation": "hosted apply", "writes": {}},
+            )
+
+            self.assertIn("- Runner variable: unavailable (permissions gap)", lines)
+
+    def test_an_active_ruleset_is_already_on(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            lines, _ = render_report(
+                self,
+                directory,
+                SUMMARY_PASS,
+                proofs=PROOFS,
+                hosted_read={
+                    "operation": "hosted read",
+                    "visibility": "private",
+                    "rulesets": [
+                        {
+                            "id": 1,
+                            "name": "main",
+                            "target": "branch",
+                            "enforcement": "active",
+                        }
+                    ],
+                },
+                hosted_apply={"operation": "hosted apply", "writes": {}},
+            )
+
+            self.assertIn(
+                "- Branch ruleset: enabled (already set before the retrofit)", lines
+            )
+
+    def test_a_disabled_ruleset_is_not_on(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            lines, _ = render_report(
+                self,
+                directory,
+                SUMMARY_PASS,
+                proofs=PROOFS,
+                hosted_read={
+                    "operation": "hosted read",
+                    "visibility": "private",
+                    "rulesets": [
+                        {
+                            "id": 1,
+                            "name": "main",
+                            "target": "branch",
+                            "enforcement": "disabled",
+                        }
+                    ],
+                },
+                hosted_apply={"operation": "hosted apply", "writes": {}},
+            )
+
+            self.assertIn("- Branch ruleset: not requested", lines)
+
     def test_renders_a_runner_variable_on_a_public_destination_as_not_offered(
         self,
     ) -> None:
@@ -2402,7 +2483,8 @@ class RecordedLinesTests(unittest.TestCase):
             for line in (
                 "- Applied: 58 payload paths, written because the destination lacked them",
                 "- Preserved: .gitignore",
-                "- Conflicted: CLAUDE.md, each merged; [[FILL: the competing intents each merge settled]]",
+                "- Merged: CLAUDE.md; [[FILL: the payload change and the destination text each carries]]",
+                "- Conflicted: [[FILL: paths with competing intents the flow could not settle, or none]]",
                 "- Overridden: README.md (the product's own front page)",
                 "- ADRs written: docs/adrs/0001-one-ledger.md",
                 (
@@ -2555,6 +2637,171 @@ class ReferencesTests(unittest.TestCase):
 
             self.assertFalse({p for p in paths if p.startswith("docs/adrs/")})
             self.assertFalse({p for p in paths if p.startswith("docs/plans/")})
+
+    def _run_references(
+        self,
+        directory: str,
+        files: dict[str, str],
+        moves: list[tuple[str, str]],
+        proofs: dict[str, object] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        """Run `references` over `files`, tracked, with `moves` as the proofs record."""
+        candidate = Path(directory) / "candidate"
+        for name, text in files.items():
+            (candidate / name).parent.mkdir(parents=True, exist_ok=True)
+            (candidate / name).write_text(text)
+        if not (candidate / ".git").exists():
+            git("init", "-q", "-b", "main", cwd=candidate)
+        git("add", "-A", cwd=candidate)
+        prefix = Path(directory) / "records"
+        Path(f"{prefix}.proofs.json").write_text(
+            json.dumps(
+                proofs
+                or {
+                    "rename_purity": {"moves": [{"from": a, "to": b} for a, b in moves]}
+                }
+            )
+        )
+        return run(
+            "references", "--records", str(prefix), "--candidate", str(candidate)
+        )
+
+    def test_a_move_a_later_proofs_lost_is_still_searched(self) -> None:
+        files = {"README.md": "Run tools/gen.py first.\n", "docs/gen.md": "x\n"}
+        with tempfile.TemporaryDirectory() as directory:
+            first = self._run_references(
+                directory, files, [("tools/gen.py", "docs/gen.md")]
+            )
+            self.assertEqual(first.returncode, 0, first.stderr)
+            self.assertEqual(
+                json.loads(first.stdout)["moves"],
+                [{"from": "tools/gen.py", "to": "docs/gen.md"}],
+            )
+
+            # Repairs pushed the move under git's rename threshold.
+            second = self._run_references(directory, files, [])
+            hits = json.loads(second.stdout)["hits"]
+            self.assertEqual([h["matched"] for h in hits], ["tools/gen.py"])
+            self.assertEqual(
+                json.loads(second.stdout)["moves"],
+                [{"from": "tools/gen.py", "to": "docs/gen.md"}],
+            )
+
+    def test_a_finished_runs_references_record_is_not_carried_over(self) -> None:
+        files = {"README.md": "Run tools/gen.py first.\n", "docs/gen.md": "x\n"}
+        with tempfile.TemporaryDirectory() as directory:
+            self._run_references(directory, files, [("tools/gen.py", "docs/gen.md")])
+            prefix = Path(directory) / "records"
+            Path(f"{prefix}.sweep.json").write_text("{}")
+            future = Path(f"{prefix}.references.json").stat().st_mtime + 10
+            os.utime(f"{prefix}.sweep.json", (future, future))
+
+            second = self._run_references(directory, files, [])
+            self.assertEqual(json.loads(second.stdout)["hits"], [])
+
+    def test_a_basename_two_moves_share_is_one_ambiguous_hit(self) -> None:
+        files = {
+            "README.md": "Edit util.py, or lib/util.py.\n",
+            "apps/a/src/util.py": "",
+            "apps/b/src/util.py": "",
+        }
+        moves = [
+            ("lib/util.py", "apps/a/src/util.py"),
+            ("x/util.py", "apps/b/src/util.py"),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            result = self._run_references(directory, files, moves)
+            hits = json.loads(result.stdout)["hits"]
+
+            self.assertEqual(
+                [(h["matched"], h["replacement"], h.get("ambiguous")) for h in hits],
+                [
+                    ("lib/util.py", "apps/a/src/util.py", None),
+                    ("util.py", None, True),
+                ],
+            )
+            self.assertEqual(
+                hits[1]["candidates"], ["apps/a/src/util.py", "apps/b/src/util.py"]
+            )
+
+    def test_a_console_script_stem_shared_across_units_is_ambiguous(self) -> None:
+        files = {
+            "README.md": "Run ./main.py now.\n",
+            "apps/a/pyproject.toml": '[project.scripts]\na-cli = "a.main:main"\n',
+            "apps/b/pyproject.toml": '[project.scripts]\nb-cli = "b.main:main"\n',
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            hits = json.loads(self._run_references(directory, files, []).stdout)["hits"]
+
+            self.assertEqual(len(hits), 1)
+            self.assertEqual(hits[0]["kind"], "invocation")
+            self.assertIsNone(hits[0]["replacement"])
+            self.assertTrue(hits[0]["ambiguous"])
+            self.assertEqual(
+                hits[0]["candidates"],
+                ["scripts/run a --entry a-cli", "scripts/run b --entry b-cli"],
+            )
+
+    def test_a_name_followed_by_an_extension_is_not_a_mention(self) -> None:
+        files = {
+            "README.md": (
+                "Keep tools/main.py.bak and ./main.py.bak.\n"
+                "See tools/main.py.\n"
+                "Then main.py, and python main.py.\n"
+            ),
+            "apps/t/pyproject.toml": '[project.scripts]\nmain = "t.main:main"\n',
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            hits = json.loads(
+                self._run_references(
+                    directory, files, [("tools/main.py", "apps/t/src/main.py")]
+                ).stdout
+            )["hits"]
+
+            self.assertEqual(
+                [(h["line"], h["matched"]) for h in hits],
+                [(2, "tools/main.py"), (3, "python main.py"), (3, "main.py")],
+            )
+
+    def test_payload_copies_and_changelogs_are_not_searched(self) -> None:
+        files = {
+            "README.md": "See REPORT.md.\n",
+            "docs/copy.md": "See REPORT.md.\n",
+            "CHANGELOG.md": "Moved REPORT.md.\n",
+            "apps/t/CHANGELOG.md": "Moved REPORT.md.\n",
+            "docs/report.md": "x\n",
+        }
+        proofs = {
+            "rename_purity": {"moves": [{"from": "REPORT.md", "to": "docs/report.md"}]},
+            "copy": {"identical_paths": ["docs/copy.md"]},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            result = self._run_references(directory, files, [], proofs)
+            hits = json.loads(result.stdout)["hits"]
+
+            self.assertEqual({h["path"] for h in hits}, {"README.md"})
+
+    def test_report_renders_an_ambiguous_hit_with_its_candidates(self) -> None:
+        hit = {
+            "path": "README.md",
+            "line": 1,
+            "text": "Edit util.py",
+            "kind": "moved-path",
+            "matched": "util.py",
+            "replacement": None,
+            "ambiguous": True,
+            "candidates": ["apps/a/src/util.py", "apps/b/src/util.py"],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            lines, _ = render_report(
+                self, directory, SUMMARY_PASS, proofs=PROOFS, references={"hits": [hit]}
+            )
+
+            self.assertIn(
+                "- References reported, not rewritten: README.md:1: `util.py`, "
+                "ambiguous between `apps/a/src/util.py`, `apps/b/src/util.py`",
+                lines,
+            )
 
     def test_report_renders_the_remaining_hits(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -76,7 +76,7 @@ python3 apps/repo-builder/src/scripts/retrofit.py references \
   --candidate <candidate> --records <records>
 ```
 
-It reads the proofs record's moves and each unit's `[project.scripts]`, and records `hits` under `<records>.references.json`: `path`, `line`, `text`, `kind` (`moved-path` or `invocation`), `matched` and the suggested `replacement`. Fix the hits, stage, run `normalize` and `proofs` again, then run `references` again so the record holds only what remains. A repaired moved file can drop below git's rename threshold, which the second `proofs` shows.
+It reads the proofs record's moves and each unit's `[project.scripts]`, and records `hits` under `<records>.references.json`: `path`, `line`, `text`, `kind` (`moved-path` or `invocation`), `matched` and the suggested `replacement` (null on a hit marked `ambiguous`, which lists its `candidates` instead), beside the `moves` it searched. Fix the hits, stage, run `normalize` and `proofs` again, then run `references` again so the record holds only what remains. A repaired moved file can drop below git's rename threshold, which the second `proofs` shows; the rerun keeps searching the moves its earlier record held.
 
 **Commit everything this flow wrote** with the message in a file beside the candidate and `git commit -F <file>`; a message passed by process substitution has landed empty.
 
