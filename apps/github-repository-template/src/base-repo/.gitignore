@@ -34,6 +34,11 @@ tmp/*
 *.tmp
 *.temp
 
+# The tasks CLI's tracker: the list and the git repository holding its
+# history. Personal to whoever runs it, not part of the repo.
+/TASKS.md
+/.tasks.git
+
 # Logs
 *.log
 logs/
