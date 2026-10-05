@@ -5,10 +5,6 @@ color: gray
   - id: dhk4
   - created: 2026-10-04
   - acceptance: ~/code/agentmemory-sqlite has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
-- [ ] Retrofit inference-runtime-broker under the template | inbox #retrofit
-  - id: 3k8d
-  - created: 2026-10-04
-  - acceptance: ~/code/inference-runtime-broker has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
 - [ ] Retrofit medical-researcher under the template | inbox #retrofit
   - id: fuzc
   - created: 2026-10-04
@@ -44,3 +40,8 @@ color: gray
   - ended: 2026-10-05
 
   retrofit PR possiblyneal/investing#2 merged at 2e3dae2
+- [x] Retrofit inference-runtime-broker under the template | done #retrofit
+  - id: 3k8d
+  - created: 2026-10-04
+  - acceptance: ~/code/inference-runtime-broker has .repo-template.json on origin/main via a merged /repo-builder retrofit PR
+  - ended: 2026-10-05
