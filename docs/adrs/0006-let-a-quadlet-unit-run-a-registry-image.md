@@ -4,7 +4,7 @@ title: Let a Quadlet Unit Run a Registry Image It Does Not Build
 description: A unit declaring ships quadlet may hold only a .container whose Image is a fully qualified registry reference; a .build is required only for an image the deploy host itself must produce.
 scope: [global]
 tags: [build-and-release, deployment]
-generated: { by: "agent/claude-opus-5-5", at: "2026-10-05T00:00:00Z" }
+generated: { by: "agent/claude-opus-5-5", at: "2026-10-05T18:41:06Z" }
 superseded_by:
 status: accepted
 ---
@@ -18,7 +18,9 @@ status: accepted
 qualified registry reference: the part before the first `/` carries a `.` or a `:`
 and is not `localhost`. A `.build` that is present is validated as before, and an
 image named `localhost/...` or by a bare name must still be produced by a `.build`
-there.
+there. A registry on the deploy host (`localhost:5000/...`) counts as a registry. A
+quadlet `.image` unit (`Image=foo.image`) is not accepted; it is refused as a bare
+name, as it was before this record.
 
 This narrows one clause of `docs/adrs/0001-declare-unit-delivery-as-two-facts.md`,
 which describes a quadlet unit as a `.build` and `.container` pair that systemd and
@@ -46,6 +48,8 @@ first.
   declaration would say the unit ships nothing when its quadlet is its delivery.
 - **Accept any `Image=` when no `.build` is present.** Rejected: a `localhost/`
   image with no build is the mismatch the check was written to catch.
+- **Accept a `.image` unit as a third shape.** Deferred: no unit pulls that way
+  yet, and it can be added when one does.
 - **Resolve the registry reference.** Rejected: it needs network access and a
   container runtime, and the gate passes on a machine with neither.
 

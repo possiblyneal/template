@@ -205,7 +205,9 @@ repos:
       - id: check-merge-conflict
       # A unified diff writes a blank context line as a single space, so
       # stripping it, or the blank lines a patch ends on, makes `git apply`
-      # reject the patch. A patch is reproduced byte for byte, never tidied.
+      # reject the patch. A patch is reproduced byte for byte, never tidied:
+      # mixed-line-ending below excludes it too, since a patch against a CRLF
+      # file carries LF headers and CRLF content.
       - id: end-of-file-fixer
         exclude: \.(patch|diff)$
       - id: trailing-whitespace
@@ -253,6 +255,7 @@ repos:
       # Enforces the LF rule in .gitattributes at commit time. Defaults to
       # rewriting to the majority ending in the file.
       - id: mixed-line-ending
+        exclude: \.(patch|diff)$
 
       # Keeps main reviewable: work lands through a pull request, where the
       # template and CODEOWNERS apply, rather than as a direct commit.

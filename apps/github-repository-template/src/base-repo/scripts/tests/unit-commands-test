@@ -237,9 +237,9 @@ fi
 
 # systemd and podman build the image on the deploy host when the unit starts, or
 # pull it from a registry, so packaging one checks the unit files rather than
-# producing anything. Every case here
-# runs on a machine with no container runtime, which is the property being kept:
-# a repository shipping a service must not need podman to pass its own gate.
+# producing anything. Every case here runs on a machine with no container
+# runtime, which is the property being kept: a repository shipping a service
+# must not need podman to pass its own gate.
 fixture "a well-formed quadlet pair validates and builds nothing"
 declare_unit svc longlived quadlet
 go_mod svc

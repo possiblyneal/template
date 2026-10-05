@@ -23,13 +23,16 @@ quadlet_values() {
 #
 # What it catches is the mismatch that would otherwise surface as a service that
 # fails to start on the deploy host: a Containerfile that is not where the build
-# says it is, or a container asking for an image the build never produces.
+# says it is, or a container asking for a local image no build here produces.
 #
 # A .build is optional: a .container may run an image pulled by a fully
 # qualified registry reference, whose first path component is a host
 # (`ghcr.io/...`, `registry:5000/...`). `localhost/...` and a bare name resolve
 # to an image on the deploy host, so one of those no .build here produces is
-# still the mismatch above.
+# still the mismatch above. A registry on the deploy host itself
+# (`localhost:5000/...`) is still a registry, something pushes to it, so it
+# passes. A `.image` unit, quadlet's own way to pull, is not accepted: no unit
+# has needed one, and `Image=foo.image` is refused like any other bare name.
 #
 # quadlet_registry_image <image>: whether the reference names a registry host,
 # the part before the first / carrying a . or a : and not being localhost.
@@ -38,8 +41,8 @@ quadlet_registry_image() {
   [[ "$1" == */* && "$host" != localhost && "$host" == *[.:]* ]]
 }
 
-# quadlet_validate <dir> <label>: the directory holding the pair, and the name
-# the messages report the unit under. The pair is listed with compgen rather
+# quadlet_validate <dir> <label>: the directory holding the unit files, and the
+# name the messages report the unit under. They are listed with compgen rather
 # than a glob so that no match is no file, whatever the caller's nullglob.
 quadlet_validate() {
   local dir="$1" label="$2" file value status=0
@@ -93,8 +96,8 @@ quadlet_validate() {
     fi
     if ! grep -qxF -- "$value" <<< "$(printf '%s\n' "${produced[@]}")" \
       && ! quadlet_registry_image "$value"; then
-      echo "$file asks for Image=$value, which no .build unit here produces and no registry serves." >&2
-      echo "An image is built here or pulled by a fully qualified registry reference. Built here: ${produced[*]:-nothing}" >&2
+      echo "$file asks for Image=$value, which no .build unit here produces and which is not a fully qualified registry reference." >&2
+      echo "An image is built here or pulled by a fully qualified registry reference (host/path, the host carrying a . or a :); a .image unit is not accepted. Built here: ${produced[*]:-nothing}" >&2
       status=1
     fi
   done
