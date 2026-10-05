@@ -16,7 +16,7 @@ A retrofit brings a repository that was never generated from this template under
 
 **No language is chosen on this path**, so [`wayfinding.md`](wayfinding.md) and [`choosing_a_language.md`](choosing_a_language.md) are not read. The destination committed to its languages before this flow existed; step 5 observes them.
 
-**Every record this run keeps sits at one prefix**, `<records>`: `<absolute path to this repository>/tmp/<repository-name>.<first 12 of the payload commit>`. Every `retrofit.py` subcommand requires `--records <records>`, and each writes its JSON to `<records>.<name>.json`, removing its earlier record before it runs so a failed step leaves none: `proofs`, `normalize`, `facts`, `autofix`, `hooks`, `sweep`, `hosted-read`, `hosted-apply`. `hosted-apply` reads its earlier record first and keeps the writes a later call does not approve, unless the sweep has run since it was written. Preflight's goes to `<records>.preflight.json`, the bar's summary to `<records>.check.txt` (the latest run overwrites it), and hosted apply's write log to `<records>.writes.json`, a path derived from the prefix rather than passed. The report and the pull-request body read the records by name. The sweep removes only the write log of these.
+**Every record this run keeps sits at one prefix**, `<records>`: `<absolute path to this repository>/tmp/<repository-name>.<first 12 of the payload commit>`. Every `retrofit.py` subcommand requires `--records <records>`, and each writes its JSON to `<records>.<name>.json`, removing its earlier record before it runs so a failed step leaves none: `proofs`, `normalize`, `facts`, `references`, `autofix`, `hooks`, `sweep`, `hosted-read`, `hosted-apply`. `hosted-apply` reads its earlier record first and keeps the writes a later call does not approve, unless the sweep has run since it was written. Preflight's goes to `<records>.preflight.json`, the bar's summary to `<records>.check.txt` (the latest run overwrites it), and hosted apply's write log to `<records>.writes.json`, a path derived from the prefix rather than passed. The report and the pull-request body read the records by name. The sweep removes only the write log of these.
 
 ## Steps
 
@@ -28,7 +28,7 @@ Read each step's file when the flow reaches it.
 4. [Provision the environment and the hooks](retrofit-step-4-provision.md)
 5. [Read the destination's units](retrofit-step-5-units.md)
 6. [Reconcile the destination's layout](retrofit-step-6-layout.md)
-7. [Dispose the collisions, write both records, meet the bar](retrofit-step-7-bar.md) — `retrofit.py normalize`, `proofs`, `autofix`, `scripts/summarize scripts/check`, `retrofit.py facts`, `/code-review`; [`retrofit-unmet-bar.md`](retrofit-unmet-bar.md) only when the bar is unmet
+7. [Dispose the collisions, write both records, meet the bar](retrofit-step-7-bar.md) — `retrofit.py normalize`, `proofs`, `references`, `autofix`, `scripts/summarize scripts/check`, `retrofit.py facts`, `/code-review`; [`retrofit-unmet-bar.md`](retrofit-unmet-bar.md) only when the bar is unmet
 8. [The hosted-write gate](retrofit-step-8-hosted-writes.md) — `retrofit.py hosted read`, `hosted apply`
 9. [Publish, prove, and offer the merge](retrofit-step-9-publish.md) — `retrofit.py pr-body`, `gh pr create`; `retrofit.py hooks` after a taken merge
 

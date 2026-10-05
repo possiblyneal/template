@@ -35,4 +35,6 @@ Where the payload ships no `.gitignore`, there is nothing to replace: report tha
 
 The instruction file is merged in step 7, after the records and before the bar is measured, so it describes what this run did and the bar reads it. This step takes the merge only as far as the layout facts.
 
+**The flow fixes the references the moves left behind in the candidate, before review.** `retrofit.py references` lists every tracked line outside `docs/adrs/` and `docs/plans/` that names a moved path or its basename, or invokes a script that now has a console script (`./<file>.py`, `python <file>.py`, `python3 <file>.py`). It needs the proofs record, so [step 7](retrofit-step-7-bar.md#normalize-prove-commit) runs it, once the moves are staged and before the first commit. Rewrite each hit that is a live reference to its `replacement`: a moved path to its new path, an invocation to `scripts/run <unit> --entry <name>`. A hit that is prose describing the old structure stays, under the repair rule above, and what remains in the record is what `report` renders under References not repaired.
+
 **What this step promises.** For a checkable destination, `scripts/structure` passes on zero allowlist entries once step 7 has written the `.unit.json` declarations. It says nothing about the destination's own checks; step 7 measures those.

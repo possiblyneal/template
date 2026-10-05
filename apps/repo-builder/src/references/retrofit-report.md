@@ -32,6 +32,8 @@ Every slot left after the renderer runs is one no record can fill, for the reaso
 - **Destination fix prepared** and **published** (unmet bar only), **Left for the operator**'s other paths, **Pending action**: each reports a decision made or awaited.
 - **Resumption**: what live state showed, what was read back, redone and retried are the resumed run's own observations.
 
+The renderer adds a **References not repaired** section after Cleanup, one line per hit left in `<records>.references.json` with its suggested replacement, or `none`. It has no slot.
+
 Three lines differ from the shape:
 
 - **Code review** is never `skipped`: it carries the axes step 7's scan ran, the findings corrected, any recorded as incorrectly identified, and the `Reviewed-Head:` sha step 9 signed off, or that no sign-off was written and why.
