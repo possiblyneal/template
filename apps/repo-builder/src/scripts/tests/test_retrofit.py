@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from collections.abc import Mapping
 from pathlib import Path
 from typing import ClassVar
 
@@ -2643,7 +2644,7 @@ class ReferencesTests(unittest.TestCase):
         directory: str,
         files: dict[str, str],
         moves: list[tuple[str, str]],
-        proofs: dict[str, object] | None = None,
+        proofs: Mapping[str, object] | None = None,
     ) -> subprocess.CompletedProcess[str]:
         """Run `references` over `files`, tracked, with `moves` as the proofs record."""
         candidate = Path(directory) / "candidate"

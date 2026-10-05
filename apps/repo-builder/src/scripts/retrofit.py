@@ -18,7 +18,7 @@ import subprocess
 import sys
 import tomllib
 import urllib.parse
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from pathlib import Path
@@ -495,50 +495,53 @@ def mention_pattern(path: str) -> re.Pattern[str]:
     return re.compile(r"(?<![\w./-])(?:\./)?" + re.escape(path) + NAME_END)
 
 
-def settled(kind: str, matched: str, replacements: list[str]) -> dict[str, object]:
-    """One hit; where the match could be several moves or scripts, one marked ambiguous."""
-    if len(replacements) == 1:
-        return {"kind": kind, "matched": matched, "replacement": replacements[0]}
-    return {
-        "kind": kind,
-        "matched": matched,
-        "replacement": None,
-        "ambiguous": True,
-        "candidates": replacements,
-    }
+Span = tuple[int, int]
+
+
+def hits_of_kind(
+    kind: str,
+    line: str,
+    patterns: list[tuple[re.Pattern[str], str]],
+    claimed: Sequence[Span] = (),
+) -> list[tuple[Span, dict[str, object]]]:
+    """One hit per span a pattern matches, with that span's replacements.
+
+    A span lying inside a `claimed` one is skipped. Where several patterns
+    match the same span with different replacements, such as a basename two
+    moves share or a console-script stem two units share, no single one is
+    right: the hit is marked ambiguous and lists its candidates instead.
+    """
+    spans: dict[Span, tuple[str, list[str]]] = {}
+    for pattern, replacement in patterns:
+        for match in pattern.finditer(line):
+            start, end = match.span()
+            if any(a <= start and end <= b for a, b in claimed):
+                continue
+            _, replacements = spans.setdefault(match.span(), (match.group(0), []))
+            if replacement not in replacements:
+                replacements.append(replacement)
+    hits: list[tuple[Span, dict[str, object]]] = []
+    for span, (matched, replacements) in spans.items():
+        hit: dict[str, object] = {"kind": kind, "matched": matched}
+        if len(replacements) == 1:
+            hit["replacement"] = replacements[0]
+        else:
+            hit |= {"replacement": None, "ambiguous": True, "candidates": replacements}
+        hits.append((span, hit))
+    return hits
 
 
 def line_hits(
     line: str,
-    scripts: list[tuple[dict[str, str], re.Pattern[str]]],
+    scripts: list[tuple[re.Pattern[str], str]],
     paths: list[tuple[re.Pattern[str], str]],
 ) -> list[dict[str, object]]:
-    """Every hit on a line. Matches of one span are one hit, whatever claims it."""
-    invocations: dict[tuple[int, int], tuple[str, list[str]]] = {}
-    for script, pattern in scripts:
-        replacement = f"scripts/run {script['unit']} --entry {script['name']}"
-        for match in pattern.finditer(line):
-            matched, replacements = invocations.setdefault(
-                match.span(), (match.group(0), [])
-            )
-            if replacement not in replacements:
-                replacements.append(replacement)
-    moved: dict[tuple[int, int], tuple[str, list[str]]] = {}
-    for pattern, new in paths:
-        for match in pattern.finditer(line):
-            start, end = match.span()
-            if any(a <= start and end <= b for a, b in invocations):
-                continue
-            matched, replacements = moved.setdefault(match.span(), (match.group(0), []))
-            if new not in replacements:
-                replacements.append(new)
-    return [
-        settled("invocation", matched, replacements)
-        for matched, replacements in invocations.values()
-    ] + [
-        settled("moved-path", matched, replacements)
-        for matched, replacements in moved.values()
-    ]
+    """Every hit on a line; an invocation claims its span from the moved paths."""
+    invocations = hits_of_kind("invocation", line, scripts)
+    moved = hits_of_kind(
+        "moved-path", line, paths, claimed=[span for span, _ in invocations]
+    )
+    return [hit for _, hit in invocations + moved]
 
 
 def references(arguments: argparse.Namespace) -> dict[str, object]:
@@ -569,7 +572,11 @@ def references(arguments: argparse.Namespace) -> dict[str, object]:
         (mention_pattern(Path(old).name), new) for old, new in moves
     ]
     scripts = [
-        (script, invocation_pattern(script)) for script in console_scripts(candidate)
+        (
+            invocation_pattern(script),
+            f"scripts/run {script['unit']} --entry {script['name']}",
+        )
+        for script in console_scripts(candidate)
     ]
 
     hits: list[dict[str, object]] = []
@@ -1642,6 +1649,68 @@ def write_runner_variable(repository: str, log: WriteLog) -> Outcome:
     return Outcome.DONE
 
 
+def refused_line(reading: object) -> str | None:
+    """A reading the host refused, as a settings line's value."""
+    if not isinstance(reading, dict) or "refused" not in reading:
+        return None
+    if reading["refused"] == Outcome.NOT_OFFERED:
+        return "unavailable (not offered for the plan)"
+    return f"unavailable ({reading['refused']})"
+
+
+# What `hosted read` shows of a setting `hosted apply` wrote nothing for, one
+# reader per write. A reader returns None where the reading leaves the setting
+# open to be requested, which is the only case that is the operator declining it.
+ALREADY_ON = "enabled (already set before the retrofit)"
+
+
+def unread(_state: dict) -> str | None:
+    return None
+
+
+def observe_merge_settings(state: dict) -> str | None:
+    return ALREADY_ON if state.get("merge_settings") == MERGE_SETTINGS else None
+
+
+def observe_dependabot_alerts(state: dict) -> str | None:
+    alerts = state.get("dependabot", {}).get("alerts")
+    return ALREADY_ON if alerts is True else refused_line(alerts)
+
+
+def observe_security_updates(state: dict) -> str | None:
+    updates = state.get("dependabot", {}).get("security_updates")
+    if isinstance(updates, dict) and updates.get("enabled"):
+        return ALREADY_ON
+    return refused_line(updates)
+
+
+def observe_push_protection(state: dict) -> str | None:
+    reading = state.get("push_protection")
+    if reading == "enabled":
+        return ALREADY_ON
+    return refused_line({"refused": reading}) if reading == "not offered" else None
+
+
+def observe_ruleset(state: dict) -> str | None:
+    rulesets = state.get("rulesets")
+    if isinstance(rulesets, list) and any(
+        ruleset.get("enforcement") == "active" for ruleset in rulesets
+    ):
+        return ALREADY_ON
+    return refused_line(rulesets)
+
+
+def observe_runner_variable(state: dict) -> str | None:
+    visibility, runner = state.get("visibility"), state.get("runner")
+    if visibility is not None and visibility != "private":
+        return f"not offered (the repository is {visibility})"
+    if refused_line(runner):
+        return refused_line(runner)
+    if isinstance(runner, str) and runner != "online":
+        return f"not offered (the dev runner is {runner})"
+    return None
+
+
 @dataclass(frozen=True)
 class HostedWrite:
     """One write the gate can approve."""
@@ -1650,6 +1719,8 @@ class HostedWrite:
     # Its line under Repository settings; labels report on a line of their own.
     setting: str | None
     perform: Callable[[argparse.Namespace, WriteLog], Outcome | LabelOutcome]
+    # What the report says of the setting when nothing was written for it.
+    observe: Callable[[dict], str | None] = unread
 
 
 # In the gate's order, which is the order `apply` performs them in.
@@ -1658,6 +1729,7 @@ HOSTED_WRITES = (
         "merge-settings",
         "Merge settings (merge commit only, head branches deleted)",
         lambda arguments, log: write_merge_settings(arguments.repository, log),
+        observe_merge_settings,
     ),
     HostedWrite(
         "labels",
@@ -1677,6 +1749,7 @@ HOSTED_WRITES = (
             f"repos/{arguments.repository}/vulnerability-alerts",
             log,
         ),
+        observe_dependabot_alerts,
     ),
     HostedWrite(
         "security-updates",
@@ -1686,11 +1759,13 @@ HOSTED_WRITES = (
             f"repos/{arguments.repository}/automated-security-fixes",
             log,
         ),
+        observe_security_updates,
     ),
     HostedWrite(
         "push-protection",
         "Push protection",
         lambda arguments, log: write_push_protection(arguments.repository, log),
+        observe_push_protection,
     ),
     HostedWrite(
         "ruleset",
@@ -1698,11 +1773,13 @@ HOSTED_WRITES = (
         lambda arguments, log: write_ruleset(
             arguments.repository, arguments.ruleset, arguments.replace_ruleset, log
         ),
+        observe_ruleset,
     ),
     HostedWrite(
         "runner-variable",
         "Runner variable",
         lambda arguments, log: write_runner_variable(arguments.repository, log),
+        observe_runner_variable,
     ),
 )
 
@@ -1847,6 +1924,10 @@ def command_result(rows: list[Row]) -> str:
     return "pass"
 
 
+def unknown(step: str) -> str:
+    return f"unknown ({step} did not run)"
+
+
 def joined(items: list[str]) -> str:
     return ", ".join(items) if items else "none"
 
@@ -1970,7 +2051,7 @@ def reconciliation(report: Report, proofs: dict, reference_record: dict | None) 
         + (
             joined([reference_hit_line(hit) for hit in reference_record["hits"]])
             if reference_record
-            else "unknown (references did not run)"
+            else unknown("references")
         ),
         f"- Ignore rules the payload does not cover: {fill('each rule and what it ignored, or none')}",
     )
@@ -2021,58 +2102,8 @@ def addon_adoption(report: Report, preflight_result: dict) -> None:
     report.add(
         f"- Already held: {joined(held)}"
         if held is not None
-        else "- Already held: unknown (preflight did not run)"
+        else f"- Already held: {unknown('preflight')}"
     )
-
-
-def refused_line(reading: object) -> str | None:
-    """A reading the host refused, as a settings line's value."""
-    if not isinstance(reading, dict) or "refused" not in reading:
-        return None
-    if reading["refused"] == Outcome.NOT_OFFERED:
-        return "unavailable (not offered for the plan)"
-    return f"unavailable ({reading['refused']})"
-
-
-def observed_state(write: str, state: dict) -> str | None:
-    """What `hosted read` shows of a setting `hosted apply` wrote nothing for.
-
-    None where the reading leaves the setting open to be requested, which is
-    the only case that is the operator declining it.
-    """
-    already_on = "enabled (already set before the retrofit)"
-    dependabot = state.get("dependabot", {})
-    if write == "merge-settings":
-        return already_on if state.get("merge_settings") == MERGE_SETTINGS else None
-    if write == "dependabot-alerts":
-        alerts = dependabot.get("alerts")
-        return already_on if alerts is True else refused_line(alerts)
-    if write == "security-updates":
-        updates = dependabot.get("security_updates")
-        if isinstance(updates, dict) and updates.get("enabled"):
-            return already_on
-        return refused_line(updates)
-    if write == "push-protection":
-        reading = state.get("push_protection")
-        if reading == "enabled":
-            return already_on
-        return refused_line({"refused": reading}) if reading == "not offered" else None
-    if write == "ruleset":
-        rulesets = state.get("rulesets")
-        if isinstance(rulesets, list) and any(
-            ruleset.get("enforcement") == "active" for ruleset in rulesets
-        ):
-            return already_on
-        return refused_line(rulesets)
-    if write == "runner-variable":
-        visibility, runner = state.get("visibility"), state.get("runner")
-        if visibility is not None and visibility != "private":
-            return f"not offered (the repository is {visibility})"
-        if refused_line(runner):
-            return refused_line(runner)
-        if isinstance(runner, str) and runner != "online":
-            return f"not offered (the dev runner is {runner})"
-    return None
 
 
 def setting_line(
@@ -2131,7 +2162,7 @@ def repository_settings(
     gate_reached = bool(hosted_state or apply_record) or not stopped
     report.section("### Repository settings")
     report.add(
-        f"- Destination visibility: {hosted_state.get('visibility') or 'unknown (hosted read did not run)'}"
+        f"- Destination visibility: {hosted_state.get('visibility') or unknown('hosted read')}"
     )
     for write in HOSTED_WRITES:
         if write.setting is not None:
@@ -2141,9 +2172,9 @@ def repository_settings(
                     writes.get(write.name),
                     reasons.get(write.name),
                     gate_reached,
-                    observed_state(write.name, hosted_state)
+                    write.observe(hosted_state)
                     if hosted_state
-                    else "unknown (hosted read did not run)",
+                    else unknown("hosted read"),
                 )
             )
     labels = labels_line(report, writes.get("labels"), bool(apply_record))
