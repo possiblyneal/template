@@ -69,6 +69,26 @@ def reaches(path, pattern):
     return path == pattern
 
 
+ANCHOR_LINK = re.compile(r"\]\(([A-Za-z0-9_-]+\.md)?#([^)\s]+)\)")
+
+
+def heading_slugs(path):
+    """GitHub's anchors for a file's headings, skipping fenced code.
+
+    Lowercase, drop everything but letters, digits, spaces and hyphens, then
+    turn each space into a hyphen -- so ` — ` becomes two hyphens.
+    """
+    slugs = set()
+    fenced = False
+    for line in path.read_text().splitlines():
+        if line.startswith("```"):
+            fenced = not fenced
+        elif not fenced and re.match(r"#{1,6} ", line):
+            text = line.lstrip("#").strip().replace("`", "").lower()
+            slugs.add(re.sub(r"[^a-z0-9 _-]", "", text).replace(" ", "-"))
+    return slugs
+
+
 def reference_files():
     files = sorted(SKILL.glob("references/*.md")) + [SKILL / "SKILL.md"]
     missing = [str(path) for path in files if not path.is_file()]
@@ -157,6 +177,27 @@ class ReferenceAssertions(unittest.TestCase):
             [],
             f"references quote headings no payload or reference file holds: {absent}",
         )
+
+    def test_anchor_links_resolve(self):
+        """A link to `file.md#anchor` must name a heading that file holds.
+
+        A retrofit reads one lifecycle section through an anchor rather than
+        the whole file, so a renamed heading leaves the step pointing at a
+        section that is not there and nothing else notices. Bare `(#anchor)`
+        links resolve against the file they sit in.
+        """
+        references = {path.name: path for path in reference_files()}
+        slugs = {name: heading_slugs(path) for name, path in references.items()}
+        broken = []
+        for name, path in references.items():
+            for line_number, line in enumerate(path.read_text().splitlines(), start=1):
+                for target, anchor in ANCHOR_LINK.findall(line):
+                    target = target or name
+                    if target not in slugs:
+                        continue
+                    if anchor not in slugs[target]:
+                        broken.append(f"{name}:{line_number} {target}#{anchor}")
+        self.assertEqual(broken, [], f"links to headings that do not exist: {broken}")
 
     def test_every_shipped_path_is_reached_by_an_ownership_rule(self):
         """A shipped path no rule reaches is product-owned by default.

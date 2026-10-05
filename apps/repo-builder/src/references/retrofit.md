@@ -1,12 +1,14 @@
 # Retrofit
 
-Read these parts of [`lifecycle.md`](lifecycle.md) first rather than the whole file — `sed -n '/^## Ownership$/,/^## /p'` and its equivalent per heading. They apply throughout:
+Rules from [`lifecycle.md`](lifecycle.md) that apply throughout, stated here so the file is never opened whole. Each links to its section for the reasoning; read that section only when the statement here is not enough.
 
-- the paragraph on quoting a `<placeholder>`, at the top of the file
-- `## Ownership`, with `### Overridden paths` and `### The payload's mode travels with the payload's content`
-- `### Resuming`, only when this run re-enters a stopped one
+- **Placeholders.** Quote every `<placeholder>` when substituting (`git push origin "$branch"`), and reject a repository or branch name outside `[A-Za-z0-9._/-]+` before it reaches a shell.
+- **Ownership** ([`## Ownership`](lifecycle.md#ownership)). `managed` paths are reconciled with the destination's intent, never blindly overwritten. `product` paths are preserved: a payload path that collides with product content is reported and the run stops there. An unmatched path is product. The longest matching rule wins. A root file matches no directory pattern, so it is owned only where named individually. The root `CLAUDE.md` is managed and merged, not overwritten.
+- **Overridden paths** ([`### Overridden paths`](lifecycle.md#overridden-paths)). A managed payload path whose destination version was chosen is recorded in `generation.overrides` as `{"path", "reason"}`, one entry per path. Never for a product path, and never for a path replaced outright such as `.gitignore`. Steps 6 and 7 link the full rule where they record one.
+- **Modes** ([`### The payload's mode travels with the payload's content`](lifecycle.md#the-payloads-mode-travels-with-the-payloads-content)). A payload path landed over an existing file ends at the payload's mode, read from `git ls-tree <commit> -- <subtree>/<path>` at the resolved source commit. The archive step does this only for an absent path.
+- **Resuming** ([`### Resuming`](lifecycle.md#resuming)), only when this run re-enters a stopped one. Re-invoking the command is the resume: re-observe live state and skip what is done.
 
-Every other lifecycle section a retrofit needs is linked from the step that uses it and read there: `## Manifest` at step 5, `## Dependabot entries follow the manifests present` and `## Running the destination's checks` at step 6 where it un-ignores a directory and at step 7, `## The runner variable is set only where it is safe and answerable` and `## Remote action gates` at step 8. `## Reviewing and reporting` only routes to `reporting.md`, which steps 7 and 9 link directly.
+Every other lifecycle section a retrofit needs is linked from the step that uses it and read there: [`## Manifest`](lifecycle.md#manifest) at step 5, [`## Dependabot entries follow the manifests present`](lifecycle.md#dependabot-entries-follow-the-manifests-present) and [`## Running the destination's checks`](lifecycle.md#running-the-destinations-checks) at step 6 where it un-ignores a directory and at step 7, [`## The runner variable is set only where it is safe and answerable`](lifecycle.md#the-runner-variable-is-set-only-where-it-is-safe-and-answerable) and [`## Remote action gates`](lifecycle.md#remote-action-gates) at step 8. `## Reviewing and reporting` only routes to `reporting.md`, which steps 7 and 9 link directly.
 
 Shared mechanics stay in [`generate.md`](generate.md) and are cited by heading; follow a citation with `sed -n '/^### Step 3 /,/^### /p'` rather than opening the whole file.
 
