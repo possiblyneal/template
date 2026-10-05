@@ -75,6 +75,7 @@ Two flows add lines to this shape rather than filling it as given, and each keep
 - Applied: <paths or none>
 - Preserved: <paths or none>
 - Renamed/deleted: <paths or none>
+- Merged: <path>: <the payload change and the destination text it carries> | none
 - Conflicted: <paths and competing intents, or none>
 - Superseded: <path>: <what it did> -> <the payload path or check now carrying it> | retired, callers repointed (<caller paths>) | none
 - Partially covered, not cut: <script path>: <the parts the check surface already does> | none
