@@ -10,7 +10,7 @@ Part of [Retrofit](retrofit.md). Derive units from what the destination already 
 
 **Read what grades the pair before proposing it.** Three payload files in the candidate decide it:
 
-- `scripts/libs/quadlet.sh` refuses `ships: quadlet` unless the unit's `deploy/quadlet/` holds a `.build` unit naming an `ImageTag` that every sibling `.container`'s `Image=` resolves to.
+- `scripts/libs/quadlet.sh` refuses `ships: quadlet` unless the unit's `deploy/quadlet/` holds a `.container` whose `Image=` resolves to an `ImageTag` a sibling `.build` names, or is a fully qualified registry reference (`ghcr.io/...`) that something else publishes.
 - `scripts/libs/detect.sh` holds one `_capability_package_<language>` per language that can ship an executable.
 - `scripts/run` detects languages only after entering `apps/<unit>/`, so a `run` other than `none` needs a manifest at that path, not at the root.
 

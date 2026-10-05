@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Validation of a quadlet unit's deploy/quadlet/ pair. Sourced by scripts/package,
+# Validation of a quadlet unit's deploy/quadlet/ files. Sourced by scripts/package,
 # which is the ship-fact dispatch and holds nothing about quadlet itself.
 #
 # Sourced, never executed: no shebang, no executable bit, a .sh extension so
@@ -15,8 +15,9 @@ quadlet_values() {
 }
 
 # A quadlet unit ships unit files, not an image. systemd and podman build it on
-# the deploy host when the unit starts, so packaging one validates the pair and
-# produces nothing. Nothing here shells out to a container runtime, which is why
+# the deploy host when the unit starts, or pull it from a registry something
+# else publishes to, so packaging one validates the unit files and produces
+# nothing. Nothing here shells out to a container runtime, which is why
 # the full gate still passes on a machine with no podman installed and why
 # scripts/doctor requires none.
 #
@@ -24,6 +25,19 @@ quadlet_values() {
 # fails to start on the deploy host: a Containerfile that is not where the build
 # says it is, or a container asking for an image the build never produces.
 #
+# A .build is optional: a .container may run an image pulled by a fully
+# qualified registry reference, whose first path component is a host
+# (`ghcr.io/...`, `registry:5000/...`). `localhost/...` and a bare name resolve
+# to an image on the deploy host, so one of those no .build here produces is
+# still the mismatch above.
+#
+# quadlet_registry_image <image>: whether the reference names a registry host,
+# the part before the first / carrying a . or a : and not being localhost.
+quadlet_registry_image() {
+  local host="${1%%/*}"
+  [[ "$1" == */* && "$host" != localhost && "$host" == *[.:]* ]]
+}
+
 # quadlet_validate <dir> <label>: the directory holding the pair, and the name
 # the messages report the unit under. The pair is listed with compgen rather
 # than a glob so that no match is no file, whatever the caller's nullglob.
@@ -34,15 +48,10 @@ quadlet_validate() {
   mapfile -t builds < <(compgen -G "$dir/*.build" || true)
   mapfile -t containers < <(compgen -G "$dir/*.container" || true)
 
-  if (( ${#builds[@]} == 0 )); then
-    echo "$label declares ships: quadlet but $dir/ holds no .build unit." >&2
-    status=1
-  fi
   if (( ${#containers[@]} == 0 )); then
     echo "$label declares ships: quadlet but $dir/ holds no .container unit." >&2
-    status=1
+    return 1
   fi
-  (( status == 0 )) || return "$status"
 
   for file in "${builds[@]}"; do
     # The image names this build produces, plus the build unit's own file name:
@@ -82,9 +91,10 @@ quadlet_validate() {
       status=1
       continue
     fi
-    if ! grep -qxF -- "$value" <<< "$(printf '%s\n' "${produced[@]}")"; then
-      echo "$file asks for Image=$value, which no .build unit here produces." >&2
-      echo "Built here: ${produced[*]}" >&2
+    if ! grep -qxF -- "$value" <<< "$(printf '%s\n' "${produced[@]}")" \
+      && ! quadlet_registry_image "$value"; then
+      echo "$file asks for Image=$value, which no .build unit here produces and no registry serves." >&2
+      echo "An image is built here or pulled by a fully qualified registry reference. Built here: ${produced[*]:-nothing}" >&2
       status=1
     fi
   done

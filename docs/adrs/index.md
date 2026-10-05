@@ -9,3 +9,4 @@
 | [0003](0003-order-the-repository-ahead-of-wayfinding.md) | Create the Destination Repository Before Wayfinding Runs, and End the Generate at Charting | accepted |
 | [0004](0004-select-the-runner-through-a-repository-variable.md) | Select the Runner Through a Repository Variable | accepted |
 | [0005](0005-stage-a-retrofit-locally-and-write-the-host-last.md) | Stage a Retrofit Locally and Write to the Host Last | accepted |
+| [0006](0006-let-a-quadlet-unit-run-a-registry-image.md) | Let a Quadlet Unit Run a Registry Image It Does Not Build | accepted |
