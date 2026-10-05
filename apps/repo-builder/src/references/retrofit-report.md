@@ -21,7 +21,7 @@ python3 apps/repo-builder/src/scripts/retrofit.py decide --records <records> \
   --key <key> --value "<the line's text>"
 ```
 
-`decide` merges each call into `<records>.decisions.json`, which survives the sweep, and both `report` and `pr-body` read it, so a judgement the two share (`unit-map`, `merged`, `conflicted`, `summary`) is recorded once. Record each where the flow makes it rather than all at the end. Deciding `none` drops an optional line (`layout-corrections`, `declined-writes`, and `left-for-the-operator` beside rendered entries). Change no rendered line; a wrong rendered line is a defect in its record. The finished report holds no `[[FILL:`.
+`decide` merges each call into `<records>.decisions.json`, which survives the sweep, and both `report` and `pr-body` read it, so a judgement the two share (`unit-map`, `merged`, `conflicted`, `summary`) is recorded once. Record each where the flow makes it rather than all at the end. Deciding `none` drops an optional line (`layout-corrections`, `declined-writes`, and `left-for-the-operator` beside rendered entries). Change no rendered line: a record's value outranks a decision, so a wrong rendered line is a defect in its record. The finished report holds no `[[FILL:`.
 
 ## Judgement slots
 
@@ -36,8 +36,8 @@ Every slot left after the renderer runs is one no record can fill, for the reaso
 - `irreversible-writes`: the cost of having made it is a judgement over the write.
 - `ruleset-enforcement` and `default-branch`: step 9 reads the host after the report's records are written.
 - `code-review`: the axes run and the findings corrected are the review's own account, and the sign-off sits in a pull-request comment.
-- `untracked`, `autofix-settings`: each describes what the flow read from the candidate at step 7, which no record captures. **Tool declaration** and **Configuration boundary** render from the proofs record's `manifests` and `configuration`, and are slots (`tool-declaration`, `configuration-boundary`) only where a manifest has no parser or no unit is declared.
-- `reverted-rules`: the autofix record lists the reverted path without the rule. The autofix commit sha renders from the facts record, which finds the commit by its subject.
+- `untracked`, `autofix-settings`: each describes what the flow read from the candidate at step 7, which no record captures. **Tool declaration** renders from the proofs record's `manifests`, each manifest's added, changed and removed keys, and is the `tool-declaration` slot only where a manifest has no parser. **Configuration boundary** renders from its `configuration`, one row for the root and one per declared unit.
+- `reverted-rules`: the autofix record lists the reverted path without the rule. The autofix commit sha renders from the facts record, which finds the commit by its exact subject on the candidate's first-parent line; it is the `autofix-commit` slot only where no commit carries it.
 - `fix-prepared` and `fix-published` (unmet bar only), `left-for-the-operator`, `pending-action`: each reports a decision made or awaited.
 - Resumption, `re-observed`, `read-back`, `redone`, `retries`: the resumed run's own observations.
 

@@ -322,7 +322,7 @@ def parsed_manifest(repository: Path, revision: str) -> dict[str, object] | None
 def manifest_changes(
     candidate: Path, base: str, changes: list[tuple[str, list[str]]]
 ) -> list[dict[str, object]]:
-    """Each staged manifest, new or edited, with the keys it added or changed."""
+    """Each staged manifest, new or edited, with the keys it added, changed or removed."""
     manifests = []
     for status, paths in changes:
         path = paths[-1]
@@ -336,17 +336,19 @@ def manifest_changes(
             "status": "edited" if at_base else "new",
             "added": None,
             "changed": None,
+            "removed": None,
         }
         if after is not None and before is not None:
             entry["added"] = sorted(set(after) - set(before))
             entry["changed"] = sorted(
                 key for key in set(after) & set(before) if after[key] != before[key]
             )
+            entry["removed"] = sorted(set(before) - set(after))
         manifests.append(entry)
     return manifests
 
 
-# Tool configuration a unit root can carry, by file name, so a tool run there
+# Tool configuration a root can carry, by file name, so a tool run there
 # stops walking upward; a `pyproject.toml` counts only with its `tool.ruff`.
 CONFIGURATION_FILES = (
     "eslint.config.*",
@@ -366,10 +368,13 @@ CONFIGURATION_FILES = (
 
 
 def unit_configuration(candidate: Path) -> dict[str, list[str]]:
-    """The tool configuration each unit root carries."""
+    """The tool configuration the repository root and each unit root carry."""
     configuration = {}
-    for declaration in sorted(candidate.glob("apps/*/.unit.json")):
-        root = declaration.parent
+    roots = [
+        candidate,
+        *(d.parent for d in sorted(candidate.glob("apps/*/.unit.json"))),
+    ]
+    for root in roots:
         found = sorted(
             entry.name
             for entry in root.iterdir()
@@ -563,13 +568,19 @@ def facts(arguments: argparse.Namespace) -> dict[str, object]:
                 "adapterless": adapterless(declaration),
             }
         )
-    autofixed = git_output(
-        candidate,
-        "log",
-        "-n1",
-        "--format=%H",
-        "--fixed-strings",
-        f"--grep={AUTOFIX_SUBJECT}",
+    # First parent only, so a commit a `resume` merged in is never taken for it.
+    autofixed = next(
+        (
+            sha
+            for sha, _, subject in (
+                line.partition(" ")
+                for line in git_output(
+                    candidate, "log", "--first-parent", "--format=%H %s"
+                ).splitlines()
+            )
+            if subject == AUTOFIX_SUBJECT
+        ),
+        None,
     )
     return {
         "operation": "facts",
@@ -577,7 +588,7 @@ def facts(arguments: argparse.Namespace) -> dict[str, object]:
         "shipped": shipped,
         "units": units,
         # The autofix pass is committed before the bar, and this runs after it.
-        "autofix_commit": autofixed or None,
+        "autofix_commit": autofixed,
     }
 
 
@@ -2146,8 +2157,8 @@ class Report:
         self.decisions = decisions
 
     def fill(self, key: str, derived: str | None = None) -> str:
-        """The decided value, else what a record settles, else the marked slot."""
-        value = self.decisions.get(key) or derived or SLOTS[key].default
+        """What a record settles, else the decided value, else the marked slot."""
+        value = derived or self.decisions.get(key) or SLOTS[key].default
         if value is not None:
             return value
         self.slots.append(f"{key}: {SLOTS[key].what}")
@@ -2687,7 +2698,8 @@ def tool_declaration(proofs: dict) -> str | None:
         f"{entry['path']}: new, declaring {joined(entry['added'] or [])}"
         if entry["status"] == "new"
         else f"{entry['path']}: added {joined(entry['added'] or [])}; "
-        f"changed {joined(entry['changed'] or [])}"
+        f"changed {joined(entry['changed'] or [])}; "
+        f"removed {joined(entry['removed'] or [])}"
         for entry in proofs["manifests"]
     ]
     return "; ".join(lines) or "nothing missing"
@@ -2698,10 +2710,10 @@ def configuration_boundary(proofs: dict) -> str | None:
         return None
     return (
         "; ".join(
-            f"{unit} carries {', '.join(files)}"
+            f"{'the root' if root == '.' else root} carries {', '.join(files)}"
             if files
-            else f"{unit}: none at the unit root"
-            for unit, files in proofs["configuration"].items()
+            else f"{'the root' if root == '.' else root}: none"
+            for root, files in proofs["configuration"].items()
         )
         or None
     )
@@ -2849,8 +2861,10 @@ def resume(arguments: argparse.Namespace) -> dict[str, object]:
 
     A conflicted lockfile takes the default branch's side, to be regenerated
     by the lock-only install rather than merged by hand; every other conflict
-    is left in the tree for the flow to settle.
+    is left in the tree for the flow to settle. The stopped run's decisions go
+    with it, since the resumed run makes each judgement again.
     """
+    record_path(arguments.records, "decisions.json").unlink(missing_ok=True)
     candidate = arguments.candidate
     upstream = f"origin/{arguments.default_branch}"
     run_git(candidate, "fetch", "origin")
@@ -2862,6 +2876,9 @@ def resume(arguments: argparse.Namespace) -> dict[str, object]:
         )
     lockfiles = [path for path in conflicted if posixpath.basename(path) in LOCKFILES]
     for path in lockfiles:
+        if blob(candidate, f"{upstream}:{path}") is None:
+            run_git(candidate, "rm", "-q", "--", path)
+            continue
         run_git(candidate, "checkout", "--theirs", "--", path)
         run_git(candidate, "add", "--", path)
     return {

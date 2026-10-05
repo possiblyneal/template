@@ -143,12 +143,14 @@ class ProofsTests(unittest.TestCase):
                         "status": "new",
                         "added": ["project.name", "tool.ruff"],
                         "changed": [],
+                        "removed": [],
                     }
                 ],
             )
             self.assertEqual(
-                report["configuration"], {"apps/ledger": ["pyproject.toml [tool.ruff]"]}
+                report["configuration"]["apps/ledger"], ["pyproject.toml [tool.ruff]"]
             )
+            self.assertIn(".", report["configuration"])
             self.assertEqual(
                 report["issue_tracker"], {"tracker": "Local markdown", "payload": False}
             )
@@ -2570,9 +2572,13 @@ class RecordedLinesTests(unittest.TestCase):
                         "status": "edited",
                         "added": ["tool.ruff"],
                         "changed": [],
+                        "removed": [],
                     }
                 ],
-                "configuration": {"apps/ledger": []},
+                "configuration": {
+                    ".": ["pyproject.toml [tool.ruff]"],
+                    "apps/ledger": [],
+                },
                 "issue_tracker": {"tracker": "GitHub", "payload": True},
             }
             facts = {
@@ -2603,9 +2609,12 @@ class RecordedLinesTests(unittest.TestCase):
             for line in (
                 (
                     "- Tool declaration: apps/ledger/pyproject.toml: added tool.ruff; "
-                    "changed none"
+                    "changed none; removed none"
                 ),
-                "- Configuration boundary: apps/ledger: none at the unit root",
+                (
+                    "- Configuration boundary: the root carries pyproject.toml "
+                    "[tool.ruff]; apps/ledger: none"
+                ),
                 "- Ships nothing for want of an adapter: ledger: python",
                 (
                     "- Autofix: `scripts/fix` rewrote apps/ledger/src/rates.py in 1 "
@@ -3107,7 +3116,7 @@ class DecideTests(unittest.TestCase):
 class ResumeTests(unittest.TestCase):
     """The default branch's movement, merged into a standing candidate."""
 
-    def _candidate(self, directory: str, upstream: dict[str, str]) -> Path:
+    def _candidate(self, directory: str, upstream: dict[str, str | None]) -> Path:
         candidate = candidate_repository(
             directory, {"uv.lock": b"base\n", "notes.md": b"base\n"}
         )
@@ -3118,7 +3127,10 @@ class ResumeTests(unittest.TestCase):
         upstream_clone = Path(directory) / "upstream"
         git("clone", "-q", str(origin), str(upstream_clone))
         for name, text in upstream.items():
-            (upstream_clone / name).write_text(text)
+            if text is None:
+                (upstream_clone / name).unlink()
+            else:
+                (upstream_clone / name).write_text(text)
         git("add", "-A", cwd=upstream_clone)
         git("commit", "-qm", "chore: upstream", cwd=upstream_clone)
         git("push", "-q", "origin", branch, cwd=upstream_clone)
@@ -3141,6 +3153,8 @@ class ResumeTests(unittest.TestCase):
     def test_merges_a_default_branch_that_moved_cleanly(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             candidate = self._candidate(directory, {"README.md": "upstream\n"})
+            decisions = Path(f"{records(candidate)[1]}.decisions.json")
+            decisions.write_text('{"decisions": {"summary": "stale"}}\n')
             result = self._resume(candidate)
 
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -3149,6 +3163,7 @@ class ResumeTests(unittest.TestCase):
             self.assertEqual(
                 report["merged"], git_output("rev-parse", "HEAD", cwd=candidate)
             )
+            self.assertFalse(decisions.exists())
 
     def test_takes_the_default_branchs_lockfile_and_leaves_the_rest(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -3163,3 +3178,14 @@ class ResumeTests(unittest.TestCase):
             self.assertEqual(report["conflicts"], ["notes.md"])
             self.assertIsNone(report["merged"])
             self.assertEqual((candidate / "uv.lock").read_text(), "upstream\n")
+
+    def test_takes_the_default_branchs_deletion_of_a_lockfile(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            candidate = self._candidate(directory, {"uv.lock": None})
+            result = self._resume(candidate)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["lockfiles_taken"], ["uv.lock"])
+            self.assertEqual(report["conflicts"], [])
+            self.assertFalse((candidate / "uv.lock").exists())
