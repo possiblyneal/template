@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from typing import ClassVar
 
 from test_preflight import git, git_output
 
@@ -2360,3 +2361,97 @@ class PullRequestBodyTests(unittest.TestCase):
             self.assertIn(
                 "gh api -X PATCH repos/o/ledger -F allow_squash_merge=true", body
             )
+
+
+class ReferencesTests(unittest.TestCase):
+    """Tracked mentions of a moved path or an old invocation, outside ADRs and plans."""
+
+    FILES: ClassVar[dict[str, str]] = {
+        "README.md": "Results are in REPORT.md.\nSee docs/report.md for the new place.\n",
+        "docs/adrs/0001-layout.md": "The tree held REPORT.md at its root.\n",
+        "docs/plans/layout.md": "Move REPORT.md under docs/.\n",
+        "apps/ledger/pyproject.toml": (
+            '[project]\nname = "ledger"\n\n'
+            '[project.scripts]\nledger-rates = "ledger.rates:main"\n'
+        ),
+        "apps/ledger/src/ledger/rates.py": (
+            '"""Print rates.\n\nUsage: ./rates.py --all\n       python3 rates.py --all\n"""\n'
+        ),
+        "docs/report.md": "# Report\n",
+    }
+
+    def _candidate(self, directory: str) -> list[str]:
+        candidate = Path(directory) / "candidate"
+        for name, text in self.FILES.items():
+            (candidate / name).parent.mkdir(parents=True, exist_ok=True)
+            (candidate / name).write_text(text)
+        git("init", "-q", "-b", "main", cwd=candidate)
+        git("add", "-A", cwd=candidate)
+        prefix = Path(directory) / "records"
+        moves = [{"from": "REPORT.md", "to": "docs/report.md"}]
+        Path(f"{prefix}.proofs.json").write_text(
+            json.dumps({"rename_purity": {"moves": moves}})
+        )
+        return ["references", "--records", str(prefix), "--candidate", str(candidate)]
+
+    def _hits(self, directory: str) -> list[dict[str, object]]:
+        result = run(*self._candidate(directory))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)["hits"]
+
+    def test_a_moved_file_named_in_a_doc_is_a_hit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            hits = [h for h in self._hits(directory) if h["path"] == "README.md"]
+
+            self.assertEqual(
+                [(h["line"], h["kind"], h["matched"], h["replacement"]) for h in hits],
+                [(1, "moved-path", "REPORT.md", "docs/report.md")],
+            )
+
+    def test_an_old_invocation_suggests_the_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            hits = [h for h in self._hits(directory) if h["kind"] == "invocation"]
+
+            self.assertEqual(
+                [(h["path"], h["line"], h["matched"]) for h in hits],
+                [
+                    ("apps/ledger/src/ledger/rates.py", 3, "./rates.py"),
+                    ("apps/ledger/src/ledger/rates.py", 4, "python3 rates.py"),
+                ],
+            )
+            self.assertEqual(
+                {h["replacement"] for h in hits},
+                {"scripts/run ledger --entry ledger-rates"},
+            )
+
+    def test_adrs_and_plans_are_left_alone(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            paths = {str(h["path"]) for h in self._hits(directory)}
+
+            self.assertFalse({p for p in paths if p.startswith("docs/adrs/")})
+            self.assertFalse({p for p in paths if p.startswith("docs/plans/")})
+
+    def test_report_renders_the_remaining_hits(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            hits = self._hits(directory)
+            lines, _ = render_report(
+                self,
+                directory,
+                SUMMARY_PASS,
+                proofs=PROOFS,
+                references={"hits": hits},
+            )
+
+            self.assertIn("### References not repaired", lines)
+            self.assertIn(
+                "- README.md:1: `REPORT.md`, suggested `docs/report.md`", lines
+            )
+
+    def test_report_says_when_no_hit_remains(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            lines, _ = render_report(
+                self, directory, SUMMARY_PASS, proofs=PROOFS, references={"hits": []}
+            )
+
+            at = lines.index("### References not repaired")
+            self.assertEqual(lines[at + 1], "- none")

@@ -16,6 +16,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tomllib
 import urllib.parse
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
@@ -433,6 +434,110 @@ def facts(arguments: argparse.Namespace) -> dict[str, object]:
         "shipped": shipped,
         "units": units,
     }
+
+
+# Records of what the tree used to be, so a mention there is correct as it stands.
+HISTORICAL_DIRECTORIES = ("docs/adrs/", "docs/plans/")
+
+
+def is_historical(path: str) -> bool:
+    return any(
+        path.startswith(directory) or f"/{directory}" in path
+        for directory in HISTORICAL_DIRECTORIES
+    )
+
+
+def console_scripts(candidate: Path) -> list[dict[str, str]]:
+    """Each unit's `[project.scripts]`: its name, unit, and the module's file stem."""
+    scripts = []
+    for manifest in sorted(candidate.glob("apps/*/pyproject.toml")):
+        declared = tomllib.loads(manifest.read_text()).get("project", {})
+        for name, target in declared.get("scripts", {}).items():
+            scripts.append(
+                {
+                    "name": name,
+                    "unit": manifest.parent.name,
+                    "stem": str(target).split(":")[0].split(".")[-1],
+                }
+            )
+    return scripts
+
+
+def invocation_pattern(script: dict[str, str]) -> re.Pattern[str]:
+    """`./<file>.py`, `python <file>.py` or `python3 <file>.py`, with any directory."""
+    stems = "|".join(
+        re.escape(stem) for stem in {script["stem"], script["name"].replace("-", "_")}
+    )
+    return re.compile(
+        r"(?:(?<![\w./-])\./|\bpython3?\s+)(?:[\w.-]+/)*(?:" + stems + r")\.py(?![\w-])"
+    )
+
+
+def mention_pattern(path: str) -> re.Pattern[str]:
+    # Not preceded by a path character, so a mention of the new path (which
+    # ends in the old one) is not a mention of the old.
+    return re.compile(r"(?<![\w./-])(?:\./)?" + re.escape(path) + r"(?![\w-])")
+
+
+def references(arguments: argparse.Namespace) -> dict[str, object]:
+    """Find tracked lines naming a moved path or a script that now has an entry.
+
+    The moves come from the proofs record and the console scripts from the
+    units' manifests. A hit carries the replacement a fix would write; the
+    flow fixes them in the candidate before review, and what remains is the
+    record `report` renders. ADRs and plans record the tree as it was and are
+    never searched.
+    """
+    candidate = preflight.require_git_repository(arguments.candidate, "candidate")
+    moves = [
+        (str(move["from"]), str(move["to"]))
+        for move in load_required(arguments.records, "proofs")["rename_purity"]["moves"]
+    ]
+    paths = [(mention_pattern(old), new) for old, new in moves] + [
+        (mention_pattern(Path(old).name), new) for old, new in moves
+    ]
+    scripts = [
+        (script, invocation_pattern(script)) for script in console_scripts(candidate)
+    ]
+
+    hits: list[dict[str, object]] = []
+    for tracked in nul_fields(candidate, "ls-files", "-z"):
+        if is_historical(tracked) or not (candidate / tracked).is_file():
+            continue
+        try:
+            lines = (candidate / tracked).read_text().splitlines()
+        except UnicodeDecodeError:
+            continue
+        for number, line in enumerate(lines, start=1):
+            claimed: list[tuple[int, int]] = []
+            found: list[dict[str, str]] = []
+            for script, pattern in scripts:
+                for match in pattern.finditer(line):
+                    claimed.append(match.span())
+                    found.append(
+                        {
+                            "kind": "invocation",
+                            "matched": match.group(0),
+                            "replacement": f"scripts/run {script['unit']} --entry {script['name']}",
+                        }
+                    )
+            for pattern, new in paths:
+                for match in pattern.finditer(line):
+                    start, end = match.span()
+                    hit = {
+                        "kind": "moved-path",
+                        "matched": match.group(0),
+                        "replacement": new,
+                    }
+                    if hit not in found and not any(
+                        a <= start and end <= b for a, b in claimed
+                    ):
+                        found.append(hit)
+            hits.extend(
+                {"path": tracked, "line": number, "text": line.strip(), **hit}
+                for hit in found
+            )
+    return {"operation": "references", "candidate": str(candidate), "hits": hits}
 
 
 def worktree_state(candidate: Path) -> str:
@@ -2189,6 +2294,21 @@ def resumption(report: Report, writes: dict) -> None:
     )
 
 
+def unrepaired_references(report: Report, found: dict) -> None:
+    """The hits still in the candidate, read from the references record."""
+    report.section("### References not repaired")
+    if not found:
+        report.add("- not run (no references record)")
+        return
+    report.add(
+        *[
+            f"- {hit['path']}:{hit['line']}: `{hit['matched']}`, suggested `{hit['replacement']}`"
+            for hit in found["hits"]
+        ]
+        or ["- none"]
+    )
+
+
 def render_report(arguments: argparse.Namespace) -> dict[str, object]:
     """Render the deterministic lines of a retrofit's final report.
 
@@ -2225,6 +2345,7 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
         load(prefix, "autofix"),
     )
     cleanup(report, swept, hooks_result, proofs)
+    unrepaired_references(report, load(prefix, "references"))
     if arguments.resumed:
         resumption(report, apply_record.get("writes", {}))
     report.section("### Pending action")
@@ -2424,6 +2545,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     executed.add_argument("--candidate", type=Path, required=True)
     executed.set_defaults(handler=facts, record="facts")
+
+    found = subparsers.add_parser(
+        "references",
+        parents=[recorded],
+        help="find mentions of moved paths and old invocations outside ADRs and plans",
+    )
+    found.add_argument("--candidate", type=Path, required=True)
+    found.set_defaults(handler=references, record="references")
 
     fixed = subparsers.add_parser(
         "autofix",

@@ -14,6 +14,8 @@ python3 apps/repo-builder/src/scripts/retrofit.py report \
 
 `--repository` is `<owner>/<repository>`, or the origin path where origin is one. It requires the proofs record and `<records>.check.txt` and reads every other record that exists; an absent record renders as a subcommand that did not run. It writes `<records>.report.md` and reports `path` and `slots`, the judgement lines left as `[[FILL: <what goes here>]]`. Fill every slot from this run's decisions, delete optional slots that do not apply, and change no rendered line; a wrong rendered line is a defect in its record. The finished report holds no `[[FILL:`.
 
+The renderer adds a **References not repaired** section after Cleanup, one line per hit left in `<records>.references.json` with its suggested replacement, or `none`. It has no slot.
+
 Three lines differ from the shape:
 
 - **Code review** is never `skipped`: it carries the axes step 7's scan ran, the findings corrected, any recorded as incorrectly identified, and the `Reviewed-Head:` sha step 9 signed off, or that no sign-off was written and why.
