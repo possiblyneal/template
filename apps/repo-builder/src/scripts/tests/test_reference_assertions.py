@@ -24,7 +24,9 @@ pytest and standalone from a pre-commit hook that resolves no dependencies.
 
 import json
 import re
+import shutil
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -69,24 +71,110 @@ def reaches(path, pattern):
     return path == pattern
 
 
-ANCHOR_LINK = re.compile(r"\]\(([A-Za-z0-9_-]+\.md)?#([^)\s]+)\)")
+# `](path.md#anchor)`, `](../path.md#anchor)` or a bare `](#anchor)`. A target
+# with a scheme is somebody else's page and is left alone.
+ANCHOR_LINK = re.compile(r"\]\(((?:[^)#\s:]*/)?[^)#\s:/]*)#([^)\s]+)\)")
+CODE_SPAN = re.compile(r"`([^`]+)`")
+FENCE = ("```", "~~~")
+
+
+def unfenced_lines(path):
+    """`(line number, line)` for every line outside a fenced code block.
+
+    A fence may be indented, so the opener and closer are matched after
+    stripping leading space.
+    """
+    fenced = False
+    for number, line in enumerate(path.read_text().splitlines(), start=1):
+        if line.lstrip().startswith(FENCE):
+            fenced = not fenced
+        elif not fenced:
+            yield number, line
+
+
+def headings(path):
+    """`(level, anchor, line number)` for a file's headings, as GitHub anchors them.
+
+    Lowercase, drop everything but letters (any script), digits, underscores,
+    spaces and hyphens, then turn each space into a hyphen -- so ` — ` becomes
+    two hyphens. A heading whose anchor repeats gets `-1`, `-2`, ... in order.
+    """
+    seen = {}
+    found = []
+    for number, line in unfenced_lines(path):
+        heading = re.match(r"(#{1,6}) +(.*)", line)
+        if heading is None:
+            continue
+        text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", heading.group(2))
+        anchor = re.sub(r"[^\w -]", "", text.replace("`", "").strip().lower())
+        anchor = anchor.replace(" ", "-")
+        count = seen.get(anchor, 0)
+        seen[anchor] = count + 1
+        found.append(
+            (
+                len(heading.group(1)),
+                anchor if count == 0 else f"{anchor}-{count}",
+                number,
+            )
+        )
+    return found
 
 
 def heading_slugs(path):
-    """GitHub's anchors for a file's headings, skipping fenced code.
+    return {anchor for _, anchor, _ in headings(path)}
 
-    Lowercase, drop everything but letters, digits, spaces and hyphens, then
-    turn each space into a hyphen -- so ` — ` becomes two hyphens.
-    """
-    slugs = set()
-    fenced = False
-    for line in path.read_text().splitlines():
-        if line.startswith("```"):
-            fenced = not fenced
-        elif not fenced and re.match(r"#{1,6} ", line):
-            text = line.lstrip("#").strip().replace("`", "").lower()
-            slugs.add(re.sub(r"[^a-z0-9 _-]", "", text).replace(" ", "-"))
-    return slugs
+
+def section(path, anchor):
+    """The text from a heading to the next one of its level or higher, or None."""
+    found = headings(path)
+    lines = path.read_text().splitlines()
+    for index, (level, name, number) in enumerate(found):
+        if name != anchor:
+            continue
+        end = next(
+            (n for lv, _, n in found[index + 1 :] if lv <= level), len(lines) + 1
+        )
+        return "\n".join(lines[number - 1 : end - 1])
+    return None
+
+
+def broken_anchor_links(files):
+    """Every `path#anchor` link in `files` whose target or heading is absent."""
+    slugs = {}
+    broken = []
+    for path in files:
+        for line_number, line in unfenced_lines(path):
+            for target, anchor in ANCHOR_LINK.findall(line):
+                resolved = (path.parent / target).resolve() if target else path
+                where = f"{path.name}:{line_number} {target}#{anchor}"
+                if resolved.suffix != ".md":
+                    continue
+                if not resolved.is_file():
+                    broken.append(f"{where} (no such file)")
+                    continue
+                if resolved not in slugs:
+                    slugs[resolved] = heading_slugs(resolved)
+                if anchor not in slugs[resolved]:
+                    broken.append(where)
+    return broken
+
+
+def extract_mismatches(extract, source):
+    """Code spans in `extract`'s bullets that the `source` section they link lacks."""
+    missing = []
+    for number, line in unfenced_lines(extract):
+        anchors = [
+            anchor
+            for target, anchor in ANCHOR_LINK.findall(line)
+            if target == source.name
+        ]
+        if not line.startswith("- ") or not anchors:
+            continue
+        sections = [section(source, anchor) or "" for anchor in anchors]
+        for span in CODE_SPAN.findall(line):
+            if not any(span in text for text in sections):
+                missing.append(f"{extract.name}:{number} `{span}`")
+    return missing
 
 
 def reference_files():
@@ -183,21 +271,30 @@ class ReferenceAssertions(unittest.TestCase):
 
         A retrofit reads one lifecycle section through an anchor rather than
         the whole file, so a renamed heading leaves the step pointing at a
-        section that is not there and nothing else notices. Bare `(#anchor)`
-        links resolve against the file they sit in.
+        section that is not there and nothing else notices. A path resolves
+        against the directory of the file the link sits in, and a bare
+        `(#anchor)` against that file itself. A link inside fenced code is an
+        example, not a link.
         """
-        references = {path.name: path for path in reference_files()}
-        slugs = {name: heading_slugs(path) for name, path in references.items()}
-        broken = []
-        for name, path in references.items():
-            for line_number, line in enumerate(path.read_text().splitlines(), start=1):
-                for target, anchor in ANCHOR_LINK.findall(line):
-                    target = target or name
-                    if target not in slugs:
-                        continue
-                    if anchor not in slugs[target]:
-                        broken.append(f"{name}:{line_number} {target}#{anchor}")
+        broken = broken_anchor_links(reference_files())
         self.assertEqual(broken, [], f"links to headings that do not exist: {broken}")
+
+    def test_inline_extracts_quote_their_source(self):
+        """Every code span in a `retrofit.md` bullet is in the section it links.
+
+        `retrofit.md` states lifecycle rules inline so a retrofit never opens
+        `lifecycle.md`, and #230 asked that any extract a script can check
+        stays in step with the source. What is mechanical is that each
+        backticked span in a bullet linking `lifecycle.md#<anchor>` occurs
+        verbatim in that section, heading line included; the prose around the
+        spans is a paraphrase and is not compared.
+        """
+        missing = extract_mismatches(
+            SKILL / "references/retrofit.md", SKILL / "references/lifecycle.md"
+        )
+        self.assertEqual(
+            missing, [], f"extract spans the linked section does not hold: {missing}"
+        )
 
     def test_every_shipped_path_is_reached_by_an_ownership_rule(self):
         """A shipped path no rule reaches is product-owned by default.
@@ -254,6 +351,72 @@ class ReferenceAssertions(unittest.TestCase):
             ".repo-template.json": [rule["path"] for rule in manifest["ownership"]],
             "lifecycle.md": [rule["path"] for rule in example["ownership"]],
         }
+
+
+class AnchorHelpers(unittest.TestCase):
+    """The link and extract checks, run over files built to break them."""
+
+    def _tree(self, files):
+        directory = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, directory)
+        for name, text in files.items():
+            (directory / name).parent.mkdir(parents=True, exist_ok=True)
+            (directory / name).write_text(text)
+        return directory
+
+    def test_relative_links_resolve_against_the_linking_files_directory(self):
+        root = self._tree(
+            {
+                "x.md": "# A\n",
+                "sub/x.md": "# B\n",
+                "sub/deep/y.md": "[ok](../x.md#b) [bad](../x.md#a) [up](../../x.md#a)\n",
+                "z.md": "[ok](sub/x.md#b) [bad](sub/x.md#a) [gone](sub/nope.md#a)\n",
+            }
+        )
+        broken = broken_anchor_links([root / "sub/deep/y.md", root / "z.md"])
+        self.assertEqual(
+            broken,
+            [
+                "y.md:1 ../x.md#a",
+                "z.md:1 sub/x.md#a",
+                "z.md:1 sub/nope.md#a (no such file)",
+            ],
+        )
+
+    def test_duplicate_headings_take_numbered_anchors(self):
+        root = self._tree({"a.md": "# Step\n\n## Step\n\n### Step\n"})
+        self.assertEqual(heading_slugs(root / "a.md"), {"step", "step-1", "step-2"})
+
+    def test_non_ascii_letters_stay_in_an_anchor(self):
+        root = self._tree({"a.md": "## Café — Über `x`\n"})
+        self.assertEqual(heading_slugs(root / "a.md"), {"café--über-x"})
+
+    def test_links_and_headings_inside_fences_are_ignored(self):
+        root = self._tree(
+            {
+                "a.md": (
+                    "# Real\n\n- item\n  ```\n  # Fake\n  [x](#nowhere)\n  ```\n"
+                    "~~~\n[y](#nowhere)\n~~~\n[z](#real)\n"
+                )
+            }
+        )
+        self.assertEqual(heading_slugs(root / "a.md"), {"real"})
+        self.assertEqual(broken_anchor_links([root / "a.md"]), [])
+
+    def test_an_extract_span_the_source_section_lacks_is_reported(self):
+        root = self._tree(
+            {
+                "lifecycle.md": "## One\n\nUse `alpha`.\n\n## Two\n\n`beta`\n",
+                "retrofit.md": (
+                    "- Quotes [`## One`](lifecycle.md#one): `alpha`, `beta`.\n"
+                    "- Prose with `gamma` and no link.\n"
+                ),
+            }
+        )
+        self.assertEqual(
+            extract_mismatches(root / "retrofit.md", root / "lifecycle.md"),
+            ["retrofit.md:1 `beta`"],
+        )
 
 
 if __name__ == "__main__":
