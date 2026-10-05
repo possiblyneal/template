@@ -2728,6 +2728,27 @@ class RecordedLinesTests(unittest.TestCase):
                 any("untracked residue a move left" in line for line in lines)
             )
 
+    def test_reads_a_kept_directory_as_kept(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            proofs = {**PROOFS, "emptied": [{"path": "src", "residue": []}]}
+            synced = {
+                "pulled": True,
+                "head": "1234567890ab" + "0" * 28,
+                "removed": [],
+                "gone": [],
+                "kept": ["src"],
+                "findings": ["src: not removed, since it is a symlink"],
+            }
+            lines, _ = render_report(
+                self, directory, SUMMARY_PASS, proofs=proofs, hooks=HOOKS, sync=synced
+            )
+
+            self.assertIn(
+                "- Directories emptied by a move: src: kept after the pull, "
+                "named under Left for the operator",
+                lines,
+            )
+
     def test_reads_a_directory_already_gone_after_the_pull(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             proofs = {

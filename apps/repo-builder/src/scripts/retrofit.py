@@ -2425,6 +2425,7 @@ def verification(
 def emptied_line(emptied: list[dict], synced: dict) -> str:
     removed = {item["path"]: item["residue"] for item in synced.get("removed", [])}
     gone = set(synced.get("gone", []))
+    kept = set(synced.get("kept", []))
     return joined(
         [
             f"{item['path']}: removed from the clone after the pull, with "
@@ -2432,6 +2433,8 @@ def emptied_line(emptied: list[dict], synced: dict) -> str:
             if item["path"] in removed
             else f"{item['path']}: gone after the pull"
             if item["path"] in gone
+            else f"{item['path']}: kept after the pull, named under Left for the operator"
+            if item["path"] in kept
             else f"{item['path']}: held open by {', '.join(item['residue'])}, which is "
             "the destination's own and is left in place, named under Left for the operator"
             if item["residue"]
