@@ -2093,6 +2093,72 @@ class ReportTests(unittest.TestCase):
                 "- Runner variable: not offered (the repository is public)", lines
             )
 
+    def test_names_the_records_a_lookup_line_needed_and_did_not_find(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            lines, slots = render_report(
+                self, directory, SUMMARY_PASS, proofs=PROOFS, hooks=HOOKS
+            )
+
+            for line in (
+                "- Destination visibility: unknown (hosted read did not run)",
+                "- Dependabot alerts: unknown (hosted read did not run)",
+                "- Runner variable: unknown (hosted read did not run)",
+                "- Already held: unknown (preflight did not run)",
+            ):
+                self.assertIn(line, lines)
+            self.assertTrue(
+                any(
+                    line.startswith("- Issue tracker: [[FILL: ")
+                    and line.endswith("labels: none created (hosted apply did not run)")
+                    for line in lines
+                )
+            )
+            self.assertIn(
+                "- Hooks: installed at worktree scope into a directory the sweep "
+                "records (sweep did not run); `extensions.worktreeConfig` set on "
+                "the clone (preflight did not run) and left set",
+                lines,
+            )
+            self.assertNotIn("public or private, read from the API", slots)
+            self.assertNotIn("candidate path", slots)
+
+    def test_reads_the_clone_from_preflight_where_the_sweep_did_not_run(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            lines, _ = render_report(
+                self,
+                directory,
+                SUMMARY_PASS,
+                proofs=PROOFS,
+                preflight={
+                    "operation": "retrofit",
+                    "addons_present": ["CHANGELOG.md"],
+                    "destination": {"path": "/home/op/ledger"},
+                },
+            )
+
+            self.assertIn("- Already held: CHANGELOG.md", lines)
+            self.assertIn(
+                "- Hooks: installed at worktree scope into a directory the sweep "
+                "records (sweep did not run); `extensions.worktreeConfig` set on "
+                "/home/op/ledger and left set",
+                lines,
+            )
+
+    def test_names_a_hosted_apply_that_ran_without_labels_as_a_judgement(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            lines, slots = render_report(
+                self,
+                directory,
+                SUMMARY_PASS,
+                proofs=PROOFS,
+                hosted_apply={"operation": "hosted apply", "writes": {}},
+            )
+
+            self.assertIn("reason no labels were created", slots)
+            self.assertIn("- Runner variable: unknown (hosted read did not run)", lines)
+
     def test_renders_a_stopped_unmet_bar_with_nothing_hosted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             lines, slots = render_report(
@@ -2133,11 +2199,10 @@ class ReportTests(unittest.TestCase):
                     "- Left for the operator: [[FILL: each path left in place and why, or none]]"
                 ],
             )
-            self.assertTrue(
-                any(
-                    line.startswith("- Candidate: left standing at [[FILL: ")
-                    for line in lines
-                )
+            self.assertIn(
+                "- Candidate: left standing at /r/tmp/ledger, because the flow "
+                "stopped and resumes from it",
+                lines,
             )
             self.assertTrue(lines[-1].startswith("[[FILL: "))
             self.assertIn("the unmet-bar outcome, in the Report additions shape", slots)

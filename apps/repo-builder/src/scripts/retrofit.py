@@ -1845,7 +1845,7 @@ def addon_adoption(report: Report, preflight_result: dict) -> None:
     report.add(
         f"- Already held: {joined(held)}"
         if held is not None
-        else f"- Already held: {report.fill('addon-shaped paths the destination brought with it, or none')}"
+        else "- Already held: unknown (preflight did not run)"
     )
 
 
@@ -1910,9 +1910,13 @@ def setting_line(
     return f"- {name}: unavailable ({outcome})"
 
 
-def labels_line(report: Report, labels: object) -> str:
+def labels_line(report: Report, labels: object, apply_ran: bool) -> str:
     if not isinstance(labels, dict):
-        return f"none created ({report.fill('reason no labels were created')})"
+        return (
+            f"none created ({report.fill('reason no labels were created')})"
+            if apply_ran
+            else "none created (hosted apply did not run)"
+        )
     parts = []
     if labels["created"]:
         parts.append(f"created ({', '.join(labels['created'])})")
@@ -1944,7 +1948,7 @@ def repository_settings(
     gate_reached = bool(hosted_state or apply_record) or not stopped
     report.section("### Repository settings")
     report.add(
-        f"- Destination visibility: {hosted_state.get('visibility') or report.fill('public or private, read from the API')}"
+        f"- Destination visibility: {hosted_state.get('visibility') or 'unknown (hosted read did not run)'}"
     )
     for write in HOSTED_WRITES:
         if write.setting is not None:
@@ -1954,10 +1958,12 @@ def repository_settings(
                     writes.get(write.name),
                     reasons.get(write.name),
                     gate_reached,
-                    observed_state(write.name, hosted_state),
+                    observed_state(write.name, hosted_state)
+                    if hosted_state
+                    else "unknown (hosted read did not run)",
                 )
             )
-    labels = labels_line(report, writes.get("labels"))
+    labels = labels_line(report, writes.get("labels"), bool(apply_record))
     report.add(
         f"- Issue tracker: {report.fill('tracker, recorded in docs/agents/issue-tracker.md, shipped by the payload or kept from the destination')}; labels: {labels}"
     )
@@ -2070,6 +2076,7 @@ def verification(
     swept: dict,
     executed: dict,
     fixed: dict,
+    preflight_result: dict,
 ) -> None:
     fill = report.fill
     copy, purity = proofs["copy"], proofs["rename_purity"]
@@ -2079,7 +2086,7 @@ def verification(
         for row in failing(rows):
             report.add(*(f"  - {row.check}: {finding}" for finding in row.findings))
     report.add(
-        candidate_hooks_line(report, proofs, swept),
+        candidate_hooks_line(proofs, swept, preflight_result),
         f"- Copied paths byte-identical to their source: {copy['identical']}/{copy['total']}; "
         "the rest are the authored surface, under File list. An overridden path is "
         "in neither count, under Reconciliation instead",
@@ -2163,23 +2170,29 @@ def reverted_line(report: Report, fixed: dict) -> str:
     )
 
 
-def candidate_hooks_line(report: Report, proofs: dict, swept: dict) -> str:
+def candidate_hooks_line(proofs: dict, swept: dict, preflight_result: dict) -> str:
     if not proofs["candidate"]["pre_commit_config"]:
         return (
             "- Hooks: none installed, because the candidate carries no "
             "`.pre-commit-config.yaml` to read hook types from"
         )
     hooks_dir = swept.get("scratch", {}).get("hooks_dir")
-    clone = swept.get("clone", {}).get("path")
+    clone = swept.get("clone", {}).get("path") or preflight_result.get(
+        "destination", {}
+    ).get("path")
     return (
-        f"- Hooks: installed at worktree scope into {hooks_dir or report.fill('the candidate hooks directory')}; "
-        f"`extensions.worktreeConfig` set on {clone or report.fill('the clone')} and left set"
+        "- Hooks: installed at worktree scope into "
+        f"{hooks_dir or 'a directory the sweep records (sweep did not run)'}; "
+        f"`extensions.worktreeConfig` set on {clone or 'the clone (preflight did not run)'} and left set"
     )
 
 
-def candidate_line(report: Report, swept: dict) -> str:
+def candidate_line(proofs: dict, swept: dict) -> str:
     if not swept:
-        return f"- Candidate: left standing at {report.fill('candidate path')}, because the flow stopped and resumes from it"
+        return (
+            f"- Candidate: left standing at {proofs['candidate']['path']}, "
+            "because the flow stopped and resumes from it"
+        )
     candidate, stages = swept["candidate"], swept["stages"]
     if stages.get("worktree") not in ("done", "absent"):
         return f"- Candidate: left standing at {candidate['path']}, because its removal was refused"
@@ -2193,7 +2206,7 @@ def candidate_line(report: Report, swept: dict) -> str:
 
 def cleanup(report: Report, swept: dict, hooks_result: dict, proofs: dict) -> None:
     report.section("### Cleanup")
-    report.add(candidate_line(report, swept))
+    report.add(candidate_line(proofs, swept))
     if swept:
         scratch = [
             f"{path}: {swept['stages'].get(stage)}"
@@ -2256,7 +2269,8 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
     reconciliation(report, proofs)
     application_boundaries(report, proofs)
     file_list(report, proofs)
-    addon_adoption(report, load(prefix, "preflight"))
+    preflight_result = load(prefix, "preflight")
+    addon_adoption(report, preflight_result)
     repository_settings(
         report, load(prefix, "hosted-read"), apply_record, arguments.stopped
     )
@@ -2271,6 +2285,7 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
         swept,
         load(prefix, "facts"),
         load(prefix, "autofix"),
+        preflight_result,
     )
     cleanup(report, swept, hooks_result, proofs)
     if arguments.resumed:
