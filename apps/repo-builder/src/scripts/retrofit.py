@@ -1871,7 +1871,7 @@ def conflicted_line(report: Report, proofs: dict) -> str:
     )
 
 
-def reconciliation(report: Report, proofs: dict) -> None:
+def reconciliation(report: Report, proofs: dict, found: dict | None) -> None:
     fill = report.fill
     moves = proofs["rename_purity"]["moves"]
     renamed = [f"{move['from']} -> {move['to']}" for move in moves]
@@ -1900,7 +1900,17 @@ def reconciliation(report: Report, proofs: dict) -> None:
         f"- Unmovable: {fill('each path that could not move and why, or none')}",
         f"- Data split: {fill('each data file, read to assets/ or written to state/, and the live copy the operator carries, or none')}",
         f"- References repaired: {fill('each file and the moved path rewritten in it, or none')}",
-        f"- References reported, not rewritten: {fill('each file and the prose describing the old structure, or none')}",
+        "- References reported, not rewritten: "
+        + (
+            joined(
+                [
+                    f"{hit['path']}:{hit['line']}: `{hit['matched']}`, suggested `{hit['replacement']}`"
+                    for hit in found["hits"]
+                ]
+            )
+            if found
+            else "unknown (references did not run)"
+        ),
         f"- Ignore rules the payload does not cover: {fill('each rule and what it ignored, or none')}",
     )
 
@@ -2355,21 +2365,6 @@ def resumption(report: Report, writes: dict) -> None:
     )
 
 
-def unrepaired_references(report: Report, found: dict) -> None:
-    """The hits still in the candidate, read from the references record."""
-    report.section("### References not repaired")
-    if not found:
-        report.add("- not run (no references record)")
-        return
-    report.add(
-        *[
-            f"- {hit['path']}:{hit['line']}: `{hit['matched']}`, suggested `{hit['replacement']}`"
-            for hit in found["hits"]
-        ]
-        or ["- none"]
-    )
-
-
 def render_report(arguments: argparse.Namespace) -> dict[str, object]:
     """Render the deterministic lines of a retrofit's final report.
 
@@ -2386,7 +2381,7 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
     apply_record = load(prefix, "hosted-apply")
     report = Report()
     header(report, arguments, proofs)
-    reconciliation(report, proofs)
+    reconciliation(report, proofs, load(prefix, "references"))
     application_boundaries(report, proofs)
     file_list(report, proofs)
     preflight_result = load(prefix, "preflight")
@@ -2408,7 +2403,6 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
         preflight_result,
     )
     cleanup(report, swept, hooks_result, proofs)
-    unrepaired_references(report, load(prefix, "references"))
     if arguments.resumed:
         resumption(report, apply_record.get("writes", {}))
     report.section("### Pending action")

@@ -2567,10 +2567,12 @@ class ReferencesTests(unittest.TestCase):
                 references={"hits": hits},
             )
 
-            self.assertIn("### References not repaired", lines)
-            self.assertIn(
-                "- README.md:1: `REPORT.md`, suggested `docs/report.md`", lines
+            line = next(
+                x
+                for x in lines
+                if x.startswith("- References reported, not rewritten:")
             )
+            self.assertIn("README.md:1: `REPORT.md`, suggested `docs/report.md`", line)
 
     def test_report_says_when_no_hit_remains(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -2578,5 +2580,13 @@ class ReferencesTests(unittest.TestCase):
                 self, directory, SUMMARY_PASS, proofs=PROOFS, references={"hits": []}
             )
 
-            at = lines.index("### References not repaired")
-            self.assertEqual(lines[at + 1], "- none")
+            self.assertIn("- References reported, not rewritten: none", lines)
+
+    def test_report_says_when_references_did_not_run(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            lines, _ = render_report(self, directory, SUMMARY_PASS, proofs=PROOFS)
+
+            self.assertIn(
+                "- References reported, not rewritten: unknown (references did not run)",
+                lines,
+            )

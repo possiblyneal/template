@@ -20,7 +20,7 @@ Every slot left after the renderer runs is one no record can fill, for the reaso
 
 - Reconciliation, **Conflicted** (intents each merge settled), **Superseded**, **Partially covered, not cut**: the reading of what a file did and what carries it now is the flow's, and the proofs record holds paths and classes, never intent.
 - **Layout plan** (corrections and declines), **Unmovable**, **Data split**, **Ignore rules the payload does not cover**: each is the operator's answer to a question the flow asked, and no subcommand records an answer.
-- **References repaired**, **References reported, not rewritten**: the rewrite is an edit the flow made by hand, and no record lists it.
+- **References repaired**: the rewrite is an edit the flow made by hand, and the references record is rewritten after it, so it holds only what remains.
 - Application boundaries, **ADR fields defaulted**, **Unit map**, **Ships nothing for want of an adapter**, **Declared but not built**: the evidence behind each is read from the destination's files by the flow, and the proofs record holds only the ADR paths written.
 - **Issue tracker**'s tracker: it is named inside `docs/agents/issue-tracker.md`, a file's content rather than a record.
 - Labels **reason none were created**, and Hosted writes, reversible, the **declined** line: the reason a write was not approved is the operator's, and `hosted apply` records only the writes it was asked to make.
@@ -31,8 +31,6 @@ Every slot left after the renderer runs is one no record can fill, for the reaso
 - **Autofix**'s commit sha, and the rule or formatter behind a **reverted** payload path: the flow makes the commit after the autofix record is written, and the record lists the path without the rule.
 - **Destination fix prepared** and **published** (unmet bar only), **Left for the operator**'s other paths, **Pending action**: each reports a decision made or awaited.
 - **Resumption**: what live state showed, what was read back, redone and retried are the resumed run's own observations.
-
-The renderer adds a **References not repaired** section after Cleanup, one line per hit left in `<records>.references.json` with its suggested replacement, or `none`. It has no slot.
 
 Three lines differ from the shape:
 
@@ -48,7 +46,6 @@ Under **Reconciliation**:
 - Unmovable: <path>: <why it could not move>; no allowlist entry written | none
 - Data split: <file>: read, to `assets/` | written, to `state/`, and the operator copies their live file there and restores the old path before pulling the merge | written, to `state/`, with its finished record snapshotted to `assets/` and a fallback the operator confirmed, and the operator copies their live file there and restores the old path before pulling the merge | none
 - References repaired: <file>: <the moved path rewritten> | none
-- References reported, not rewritten: <file>: <the prose describing the old structure> | none
 - Ignore rules the payload does not cover: <rule>: <what it ignored>, reported and not re-added | restored by the operator (<reason>), so the ignore file is authored and no override entry is recorded | none
 
 Under **Application boundaries**:
