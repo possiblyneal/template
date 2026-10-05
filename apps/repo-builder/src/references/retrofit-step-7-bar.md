@@ -67,7 +67,7 @@ python3 apps/repo-builder/src/scripts/retrofit.py proofs --template-repo . \
 
 `normalize` runs `git add --renormalize`, clears the executable bit from staged files not starting with `#!`, and runs the configuration's whitespace, end-of-file, line-ending and `adr-index` hooks over the staged paths, re-staging what they rewrite. It reports `renormalized`, `executable_cleared`, `rewritten` and `still_failing`. Fix each `still_failing` entry by hand before the proofs.
 
-`proofs` measures from the index, so it runs with nothing committed. It records `copy` (with `differing` and `missing`), `rename_purity`, `authored`, `deleted`, `applied`, `preserved`, `payload_total`, `overridden`, `emptied` and `workflows_without_pull_request`. A move edited past git's rename threshold appears as a deletion plus an `authored` path. It refuses an empty index and a candidate already past `<base-commit>`.
+`proofs` measures from the index, so it runs with nothing committed. It records `copy` (with `differing` and `missing`), `rename_purity`, `authored`, `deleted`, `applied`, `preserved`, `payload_total`, `overridden`, `emptied` and `workflows_without_pull_request`, plus what the report renders in place of slots: `manifests` (each staged manifest, `new` or `edited` against `<base-commit>`, with the keys it `added` and `changed`), `configuration` (the tool configuration each declared unit's root carries) and `issue_tracker` (the tracker `docs/agents/issue-tracker.md` names, and whether the payload shipped it). A move edited past git's rename threshold appears as a deletion plus an `authored` path. It refuses an empty index and a candidate already past `<base-commit>`.
 
 **Fix the references the moves left behind, before the first commit**, as [step 6](retrofit-step-6-layout.md) says:
 
@@ -76,7 +76,7 @@ python3 apps/repo-builder/src/scripts/retrofit.py references \
   --candidate <candidate> --records <records>
 ```
 
-It reads the proofs record's moves and each unit's `[project.scripts]`, and records `hits` under `<records>.references.json`: `path`, `line`, `text`, `kind` (`moved-path` or `invocation`), `matched` and the suggested `replacement` (null on a hit marked `ambiguous`, which lists its `candidates` instead), beside the `moves` it searched. Fix the hits, stage, run `normalize` and `proofs` again, then run `references` again so the record holds only what remains. A repaired moved file can drop below git's rename threshold, which the second `proofs` shows; the rerun keeps searching the moves its earlier record held.
+It reads the proofs record's moves and each unit's `[project.scripts]`, and records `hits` under `<records>.references.json`: `path`, `line`, `text`, `kind` (`moved-path` or `invocation`), `matched` and the suggested `replacement` (null on a hit marked `ambiguous`, which lists its `candidates` instead), beside the `moves` it searched. A moved-path mention that resolves to a tracked file, relative to its own directory or its unit's root, is not a hit: a relative import or a unit-relative path is already right. Fix the hits, stage, run `normalize` and `proofs` again, then run `references` again so the record holds only what remains. A repaired moved file can drop below git's rename threshold, which the second `proofs` shows; the rerun keeps searching the moves its earlier record held.
 
 **Commit everything this flow wrote** with the message in a file beside the candidate and `git commit -F <file>`; a message passed by process substitution has landed empty.
 
@@ -92,7 +92,7 @@ python3 apps/repo-builder/src/scripts/retrofit.py autofix --candidate <candidate
   --subtree apps/github-repository-template/src/base-repo --records <records>
 ```
 
-It refuses uncommitted tracked changes, runs `scripts/fix` at most twice while a pass still changes something, and restores every rewritten path that was a byte-identical payload copy, listing it under `reverted` as a payload defect to report. It reports `shipped`, `passes`, `exit_status`, `rewritten` and `reverted`. **Its exit status is not the bar.** Where `shipped` is false, measure the bar without a pass. Then commit the pass alone, the same way.
+It refuses uncommitted tracked changes, runs `scripts/fix` at most twice while a pass still changes something, and restores every rewritten path that was a byte-identical payload copy, listing it under `reverted` as a payload defect to report. It reports `shipped`, `passes`, `exit_status`, `rewritten` and `reverted`. **Its exit status is not the bar.** Where `shipped` is false, measure the bar without a pass. Then commit the pass alone, the same way, with the subject `style: apply the destination's own autofix`: `facts` finds the commit by that subject and the report renders its sha.
 
 Where the destination's test capability collects anything, report its result on both sides of the pass, since the formatter is the risky part; where it collects nothing, say so.
 
@@ -111,7 +111,9 @@ git -C <candidate> add -A [-- . '<exclude pathspec>'...]
 python3 apps/repo-builder/src/scripts/retrofit.py facts --candidate <candidate> --records <records>
 ```
 
-Per unit it runs `scripts/package <unit>` for real and `scripts/run <unit>` under `CI_DRY_RUN`, and flags either that printed `No project manifest found` as doing nothing, since both exit zero there. Neither is in the check surface, so a wrong declaration passes the bar otherwise. A failure is a wrong fact or a missing descriptor: fix it, and re-read it with the operator where the fix changes a fact they confirmed.
+Per unit it runs `scripts/package <unit>` for real and `scripts/run <unit>` under `CI_DRY_RUN`, and flags either that printed `No project manifest found` as doing nothing, since both exit zero there. Neither is in the check surface, so a wrong declaration passes the bar otherwise. A failure is a wrong fact or a missing descriptor: fix it, and re-read it with the operator where the fix changes a fact they confirmed. It also records `autofix_commit` and, per unit, `adapterless`: the language of a unit shipping `none` beside a manifest no packaging adapter reads.
+
+**Record each judgement as it is made**, from step 5 on, with `retrofit.py decide --key <key> --value "<line>"` under [Report additions](retrofit-report.md#report-additions): the unit map once the operator confirms it, each collision's disposition, the layout corrections, the review's account. The report and the pull-request body render from that record, so nothing is reconstructed at the end.
 
 **An unmet bar is a failed retrofit and stops before the pull request**, naming the capability that could not pass and why. The fix does not ride along in the candidate. **The rest of that path is in [`retrofit-unmet-bar.md`](retrofit-unmet-bar.md)**; a run that meets the bar never reads it.
 
