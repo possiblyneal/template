@@ -99,7 +99,7 @@ A root file matches no directory pattern, so `CLAUDE.md`, `.pre-commit-config.ya
 
 Reaching a path is not managing it. `.env` is named and **product**: the payload ships an empty one so the file exists, and a destination's copy is the destination's. Naming it makes that a decision rather than the default an added payload path would inherit.
 
-The root `CLAUDE.md` is managed and merged, not overwritten: the destination writes its own instructions into the same file, so an update reconciles the template's change with them and stops only where both say different things about the same rule.
+The root `CLAUDE.md` is managed and merged, not overwritten: the destination writes its own instructions into the same file, so an update reconciles the template's change with them and stops only where both say different things about the same rule. A file written that way is `merged` in the update's classification, not overridden: it records no entry and stays managed.
 
 A rename or delete of a destination-modified managed file needs semantic review. Product-created files under managed directories remain untouched unless the new template introduces the same path.
 

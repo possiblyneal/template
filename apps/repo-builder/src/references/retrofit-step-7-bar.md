@@ -69,6 +69,15 @@ python3 apps/repo-builder/src/scripts/retrofit.py proofs --template-repo . \
 
 `proofs` measures from the index, so it runs with nothing committed. It records `copy` (with `differing` and `missing`), `rename_purity`, `authored`, `deleted`, `applied`, `preserved`, `payload_total`, `overridden`, `emptied` and `workflows_without_pull_request`. A move edited past git's rename threshold appears as a deletion plus an `authored` path. It refuses an empty index and a candidate already past `<base-commit>`.
 
+**Fix the references the moves left behind, before the first commit**, as [step 6](retrofit-step-6-layout.md) says:
+
+```bash
+python3 apps/repo-builder/src/scripts/retrofit.py references \
+  --candidate <candidate> --records <records>
+```
+
+It reads the proofs record's moves and each unit's `[project.scripts]`, and records `hits` under `<records>.references.json`: `path`, `line`, `text`, `kind` (`moved-path` or `invocation`), `matched` and the suggested `replacement` (null on a hit marked `ambiguous`, which lists its `candidates` instead), beside the `moves` it searched. Fix the hits, stage, run `normalize` and `proofs` again, then run `references` again so the record holds only what remains. A repaired moved file can drop below git's rename threshold, which the second `proofs` shows; the rerun keeps searching the moves its earlier record held.
+
 **Commit everything this flow wrote** with the message in a file beside the candidate and `git commit -F <file>`; a message passed by process substitution has landed empty.
 
 ## The autofix pass

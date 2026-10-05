@@ -16,8 +16,9 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tomllib
 import urllib.parse
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from pathlib import Path
@@ -172,6 +173,7 @@ def proofs(arguments: argparse.Namespace) -> dict[str, object]:
     overridden = overrides(candidate)
     overridden_set = {entry["path"] for entry in overridden}
     identical = applied = unchanged = 0
+    identical_paths: list[str] = []
     differing: list[dict[str, object]] = []
     missing: list[str] = []
     preserved: list[str] = []
@@ -192,12 +194,14 @@ def proofs(arguments: argparse.Namespace) -> dict[str, object]:
                 preserved.append(path)
             else:
                 unchanged += 1
+                identical_paths.append(path)
             continue
         # An ignored copy is on disk only, so it is no path the branch writes.
         if not at_base and path not in excluded:
             applied += 1
         if actual == expected:
             identical += 1
+            identical_paths.append(path)
             # The destination's own version is gone, though the copy is exact.
             if at_base:
                 replaced.append(path)
@@ -249,6 +253,9 @@ def proofs(arguments: argparse.Namespace) -> dict[str, object]:
         "overridden": overridden,
         "copy": {
             "identical": identical,
+            # Every payload path whose content is the payload's, copied this
+            # run or already held: the files a rewrite must leave alone.
+            "identical_paths": sorted(identical_paths),
             "total": identical + len(differing),
             "differing": differing,
             "missing": missing,
@@ -432,6 +439,171 @@ def facts(arguments: argparse.Namespace) -> dict[str, object]:
         "candidate": str(candidate),
         "shipped": shipped,
         "units": units,
+    }
+
+
+# Records of what the tree used to be, so a mention there is correct as it
+# stands: ADRs and plans at any depth, and every changelog.
+HISTORICAL_DIRECTORIES = ("docs/adrs/", "docs/plans/")
+HISTORICAL_FILE = "CHANGELOG.md"
+
+
+def is_historical(path: str) -> bool:
+    return Path(path).name == HISTORICAL_FILE or any(
+        path.startswith(directory) or f"/{directory}" in path
+        for directory in HISTORICAL_DIRECTORIES
+    )
+
+
+def console_scripts(candidate: Path) -> list[dict[str, str]]:
+    """Each unit's `[project.scripts]`: its name, unit, and the module's file stem."""
+    scripts = []
+    for manifest in sorted(candidate.glob("apps/*/pyproject.toml")):
+        declared = tomllib.loads(manifest.read_text()).get("project", {})
+        for name, target in declared.get("scripts", {}).items():
+            scripts.append(
+                {
+                    "name": name,
+                    "unit": manifest.parent.name,
+                    "stem": str(target).split(":")[0].split(".")[-1],
+                }
+            )
+    return scripts
+
+
+# A name ends where no word character, hyphen or `.<word>` extension follows,
+# so `main.py.bak` is another file while a sentence-final period still ends one.
+NAME_END = r"(?![\w-]|\.\w)"
+
+
+def invocation_pattern(script: dict[str, str]) -> re.Pattern[str]:
+    """`./<file>.py`, `python <file>.py` or `python3 <file>.py`, with any directory."""
+    stems = "|".join(
+        re.escape(stem) for stem in {script["stem"], script["name"].replace("-", "_")}
+    )
+    return re.compile(
+        r"(?:(?<![\w./-])\./|\bpython3?\s+)(?:[\w.-]+/)*(?:"
+        + stems
+        + r")\.py"
+        + NAME_END
+    )
+
+
+def mention_pattern(path: str) -> re.Pattern[str]:
+    # Not preceded by a path character, so a mention of the new path (which
+    # ends in the old one) is not a mention of the old.
+    return re.compile(r"(?<![\w./-])(?:\./)?" + re.escape(path) + NAME_END)
+
+
+Span = tuple[int, int]
+
+
+def hits_of_kind(
+    kind: str,
+    line: str,
+    patterns: list[tuple[re.Pattern[str], str]],
+    claimed: Sequence[Span] = (),
+) -> list[tuple[Span, dict[str, object]]]:
+    """One hit per span a pattern matches, with that span's replacements.
+
+    A span lying inside a `claimed` one is skipped. Where several patterns
+    match the same span with different replacements, such as a basename two
+    moves share or a console-script stem two units share, no single one is
+    right: the hit is marked ambiguous and lists its candidates instead.
+    """
+    spans: dict[Span, tuple[str, list[str]]] = {}
+    for pattern, replacement in patterns:
+        for match in pattern.finditer(line):
+            start, end = match.span()
+            if any(a <= start and end <= b for a, b in claimed):
+                continue
+            _, replacements = spans.setdefault(match.span(), (match.group(0), []))
+            if replacement not in replacements:
+                replacements.append(replacement)
+    hits: list[tuple[Span, dict[str, object]]] = []
+    for span, (matched, replacements) in spans.items():
+        hit: dict[str, object] = {"kind": kind, "matched": matched}
+        if len(replacements) == 1:
+            hit["replacement"] = replacements[0]
+        else:
+            hit |= {"replacement": None, "ambiguous": True, "candidates": replacements}
+        hits.append((span, hit))
+    return hits
+
+
+def line_hits(
+    line: str,
+    scripts: list[tuple[re.Pattern[str], str]],
+    paths: list[tuple[re.Pattern[str], str]],
+) -> list[dict[str, object]]:
+    """Every hit on a line; an invocation claims its span from the moved paths."""
+    invocations = hits_of_kind("invocation", line, scripts)
+    moved = hits_of_kind(
+        "moved-path", line, paths, claimed=[span for span, _ in invocations]
+    )
+    return [hit for _, hit in invocations + moved]
+
+
+def references(arguments: argparse.Namespace) -> dict[str, object]:
+    """Find tracked lines naming a moved path or a script that now has an entry.
+
+    The moves come from the proofs record, unioned with those the earlier
+    references record searched that still hold in the candidate: a repair can
+    push a move below git's rename threshold, and the rerun's proofs then no
+    longer lists it, while a move the operator dropped is searched no more. The console
+    scripts come from the units' manifests. A hit carries the replacement a fix
+    would write, or the candidates where a basename or a console-script stem is
+    shared and no single one is right; the flow fixes them in the candidate
+    before review, and what remains is the record `report` renders. ADRs,
+    plans, changelogs and byte-identical payload copies are never searched.
+    """
+    candidate = preflight.require_git_repository(arguments.candidate, "candidate")
+    proofs_record = load_required(arguments.records, "proofs")
+    tracked_paths = set(nul_fields(candidate, "ls-files", "-z"))
+    searched: dict[str, str] = {
+        str(move["from"]): str(move["to"])
+        for move in arguments.previous.get("moves", [])
+        if move["from"] not in tracked_paths and move["to"] in tracked_paths
+    }
+    searched.update(
+        (str(move["from"]), str(move["to"]))
+        for move in proofs_record["rename_purity"]["moves"]
+    )
+    moves = list(searched.items())
+    copies = set(proofs_record.get("copy", {}).get("identical_paths", []))
+    paths = [(mention_pattern(old), new) for old, new in moves] + [
+        (mention_pattern(Path(old).name), new) for old, new in moves
+    ]
+    scripts = [
+        (
+            invocation_pattern(script),
+            f"scripts/run {script['unit']} --entry {script['name']}",
+        )
+        for script in console_scripts(candidate)
+    ]
+
+    hits: list[dict[str, object]] = []
+    for tracked in sorted(tracked_paths):
+        if (
+            is_historical(tracked)
+            or tracked in copies
+            or not (candidate / tracked).is_file()
+        ):
+            continue
+        try:
+            lines = (candidate / tracked).read_text().splitlines()
+        except UnicodeDecodeError:
+            continue
+        for number, line in enumerate(lines, start=1):
+            hits.extend(
+                {"path": tracked, "line": number, "text": line.strip(), **hit}
+                for hit in line_hits(line, scripts, paths)
+            )
+    return {
+        "operation": "references",
+        "candidate": str(candidate),
+        "moves": [{"from": old, "to": new} for old, new in moves],
+        "hits": hits,
     }
 
 
@@ -1480,6 +1652,69 @@ def write_runner_variable(repository: str, log: WriteLog) -> Outcome:
     return Outcome.DONE
 
 
+def refused_line(reading: object) -> str | None:
+    """A reading the host refused, as a settings line's value."""
+    if not isinstance(reading, dict) or "refused" not in reading:
+        return None
+    if reading["refused"] == Outcome.NOT_OFFERED:
+        return "unavailable (not offered for the plan)"
+    return f"unavailable ({reading['refused']})"
+
+
+# What `hosted read` shows of a setting `hosted apply` wrote nothing for, one
+# reader per write. A reader returns None where the reading leaves the setting
+# open to be requested, which is the only case that is the operator declining it.
+ALREADY_ON = "enabled (already set before the retrofit)"
+
+
+def unread(_state: dict) -> str | None:
+    return None
+
+
+def observe_merge_settings(state: dict) -> str | None:
+    return ALREADY_ON if state.get("merge_settings") == MERGE_SETTINGS else None
+
+
+def observe_dependabot_alerts(state: dict) -> str | None:
+    alerts = state.get("dependabot", {}).get("alerts")
+    return ALREADY_ON if alerts is True else refused_line(alerts)
+
+
+def observe_security_updates(state: dict) -> str | None:
+    updates = state.get("dependabot", {}).get("security_updates")
+    if isinstance(updates, dict) and updates.get("enabled"):
+        return ALREADY_ON
+    return refused_line(updates)
+
+
+def observe_push_protection(state: dict) -> str | None:
+    reading = state.get("push_protection")
+    if reading == "enabled":
+        return ALREADY_ON
+    return refused_line({"refused": reading}) if reading == "not offered" else None
+
+
+def observe_ruleset(state: dict) -> str | None:
+    rulesets = state.get("rulesets")
+    if isinstance(rulesets, list) and any(
+        ruleset.get("target") == "branch" and ruleset.get("enforcement") == "active"
+        for ruleset in rulesets
+    ):
+        return ALREADY_ON
+    return refused_line(rulesets)
+
+
+def observe_runner_variable(state: dict) -> str | None:
+    visibility, runner = state.get("visibility"), state.get("runner")
+    if visibility is not None and visibility != "private":
+        return f"not offered (the repository is {visibility})"
+    if refused_line(runner):
+        return refused_line(runner)
+    if isinstance(runner, str) and runner != "online":
+        return f"not offered (the dev runner is {runner})"
+    return None
+
+
 @dataclass(frozen=True)
 class HostedWrite:
     """One write the gate can approve."""
@@ -1488,6 +1723,8 @@ class HostedWrite:
     # Its line under Repository settings; labels report on a line of their own.
     setting: str | None
     perform: Callable[[argparse.Namespace, WriteLog], Outcome | LabelOutcome]
+    # What the report says of the setting when nothing was written for it.
+    observe: Callable[[dict], str | None] = unread
 
 
 # In the gate's order, which is the order `apply` performs them in.
@@ -1496,6 +1733,7 @@ HOSTED_WRITES = (
         "merge-settings",
         "Merge settings (merge commit only, head branches deleted)",
         lambda arguments, log: write_merge_settings(arguments.repository, log),
+        observe_merge_settings,
     ),
     HostedWrite(
         "labels",
@@ -1515,6 +1753,7 @@ HOSTED_WRITES = (
             f"repos/{arguments.repository}/vulnerability-alerts",
             log,
         ),
+        observe_dependabot_alerts,
     ),
     HostedWrite(
         "security-updates",
@@ -1524,11 +1763,13 @@ HOSTED_WRITES = (
             f"repos/{arguments.repository}/automated-security-fixes",
             log,
         ),
+        observe_security_updates,
     ),
     HostedWrite(
         "push-protection",
         "Push protection",
         lambda arguments, log: write_push_protection(arguments.repository, log),
+        observe_push_protection,
     ),
     HostedWrite(
         "ruleset",
@@ -1536,11 +1777,13 @@ HOSTED_WRITES = (
         lambda arguments, log: write_ruleset(
             arguments.repository, arguments.ruleset, arguments.replace_ruleset, log
         ),
+        observe_ruleset,
     ),
     HostedWrite(
         "runner-variable",
         "Runner variable",
         lambda arguments, log: write_runner_variable(arguments.repository, log),
+        observe_runner_variable,
     ),
 )
 
@@ -1685,6 +1928,10 @@ def command_result(rows: list[Row]) -> str:
     return "pass"
 
 
+def unknown(step: str) -> str:
+    return f"unknown ({step} did not run)"
+
+
 def joined(items: list[str]) -> str:
     return ", ".join(items) if items else "none"
 
@@ -1756,17 +2003,25 @@ def merged_paths(proofs: dict) -> list[str]:
     ]
 
 
-def conflicted_line(report: Report, proofs: dict) -> str:
+def merged_line(report: Report, proofs: dict) -> str:
     merged = merged_paths(proofs)
     if not merged:
-        return "- Conflicted: none"
+        return "- Merged: none"
     return (
-        f"- Conflicted: {', '.join(merged)}, each merged; "
-        f"{report.fill('the competing intents each merge settled')}"
+        f"- Merged: {', '.join(merged)}; "
+        f"{report.fill('the payload change and the destination text each carries')}"
     )
 
 
-def reconciliation(report: Report, proofs: dict) -> None:
+def reference_hit_line(hit: dict) -> str:
+    where = f"{hit['path']}:{hit['line']}: `{hit['matched']}`"
+    if hit.get("ambiguous"):
+        candidates = ", ".join(f"`{candidate}`" for candidate in hit["candidates"])
+        return f"{where}, ambiguous between {candidates}"
+    return f"{where}, suggested `{hit['replacement']}`"
+
+
+def reconciliation(report: Report, proofs: dict, reference_record: dict | None) -> None:
     fill = report.fill
     moves = proofs["rename_purity"]["moves"]
     renamed = [f"{move['from']} -> {move['to']}" for move in moves]
@@ -1776,7 +2031,8 @@ def reconciliation(report: Report, proofs: dict) -> None:
         f"- Applied: {proofs['applied']} payload paths, written because the destination lacked them",
         f"- Preserved: {joined(proofs['preserved'])}",
         f"- Renamed/deleted: {joined(renamed + deleted)}",
-        conflicted_line(report, proofs),
+        merged_line(report, proofs),
+        f"- Conflicted: {fill('paths with competing intents the flow could not settle, or none')}",
         f"- Superseded: {fill('each superseded path, what it did and what carries it now, or none')}",
         f"- Partially covered, not cut: {fill('script paths and the parts already covered, or none')}",
         "- Overridden: "
@@ -1795,7 +2051,12 @@ def reconciliation(report: Report, proofs: dict) -> None:
         f"- Unmovable: {fill('each path that could not move and why, or none')}",
         f"- Data split: {fill('each data file, read to assets/ or written to state/, and the live copy the operator carries, or none')}",
         f"- References repaired: {fill('each file and the moved path rewritten in it, or none')}",
-        f"- References reported, not rewritten: {fill('each file and the prose describing the old structure, or none')}",
+        "- References reported, not rewritten: "
+        + (
+            joined([reference_hit_line(hit) for hit in reference_record["hits"]])
+            if reference_record
+            else unknown("references")
+        ),
         f"- Ignore rules the payload does not cover: {fill('each rule and what it ignored, or none')}",
     )
 
@@ -1845,27 +2106,35 @@ def addon_adoption(report: Report, preflight_result: dict) -> None:
     report.add(
         f"- Already held: {joined(held)}"
         if held is not None
-        else f"- Already held: {report.fill('addon-shaped paths the destination brought with it, or none')}"
+        else f"- Already held: {unknown('preflight')}"
     )
 
 
 def setting_line(
-    name: str, outcome: object, reason: str | None, gate_reached: bool
+    name: str,
+    outcome: object,
+    reason: str | None,
+    gate_reached: bool,
+    observed: str | None,
 ) -> str:
     if outcome in (Outcome.DONE, Outcome.ALREADY_SET, Outcome.LOGGED):
         return f"- {name}: enabled"
     if not gate_reached:
         return f"- {name}: not reached (stopped before the gate)"
     if outcome is None:
-        return f"- {name}: not requested"
+        return f"- {name}: {observed or 'not requested'}"
     if outcome == Outcome.NOT_OFFERED:
         return f"- {name}: unavailable ({reason or 'not offered for the plan'})"
     return f"- {name}: unavailable ({outcome})"
 
 
-def labels_line(report: Report, labels: object) -> str:
+def labels_line(report: Report, labels: object, apply_ran: bool) -> str:
     if not isinstance(labels, dict):
-        return f"none created ({report.fill('reason no labels were created')})"
+        return (
+            f"none created ({report.fill('reason no labels were created')})"
+            if apply_ran
+            else "none created (hosted apply did not run)"
+        )
     parts = []
     if labels["created"]:
         parts.append(f"created ({', '.join(labels['created'])})")
@@ -1897,7 +2166,7 @@ def repository_settings(
     gate_reached = bool(hosted_state or apply_record) or not stopped
     report.section("### Repository settings")
     report.add(
-        f"- Destination visibility: {hosted_state.get('visibility') or report.fill('public or private, read from the API')}"
+        f"- Destination visibility: {hosted_state.get('visibility') or unknown('hosted read')}"
     )
     for write in HOSTED_WRITES:
         if write.setting is not None:
@@ -1907,9 +2176,12 @@ def repository_settings(
                     writes.get(write.name),
                     reasons.get(write.name),
                     gate_reached,
+                    write.observe(hosted_state)
+                    if hosted_state
+                    else unknown("hosted read"),
                 )
             )
-    labels = labels_line(report, writes.get("labels"))
+    labels = labels_line(report, writes.get("labels"), bool(apply_record))
     report.add(
         f"- Issue tracker: {report.fill('tracker, recorded in docs/agents/issue-tracker.md, shipped by the payload or kept from the destination')}; labels: {labels}"
     )
@@ -2022,6 +2294,7 @@ def verification(
     swept: dict,
     executed: dict,
     fixed: dict,
+    preflight_result: dict,
 ) -> None:
     fill = report.fill
     copy, purity = proofs["copy"], proofs["rename_purity"]
@@ -2031,7 +2304,7 @@ def verification(
         for row in failing(rows):
             report.add(*(f"  - {row.check}: {finding}" for finding in row.findings))
     report.add(
-        candidate_hooks_line(report, proofs, swept),
+        candidate_hooks_line(proofs, swept, preflight_result),
         f"- Copied paths byte-identical to their source: {copy['identical']}/{copy['total']}; "
         "the rest are the authored surface, under File list. An overridden path is "
         "in neither count, under Reconciliation instead",
@@ -2115,23 +2388,29 @@ def reverted_line(report: Report, fixed: dict) -> str:
     )
 
 
-def candidate_hooks_line(report: Report, proofs: dict, swept: dict) -> str:
+def candidate_hooks_line(proofs: dict, swept: dict, preflight_result: dict) -> str:
     if not proofs["candidate"]["pre_commit_config"]:
         return (
             "- Hooks: none installed, because the candidate carries no "
             "`.pre-commit-config.yaml` to read hook types from"
         )
     hooks_dir = swept.get("scratch", {}).get("hooks_dir")
-    clone = swept.get("clone", {}).get("path")
+    clone = swept.get("clone", {}).get("path") or preflight_result.get(
+        "destination", {}
+    ).get("path")
     return (
-        f"- Hooks: installed at worktree scope into {hooks_dir or report.fill('the candidate hooks directory')}; "
-        f"`extensions.worktreeConfig` set on {clone or report.fill('the clone')} and left set"
+        "- Hooks: installed at worktree scope into "
+        f"{hooks_dir or 'a directory the sweep records (sweep did not run)'}; "
+        f"`extensions.worktreeConfig` set on {clone or 'the clone (preflight did not run)'} and left set"
     )
 
 
-def candidate_line(report: Report, swept: dict) -> str:
+def candidate_line(proofs: dict, swept: dict) -> str:
     if not swept:
-        return f"- Candidate: left standing at {report.fill('candidate path')}, because the flow stopped and resumes from it"
+        return (
+            f"- Candidate: left standing at {proofs['candidate']['path']}, "
+            "because the flow stopped and resumes from it"
+        )
     candidate, stages = swept["candidate"], swept["stages"]
     if stages.get("worktree") not in ("done", "absent"):
         return f"- Candidate: left standing at {candidate['path']}, because its removal was refused"
@@ -2145,7 +2424,7 @@ def candidate_line(report: Report, swept: dict) -> str:
 
 def cleanup(report: Report, swept: dict, hooks_result: dict, proofs: dict) -> None:
     report.section("### Cleanup")
-    report.add(candidate_line(report, swept))
+    report.add(candidate_line(proofs, swept))
     if swept:
         scratch = [
             f"{path}: {swept['stages'].get(stage)}"
@@ -2205,10 +2484,11 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
     apply_record = load(prefix, "hosted-apply")
     report = Report()
     header(report, arguments, proofs)
-    reconciliation(report, proofs)
+    reconciliation(report, proofs, load(prefix, "references"))
     application_boundaries(report, proofs)
     file_list(report, proofs)
-    addon_adoption(report, load(prefix, "preflight"))
+    preflight_result = load(prefix, "preflight")
+    addon_adoption(report, preflight_result)
     repository_settings(
         report, load(prefix, "hosted-read"), apply_record, arguments.stopped
     )
@@ -2223,6 +2503,7 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
         swept,
         load(prefix, "facts"),
         load(prefix, "autofix"),
+        preflight_result,
     )
     cleanup(report, swept, hooks_result, proofs)
     if arguments.resumed:
@@ -2425,6 +2706,14 @@ def build_parser() -> argparse.ArgumentParser:
     executed.add_argument("--candidate", type=Path, required=True)
     executed.set_defaults(handler=facts, record="facts")
 
+    referenced = subparsers.add_parser(
+        "references",
+        parents=[recorded],
+        help="find mentions of moved paths and old invocations outside ADRs and plans",
+    )
+    referenced.add_argument("--candidate", type=Path, required=True)
+    referenced.set_defaults(handler=references, record="references")
+
     fixed = subparsers.add_parser(
         "autofix",
         parents=[recorded],
@@ -2531,14 +2820,19 @@ def fail(message: str, status: int = 2) -> NoReturn:
     raise SystemExit(status)
 
 
+# The records whose subcommand reads its own earlier one as `arguments.previous`.
+EARLIER_RECORD_READERS = ("hosted-apply", "references")
+
+
 def main() -> int:
     arguments = build_parser().parse_args()
     record = getattr(arguments, "record", None)
-    if record == "hosted-apply":
-        # Read before the unlink, for the one step that builds on its own
-        # earlier record: `hosted apply` run again later in the same flow.
-        # One the sweep postdates belongs to a finished run, and an unreadable
-        # one, left by an interrupted write, counts as none.
+    if record in EARLIER_RECORD_READERS:
+        # Read before the unlink, for the steps that build on their own
+        # earlier record: `hosted apply` run again later in the same flow, and
+        # `references` rerun after its repairs. One the sweep postdates belongs
+        # to a finished run, and an unreadable one, left by an interrupted
+        # write, counts as none.
         earlier = record_path(arguments.records, f"{record}.json")
         sweep = record_path(arguments.records, "sweep.json")
         swept = (

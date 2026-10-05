@@ -12,7 +12,25 @@ python3 apps/repo-builder/src/scripts/retrofit.py report \
   [--pull-request <URL>] [--stopped "<what remains>"] [--resumed]
 ```
 
-`--repository` is `<owner>/<repository>`, or the origin path where origin is one. It requires the proofs record and `<records>.check.txt` and reads every other record that exists; an absent record renders as a subcommand that did not run. It writes `<records>.report.md` and reports `path` and `slots`, the judgement lines left as `[[FILL: <what goes here>]]`. Fill every slot from this run's decisions, delete optional slots that do not apply, and change no rendered line; a wrong rendered line is a defect in its record. The finished report holds no `[[FILL:`.
+`--repository` is `<owner>/<repository>`, or the origin path where origin is one. It requires the proofs record and `<records>.check.txt` and reads every other record that exists; an absent record renders as the fact that its subcommand did not run (`unknown (hosted read did not run)`), never as a blank or a slot. It writes `<records>.report.md` and reports `path` and `slots`, the judgement lines left as `[[FILL: <what goes here>]]`. Fill every slot from this run's decisions, delete optional slots that do not apply, and change no rendered line; a wrong rendered line is a defect in its record. The finished report holds no `[[FILL:`.
+
+## Judgement slots
+
+Every slot left after the renderer runs is one no record can fill, for the reason beside it. A value a record holds is rendered, and a defect in that line is fixed in the record's subcommand.
+
+- Reconciliation, **Merged** (the payload change and destination text each merged path carries; the paths themselves are rendered), **Conflicted** (paths with competing intents the flow could not settle), **Superseded**, **Partially covered, not cut**: the reading of what a file did and what carries it now is the flow's, and the proofs record holds paths and classes, never intent.
+- **Layout plan** (corrections and declines), **Unmovable**, **Data split**, **Ignore rules the payload does not cover**: each is the operator's answer to a question the flow asked, and no subcommand records an answer.
+- **References repaired**: the rewrite is an edit the flow made by hand, and the references record is rewritten after it, so it holds only what remains.
+- Application boundaries, **ADR fields defaulted**, **Unit map**, **Ships nothing for want of an adapter**, **Declared but not built**: the evidence behind each is read from the destination's files by the flow, and the proofs record holds only the ADR paths written.
+- **Issue tracker**'s tracker: it is named inside `docs/agents/issue-tracker.md`, a file's content rather than a record.
+- Labels **reason none were created**, and Hosted writes, reversible, the **declined** line: the reason a write was not approved is the operator's, and `hosted apply` records only the writes it was asked to make.
+- Hosted writes, irreversible, **each irreversible write**: the cost of having made it is a judgement over the write.
+- **Ruleset enforcement** and **Default branch after merge**: step 9 reads the host after the report's records are written, and no subcommand records that reading.
+- **Code review**: the axes run and the findings corrected are the review's own account, and the sign-off sits in a pull-request comment.
+- **Untracked at the bar**, **Tool declaration**, **Configuration boundary**, **Autofix settings resolution**: each describes what the flow wrote into or read from the candidate at step 7, which no record captures.
+- **Autofix**'s commit sha, and the rule or formatter behind a **reverted** payload path: the flow makes the commit after the autofix record is written, and the record lists the path without the rule.
+- **Destination fix prepared** and **published** (unmet bar only), **Left for the operator**'s other paths, **Pending action**: each reports a decision made or awaited.
+- **Resumption**: what live state showed, what was read back, redone and retried are the resumed run's own observations.
 
 Three lines differ from the shape:
 
@@ -28,7 +46,6 @@ Under **Reconciliation**:
 - Unmovable: <path>: <why it could not move>; no allowlist entry written | none
 - Data split: <file>: read, to `assets/` | written, to `state/`, and the operator copies their live file there and restores the old path before pulling the merge | written, to `state/`, with its finished record snapshotted to `assets/` and a fallback the operator confirmed, and the operator copies their live file there and restores the old path before pulling the merge | none
 - References repaired: <file>: <the moved path rewritten> | none
-- References reported, not rewritten: <file>: <the prose describing the old structure> | none
 - Ignore rules the payload does not cover: <rule>: <what it ignored>, reported and not re-added | restored by the operator (<reason>), so the ignore file is authored and no override entry is recorded | none
 
 Under **Application boundaries**:

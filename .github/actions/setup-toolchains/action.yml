@@ -61,8 +61,8 @@ runs:
     # Installing it instead would mean piping a network script into a shell in
     # every generated repository, and writing the new bin directory to
     # GITHUB_PATH for the steps that follow. Both are worse than a prerequisite
-    # the host owner satisfies once, and both sit against the rule in
-    # scripts/CLAUDE.md that the toolchains are the machine's.
+    # the host owner satisfies once, and both sit against the rule that the
+    # toolchains are the machine's.
     - name: Set up Rust
       if: steps.detect.outputs.rust == 'true'
       shell: bash

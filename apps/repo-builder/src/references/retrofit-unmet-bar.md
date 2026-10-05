@@ -33,7 +33,20 @@ Where a fix was prepared, the branch outlives the worktree and is what the gate 
 
    Report which reading was used. A finding gated on the declaration does not fire where none is declared, so a clean lint in the destination's tree proves nothing by itself. Report both counts, before and after. **A non-zero after is not publishable**: fix what the second reading still shows or drop that commit; where neither is possible, report the finding outstanding and offer nothing for it.
 
-**Step 7's configuration guard covers this worktree too**, and bites harder: it sits under this repository's `tmp/`, so a tool walking upward finds *this* repository's configuration, and its pre-retrofit layout carries none of the boundaries the tool declaration writes. Read each tool's resolved settings path (`ruff check --show-settings .` and each language's equivalent) before the worktree's first commit, which comes before either reading. Resolved outside this worktree, or unreadable: prepare nothing, report the tool and the path, and leave every finding outstanding. Never supply the missing boundary, which would commit this flow's configuration choice to the operator's default branch.
+**Step 7's configuration guard covers this worktree too**, and bites harder: it sits under this repository's `tmp/`, so a tool walking upward finds *this* repository's configuration, and its pre-retrofit layout carries none of the boundaries the tool declaration writes. Read each tool's resolved settings path (`ruff check --show-settings .` and each language's equivalent) before the worktree's first commit, which comes before either reading. Where a path resolves outside this worktree, or is unreadable, the outcome turns on whether the destination's pre-retrofit tree (the files on `origin/<default-branch>`) carries configuration for that tool:
+
+| Resolved path | Destination has its own config for the tool | Outcome |
+|---|---|---|
+| Outside the worktree | No | Take the reading with the tool's isolation flag instead of stopping, and report that flag as the settings it was read under. |
+| Outside the worktree | Yes | Prepare nothing, report the tool and the path, and leave every finding outstanding. |
+| Any | Any, but the language has no isolation flag | Prepare nothing, as in the row above. |
+
+A destination with no ruff configuration always lands in the first row, since ruff walks up to this repository's `pyproject.toml`. The flags, each confirmed against the tool's own help or docs:
+
+- Python: `ruff check --isolated`, which ignores every configuration file. It combines with `--target-version py311` for the second reading.
+- eslint: `eslint --no-config-lookup`, which disables lookup of `eslint.config.*`.
+
+Go, Rust, Swift and Kotlin keep the stop: no isolation flag is confirmed for `go vet`, `cargo clippy`, `swift format` or ktlint. Never supply the missing boundary, which would commit this flow's configuration choice to the operator's default branch, and never isolate where the destination carries its own configuration, which would override the operator's settings.
 
 **The inverse case is left alone.** A finding that fires in the destination's tree and not under the candidate's target version is not this retrofit's blocker and gets no commit.
 
