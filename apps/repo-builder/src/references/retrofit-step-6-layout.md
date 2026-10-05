@@ -13,13 +13,13 @@ Part of [Retrofit](retrofit.md). Turn the destination's tree into the template's
 - A written file that also holds a record the program will not write again, such as a finished season, may keep that record as a read-only snapshot under `assets/` for the program to fall back to. That fallback is new code: the plan proposes it, and the flow writes it only once the operator confirms.
 - A harness backup follows the file it backs up.
 - The plan names each data file as read or written, since only the code that opens it can tell.
-- The report tells the operator to carry each moved live file before pulling the merge: copy it into `apps/<unit>/state/`, then `git restore` the old path. The pull refuses to remove a tracked file they changed and silently removes one they did not.
+- Each moved live file is carried before the clone pulls the merge: copied into `apps/<unit>/state/`, then the old path `git restore`d. The pull refuses to remove a tracked file the operator changed and silently removes one they did not. Where the merge is taken, [step 9](retrofit-step-9-publish.md) carries it; where it is declined, the report tells the operator to.
 
 **Documentation stays repository-wide**, even where every other scoped folder moved under the one unit, because `scripts/adr-index` indexes from a root path; see [Architecture records live at the root documentation path](lifecycle.md#architecture-records-live-at-the-root-documentation-path). Migrate existing records to that path here, with the moves.
 
 **A readme below the root is documentation and moves with it**, into the nearest owning `docs/` under a name describing its subject. The root readme stays, as an addon the destination already holds.
 
-**A move that empties a directory can leave it standing in the operator's clone**, held open by untracked or ignored residue. The proofs record lists each such directory under `emptied`, with the residue read from the clone. Report each and remove none of it: an untracked file is the operator's to judge.
+**A move that empties a directory can leave it standing in the operator's clone**, held open by untracked or ignored residue. The proofs record lists each such directory under `emptied`, with the residue read from the clone. Remove none of it here: the clone still tracks the files the move takes away until it pulls the merge, and [step 9](retrofit-step-9-publish.md)'s `retrofit.py sync` removes each such directory then. A declined merge leaves the residue reported for the operator.
 
 **The flow writes no `.structure-allow` entry.** Report a path that cannot be moved with the reason; the operator may add the entry afterwards, outside the flow.
 

@@ -1038,6 +1038,69 @@ def hooks(arguments: argparse.Namespace) -> dict[str, object]:
     }
 
 
+def sync(arguments: argparse.Namespace) -> dict[str, object]:
+    """Bring the operator's clone onto the merge, and remove what the moves stranded.
+
+    Fast-forwards the default branch only where the clone has it checked out
+    and the merge applies without overwriting a change, then deletes each
+    directory the proofs record as emptied that the pulled tree still leaves
+    with nothing tracked. Its residue is re-read from disk first, so the record
+    names what was actually removed.
+    """
+    clone = preflight.require_git_repository(arguments.clone, "clone")
+    branch = arguments.default_branch
+    run_git(clone, "fetch", "-q", "origin", branch)
+    base = preflight.resolve_commit(clone, f"origin/{branch}")
+    if blob(clone, f"{base}:.repo-template.json") is None:
+        raise PreflightError(
+            f"origin/{branch} carries no .repo-template.json; sync only "
+            "after the merge has landed"
+        )
+    findings: list[str] = []
+    checked_out = run_git(
+        clone, "symbolic-ref", "--quiet", "--short", "HEAD", check=False
+    )
+    if checked_out.stdout.strip() != branch:
+        findings.append(
+            f"the clone has {checked_out.stdout.strip() or 'a detached HEAD'} out, "
+            f"not {branch}; not pulled"
+        )
+        pulled = False
+    else:
+        merged = run_git(
+            clone, "merge", "--ff-only", "-q", f"origin/{branch}", check=False
+        )
+        pulled = merged.returncode == 0
+        if not pulled:
+            findings.append(f"fast-forward refused: {merged.stderr.strip()}")
+
+    removed: list[dict[str, object]] = []
+    for item in load_required(arguments.records, "proofs")["emptied"]:
+        path = item["path"]
+        directory = clone / path
+        if (
+            not pulled
+            or not directory.is_dir()
+            or git_output(clone, "ls-files", "--", path)
+        ):
+            continue
+        residue = sorted(
+            str(file.relative_to(clone))
+            for file in directory.rglob("*")
+            if not file.is_dir()
+        )
+        shutil.rmtree(directory)
+        removed.append({"path": path, "residue": residue})
+    return {
+        "operation": "sync",
+        "clone": {"path": str(clone), "default_branch": branch, "base": base},
+        "pulled": pulled,
+        "head": git_output(clone, "rev-parse", "HEAD"),
+        "removed": removed,
+        "findings": findings,
+    }
+
+
 PULL_REQUESTS_NOT_APPLICABLE = {
     "outcome": "not-applicable",
     "reason": "origin is a local path, not a GitHub repository",
@@ -2292,6 +2355,7 @@ def verification(
     summaries: list[tuple[str, list[Row]]],
     hooks_result: dict,
     swept: dict,
+    synced: dict,
     executed: dict,
     fixed: dict,
     preflight_result: dict,
@@ -2314,7 +2378,7 @@ def verification(
         if hooks_result
         else "- Default branch after merge: n/a (nothing merged)",
         f"- Moved paths byte-identical to their pre-move blob: {purity['identical']}/{purity['total']}",
-        f"- Directories emptied by a move: {emptied_line(proofs['emptied'])}",
+        f"- Directories emptied by a move: {emptied_line(proofs['emptied'], synced)}",
         f"- Untracked at the bar: {fill('none, or the paths and how they were disposed')}",
         f"- Declared facts executed: {facts_line(executed)}",
         f"- Tool declaration: {fill('per manifest, what was added, kept or declined')}",
@@ -2327,11 +2391,15 @@ def verification(
     report.add(destination_hooks_line(hooks_result, arguments.stopped))
 
 
-def emptied_line(emptied: list[dict]) -> str:
+def emptied_line(emptied: list[dict], synced: dict) -> str:
+    removed = {item["path"]: item["residue"] for item in synced.get("removed", [])}
     return joined(
         [
-            f"{item['path']}: held open by {', '.join(item['residue'])}, which is the "
-            "destination's own and is left in place, named under Left for the operator"
+            f"{item['path']}: removed from the clone after the pull, with "
+            f"{', '.join(removed[item['path']]) or 'nothing'} inside"
+            if item["path"] in removed
+            else f"{item['path']}: held open by {', '.join(item['residue'])}, which is "
+            "the destination's own and is left in place, named under Left for the operator"
             if item["residue"]
             else f"{item['path']}: gone after the merge"
             for item in emptied
@@ -2422,9 +2490,17 @@ def candidate_line(proofs: dict, swept: dict) -> str:
     )
 
 
-def cleanup(report: Report, swept: dict, hooks_result: dict, proofs: dict) -> None:
+def cleanup(
+    report: Report, swept: dict, hooks_result: dict, synced: dict, proofs: dict
+) -> None:
     report.section("### Cleanup")
     report.add(candidate_line(proofs, swept))
+    if synced:
+        report.add(
+            f"- Operator's clone: fast-forwarded to {synced['head'][:12]}"
+            if synced["pulled"]
+            else "- Operator's clone: not pulled, named under Left for the operator"
+        )
     if swept:
         scratch = [
             f"{path}: {swept['stages'].get(stage)}"
@@ -2443,10 +2519,12 @@ def cleanup(report: Report, swept: dict, hooks_result: dict, proofs: dict) -> No
     if swept.get("pull_requests", {}).get("outcome") == "not-applicable":
         left.append(f"pull requests: n/a ({swept['pull_requests']['reason']})")
     left += [str(finding) for finding in hooks_result.get("findings", [])]
+    left += [str(finding) for finding in synced.get("findings", [])]
+    removed = {item["path"] for item in synced.get("removed", [])}
     left += [
         f"{item['path']}: {', '.join(item['residue'])}, untracked residue a move left"
         for item in proofs["emptied"]
-        if item["residue"]
+        if item["residue"] and item["path"] not in removed
     ]
     others = report.fill(
         "any other path left in place and why, or delete this entry"
@@ -2481,6 +2559,7 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
     summaries = [("scripts/check", read_summary(required_record(prefix, "check.txt")))]
     hooks_result = load(prefix, "hooks")
     swept = load(prefix, "sweep")
+    synced = load(prefix, "sync")
     apply_record = load(prefix, "hosted-apply")
     report = Report()
     header(report, arguments, proofs)
@@ -2501,11 +2580,12 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
         summaries,
         hooks_result,
         swept,
+        synced,
         load(prefix, "facts"),
         load(prefix, "autofix"),
         preflight_result,
     )
-    cleanup(report, swept, hooks_result, proofs)
+    cleanup(report, swept, hooks_result, synced, proofs)
     if arguments.resumed:
         resumption(report, apply_record.get("writes", {}))
     report.section("### Pending action")
@@ -2743,6 +2823,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="where the throwaway worktree goes; must not exist",
     )
     install.set_defaults(handler=hooks, record="hooks")
+
+    pull = subparsers.add_parser(
+        "sync",
+        parents=[recorded],
+        help="fast-forward the clone onto the merge and remove the emptied directories",
+    )
+    pull.add_argument("--clone", type=Path, required=True)
+    pull.add_argument("--default-branch", required=True)
+    pull.set_defaults(handler=sync, record="sync")
 
     teardown = subparsers.add_parser(
         "sweep",
