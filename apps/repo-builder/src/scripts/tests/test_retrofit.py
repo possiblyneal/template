@@ -944,6 +944,158 @@ def gh_calls(directory: str) -> list[list[str]]:
     return [json.loads(line) for line in log.read_text().splitlines()]
 
 
+class SyncTests(unittest.TestCase):
+    """The operator's clone, brought onto a taken merge and cleared of residue."""
+
+    def _merged(self, directory: str) -> Path:
+        """A clone whose origin took a merge moving `src/` and `tests/` away.
+
+        `src/` keeps ignored and untracked residue in the clone, which is what
+        holds a directory open after the pull removes every tracked file.
+        """
+        clone = Path(retrofit_fixture(directory)["destination"])
+        merge = Path(directory) / "merge"
+        git("worktree", "add", "-q", "-b", "retrofit/abc1234", str(merge), cwd=clone)
+        git("mv", "src", "apps-ledger-src", cwd=merge)
+        git("rm", "-rq", "tests", cwd=merge)
+        (merge / ".repo-template.json").write_text("{}\n")
+        (merge / ".gitignore").write_text("__pycache__/\n")
+        git("add", "-A", cwd=merge)
+        git("commit", "-q", "-m", "chore: retrofit", cwd=merge)
+        git("push", "-q", "origin", "retrofit/abc1234:main", cwd=merge)
+        git("worktree", "remove", str(merge), cwd=clone)
+        (clone / "src/ledger/__pycache__").mkdir()
+        (clone / "src/ledger/__pycache__/rates.pyc").write_text("cached\n")
+        (clone / "src/notes.txt").write_text("scratch\n")
+        proofs = {
+            "emptied": [
+                {
+                    "path": "src",
+                    "residue": ["src/ledger/__pycache__/", "src/notes.txt"],
+                },
+                {"path": "tests", "residue": []},
+            ]
+        }
+        Path(directory, "records.proofs.json").write_text(json.dumps(proofs))
+        return clone
+
+    def _sync(self, directory: str, clone: Path) -> dict:
+        result = run(
+            "sync",
+            "--clone",
+            str(clone),
+            "--default-branch",
+            "main",
+            "--records",
+            str(Path(directory) / "records"),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)
+
+    def test_fast_forwards_and_removes_each_emptied_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            clone = self._merged(directory)
+
+            report = self._sync(directory, clone)
+
+            self.assertTrue(report["pulled"])
+            self.assertEqual(
+                report["head"], git_output("rev-parse", "origin/main", cwd=clone)
+            )
+            self.assertEqual(
+                report["removed"],
+                [
+                    {
+                        "path": "src",
+                        "residue": [
+                            "src/ledger/__pycache__/rates.pyc",
+                            "src/notes.txt",
+                        ],
+                    }
+                ],
+            )
+            self.assertEqual(report["findings"], [])
+            self.assertFalse((clone / "src").exists())
+            self.assertTrue((clone / "apps-ledger-src/ledger/rates.py").is_file())
+
+    def test_leaves_a_clone_with_another_branch_out_untouched(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            clone = self._merged(directory)
+            git("switch", "-q", "-c", "work", cwd=clone)
+
+            report = self._sync(directory, clone)
+
+            self.assertFalse(report["pulled"])
+            self.assertEqual(report["removed"], [])
+            self.assertEqual(
+                report["findings"], ["the clone has work out, not main; not pulled"]
+            )
+            self.assertTrue((clone / "src/notes.txt").is_file())
+
+    def test_leaves_a_clone_with_uncommitted_changes_untouched(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            clone = self._merged(directory)
+            with (clone / "README.md").open("a") as readme:
+                readme.write("edited\n")
+
+            report = self._sync(directory, clone)
+
+            self.assertFalse(report["pulled"])
+            self.assertEqual(
+                report["findings"], ["the clone has uncommitted changes; not pulled"]
+            )
+            self.assertTrue((clone / "src/notes.txt").is_file())
+
+    def test_keeps_a_directory_holding_a_file_the_plan_did_not_name(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            clone = self._merged(directory)
+            (clone / "src/save.dat").write_text("live\n")
+
+            report = self._sync(directory, clone)
+
+            self.assertTrue(report["pulled"])
+            self.assertEqual(report["removed"], [])
+            self.assertEqual(
+                report["findings"],
+                [
+                    (
+                        "src: not removed, since it holds src/save.dat, "
+                        "which the plan did not name"
+                    )
+                ],
+            )
+            self.assertEqual(report["kept"], ["src"])
+            self.assertTrue((clone / "src/save.dat").is_file())
+
+    def test_a_rerun_records_a_removed_directory_as_gone(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            clone = self._merged(directory)
+            self._sync(directory, clone)
+
+            report = self._sync(directory, clone)
+
+            self.assertEqual(report["removed"], [])
+            self.assertEqual(report["gone"], ["src", "tests"])
+
+    def test_refuses_before_the_merge_has_landed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            clone = Path(retrofit_fixture(directory)["destination"])
+            Path(directory, "records.proofs.json").write_text('{"emptied": []}')
+
+            result = run(
+                "sync",
+                "--clone",
+                str(clone),
+                "--default-branch",
+                "main",
+                "--records",
+                str(Path(directory) / "records"),
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("after the merge has landed", result.stderr)
+
+
 class SweepTests(unittest.TestCase):
     """The flow's own residue, taken down after the pull request is decided."""
 
@@ -2548,6 +2700,77 @@ class RecordedLinesTests(unittest.TestCase):
                     line.startswith("- Left for the operator: src: src/__pycache__/")
                     for line in lines
                 )
+            )
+
+    def test_reads_a_synced_clone_into_the_emptied_and_cleanup_lines(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            proofs = {
+                **PROOFS,
+                "emptied": [{"path": "src", "residue": ["src/__pycache__/"]}],
+            }
+            synced = {
+                "pulled": True,
+                "head": "1234567890ab" + "0" * 28,
+                "removed": [{"path": "src", "residue": ["src/__pycache__/x.pyc"]}],
+                "findings": [],
+            }
+            lines, _ = render_report(
+                self, directory, SUMMARY_PASS, proofs=proofs, hooks=HOOKS, sync=synced
+            )
+
+            self.assertIn(
+                "- Directories emptied by a move: src: removed from the clone after "
+                "the pull, with src/__pycache__/x.pyc inside",
+                lines,
+            )
+            self.assertIn("- Operator's clone: fast-forwarded to 1234567890ab", lines)
+            self.assertFalse(
+                any("untracked residue a move left" in line for line in lines)
+            )
+
+    def test_reads_a_kept_directory_as_kept(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            proofs = {**PROOFS, "emptied": [{"path": "src", "residue": []}]}
+            synced = {
+                "pulled": True,
+                "head": "1234567890ab" + "0" * 28,
+                "removed": [],
+                "gone": [],
+                "kept": ["src"],
+                "findings": ["src: not removed, since it is a symlink"],
+            }
+            lines, _ = render_report(
+                self, directory, SUMMARY_PASS, proofs=proofs, hooks=HOOKS, sync=synced
+            )
+
+            self.assertIn(
+                "- Directories emptied by a move: src: kept after the pull, "
+                "named under Left for the operator",
+                lines,
+            )
+
+    def test_reads_a_directory_already_gone_after_the_pull(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            proofs = {
+                **PROOFS,
+                "emptied": [{"path": "src", "residue": ["src/__pycache__/"]}],
+            }
+            synced = {
+                "pulled": True,
+                "head": "1234567890ab" + "0" * 28,
+                "removed": [],
+                "gone": ["src"],
+                "findings": [],
+            }
+            lines, _ = render_report(
+                self, directory, SUMMARY_PASS, proofs=proofs, hooks=HOOKS, sync=synced
+            )
+
+            self.assertIn(
+                "- Directories emptied by a move: src: gone after the pull", lines
+            )
+            self.assertFalse(
+                any("untracked residue a move left" in line for line in lines)
             )
 
 

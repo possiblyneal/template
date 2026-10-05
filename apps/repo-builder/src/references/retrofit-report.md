@@ -44,7 +44,7 @@ Under **Reconciliation**:
 
 - Layout plan: <old path> -> <new path>: corrected by the operator to <path> | declined
 - Unmovable: <path>: <why it could not move>; no allowlist entry written | none
-- Data split: <file>: read, to `assets/` | written, to `state/`, and the operator copies their live file there and restores the old path before pulling the merge | written, to `state/`, with its finished record snapshotted to `assets/` and a fallback the operator confirmed, and the operator copies their live file there and restores the old path before pulling the merge | none
+- Data split: <file>: read, to `assets/` | written, to `state/` | written, to `state/`, with its finished record snapshotted to `assets/` and a fallback the operator confirmed | none. A written file adds where its live file went: carried there and the old path restored before the clone pulled, or, where the merge was declined, left for the operator to copy there and restore the old path before pulling
 - References repaired: <file>: <the moved path rewritten> | none
 - Ignore rules the payload does not cover: <rule>: <what it ignored>, reported and not re-added | restored by the operator (<reason>), so the ignore file is authored and no override entry is recorded | none
 
