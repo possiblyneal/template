@@ -235,10 +235,11 @@ fi
 
 # --- a quadlet unit is validated, not built ----------------------------------
 
-# systemd and podman build the image on the deploy host when the unit starts, so
-# packaging one checks the pair rather than producing anything. Every case here
-# runs on a machine with no container runtime, which is the property being kept:
-# a repository shipping a service must not need podman to pass its own gate.
+# systemd and podman build the image on the deploy host when the unit starts, or
+# pull it from a registry, so packaging one checks the unit files rather than
+# producing anything. Every case here runs on a machine with no container
+# runtime, which is the property being kept: a repository shipping a service
+# must not need podman to pass its own gate.
 fixture "a well-formed quadlet pair validates and builds nothing"
 declare_unit svc longlived quadlet
 go_mod svc
@@ -296,18 +297,39 @@ else
   fail "an image no build produces was not refused (exit $status): $out"
 fi
 
-fixture "a missing .build unit is refused"
+# A unit whose image CI publishes runs it by registry reference and ships no
+# .build, so the .container alone is a whole quadlet.
+fixture "a registry image with no .build unit is accepted"
 declare_unit svc longlived quadlet
 go_mod svc
 quadlet_pair svc
 rm "$work/apps/svc/deploy/quadlet/svc.build"
+printf '[Container]\nImage=ghcr.io/owner/svc:latest\n' > "$work/apps/svc/deploy/quadlet/svc.container"
 out="$(run_in scripts/package svc)"
 status=$?
-if (( status != 0 )) && grep -q '.build' <<< "$out"; then
+if (( status == 0 )); then
   pass
 else
-  fail "a missing .build unit was not refused (exit $status): $out"
+  fail "a registry image was rejected (exit $status): $out"
 fi
+
+# localhost/ and a bare name both resolve to an image on the deploy host, so
+# with no .build to produce it the service would not start there.
+for image in localhost/svc:latest svc:latest; do
+  fixture "an image only the deploy host could hold, with no .build, is refused: $image"
+  declare_unit svc longlived quadlet
+  go_mod svc
+  quadlet_pair svc
+  rm "$work/apps/svc/deploy/quadlet/svc.build"
+  printf '[Container]\nImage=%s\n' "$image" > "$work/apps/svc/deploy/quadlet/svc.container"
+  out="$(run_in scripts/package svc)"
+  status=$?
+  if (( status != 0 )) && grep -qF "$image" <<< "$out"; then
+    pass
+  else
+    fail "$image with no .build was not refused (exit $status): $out"
+  fi
+done
 
 fixture "a missing .container unit is refused"
 declare_unit svc longlived quadlet
