@@ -1064,6 +1064,7 @@ class SyncTests(unittest.TestCase):
                     )
                 ],
             )
+            self.assertEqual(report["kept"], ["src"])
             self.assertTrue((clone / "src/save.dat").is_file())
 
     def test_a_rerun_records_a_removed_directory_as_gone(self) -> None:

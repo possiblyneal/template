@@ -1085,12 +1085,15 @@ def sync(arguments: argparse.Namespace) -> dict[str, object]:
 
     removed: list[dict[str, object]] = []
     gone: list[str] = []
+    kept: list[str] = []
     for item in load_required(arguments.records, "proofs")["emptied"] if pulled else []:
         path = item["path"]
         directory = clone / path
-        if directory.is_symlink() or git_output(
-            clone, "ls-files", "--", f":(literal){path}"
-        ):
+        if git_output(clone, "ls-files", "--", f":(literal){path}"):
+            continue
+        if directory.is_symlink():
+            findings.append(f"{path}: not removed, since it is a symlink")
+            kept.append(path)
             continue
         if not directory.is_dir():
             gone.append(path)
@@ -1113,6 +1116,7 @@ def sync(arguments: argparse.Namespace) -> dict[str, object]:
                 f"{path}: not removed, since it holds {', '.join(unplanned)}, "
                 "which the plan did not name"
             )
+            kept.append(path)
             continue
         shutil.rmtree(directory)
         removed.append({"path": path, "residue": residue})
@@ -1123,6 +1127,7 @@ def sync(arguments: argparse.Namespace) -> dict[str, object]:
         "head": git_output(clone, "rev-parse", "HEAD"),
         "removed": removed,
         "gone": gone,
+        "kept": kept,
         "findings": findings,
     }
 
@@ -2550,7 +2555,8 @@ def cleanup(
     left += [str(finding) for finding in hooks_result.get("findings", [])]
     left += [str(finding) for finding in synced.get("findings", [])]
     cleared = {item["path"] for item in synced.get("removed", [])}
-    cleared |= set(synced.get("gone", []))
+    # A kept directory's own finding above already names why it stayed.
+    cleared |= set(synced.get("gone", [])) | set(synced.get("kept", []))
     left += [
         f"{item['path']}: {', '.join(item['residue'])}, untracked residue a move left"
         for item in proofs["emptied"]
