@@ -245,8 +245,13 @@ repos:
     rev: v6.0.0
     hooks:
       - id: check-merge-conflict
+      # A unified diff writes a blank context line as a single space, so
+      # stripping it, or the blank lines a patch ends on, makes `git apply`
+      # reject the patch. A patch is reproduced byte for byte, never tidied.
       - id: end-of-file-fixer
+        exclude: \.(patch|diff)$
       - id: trailing-whitespace
+        exclude: \.(patch|diff)$
       - id: check-yaml
       # devcontainer.json is JSON with comments -- the dev container schema
       # sets allowComments -- and the addon copy carries its adoption guidance
