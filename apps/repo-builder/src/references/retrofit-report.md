@@ -21,7 +21,7 @@ python3 apps/repo-builder/src/scripts/retrofit.py decide --records <records> \
   --key <key> --value "<the line's text>"
 ```
 
-`decide` merges each call into `<records>.decisions.json`, which survives the sweep, and both `report` and `pr-body` read it, so a judgement the two share (`unit-map`, `merged`, `conflicted`, `summary`) is recorded once. Record each where the flow makes it rather than all at the end. Deciding `none` drops an optional line (`layout-corrections`, `declined-writes`, and `left-for-the-operator` beside rendered entries). Change no rendered line: a record's value outranks a decision, so a wrong rendered line is a defect in its record. The finished report holds no `[[FILL:`.
+`decide` merges each call into `<records>.decisions.json`, which survives the sweep though not a `resume`, and both `report` and `pr-body` read it, so a judgement the two share (`unit-map`, `merged`, `conflicted`, `summary`) is recorded once. Record each where the flow makes it rather than all at the end. Deciding `none` drops an optional line (`layout-corrections`, `declined-writes`, and `left-for-the-operator` beside rendered entries). Change no rendered line: a record's value outranks a decision, so a decision on a key a record fills applies only where the record leaves it a slot, and a wrong rendered line is a defect in its record. The finished report holds no `[[FILL:`.
 
 ## Judgement slots
 
