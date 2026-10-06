@@ -19,7 +19,7 @@ Part of [Retrofit](retrofit.md). Turn the destination's tree into the template's
 
 **A readme below the root is documentation and moves with it**, into the nearest owning `docs/` under a name describing its subject. The root readme stays, as an addon the destination already holds.
 
-**A move that empties a directory can leave it standing in the operator's clone**, held open by untracked or ignored residue. The proofs record lists each such directory under `emptied`, with the residue read from the clone. Remove none of it here: the clone still tracks the files the move takes away until it pulls the merge, and [step 9](retrofit-step-9-publish.md)'s `retrofit.py sync` removes each such directory then. A declined merge leaves the residue reported for the operator.
+**A move that empties a directory can leave it standing in the operator's clone**, held open by untracked or ignored residue. The proofs record lists each such directory under `emptied`, with the residue read from the clone: every file under `residue`, and under `summary` one `dir/` entry for each directory holding nothing tracked, which is what the report prints. Remove none of it here: the clone still tracks the files the move takes away until it pulls the merge, and [step 9](retrofit-step-9-publish.md)'s `retrofit.py sync` removes each such directory then. A declined merge leaves the residue reported for the operator.
 
 **The flow writes no `.structure-allow` entry.** Report a path that cannot be moved with the reason; the operator may add the entry afterwards, outside the flow.
 

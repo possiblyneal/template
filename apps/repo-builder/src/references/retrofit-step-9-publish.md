@@ -41,6 +41,6 @@ python3 apps/repo-builder/src/scripts/retrofit.py sync --clone <clone> \
   --default-branch <default-branch> --records <records>
 ```
 
-It refuses before the merge has landed, fast-forwards the default branch only where the clone is clean with it checked out, and then deletes each `emptied` directory the pulled tree leaves with nothing tracked, residue and all, recording what each held under `removed` and each already absent under `gone`. A directory holding a file the proofs record's residue did not name stays, since that file arrived after the plan was read. Anything that kept it from pulling or deleting is a finding the report names under Left for the operator, and the residue stays with it.
+It refuses before the merge has landed, fast-forwards the default branch only where the clone is clean with it checked out, and then deletes each `emptied` directory the pulled tree leaves with nothing tracked, residue and all, recording what each held under `removed` as its `summary` entries and each already absent under `gone`. A directory holding a file the proofs record's residue did not name stays, since that file arrived after the plan was read. Anything that kept it from pulling or deleting is a finding the report names under Left for the operator, and the residue stays with it.
 
 Then run step 2's sweep and render the report under [Report additions](retrofit-report.md#report-additions).

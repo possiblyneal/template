@@ -78,8 +78,11 @@ def emptied_directories(candidate: Path, removed: list[str]) -> list[dict[str, o
     Git tracks no directories, so the residue that holds one open after the
     merge is never in the candidate's diff: it is untracked or ignored output
     in the operator's clone, read from there while the tracked file still
-    names it. A directory holding nothing tracked is one `dir/` entry rather
-    than every file inside it, so a `node_modules/` is a line, not a megabyte.
+    names it. `residue` lists every file, which is what lets sync refuse a
+    file that arrives after the plan; `summary` collapses a directory holding
+    nothing tracked to one `dir/` entry, so a `node_modules/` reads as a line
+    in the report rather than a megabyte. Each mode is passed explicitly,
+    since `status.showUntrackedFiles` would otherwise choose it.
     """
     emptied: set[str] = set()
     for path in removed:
@@ -97,22 +100,28 @@ def emptied_directories(candidate: Path, removed: list[str]) -> list[dict[str, o
         git_output(candidate, "rev-parse", "--path-format=absolute", "--git-common-dir")
     )
     clone = common.parent
+
+    def untracked(path: str, mode: str) -> list[str]:
+        return [
+            entry[3:]
+            for entry in nul_fields(
+                clone,
+                "status",
+                "--ignored",
+                f"--untracked-files={mode}",
+                "--porcelain",
+                "-z",
+                "--",
+                path,
+            )
+            if entry.startswith(("!! ", "?? "))
+        ]
+
     return [
         {
             "path": path,
-            "residue": [
-                entry[3:]
-                for entry in nul_fields(
-                    clone,
-                    "status",
-                    "--ignored",
-                    "--porcelain",
-                    "-z",
-                    "--",
-                    path,
-                )
-                if entry.startswith(("!! ", "?? "))
-            ],
+            "residue": untracked(path, "all"),
+            "summary": untracked(path, "normal"),
         }
         for path in topmost
     ]
@@ -1364,7 +1373,7 @@ def sync(arguments: argparse.Namespace) -> dict[str, object]:
                 "path": path,
                 "residue": [
                     named
-                    for named in item["residue"]
+                    for named in item["summary"]
                     if any(covers(named, file) for file in residue)
                 ],
             }
@@ -2958,7 +2967,7 @@ def emptied_line(emptied: list[dict], synced: dict) -> str:
             if item["path"] in gone
             else f"{item['path']}: kept after the pull, named under Left for the operator"
             if item["path"] in kept
-            else f"{item['path']}: held open by {', '.join(item['residue'])}, which is "
+            else f"{item['path']}: held open by {', '.join(item['summary'])}, which is "
             "the destination's own and is left in place, named under Left for the operator"
             if item["residue"]
             else f"{item['path']}: gone after the merge"
@@ -3118,7 +3127,7 @@ def cleanup(
     # A kept directory's own finding above already names why it stayed.
     cleared |= set(synced.get("gone", [])) | set(synced.get("kept", []))
     left += [
-        f"{item['path']}: {', '.join(item['residue'])}, untracked residue a move left"
+        f"{item['path']}: {', '.join(item['summary'])}, untracked residue a move left"
         for item in proofs["emptied"]
         if item["residue"] and item["path"] not in cleared
     ]
