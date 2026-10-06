@@ -25,7 +25,7 @@ python3 apps/repo-builder/src/scripts/retrofit.py decide --records <records> \
 
 ## Judgement slots
 
-Every slot left after the renderer runs is one no record can fill, for the reason beside it, and its key is the one `decide --key` takes. A value a record holds is rendered, and a defect in that line is fixed in the record's subcommand. `conflicted`, `superseded`, `partially-covered`, `unmovable`, `untracked` and `retries` render `none` until decided otherwise.
+Every slot left after the renderer runs is one no record can fill, for the reason beside it, and its key is the one `decide --key` takes. A value a record holds is rendered, and a defect in that line is fixed in the record's subcommand. A slot with a default in `SLOTS` renders it until decided otherwise. `decide` refuses an empty value.
 
 - Reconciliation, `merged` (the payload change and destination text each merged path carries; the paths themselves are rendered), `conflicted`, `superseded`, `partially-covered`: the reading of what a file did and what carries it now is the flow's, and the proofs record holds paths and classes, never intent.
 - `layout-corrections`, `unmovable`, `data-split`, `ignore-rules`: each is the operator's answer to a question the flow asked.

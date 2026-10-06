@@ -155,6 +155,39 @@ class ProofsTests(unittest.TestCase):
                 report["issue_tracker"], {"tracker": "Local markdown", "payload": False}
             )
 
+    def test_leaves_an_unparsable_manifest_to_a_slot(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = retrofit_fixture(directory)
+            destination = self._overlay(fixture)
+            (destination / "apps/ledger/package.json").write_text("{not json\n")
+            git("add", "-A", cwd=destination)
+            result = self._proofs(fixture)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(
+                {
+                    "path": "apps/ledger/package.json",
+                    "status": "new",
+                    "added": None,
+                    "changed": None,
+                    "removed": None,
+                },
+                json.loads(result.stdout)["manifests"],
+            )
+
+    def test_refuses_a_unit_pyproject_that_does_not_parse(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = retrofit_fixture(directory)
+            destination = self._overlay(fixture)
+            (destination / "apps/ledger/.unit.json").write_text("{}\n")
+            (destination / "apps/ledger/pyproject.toml").write_text("[project\n")
+            git("add", "-A", cwd=destination)
+            result = self._proofs(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("does not parse", result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+
     def test_names_a_destination_file_an_exact_copy_replaced(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = retrofit_fixture(directory)
@@ -3084,6 +3117,22 @@ class ReferencesTests(unittest.TestCase):
                 [h["path"] for h in json.loads(result.stdout)["hits"]], ["README.md"]
             )
 
+    def test_a_payload_file_at_a_moved_files_old_path_does_not_hide_it(self) -> None:
+        files = {
+            "scripts/check": "#!/bin/sh\n",
+            "apps/ledger/scripts/check": "#!/bin/sh\n",
+            "README.md": "Run scripts/check first.\n",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            result = self._run_references(
+                directory, files, [("scripts/check", "apps/ledger/scripts/check")]
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(
+                "README.md", [h["path"] for h in json.loads(result.stdout)["hits"]]
+            )
+
     def test_adrs_and_plans_are_left_alone(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             paths = {str(h["path"]) for h in self._hits(directory)}
@@ -3321,6 +3370,21 @@ class DecideTests(unittest.TestCase):
                 {"summary": "s", "scope": "x"},
             )
 
+    def test_refuses_an_empty_value_and_keeps_the_earlier_ones(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            prefix = str(Path(directory) / "records")
+            run("decide", "--records", prefix, "--key", "scope", "--value", "x")
+            result = run(
+                "decide", "--records", prefix, "--key", "summary", "--value", " "
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("non-empty", result.stderr)
+            self.assertEqual(
+                json.loads(Path(f"{prefix}.decisions.json").read_text())["decisions"],
+                {"scope": "x"},
+            )
+
     def test_refuses_a_key_no_renderer_reads(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             result = run(
@@ -3378,6 +3442,8 @@ class ResumeTests(unittest.TestCase):
             candidate = self._candidate(directory, {"README.md": "upstream\n"})
             decisions = Path(f"{records(candidate)[1]}.decisions.json")
             decisions.write_text('{"decisions": {"summary": "stale"}}\n')
+            hooks_resume = Path(f"{records(candidate)[1]}.resume.json")
+            hooks_resume.write_text('{"prior_hooks": {"scope": "default"}}\n')
             result = self._resume(candidate)
 
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -3387,6 +3453,10 @@ class ResumeTests(unittest.TestCase):
                 report["merged"], git_output("rev-parse", "HEAD", cwd=candidate)
             )
             self.assertFalse(decisions.exists())
+            self.assertIn("prior_hooks", hooks_resume.read_text())
+            self.assertTrue(
+                Path(f"{records(candidate)[1]}.upstream-merge.json").exists()
+            )
 
     def test_takes_the_default_branchs_lockfile_and_leaves_the_rest(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

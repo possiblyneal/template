@@ -311,11 +311,15 @@ def manifest_leaves(document: object, key: str = "") -> dict[str, object]:
 
 
 def parsed_manifest(repository: Path, revision: str) -> dict[str, object] | None:
+    """The manifest's leaves, or None where its format is unread or it does not parse."""
     text = run_git(repository, "show", revision).stdout
-    if revision.endswith(".json"):
-        return manifest_leaves(json.loads(text))
-    if revision.endswith(".toml"):
-        return manifest_leaves(tomllib.loads(text))
+    try:
+        if revision.endswith(".json"):
+            return manifest_leaves(json.loads(text))
+        if revision.endswith(".toml"):
+            return manifest_leaves(tomllib.loads(text))
+    except (json.JSONDecodeError, tomllib.TOMLDecodeError):
+        return None
     return None
 
 
@@ -382,10 +386,13 @@ def unit_configuration(candidate: Path) -> dict[str, list[str]]:
             and any(fnmatch.fnmatch(entry.name, name) for name in CONFIGURATION_FILES)
         )
         pyproject = root / "pyproject.toml"
-        if pyproject.is_file() and "ruff" in tomllib.loads(pyproject.read_text()).get(
-            "tool", {}
-        ):
-            found.append("pyproject.toml [tool.ruff]")
+        if pyproject.is_file():
+            try:
+                declared = tomllib.loads(pyproject.read_text())
+            except tomllib.TOMLDecodeError as error:
+                raise PreflightError(f"{pyproject} does not parse: {error}") from error
+            if "ruff" in declared.get("tool", {}):
+                found.append("pyproject.toml [tool.ruff]")
         configuration[str(root.relative_to(candidate))] = found
     return configuration
 
@@ -767,6 +774,8 @@ def references(arguments: argparse.Namespace) -> dict[str, object]:
         for move in proofs_record["rename_purity"]["moves"]
     )
     moves = list(searched.items())
+    # A move's old path a payload file now occupies is still the moved file's.
+    resolvable = tracked_paths - set(searched)
     copies = set(proofs_record.get("copy", {}).get("identical_paths", []))
     paths = [(mention_pattern(old), new) for old, new in moves] + [
         (mention_pattern(Path(old).name), new) for old, new in moves
@@ -797,7 +806,7 @@ def references(arguments: argparse.Namespace) -> dict[str, object]:
                 for hit in line_hits(line, scripts, paths)
                 if not (
                     hit["kind"] == "moved-path"
-                    and resolves_locally(tracked, str(hit["matched"]), tracked_paths)
+                    and resolves_locally(tracked, str(hit["matched"]), resolvable)
                 )
             )
     return {
@@ -2951,6 +2960,13 @@ def resumption(report: Report, writes: dict) -> None:
     )
 
 
+def non_empty(value: str) -> str:
+    """Refused at parsing, before `main` unlinks the record an empty value would lose."""
+    if not value.strip():
+        raise argparse.ArgumentTypeError("needs a non-empty value")
+    return value
+
+
 def decide(arguments: argparse.Namespace) -> dict[str, object]:
     """Record one judgement, for every renderer whose slot it fills."""
     decisions = {
@@ -3387,7 +3403,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="record a judgement the report and the pull-request body render",
     )
     decision.add_argument("--key", required=True, choices=sorted(SLOTS))
-    decision.add_argument("--value", required=True)
+    decision.add_argument("--value", required=True, type=non_empty)
     decision.set_defaults(handler=decide, record="decisions")
 
     resumed = subparsers.add_parser(
@@ -3397,7 +3413,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     resumed.add_argument("--candidate", type=Path, required=True)
     resumed.add_argument("--default-branch", required=True)
-    resumed.set_defaults(handler=resume, record="resume")
+    resumed.set_defaults(handler=resume, record="upstream-merge")
     return parser
 
 
