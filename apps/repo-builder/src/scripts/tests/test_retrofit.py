@@ -286,8 +286,9 @@ class ProofsTests(unittest.TestCase):
             self.assertEqual(report["preserved"], [])
             emptied = {item["path"]: item["residue"] for item in report["emptied"]}
             self.assertEqual(emptied["tests"], [])
-            self.assertIn("src/notes.txt", emptied["src"])
-            self.assertTrue(all(path.startswith("src/") for path in emptied["src"]))
+            # A directory holding nothing tracked is one entry, not each file
+            # inside it; the move is staged in this clone, so `src/` is one.
+            self.assertEqual(emptied["src"], ["src/", "src/__pycache__/"])
             self.assertEqual(
                 report["workflows_without_pull_request"],
                 [".github/workflows/release.yml"],
@@ -1162,10 +1163,7 @@ class SyncTests(unittest.TestCase):
                 [
                     {
                         "path": "src",
-                        "residue": [
-                            "src/ledger/__pycache__/rates.pyc",
-                            "src/notes.txt",
-                        ],
+                        "residue": ["src/ledger/__pycache__/", "src/notes.txt"],
                     }
                 ],
             )

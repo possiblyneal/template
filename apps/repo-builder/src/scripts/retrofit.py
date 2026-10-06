@@ -78,7 +78,8 @@ def emptied_directories(candidate: Path, removed: list[str]) -> list[dict[str, o
     Git tracks no directories, so the residue that holds one open after the
     merge is never in the candidate's diff: it is untracked or ignored output
     in the operator's clone, read from there while the tracked file still
-    names it.
+    names it. A directory holding nothing tracked is one `dir/` entry rather
+    than every file inside it, so a `node_modules/` is a line, not a megabyte.
     """
     emptied: set[str] = set()
     for path in removed:
@@ -105,7 +106,6 @@ def emptied_directories(candidate: Path, removed: list[str]) -> list[dict[str, o
                     clone,
                     "status",
                     "--ignored",
-                    "--untracked-files=all",
                     "--porcelain",
                     "-z",
                     "--",
@@ -116,6 +116,11 @@ def emptied_directories(candidate: Path, removed: list[str]) -> list[dict[str, o
         }
         for path in topmost
     ]
+
+
+def covers(named: str, file: str) -> bool:
+    """Whether a residue entry names the file, itself or as a `dir/` holding it."""
+    return file == named or (named.endswith("/") and file.startswith(named))
 
 
 # `pull_request` outside a comment and not as `pull_request_target`, whose run
@@ -1344,10 +1349,7 @@ def sync(arguments: argparse.Namespace) -> dict[str, object]:
         unplanned = [
             file
             for file in residue
-            if not any(
-                file == named or (named.endswith("/") and file.startswith(named))
-                for named in item["residue"]
-            )
+            if not any(covers(named, file) for named in item["residue"])
         ]
         if unplanned:
             findings.append(
@@ -1357,7 +1359,16 @@ def sync(arguments: argparse.Namespace) -> dict[str, object]:
             kept.append(path)
             continue
         shutil.rmtree(directory)
-        removed.append({"path": path, "residue": residue})
+        removed.append(
+            {
+                "path": path,
+                "residue": [
+                    named
+                    for named in item["residue"]
+                    if any(covers(named, file) for file in residue)
+                ],
+            }
+        )
     return {
         "operation": "sync",
         "clone": {"path": str(clone), "default_branch": branch, "base": base},
