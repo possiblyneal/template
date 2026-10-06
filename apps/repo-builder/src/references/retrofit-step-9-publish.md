@@ -18,7 +18,7 @@ gh pr create --repo <owner>/<repository> --base <default-branch> \
   --body-file <records>.pr-body.md
 ```
 
-`pr-body` fills the template's sections from the records — check summary, both proofs, `normalize`, `facts`, `autofix`, workflows the event never runs, deletions, and the write log's reverse commands — leaves every judgement as `[[FILL: …]]`, and reports `path` and `slots`. Fill each slot: Summary, Decisions and Scope carry the per-path dispositions, layout moves and what the review found. Name only paths in the diff. The finished body holds no `[[FILL:` and never carries the session report.
+`pr-body` fills the template's sections from the records — check summary, both proofs, `normalize`, `facts`, `autofix`, workflows the event never runs, deletions, and the write log's reverse commands — answers the database and authentication risks `no` where no path the diff touches could carry one, leaves every other judgement as `[[FILL: <key>: …]]`, and reports `path` and `slots`. Its Decisions section shares `unit-map`, `merged` and `conflicted` with the report. Fill each remaining slot with `retrofit.py decide`, as for [the report](retrofit-report.md#report-additions), and render again: `summary`, `scope`, `not-verified`, `risk-api`, `risk-dependencies`, `risk-explained`, and either risk the renderer could not answer. Name only paths in the diff. The finished body holds no `[[FILL:` and never carries the session report.
 
 **The proofs are not taken again.** Their counts come from the proofs record step 7 measured. What is left after the two is the authored surface step 7 reviewed.
 

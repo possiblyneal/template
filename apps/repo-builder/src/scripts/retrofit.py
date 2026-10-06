@@ -9,8 +9,10 @@ they live beside it rather than in it, and reuse its git helpers by import.
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import json
 import os
+import posixpath
 import re
 import shlex
 import shutil
@@ -273,6 +275,144 @@ def proofs(arguments: argparse.Namespace) -> dict[str, object]:
             candidate, deleted + [str(move["from"]) for move in moves]
         ),
         "workflows_without_pull_request": workflows_without_pull_request(candidate),
+        "manifests": manifest_changes(candidate, base, changes),
+        "configuration": unit_configuration(candidate),
+        "issue_tracker": issue_tracker(candidate, set(identical_paths)),
+    }
+
+
+# The manifests a tool declaration edits; JSON and TOML ones are read for
+# what the declaration added or changed.
+MANIFESTS = (
+    "package.json",
+    "pyproject.toml",
+    "Cargo.toml",
+    "go.mod",
+    "build.gradle.kts",
+    "Package.swift",
+)
+
+
+def manifest_leaves(document: object, key: str = "") -> dict[str, object]:
+    """Each value a manifest declares, by dotted key; a list item is `key[item]`."""
+    if isinstance(document, dict):
+        if not document:
+            return {key: {}}
+        return {
+            leaf: value
+            for name, child in document.items()
+            for leaf, value in manifest_leaves(
+                child, f"{key}.{name}" if key else name
+            ).items()
+        }
+    if isinstance(document, list):
+        return {f"{key}[{item}]": None for item in document}
+    return {key: document}
+
+
+def parsed_manifest(repository: Path, revision: str) -> dict[str, object] | None:
+    """The manifest's leaves, or None where its format is unread or it does not parse."""
+    text = run_git(repository, "show", revision).stdout
+    try:
+        if revision.endswith(".json"):
+            return manifest_leaves(json.loads(text))
+        if revision.endswith(".toml"):
+            return manifest_leaves(tomllib.loads(text))
+    except (json.JSONDecodeError, tomllib.TOMLDecodeError):
+        return None
+    return None
+
+
+def manifest_changes(
+    candidate: Path, base: str, changes: list[tuple[str, list[str]]]
+) -> list[dict[str, object]]:
+    """Each staged manifest, new or edited, with the keys it added, changed or removed."""
+    manifests = []
+    for status, paths in changes:
+        path = paths[-1]
+        if status == "D" or Path(path).name not in MANIFESTS:
+            continue
+        at_base = blob(candidate, f"{base}:{paths[0]}") is not None
+        after = parsed_manifest(candidate, f":{path}")
+        before = parsed_manifest(candidate, f"{base}:{paths[0]}") if at_base else {}
+        entry: dict[str, object] = {
+            "path": path,
+            "status": "edited" if at_base else "new",
+            "added": None,
+            "changed": None,
+            "removed": None,
+        }
+        if after is not None and before is not None:
+            entry["added"] = sorted(set(after) - set(before))
+            entry["changed"] = sorted(
+                key for key in set(after) & set(before) if after[key] != before[key]
+            )
+            entry["removed"] = sorted(set(before) - set(after))
+        manifests.append(entry)
+    return manifests
+
+
+# Tool configuration a root can carry, by file name, so a tool run there
+# stops walking upward; a `pyproject.toml` counts only with its `tool.ruff`.
+CONFIGURATION_FILES = (
+    "eslint.config.*",
+    ".prettierrc*",
+    ".prettierignore",
+    "tsconfig*.json",
+    "jsconfig.json",
+    "ruff.toml",
+    ".ruff.toml",
+    "clippy.toml",
+    "rustfmt.toml",
+    ".rustfmt.toml",
+    ".swift-format",
+    ".editorconfig",
+    "detekt.yml",
+)
+
+
+def unit_configuration(candidate: Path) -> dict[str, list[str]]:
+    """The tool configuration the repository root and each unit root carry."""
+    configuration = {}
+    roots = [
+        candidate,
+        *(d.parent for d in sorted(candidate.glob("apps/*/.unit.json"))),
+    ]
+    for root in roots:
+        found = sorted(
+            entry.name
+            for entry in root.iterdir()
+            if entry.is_file()
+            and any(fnmatch.fnmatch(entry.name, name) for name in CONFIGURATION_FILES)
+        )
+        pyproject = root / "pyproject.toml"
+        if pyproject.is_file():
+            try:
+                declared = tomllib.loads(pyproject.read_text())
+            except tomllib.TOMLDecodeError as error:
+                raise PreflightError(f"{pyproject} does not parse: {error}") from error
+            if "ruff" in declared.get("tool", {}):
+                found.append("pyproject.toml [tool.ruff]")
+        configuration[str(root.relative_to(candidate))] = found
+    return configuration
+
+
+ISSUE_TRACKER = "docs/agents/issue-tracker.md"
+
+
+def issue_tracker(
+    candidate: Path, payload_copies: set[str]
+) -> dict[str, object] | None:
+    """The tracker the candidate's issue-tracker doc names in its heading."""
+    path = candidate / ISSUE_TRACKER
+    if not path.is_file():
+        return None
+    heading = next(iter(path.read_text().splitlines()), "")
+    if not heading.startswith("# Issue tracker:"):
+        return None
+    return {
+        "tracker": heading.removeprefix("# Issue tracker:").strip(),
+        "payload": ISSUE_TRACKER in payload_copies,
     }
 
 
@@ -432,14 +572,57 @@ def facts(arguments: argparse.Namespace) -> dict[str, object]:
                 "unit": unit,
                 "package": executed_fact(packaged),
                 "run": executed_fact(ran),
+                "adapterless": adapterless(declaration),
             }
         )
+    # First parent only, so a commit a `resume` merged in is never taken for it.
+    autofixed = next(
+        (
+            sha
+            for sha, _, subject in (
+                line.partition(" ")
+                for line in git_output(
+                    candidate, "log", "--first-parent", "--format=%H %s"
+                ).splitlines()
+            )
+            if subject == AUTOFIX_SUBJECT
+        ),
+        None,
+    )
     return {
         "operation": "facts",
         "candidate": str(candidate),
         "shipped": shipped,
         "units": units,
+        # The autofix pass is committed before the bar, and this runs after it.
+        "autofix_commit": autofixed,
     }
+
+
+# The subject step 7 commits the autofix pass under, which `facts` finds it by.
+AUTOFIX_SUBJECT = "style: apply the destination's own autofix"
+
+# A unit manifest whose language `scripts/package` has no adapter for.
+UNPACKAGED = {
+    "package.json": "node",
+    "pyproject.toml": "python",
+    "Package.swift": "swift",
+    "build.gradle.kts": "kotlin",
+}
+
+
+def adapterless(declaration: Path) -> str | None:
+    """The language of a unit that ships nothing for want of a packaging adapter."""
+    if json.loads(declaration.read_text()).get("ships", {}).get("kind") != "none":
+        return None
+    return next(
+        (
+            language
+            for manifest, language in UNPACKAGED.items()
+            if (declaration.parent / manifest).is_file()
+        ),
+        None,
+    )
 
 
 # Records of what the tree used to be, so a mention there is correct as it
@@ -544,6 +727,25 @@ def line_hits(
     return [hit for _, hit in invocations + moved]
 
 
+def unit_root(path: str) -> str | None:
+    parts = path.split("/")
+    return "/".join(parts[:2]) if parts[0] == "apps" and len(parts) > 2 else None
+
+
+def resolves_locally(path: str, matched: str, tracked: set[str]) -> bool:
+    """Whether a mention names a tracked file from where it is written.
+
+    A relative import such as `./db.js`, or a unit's own CLAUDE.md naming
+    `src/db.js`, moved with what it names and is correct as it stands.
+    """
+    bases = [posixpath.dirname(path), unit_root(path)]
+    return any(
+        posixpath.normpath(posixpath.join(base, matched)) in tracked
+        for base in bases
+        if base is not None
+    )
+
+
 def references(arguments: argparse.Namespace) -> dict[str, object]:
     """Find tracked lines naming a moved path or a script that now has an entry.
 
@@ -555,7 +757,9 @@ def references(arguments: argparse.Namespace) -> dict[str, object]:
     would write, or the candidates where a basename or a console-script stem is
     shared and no single one is right; the flow fixes them in the candidate
     before review, and what remains is the record `report` renders. ADRs,
-    plans, changelogs and byte-identical payload copies are never searched.
+    plans, changelogs and byte-identical payload copies are never searched,
+    and a mention that resolves to a tracked file from its own directory or
+    its unit's root is no hit.
     """
     candidate = preflight.require_git_repository(arguments.candidate, "candidate")
     proofs_record = load_required(arguments.records, "proofs")
@@ -570,6 +774,8 @@ def references(arguments: argparse.Namespace) -> dict[str, object]:
         for move in proofs_record["rename_purity"]["moves"]
     )
     moves = list(searched.items())
+    # A move's old path a payload file now occupies is still the moved file's.
+    resolvable = tracked_paths - set(searched)
     copies = set(proofs_record.get("copy", {}).get("identical_paths", []))
     paths = [(mention_pattern(old), new) for old, new in moves] + [
         (mention_pattern(Path(old).name), new) for old, new in moves
@@ -598,6 +804,10 @@ def references(arguments: argparse.Namespace) -> dict[str, object]:
             hits.extend(
                 {"path": tracked, "line": number, "text": line.strip(), **hit}
                 for hit in line_hits(line, scripts, paths)
+                if not (
+                    hit["kind"] == "moved-path"
+                    and resolves_locally(tracked, str(hit["matched"]), resolvable)
+                )
             )
     return {
         "operation": "references",
@@ -1952,19 +2162,117 @@ SUMMARY_ROW = re.compile(
 UNLISTED_FAILURE = re.compile(r"^(.+ exited \d+) with no failing result line")
 
 
-class Report:
-    """The final report's lines, with every judgement left as a marked slot."""
+@dataclass(frozen=True)
+class Slot:
+    """A line no record settles: what goes there, and what renders undecided."""
 
-    def __init__(self) -> None:
+    what: str
+    default: str | None = None
+
+
+# Every judgement the report and the pull-request body leave to the flow, by
+# the key `decide` records it under. A key both renderers read is decided once.
+SLOTS = {
+    "summary": Slot("what the retrofit changed and why, in two or three sentences"),
+    "merged": Slot("the payload change and the destination text each carries"),
+    "conflicted": Slot(
+        "paths with competing intents the flow could not settle, or none", "none"
+    ),
+    "superseded": Slot(
+        "each superseded path, what it did and what carries it now, or none", "none"
+    ),
+    "partially-covered": Slot(
+        "script paths and the parts already covered, or none", "none"
+    ),
+    "layout-corrections": Slot(
+        "each move the operator corrected or declined, or none to drop this line"
+    ),
+    "unmovable": Slot("each path that could not move and why, or none", "none"),
+    "data-split": Slot(
+        "each data file, read to assets/ or written to state/, and the live copy "
+        "the operator carries, or none"
+    ),
+    "references-repaired": Slot(
+        "each file and the moved path rewritten in it, or none"
+    ),
+    "ignore-rules": Slot("each rule and what it ignored, or none"),
+    "adr-fields-defaulted": Slot(
+        "each ADR path and field set to the payload template default, or none"
+    ),
+    "unit-map": Slot("one line per unit, in the Report additions shape"),
+    "ships-nothing": Slot("unit and language, or none"),
+    "declared-not-built": Slot("deployable, its descriptor and owning unit, or none"),
+    "issue-tracker": Slot(
+        "tracker, recorded in docs/agents/issue-tracker.md, shipped by the payload "
+        "or kept from the destination"
+    ),
+    "labels-reason": Slot("reason no labels were created"),
+    "declined-writes": Slot(
+        "each write the operator declined, with the reason, recorded in "
+        "generation.features; or none to drop this line"
+    ),
+    "irreversible-writes": Slot(
+        "each irreversible write, its before-state, applied value and cost; or none"
+    ),
+    "ruleset-enforcement": Slot(
+        "step 9's mergeable/mergeStateStatus reading of the pull request"
+    ),
+    "fix-prepared": Slot("the unmet-bar outcome, in the Report additions shape"),
+    "fix-published": Slot("the unmet-bar outcome, in the Report additions shape"),
+    "code-review": Slot(
+        "the axes that ran over the authored surface, the findings corrected or "
+        "recorded as incorrectly identified, and the Reviewed-Head sha, or why no "
+        "sign-off was written"
+    ),
+    "default-branch": Slot("check-suite result"),
+    "untracked": Slot("none, or the paths and how they were disposed", "none"),
+    "tool-declaration": Slot("per manifest, what was added, kept or declined"),
+    "configuration-boundary": Slot("one row per language"),
+    "autofix-settings": Slot(
+        "every tool resolved inside the candidate, or SKIPPED and why"
+    ),
+    "autofix-commit": Slot("the commit sha"),
+    "reverted-rules": Slot("the rule or formatter that rewrote each"),
+    "left-for-the-operator": Slot("each other path left in place and why, or none"),
+    "pending-action": Slot("the exact decision or authorization needed"),
+    "re-observed": Slot("what live state showed complete"),
+    "read-back": Slot("the issues and decisions read back"),
+    "redone": Slot("anything performed again and why, or none"),
+    "retries": Slot("transient failures retried and their outcomes, or none", "none"),
+    "not-verified": Slot("anything else not exercised, or nothing"),
+    "risk-database": Slot("yes / no"),
+    "risk-auth": Slot("yes / no"),
+    "risk-api": Slot("yes / no"),
+    "risk-dependencies": Slot("yes / no"),
+    "risk-explained": Slot(
+        "for every yes, what specifically changed and what happens if it is wrong"
+    ),
+    "scope": Slot("anything touched beyond the payload and the moves it required"),
+}
+
+
+class Report:
+    """Rendered lines, with every judgement not yet decided left as a marked slot."""
+
+    def __init__(self, decisions: Mapping[str, str]) -> None:
         self.lines: list[str] = []
         self.slots: list[str] = []
+        self.decisions = decisions
 
-    def fill(self, what: str) -> str:
-        self.slots.append(what)
-        return f"[[FILL: {what}]]"
+    def fill(self, key: str, derived: str | None = None) -> str:
+        """What a record settles, else the decided value, else the marked slot."""
+        value = derived or self.decisions.get(key) or SLOTS[key].default
+        if value is not None:
+            return value
+        self.slots.append(f"{key}: {SLOTS[key].what}")
+        return f"[[FILL: {key}: {SLOTS[key].what}]]"
 
-    def add(self, *lines: str) -> None:
-        self.lines.extend(lines)
+    def optional(self, key: str) -> str | None:
+        """A slot on a line the flow drops by deciding it `none`."""
+        return None if self.decisions.get(key) == "none" else self.fill(key)
+
+    def add(self, *lines: str | None) -> None:
+        self.lines.extend(line for line in lines if line is not None)
 
     def section(self, heading: str) -> None:
         self.lines += ["", heading]
@@ -2097,14 +2405,21 @@ def merged_paths(proofs: dict) -> list[str]:
     ]
 
 
+def overridden_line(proofs: dict) -> str:
+    return joined(
+        [f"{entry['path']} ({entry['reason']})" for entry in proofs["overridden"]]
+    )
+
+
+def decided(prefix: Path) -> dict[str, str]:
+    return load(prefix, "decisions").get("decisions", {})
+
+
 def merged_line(report: Report, proofs: dict) -> str:
     merged = merged_paths(proofs)
     if not merged:
         return "- Merged: none"
-    return (
-        f"- Merged: {', '.join(merged)}; "
-        f"{report.fill('the payload change and the destination text each carries')}"
-    )
+    return f"- Merged: {', '.join(merged)}; {report.fill('merged')}"
 
 
 def reference_hit_line(hit: dict) -> str:
@@ -2126,36 +2441,49 @@ def reconciliation(report: Report, proofs: dict, reference_record: dict | None) 
         f"- Preserved: {joined(proofs['preserved'])}",
         f"- Renamed/deleted: {joined(renamed + deleted)}",
         merged_line(report, proofs),
-        f"- Conflicted: {fill('paths with competing intents the flow could not settle, or none')}",
-        f"- Superseded: {fill('each superseded path, what it did and what carries it now, or none')}",
-        f"- Partially covered, not cut: {fill('script paths and the parts already covered, or none')}",
-        "- Overridden: "
-        + joined(
-            [f"{entry['path']} ({entry['reason']})" for entry in proofs["overridden"]]
-        ),
+        f"- Conflicted: {fill('conflicted')}",
+        f"- Superseded: {fill('superseded')}",
+        f"- Partially covered, not cut: {fill('partially-covered')}",
+        f"- Overridden: {overridden_line(proofs)}",
     )
     if moves:
+        corrections = report.optional("layout-corrections")
         report.add(
-            *(f"- Layout plan: {move['from']} -> {move['to']}: moved" for move in moves)
+            *(
+                f"- Layout plan: {move['from']} -> {move['to']}: moved"
+                for move in moves
+            ),
+            f"- Layout plan: {corrections}" if corrections else None,
         )
+    else:
+        report.add("- Layout plan: none")
     report.add(
-        f"- Layout plan: {fill('each move the operator corrected or declined, or delete this line')}"
-        if moves
-        else "- Layout plan: none",
-        f"- Unmovable: {fill('each path that could not move and why, or none')}",
-        f"- Data split: {fill('each data file, read to assets/ or written to state/, and the live copy the operator carries, or none')}",
-        f"- References repaired: {fill('each file and the moved path rewritten in it, or none')}",
+        f"- Unmovable: {fill('unmovable')}",
+        f"- Data split: {fill('data-split')}",
+        f"- References repaired: {fill('references-repaired')}",
         "- References reported, not rewritten: "
         + (
             joined([reference_hit_line(hit) for hit in reference_record["hits"]])
             if reference_record
             else unknown("references")
         ),
-        f"- Ignore rules the payload does not cover: {fill('each rule and what it ignored, or none')}",
+        f"- Ignore rules the payload does not cover: {fill('ignore-rules')}",
     )
 
 
-def application_boundaries(report: Report, proofs: dict) -> None:
+def ships_nothing(executed: dict) -> str | None:
+    """Units declaring `ships: none` beside a manifest no adapter packages."""
+    if not executed.get("units"):
+        return None
+    found = [
+        f"{unit['unit']}: {unit['adapterless']}"
+        for unit in executed["units"]
+        if unit.get("adapterless")
+    ]
+    return "; ".join(found) or "none"
+
+
+def application_boundaries(report: Report, proofs: dict, executed: dict) -> None:
     fill = report.fill
     records = [
         path
@@ -2165,10 +2493,10 @@ def application_boundaries(report: Report, proofs: dict) -> None:
     report.section("### Application boundaries")
     report.add(
         f"- ADRs written: {joined(records)}",
-        f"- ADR fields defaulted: {fill('each ADR path and field set to the payload template default, or none')}",
-        f"- Unit map: {fill('one line per unit, in the Report additions shape')}",
-        f"- Ships nothing for want of an adapter: {fill('unit and language, or none')}",
-        f"- Declared but not built: {fill('deployable, its descriptor and owning unit, or none')}",
+        f"- ADR fields defaulted: {fill('adr-fields-defaulted')}",
+        f"- Unit map: {fill('unit-map')}",
+        f"- Ships nothing for want of an adapter: {fill('ships-nothing', ships_nothing(executed))}",
+        f"- Declared but not built: {fill('declared-not-built')}",
     )
 
 
@@ -2225,7 +2553,7 @@ def setting_line(
 def labels_line(report: Report, labels: object, apply_ran: bool) -> str:
     if not isinstance(labels, dict):
         return (
-            f"none created ({report.fill('reason no labels were created')})"
+            f"none created ({report.fill('labels-reason')})"
             if apply_ran
             else "none created (hosted apply did not run)"
         )
@@ -2252,7 +2580,11 @@ def labels_line(report: Report, labels: object, apply_ran: bool) -> str:
 
 
 def repository_settings(
-    report: Report, hosted_state: dict, apply_record: dict, stopped: str | None
+    report: Report,
+    proofs: dict,
+    hosted_state: dict,
+    apply_record: dict,
+    stopped: str | None,
 ) -> None:
     writes, reasons = apply_record.get("writes", {}), apply_record.get("reasons", {})
     # The gate opens with `hosted read`, so its JSON marks a run that reached
@@ -2276,8 +2608,17 @@ def repository_settings(
                 )
             )
     labels = labels_line(report, writes.get("labels"), bool(apply_record))
+    tracker = proofs.get("issue_tracker")
+    derived = tracker and (
+        f"{tracker['tracker']}, recorded in {ISSUE_TRACKER}, "
+        + (
+            "shipped by the payload"
+            if tracker["payload"]
+            else "kept from the destination"
+        )
+    )
     report.add(
-        f"- Issue tracker: {report.fill('tracker, recorded in docs/agents/issue-tracker.md, shipped by the payload or kept from the destination')}; labels: {labels}"
+        f"- Issue tracker: {report.fill('issue-tracker', derived)}; labels: {labels}"
     )
 
 
@@ -2288,9 +2629,8 @@ def reversible_writes(report: Report, entries: list[dict]) -> None:
             f"- {entry['write']}: was {json.dumps(entry['before'])} -> "
             f"{json.dumps(entry['after'])}; reverse with `{shlex.join(entry['reverse_command'])}`"
         )
-    report.add(
-        f"- {report.fill('each write the operator declined, with the reason, recorded in generation.features; or delete this line')}"
-    )
+    declined = report.optional("declined-writes")
+    report.add(f"- {declined}" if declined else None)
     if not entries:
         report.add("- none performed")
 
@@ -2303,9 +2643,7 @@ def ruleset_enforcement(
         return "n/a (no ruleset written)"
     if pull_request is None:
         return "not yet proven at the gate, and no pull request opened to prove it"
-    return report.fill(
-        "step 9's mergeable/mergeStateStatus reading of the pull request"
-    )
+    return report.fill("ruleset-enforcement")
 
 
 def irreversible_writes(
@@ -2326,7 +2664,7 @@ def irreversible_writes(
         ]
     report.section("### Hosted writes, irreversible")
     report.add(
-        f"- {report.fill('each irreversible write, its before-state, applied value and cost; or none')}",
+        f"- {report.fill('irreversible-writes')}",
         f"- Ruleset enforcement: {ruleset_enforcement(report, writes.get('ruleset'), pull_request)}",
         f"- Permissions gap: {'; '.join(gaps) if gaps else 'none'}",
     )
@@ -2343,8 +2681,8 @@ def bar_lines(report: Report, summaries: list[tuple[str, list[Row]]]) -> list[st
     )
     return [
         f"- Bar: UNMET: {unmet}; stopped before the pull request, zero hosted writes performed",
-        f"- Destination fix prepared: {report.fill('the unmet-bar outcome, in the Report additions shape')}",
-        f"- Destination fix published: {report.fill('the unmet-bar outcome, in the Report additions shape')}",
+        f"- Destination fix prepared: {report.fill('fix-prepared')}",
+        f"- Destination fix published: {report.fill('fix-published')}",
     ]
 
 
@@ -2404,18 +2742,19 @@ def verification(
         "the rest are the authored surface, under File list. An overridden path is "
         "in neither count, under Reconciliation instead",
         f"- Workflows the pull-request event never ran: {joined(proofs['workflows_without_pull_request'])}",
-        f"- Code review: {fill('the axes that ran over the authored surface, the findings corrected or recorded as incorrectly identified, and the Reviewed-Head sha, or why no sign-off was written')}",
-        f"- Default branch after merge: {fill('check-suite result')}"
+        f"- Code review: {fill('code-review')}",
+        f"- Default branch after merge: {fill('default-branch')}"
         if hooks_result
         else "- Default branch after merge: n/a (nothing merged)",
         f"- Moved paths byte-identical to their pre-move blob: {purity['identical']}/{purity['total']}",
         f"- Directories emptied by a move: {emptied_line(proofs['emptied'], synced)}",
-        f"- Untracked at the bar: {fill('none, or the paths and how they were disposed')}",
+        f"- Untracked at the bar: {fill('untracked')}",
         f"- Declared facts executed: {facts_line(executed)}",
-        f"- Tool declaration: {fill('per manifest, what was added, kept or declined')}",
-        f"- Configuration boundary: {fill('one row per language')}",
-        f"- Autofix: {autofix_line(report, fixed)}",
-        f"- Autofix settings resolution: {fill('every tool resolved inside the candidate, or SKIPPED and why')}",
+        f"- Tool declaration: {fill('tool-declaration', tool_declaration(proofs))}",
+        "- Configuration boundary: "
+        + fill("configuration-boundary", configuration_boundary(proofs)),
+        f"- Autofix: {autofix_line(report, fixed, executed)}",
+        f"- Autofix settings resolution: {fill('autofix-settings')}",
         f"- Payload paths the autofix rewrote: {reverted_line(report, fixed)}",
     )
     report.add(*bar_lines(report, summaries))
@@ -2462,7 +2801,39 @@ def facts_line(executed: dict) -> str:
     )
 
 
-def autofix_line(report: Report, fixed: dict) -> str:
+def tool_declaration(proofs: dict) -> str | None:
+    """What each staged manifest gained over the destination's own."""
+    # A manifest no parser reads, such as `go.mod`, leaves the line a judgement.
+    if "manifests" not in proofs or any(
+        entry["added"] is None for entry in proofs["manifests"]
+    ):
+        return None
+    lines = [
+        f"{entry['path']}: new, declaring {joined(entry['added'] or [])}"
+        if entry["status"] == "new"
+        else f"{entry['path']}: added {joined(entry['added'] or [])}; "
+        f"changed {joined(entry['changed'] or [])}; "
+        f"removed {joined(entry['removed'] or [])}"
+        for entry in proofs["manifests"]
+    ]
+    return "; ".join(lines) or "nothing missing"
+
+
+def configuration_boundary(proofs: dict) -> str | None:
+    if "configuration" not in proofs:
+        return None
+    return (
+        "; ".join(
+            f"{'the root' if root == '.' else root} carries {', '.join(files)}"
+            if files
+            else f"{'the root' if root == '.' else root}: none"
+            for root, files in proofs["configuration"].items()
+        )
+        or None
+    )
+
+
+def autofix_line(report: Report, fixed: dict, executed: dict) -> str:
     if not fixed:
         return "no pass ran"
     if not fixed["shipped"]:
@@ -2470,6 +2841,7 @@ def autofix_line(report: Report, fixed: dict) -> str:
             "the payload ships no `scripts/fix`, so the bar was measured without a pass"
         )
     passes = f"{fixed['passes']} pass{'es' if fixed['passes'] > 1 else ''}"
+    commit = executed.get("autofix_commit")
     remaining = (
         "; findings it could not fix remained for the bar"
         if fixed["exit_status"]
@@ -2479,7 +2851,8 @@ def autofix_line(report: Report, fixed: dict) -> str:
         return f"nothing rewritten outside the payload ({passes}){remaining}"
     return (
         f"`scripts/fix` rewrote {', '.join(fixed['rewritten'])} in {passes}, "
-        f"committed by itself in {report.fill('the commit sha')}{remaining}"
+        f"committed by itself in {report.fill('autofix-commit', commit and commit[:12])}"
+        f"{remaining}"
     )
 
 
@@ -2489,7 +2862,7 @@ def reverted_line(report: Report, fixed: dict) -> str:
         return "none"
     return (
         f"{', '.join(reverted)}, reverted in the candidate and reported as a payload "
-        f"defect; {report.fill('the rule or formatter that rewrote each')}"
+        f"defect; {report.fill('reverted-rules')}"
     )
 
 
@@ -2565,12 +2938,14 @@ def cleanup(
         for item in proofs["emptied"]
         if item["residue"] and item["path"] not in cleared
     ]
-    others = report.fill(
-        "any other path left in place and why, or delete this entry"
+    others = (
+        report.optional("left-for-the-operator")
         if left
-        else "each path left in place and why, or none"
+        else report.fill("left-for-the-operator")
     )
-    report.add(f"- Left for the operator: {'; '.join([*left, others])}")
+    report.add(
+        f"- Left for the operator: {'; '.join(item for item in [*left, others] if item)}"
+    )
 
 
 def resumption(report: Report, writes: dict) -> None:
@@ -2578,11 +2953,74 @@ def resumption(report: Report, writes: dict) -> None:
     logged = [write for write, outcome in writes.items() if outcome == Outcome.LOGGED]
     report.section("### Resumption")
     report.add(
-        f"- Re-observed as already done: {fill('what live state showed complete')}",
-        f"- Taken from the resume record: hosted writes {joined(logged)}; {fill('the issues and decisions read back')}",
-        f"- Redone: {fill('anything performed again and why, or none')}",
-        f"- Retries: {fill('transient failures retried and their outcomes, or none')}",
+        f"- Re-observed as already done: {fill('re-observed')}",
+        f"- Taken from the resume record: hosted writes {joined(logged)}; {fill('read-back')}",
+        f"- Redone: {fill('redone')}",
+        f"- Retries: {fill('retries')}",
     )
+
+
+def non_empty(value: str) -> str:
+    """Refused at parsing, before `main` unlinks the record an empty value would lose."""
+    if not value.strip():
+        raise argparse.ArgumentTypeError("needs a non-empty value")
+    return value
+
+
+def decide(arguments: argparse.Namespace) -> dict[str, object]:
+    """Record one judgement, for every renderer whose slot it fills."""
+    decisions = {
+        **arguments.previous.get("decisions", {}),
+        arguments.key: arguments.value,
+    }
+    return {"operation": "decide", "decisions": decisions}
+
+
+LOCKFILES = {
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "uv.lock",
+    "poetry.lock",
+    "Cargo.lock",
+    "go.sum",
+    "Package.resolved",
+    "gradle.lockfile",
+}
+
+
+def resume(arguments: argparse.Namespace) -> dict[str, object]:
+    """Merge the default branch's movement into the candidate.
+
+    A conflicted lockfile takes the default branch's side, to be regenerated
+    by the lock-only install rather than merged by hand; every other conflict
+    is left in the tree for the flow to settle. The stopped run's decisions go
+    with it, since the resumed run makes each judgement again.
+    """
+    record_path(arguments.records, "decisions.json").unlink(missing_ok=True)
+    candidate = arguments.candidate
+    upstream = f"origin/{arguments.default_branch}"
+    run_git(candidate, "fetch", "origin")
+    merged = run_git(candidate, "merge", "--no-edit", upstream, check=False)
+    conflicted = nul_fields(candidate, "diff", "--name-only", "-z", "--diff-filter=U")
+    if merged.returncode and not conflicted:
+        raise PreflightError(
+            merged.stderr.strip() or merged.stdout.strip() or "merge failed"
+        )
+    lockfiles = [path for path in conflicted if posixpath.basename(path) in LOCKFILES]
+    for path in lockfiles:
+        if blob(candidate, f"{upstream}:{path}") is None:
+            run_git(candidate, "rm", "-q", "--", path)
+            continue
+        run_git(candidate, "checkout", "--theirs", "--", path)
+        run_git(candidate, "add", "--", path)
+    return {
+        "operation": "resume",
+        "upstream": git_output(candidate, "rev-parse", upstream),
+        "merged": None if conflicted else git_output(candidate, "rev-parse", "HEAD"),
+        "lockfiles_taken": lockfiles,
+        "conflicts": [path for path in conflicted if path not in lockfiles],
+    }
 
 
 def render_report(arguments: argparse.Namespace) -> dict[str, object]:
@@ -2600,15 +3038,16 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
     swept = load(prefix, "sweep")
     synced = load(prefix, "sync")
     apply_record = load(prefix, "hosted-apply")
-    report = Report()
+    report = Report(decided(prefix))
     header(report, arguments, proofs)
     reconciliation(report, proofs, load(prefix, "references"))
-    application_boundaries(report, proofs)
+    executed, fixed = load(prefix, "facts"), load(prefix, "autofix")
+    application_boundaries(report, proofs, executed)
     file_list(report, proofs)
     preflight_result = load(prefix, "preflight")
     addon_adoption(report, preflight_result)
     repository_settings(
-        report, load(prefix, "hosted-read"), apply_record, arguments.stopped
+        report, proofs, load(prefix, "hosted-read"), apply_record, arguments.stopped
     )
     reversible_writes(report, write_entries(apply_record))
     irreversible_writes(report, apply_record, arguments.pull_request)
@@ -2620,19 +3059,15 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
         hooks_result,
         swept,
         synced,
-        load(prefix, "facts"),
-        load(prefix, "autofix"),
+        executed,
+        fixed,
         preflight_result,
     )
     cleanup(report, swept, hooks_result, synced, proofs)
     if arguments.resumed:
         resumption(report, apply_record.get("writes", {}))
     report.section("### Pending action")
-    report.add(
-        report.fill("the exact decision or authorization needed")
-        if arguments.stopped
-        else "none"
-    )
+    report.add(report.fill("pending-action") if arguments.stopped else "none")
 
     output = record_path(prefix, "report.md")
     output.write_text("\n".join(report.lines) + "\n")
@@ -2655,9 +3090,28 @@ def proof_lines(
         )
     lines += [
         f"- Declared facts executed: {facts_line(executed)}",
-        f"- Autofix: {autofix_line(report, fixed)}",
+        f"- Autofix: {autofix_line(report, fixed, executed)}",
     ]
     return lines
+
+
+DATABASE_PATHS = re.compile(r"migrat|schema|alembic|prisma|\.sql$", re.IGNORECASE)
+AUTH_PATHS = re.compile(r"auth|login|permission|oauth|session", re.IGNORECASE)
+
+
+def untouched(proofs: dict, pattern: re.Pattern[str]) -> str | None:
+    """`no` where no path the diff touches matches; otherwise a judgement."""
+    paths = [
+        *proofs["authored"],
+        *proofs["deleted"],
+        *(item["path"] for item in proofs["copy"]["differing"]),
+        *(
+            path
+            for move in proofs["rename_purity"]["moves"]
+            for path in (move["from"], move["to"])
+        ),
+    ]
+    return None if any(pattern.search(path) for path in paths) else "no"
 
 
 def data_risk(proofs: dict) -> str:
@@ -2697,12 +3151,12 @@ def render_pr_body(arguments: argparse.Namespace) -> dict[str, object]:
     proofs = load_required(prefix, "proofs")
     check = required_record(prefix, "check.txt").read_text().rstrip()
     entries = write_entries(load(prefix, "hosted-apply"))
-    report = Report()
+    report = Report(decided(prefix))
     fill = report.fill
     report.add(
         "## Summary",
         "",
-        fill("what the retrofit changed and why, in two or three sentences"),
+        fill("summary"),
     )
     report.section("## Linked issue or goal")
     report.add(
@@ -2732,24 +3186,24 @@ def render_pr_body(arguments: argparse.Namespace) -> dict[str, object]:
         "",
         f"- Workflows with no `pull_request` trigger, which this pull request never ran: "
         f"{joined(proofs['workflows_without_pull_request'])}",
-        f"- {fill('anything else not exercised, or nothing')}",
+        f"- {fill('not-verified')}",
     )
     report.section("## Risk")
     report.add(
         "",
         "Answer each. These are checkable against the diff.",
         "",
-        f"- Database migration or schema change: {fill('yes / no')}",
-        f"- Authentication, authorization, or permission logic touched: {fill('yes / no')}",
+        "- Database migration or schema change: "
+        + fill("risk-database", untouched(proofs, DATABASE_PATHS)),
+        "- Authentication, authorization, or permission logic touched: "
+        + fill("risk-auth", untouched(proofs, AUTH_PATHS)),
         "- Secrets, credentials, or security config touched: yes — the payload adds "
         "gitleaks, a dependency audit, CodeQL and Dependabot",
-        f"- Public API, CLI, or on-disk format changed in a way existing callers would notice: {fill('yes / no')}",
-        f"- Dependencies added, removed, or upgraded: {fill('yes / no')}",
+        f"- Public API, CLI, or on-disk format changed in a way existing callers would notice: {fill('risk-api')}",
+        f"- Dependencies added, removed, or upgraded: {fill('risk-dependencies')}",
         f"- Deletes or overwrites existing data: {data_risk(proofs)}",
         "",
-        fill(
-            "for every yes, what specifically changed and what happens if it is wrong"
-        ),
+        fill("risk-explained"),
         "",
         "Rollback:",
         "",
@@ -2757,12 +3211,14 @@ def render_pr_body(arguments: argparse.Namespace) -> dict[str, object]:
     )
     report.section("## Decisions a reviewer should check")
     report.add(
-        "", fill("the unit map, each conflict settled and each override, with why")
+        "",
+        f"- Unit map: {fill('unit-map')}",
+        merged_line(report, proofs),
+        f"- Conflicted: {fill('conflicted')}",
+        f"- Overridden: {overridden_line(proofs)}",
     )
     report.section("## Scope")
-    report.add(
-        "", fill("anything touched beyond the payload and the moves it required")
-    )
+    report.add("", fill("scope"))
     report.section("## Screenshots or demos")
     report.add("", "N/A")
     report.section("## Checklist")
@@ -2940,6 +3396,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     body.add_argument("--repository", required=True, help="owner/name")
     body.set_defaults(handler=render_pr_body)
+
+    decision = subparsers.add_parser(
+        "decide",
+        parents=[recorded],
+        help="record a judgement the report and the pull-request body render",
+    )
+    decision.add_argument("--key", required=True, choices=sorted(SLOTS))
+    decision.add_argument("--value", required=True, type=non_empty)
+    decision.set_defaults(handler=decide, record="decisions")
+
+    resumed = subparsers.add_parser(
+        "resume",
+        parents=[recorded],
+        help="merge the default branch's movement into the candidate",
+    )
+    resumed.add_argument("--candidate", type=Path, required=True)
+    resumed.add_argument("--default-branch", required=True)
+    resumed.set_defaults(handler=resume, record="upstream-merge")
     return parser
 
 
@@ -2949,7 +3423,7 @@ def fail(message: str, status: int = 2) -> NoReturn:
 
 
 # The records whose subcommand reads its own earlier one as `arguments.previous`.
-EARLIER_RECORD_READERS = ("hosted-apply", "references")
+EARLIER_RECORD_READERS = ("hosted-apply", "references", "decisions")
 
 
 def main() -> int:
@@ -2963,8 +3437,10 @@ def main() -> int:
         # write, counts as none.
         earlier = record_path(arguments.records, f"{record}.json")
         sweep = record_path(arguments.records, "sweep.json")
+        # Decisions are made up to the report, which renders after the sweep.
         swept = (
-            earlier.is_file()
+            record != "decisions"
+            and earlier.is_file()
             and sweep.is_file()
             and sweep.stat().st_mtime >= earlier.stat().st_mtime
         )

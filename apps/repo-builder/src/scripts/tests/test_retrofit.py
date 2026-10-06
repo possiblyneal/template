@@ -40,6 +40,15 @@ def payload_arguments(fixture: dict[str, str]) -> list[str]:
     ]
 
 
+# For a subcommand that commits itself: a CI runner has no ambient identity.
+COMMIT_IDENTITY = {
+    "GIT_AUTHOR_NAME": "Repo Builder Test",
+    "GIT_AUTHOR_EMAIL": "repo-builder-test@example.invalid",
+    "GIT_COMMITTER_NAME": "Repo Builder Test",
+    "GIT_COMMITTER_EMAIL": "repo-builder-test@example.invalid",
+}
+
+
 def records(candidate: Path) -> list[str]:
     """A record prefix beside the candidate, where a step's JSON lands."""
     return ["--records", str(candidate.parent / "records")]
@@ -118,6 +127,75 @@ class ProofsTests(unittest.TestCase):
             self.assertEqual(copy["total"], copy["identical"] + 1)
             self.assertIn(".gitignore", report["authored"])
             self.assertEqual(report["replaced"], [])
+
+    def test_records_manifests_configuration_and_the_issue_tracker(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = retrofit_fixture(directory)
+            destination = self._overlay(fixture)
+            (destination / "apps/ledger/.unit.json").write_text("{}\n")
+            (destination / "apps/ledger/pyproject.toml").write_text(
+                '[project]\nname = "ledger"\n\n[tool.ruff]\n'
+            )
+            (destination / "docs/agents/issue-tracker.md").write_text(
+                "# Issue tracker: Local markdown\n"
+            )
+            git("add", "-A", cwd=destination)
+            result = self._proofs(fixture)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(
+                report["manifests"],
+                [
+                    {
+                        "path": "apps/ledger/pyproject.toml",
+                        "status": "new",
+                        "added": ["project.name", "tool.ruff"],
+                        "changed": [],
+                        "removed": [],
+                    }
+                ],
+            )
+            self.assertEqual(
+                report["configuration"]["apps/ledger"], ["pyproject.toml [tool.ruff]"]
+            )
+            self.assertIn(".", report["configuration"])
+            self.assertEqual(
+                report["issue_tracker"], {"tracker": "Local markdown", "payload": False}
+            )
+
+    def test_leaves_an_unparsable_manifest_to_a_slot(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = retrofit_fixture(directory)
+            destination = self._overlay(fixture)
+            (destination / "apps/ledger/package.json").write_text("{not json\n")
+            git("add", "-A", cwd=destination)
+            result = self._proofs(fixture)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(
+                {
+                    "path": "apps/ledger/package.json",
+                    "status": "new",
+                    "added": None,
+                    "changed": None,
+                    "removed": None,
+                },
+                json.loads(result.stdout)["manifests"],
+            )
+
+    def test_refuses_a_unit_pyproject_that_does_not_parse(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = retrofit_fixture(directory)
+            destination = self._overlay(fixture)
+            (destination / "apps/ledger/.unit.json").write_text("{}\n")
+            (destination / "apps/ledger/pyproject.toml").write_text("[project\n")
+            git("add", "-A", cwd=destination)
+            result = self._proofs(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("does not parse", result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
 
     def test_names_a_destination_file_an_exact_copy_replaced(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -446,6 +524,36 @@ class FactsTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertFalse(stale.exists())
 
+    def test_names_the_autofix_commit_and_an_adapterless_unit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            candidate = candidate_repository(
+                directory,
+                {
+                    "apps/ledger/.unit.json": (
+                        b'{"schema_version": 1, "run": "none", "ships": {"kind": "none"}}\n'
+                    ),
+                    "apps/ledger/pyproject.toml": b'[project]\nname = "ledger"\n',
+                },
+            )
+            (candidate / "README.md").write_text("fixed\n")
+            git("add", "-A", cwd=candidate)
+            git(
+                "commit",
+                "-q",
+                "-m",
+                "style: apply the destination's own autofix",
+                cwd=candidate,
+            )
+            sha = git_output("rev-parse", "HEAD", cwd=candidate)
+            write_script(candidate / "scripts/package", "exit 0")
+            write_script(candidate / "scripts/run", "exit 0")
+            result = run("facts", "--candidate", str(candidate), *records(candidate))
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["autofix_commit"], sha)
+            self.assertEqual(report["units"][0]["adapterless"], "python")
+
     def test_records_each_units_package_and_run(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             candidate = candidate_repository(
@@ -466,6 +574,7 @@ class FactsTests(unittest.TestCase):
                 [
                     {
                         "unit": "ledger",
+                        "adapterless": None,
                         "package": {
                             "exit": 1,
                             "tail": "boom ledger",
@@ -617,10 +726,7 @@ class HooksTests(unittest.TestCase):
         return {
             **os.environ,
             "GIT_CONFIG_GLOBAL": str(root / "gitconfig"),
-            "GIT_AUTHOR_NAME": "Repo Builder Test",
-            "GIT_AUTHOR_EMAIL": "repo-builder-test@example.invalid",
-            "GIT_COMMITTER_NAME": "Repo Builder Test",
-            "GIT_COMMITTER_EMAIL": "repo-builder-test@example.invalid",
+            **COMMIT_IDENTITY,
         }
 
     def _hooks(
@@ -879,10 +985,7 @@ class HookOutcomeTests(unittest.TestCase):
                     **os.environ,
                     # This machine's own global hooks would run instead.
                     "GIT_CONFIG_GLOBAL": os.devnull,
-                    "GIT_AUTHOR_NAME": "Repo Builder Test",
-                    "GIT_AUTHOR_EMAIL": "repo-builder-test@example.invalid",
-                    "GIT_COMMITTER_NAME": "Repo Builder Test",
-                    "GIT_COMMITTER_EMAIL": "repo-builder-test@example.invalid",
+                    **COMMIT_IDENTITY,
                 },
             )
 
@@ -2144,7 +2247,7 @@ class ReportTests(unittest.TestCase):
             self.assertNotIn("### Resumption", lines)
             filled = sum(line.count("[[FILL: ") for line in lines)
             self.assertEqual(filled, len(slots))
-            self.assertIn("check-suite result", slots)
+            self.assertIn("default-branch: check-suite result", slots)
 
     def test_names_a_destination_whose_origin_is_a_path(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -2415,7 +2518,7 @@ class ReportTests(unittest.TestCase):
                 hosted_apply={"operation": "hosted apply", "writes": {}},
             )
 
-            self.assertIn("reason no labels were created", slots)
+            self.assertIn("labels-reason: reason no labels were created", slots)
             self.assertIn("- Runner variable: unknown (hosted read did not run)", lines)
 
     def test_renders_a_stopped_unmet_bar_with_nothing_hosted(self) -> None:
@@ -2455,7 +2558,10 @@ class ReportTests(unittest.TestCase):
             self.assertEqual(
                 left,
                 [
-                    "- Left for the operator: [[FILL: each path left in place and why, or none]]"
+                    (
+                        "- Left for the operator: [[FILL: left-for-the-operator: "
+                        "each other path left in place and why, or none]]"
+                    )
                 ],
             )
             self.assertIn(
@@ -2464,7 +2570,10 @@ class ReportTests(unittest.TestCase):
                 lines,
             )
             self.assertTrue(lines[-1].startswith("[[FILL: "))
-            self.assertIn("the unmet-bar outcome, in the Report additions shape", slots)
+            self.assertIn(
+                "fix-prepared: the unmet-bar outcome, in the Report additions shape",
+                slots,
+            )
 
     def test_reports_destination_hooks_not_applicable_where_the_payload_ships_none(
         self,
@@ -2558,7 +2667,8 @@ class ReportTests(unittest.TestCase):
             )
 
             self.assertIn(
-                "step 9's mergeable/mergeStateStatus reading of the pull request",
+                "ruleset-enforcement: step 9's mergeable/mergeStateStatus reading "
+                "of the pull request",
                 slots,
             )
             self.assertIn(
@@ -2640,6 +2750,99 @@ class RecordedLinesTests(unittest.TestCase):
                 lines,
             )
 
+    def test_renders_what_the_records_settle_in_place_of_slots(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            proofs = {
+                **PROOFS,
+                "manifests": [
+                    {
+                        "path": "apps/ledger/pyproject.toml",
+                        "status": "edited",
+                        "added": ["tool.ruff"],
+                        "changed": [],
+                        "removed": [],
+                    }
+                ],
+                "configuration": {
+                    ".": ["pyproject.toml [tool.ruff]"],
+                    "apps/ledger": [],
+                },
+                "issue_tracker": {"tracker": "GitHub", "payload": True},
+            }
+            facts = {
+                **FACTS,
+                "units": [
+                    {
+                        "unit": "ledger",
+                        "package": {
+                            "exit": 0,
+                            "tail": "packaged",
+                            "no_manifest": False,
+                        },
+                        "run": {"exit": 0, "tail": "ran", "no_manifest": False},
+                        "adapterless": "python",
+                    }
+                ],
+                "autofix_commit": "b" * 40,
+            }
+            lines, slots = render_report(
+                self,
+                directory,
+                SUMMARY_PASS,
+                proofs=proofs,
+                facts=facts,
+                autofix=AUTOFIX,
+            )
+
+            for line in (
+                (
+                    "- Tool declaration: apps/ledger/pyproject.toml: added tool.ruff; "
+                    "changed none; removed none"
+                ),
+                (
+                    "- Configuration boundary: the root carries pyproject.toml "
+                    "[tool.ruff]; apps/ledger: none"
+                ),
+                "- Ships nothing for want of an adapter: ledger: python",
+                (
+                    "- Autofix: `scripts/fix` rewrote apps/ledger/src/rates.py in 1 "
+                    f"pass, committed by itself in {'b' * 12}"
+                ),
+            ):
+                self.assertIn(line, lines)
+            self.assertTrue(
+                any(
+                    line.startswith(
+                        "- Issue tracker: GitHub, recorded in "
+                        "docs/agents/issue-tracker.md, shipped by the payload; "
+                    )
+                    for line in lines
+                )
+            )
+            self.assertFalse(
+                [slot for slot in slots if slot.startswith(("tool-", "autofix-commit"))]
+            )
+
+    def test_a_decision_fills_its_slot_and_none_drops_an_optional_line(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            decisions = {
+                "decisions": {
+                    "unit-map": "ledger: apps/ledger, oneshot, ships none",
+                    "layout-corrections": "none",
+                    "declined-writes": "none",
+                }
+            }
+            lines, slots = render_report(
+                self, directory, SUMMARY_PASS, proofs=PROOFS, decisions=decisions
+            )
+
+            self.assertIn("- Unit map: ledger: apps/ledger, oneshot, ships none", lines)
+            self.assertFalse([line for line in lines if "layout-corrections" in line])
+            self.assertFalse([line for line in lines if "declined-writes" in line])
+            self.assertNotIn(
+                "unit-map: one line per unit, in the Report additions shape", slots
+            )
+
     def test_reads_reconciliation_facts_and_autofix_from_their_records(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             proofs = {
@@ -2660,8 +2863,11 @@ class RecordedLinesTests(unittest.TestCase):
             for line in (
                 "- Applied: 58 payload paths, written because the destination lacked them",
                 "- Preserved: .gitignore",
-                "- Merged: CLAUDE.md; [[FILL: the payload change and the destination text each carries]]",
-                "- Conflicted: [[FILL: paths with competing intents the flow could not settle, or none]]",
+                (
+                    "- Merged: CLAUDE.md; [[FILL: merged: the payload change and the "
+                    "destination text each carries]]"
+                ),
+                "- Conflicted: none",
                 "- Overridden: README.md (the product's own front page)",
                 "- ADRs written: docs/adrs/0001-one-ledger.md",
                 (
@@ -2682,7 +2888,7 @@ class RecordedLinesTests(unittest.TestCase):
                 ),
                 (
                     "- Autofix: `scripts/fix` rewrote apps/ledger/src/rates.py in 1 pass, "
-                    "committed by itself in [[FILL: the commit sha]]"
+                    "committed by itself in [[FILL: autofix-commit: the commit sha]]"
                 ),
             ):
                 self.assertIn(line, lines)
@@ -2809,6 +3015,24 @@ class PullRequestBodyTests(unittest.TestCase):
                 "Revert the merge commit. No hosted setting was written.", body
             )
 
+    def test_shares_decisions_with_the_report_and_answers_untouched_risks(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            body = self._render(
+                directory,
+                decisions={"decisions": {"unit-map": "ledger: apps/ledger"}},
+            )
+
+            for line in (
+                "- Unit map: ledger: apps/ledger",
+                "- Conflicted: none",
+                "- Overridden: README.md (the product's own front page)",
+                "- Database migration or schema change: no",
+                "- Authentication, authorization, or permission logic touched: no",
+            ):
+                self.assertIn(line, body)
+
     def test_rollback_lists_each_logged_reverse_command(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             body = self._render(directory, hosted_apply=HOSTED_APPLY)
@@ -2877,6 +3101,39 @@ class ReferencesTests(unittest.TestCase):
             self.assertEqual(
                 {h["replacement"] for h in hits},
                 {"scripts/run ledger --entry ledger-rates"},
+            )
+
+    def test_a_mention_resolving_to_a_tracked_file_is_not_a_hit(self) -> None:
+        files = {
+            "apps/ledger/src/main.py": "from . import rates\nopen('src/rates.py')\n",
+            "apps/ledger/src/rates.py": "x = 1\n",
+            "apps/ledger/README.md": "Edit src/rates.py.\n",
+            "README.md": "Edit src/rates.py.\n",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            result = self._run_references(
+                directory, files, [("src/rates.py", "apps/ledger/src/rates.py")]
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                [h["path"] for h in json.loads(result.stdout)["hits"]], ["README.md"]
+            )
+
+    def test_a_payload_file_at_a_moved_files_old_path_does_not_hide_it(self) -> None:
+        files = {
+            "scripts/check": "#!/bin/sh\n",
+            "apps/ledger/scripts/check": "#!/bin/sh\n",
+            "README.md": "Run scripts/check first.\n",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            result = self._run_references(
+                directory, files, [("scripts/check", "apps/ledger/scripts/check")]
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(
+                "README.md", [h["path"] for h in json.loads(result.stdout)["hits"]]
             )
 
     def test_adrs_and_plans_are_left_alone(self) -> None:
@@ -3097,3 +3354,136 @@ class ReferencesTests(unittest.TestCase):
                 "- References reported, not rewritten: unknown (references did not run)",
                 lines,
             )
+
+
+class DecideTests(unittest.TestCase):
+    """Judgements recorded once, for both renderers."""
+
+    def test_each_decision_joins_the_earlier_ones(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            prefix = str(Path(directory) / "records")
+            for key, value in (("summary", "first"), ("scope", "x"), ("summary", "s")):
+                result = run(
+                    "decide", "--records", prefix, "--key", key, "--value", value
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+            self.assertEqual(
+                json.loads(Path(f"{prefix}.decisions.json").read_text())["decisions"],
+                {"summary": "s", "scope": "x"},
+            )
+
+    def test_refuses_an_empty_value_and_keeps_the_earlier_ones(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            prefix = str(Path(directory) / "records")
+            run("decide", "--records", prefix, "--key", "scope", "--value", "x")
+            result = run(
+                "decide", "--records", prefix, "--key", "summary", "--value", " "
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("non-empty", result.stderr)
+            self.assertEqual(
+                json.loads(Path(f"{prefix}.decisions.json").read_text())["decisions"],
+                {"scope": "x"},
+            )
+
+    def test_refuses_a_key_no_renderer_reads(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = run(
+                "decide",
+                "--records",
+                str(Path(directory) / "records"),
+                "--key",
+                "nonsense",
+                "--value",
+                "x",
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+
+
+class ResumeTests(unittest.TestCase):
+    """The default branch's movement, merged into a standing candidate."""
+
+    def _candidate(self, directory: str, upstream: dict[str, str | None]) -> Path:
+        candidate = candidate_repository(
+            directory, {"uv.lock": b"base\n", "notes.md": b"base\n"}
+        )
+        origin = Path(directory) / "origin.git"
+        git("clone", "-q", "--bare", str(candidate), str(origin))
+        git("remote", "add", "origin", str(origin), cwd=candidate)
+        branch = git_output("branch", "--show-current", cwd=candidate)
+        upstream_clone = Path(directory) / "upstream"
+        git("clone", "-q", str(origin), str(upstream_clone))
+        for name, text in upstream.items():
+            if text is None:
+                (upstream_clone / name).unlink()
+            else:
+                (upstream_clone / name).write_text(text)
+        git("add", "-A", cwd=upstream_clone)
+        git("commit", "-qm", "chore: upstream", cwd=upstream_clone)
+        git("push", "-q", "origin", branch, cwd=upstream_clone)
+        (candidate / "uv.lock").write_text("candidate\n")
+        (candidate / "notes.md").write_text("candidate\n")
+        git("commit", "-qam", "chore: candidate", cwd=candidate)
+        return candidate
+
+    def _resume(self, candidate: Path) -> subprocess.CompletedProcess[str]:
+        branch = git_output("branch", "--show-current", cwd=candidate)
+        return run(
+            "resume",
+            "--candidate",
+            str(candidate),
+            "--default-branch",
+            branch,
+            *records(candidate),
+            # The merge commits, and this machine's global hooks would run on it.
+            env={**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, **COMMIT_IDENTITY},
+        )
+
+    def test_merges_a_default_branch_that_moved_cleanly(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            candidate = self._candidate(directory, {"README.md": "upstream\n"})
+            decisions = Path(f"{records(candidate)[1]}.decisions.json")
+            decisions.write_text('{"decisions": {"summary": "stale"}}\n')
+            hooks_resume = Path(f"{records(candidate)[1]}.resume.json")
+            hooks_resume.write_text('{"prior_hooks": {"scope": "default"}}\n')
+            result = self._resume(candidate)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["conflicts"], [])
+            self.assertEqual(
+                report["merged"], git_output("rev-parse", "HEAD", cwd=candidate)
+            )
+            self.assertFalse(decisions.exists())
+            self.assertIn("prior_hooks", hooks_resume.read_text())
+            self.assertTrue(
+                Path(f"{records(candidate)[1]}.upstream-merge.json").exists()
+            )
+
+    def test_takes_the_default_branchs_lockfile_and_leaves_the_rest(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            candidate = self._candidate(
+                directory, {"uv.lock": "upstream\n", "notes.md": "upstream\n"}
+            )
+            result = self._resume(candidate)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["lockfiles_taken"], ["uv.lock"])
+            self.assertEqual(report["conflicts"], ["notes.md"])
+            self.assertIsNone(report["merged"])
+            self.assertEqual((candidate / "uv.lock").read_text(), "upstream\n")
+
+    def test_takes_the_default_branchs_deletion_of_a_lockfile(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            candidate = self._candidate(directory, {"uv.lock": None})
+            result = self._resume(candidate)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["lockfiles_taken"], ["uv.lock"])
+            self.assertEqual(report["conflicts"], [])
+            self.assertFalse((candidate / "uv.lock").exists())
