@@ -13,27 +13,12 @@ scripts/doctor
 
 # Run before the checks they guard. They verify the language-capabilities
 # interface, its workflow adapters, and that routine local commands stay offline.
-#
-# nullglob so an empty scripts/tests/ reports itself plainly rather than the
-# unexpanded glob reading as one missing, non-executable test script.
-shopt -s nullglob
-test_scripts=(scripts/tests/*-test)
-shopt -u nullglob
-if (( ${#test_scripts[@]} == 0 )); then
-  echo "No test scripts found in scripts/tests/."
+if [[ ! -x scripts/script-tests ]]; then
+  echo "scripts/script-tests is missing or not executable."
   exit 1
 fi
-for test_script in "${test_scripts[@]}"; do
-  if [[ ! -x "$test_script" ]]; then
-    echo "$test_script is missing or not executable."
-    exit 1
-  fi
-  # Closed for the same reason libs/detect.sh closes it for a capability: a
-  # child that drains fd 0 blocks until the caller's stdin reaches EOF, which
-  # for a terminal or an agent harness is never, and the gate hangs with
-  # nothing printed. Nothing check runs is interactive.
-  "$test_script" </dev/null
-done
+
+scripts/script-tests
 
 # Where a file sits, checked before what is in it. A misplaced file passes every
 # language check in this repository, because each one reads the manifests and

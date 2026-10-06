@@ -77,6 +77,8 @@ The specific operating parameters for the AI agent.
 
 `scripts/tests/`: Tests for the scripts themselves.
 
+`scripts/script-tests`: Runs every `scripts/tests/*-test` concurrently, one per CPU, and prints each one's output whole once all have finished, naming every test that failed. Called by `scripts/check` and by `ci.yml`, so both run the suites the same way. The suites spend their time waiting on git and child processes, so running them side by side cuts the wall time several-fold.
+
 `scripts/summarize`: Runs a check command and prints only its Result table — one line per check, the findings under any that failed — dropping every other thing the command wrote. Exits with that command's status, so it can stand in for the command rather than only report on it. It is the one consumer of the printed layout `scripts/libs/result.sh` documents, which is where a change to the column widths has to be reflected.
 
 `scripts/run`: Starts a unit, dispatching on the `run` fact its `.unit.json` declares — a one-shot runs the program's own entry point, a long-lived one runs the dev server, `none` exits saying there is nothing to run. Names the unit when `apps/` holds several, since a run is one foreground process; `--entry <name>` names one of the programs the unit's own language manifest declares, required for the same reason when it declares several; everything after `--` reaches the program unchanged.
