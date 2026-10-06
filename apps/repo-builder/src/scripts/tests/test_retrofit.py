@@ -1982,6 +1982,48 @@ class HostedTests(unittest.TestCase):
             self.assertEqual(settled[0]["before"], unanswered[0]["before"])
             self.assertFalse([call for call in gh_calls(directory) if "-X" in call])
 
+    def test_a_retried_ruleset_replacement_keeps_the_original(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            records = Path(directory) / "candidate"
+            body = Path(directory) / "ruleset.json"
+            body.write_text('{"name": "main"}')
+            endpoint = f"{REPO}/rulesets/9"
+            arguments = [
+                "hosted",
+                "apply",
+                "--repository",
+                "owner/ledger",
+                "--records",
+                str(records),
+                "--approve",
+                "ruleset",
+                "--ruleset",
+                str(body),
+                "--replace-ruleset",
+                "9",
+            ]
+
+            def attempt(current: str) -> None:
+                responses: list[dict[str, object]] = [
+                    {
+                        "args": ["api", endpoint],
+                        "stdout": json.dumps({"name": current}),
+                    },
+                    {"args": ["api", "-X", "PUT"], "stdout": "", "status": 1},
+                    *self._responses(),
+                ]
+                shutil.rmtree(Path(directory) / "bin", ignore_errors=True)
+                run(*arguments, env=stub_gh(directory, responses))
+
+            attempt("original")
+            attempt("main")
+
+            saved = Path(f"{records}.writes.ruleset-9.json")
+            self.assertEqual(json.loads(saved.read_text()), {"name": "original"})
+            entries = json.loads(Path(f"{records}.writes.json").read_text())
+            self.assertEqual(len(entries), 1)
+            self.assertEqual(entries[0]["before"], str(saved))
+
     def test_a_resumed_apply_never_repeats_a_logged_write(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             self._apply(directory, "--approve", "merge-settings")

@@ -1735,18 +1735,24 @@ class WriteLog:
             for entry in self.entries
         )
 
+    def unconfirmed(self, write: str) -> dict | None:
+        return next(
+            (
+                entry
+                for entry in self.entries
+                if entry["write"] == write and entry.get("unconfirmed")
+            ),
+            None,
+        )
+
     def settle(self, write: str) -> bool:
         """Confirm an unanswered write the host is now seen to hold."""
-        unconfirmed = [
-            entry
-            for entry in self.entries
-            if entry["write"] == write and entry.get("unconfirmed")
-        ]
-        for entry in unconfirmed:
-            del entry["unconfirmed"]
-        if unconfirmed:
-            self.save()
-        return bool(unconfirmed)
+        entry = self.unconfirmed(write)
+        if entry is None:
+            return False
+        del entry["unconfirmed"]
+        self.save()
+        return True
 
     def append(
         self, write: str, before: object, after: object, reverse: list[str]
@@ -1773,13 +1779,14 @@ class WriteLog:
 
         A refusal the host answered proves nothing landed, so its entry is
         dropped; one it never answered may have landed, so the entry stays
-        for the next run to settle rather than losing the before-state.
+        for the next run to settle rather than losing the before-state. A
+        retry keeps that entry's before-state and reverse, read before
+        anything could have landed, over the ones it read since.
         """
-        self.entries = [
-            entry
-            for entry in self.entries
-            if not (entry["write"] == write and entry.get("unconfirmed"))
-        ]
+        stale = self.unconfirmed(write)
+        if stale is not None:
+            self.entries.remove(stale)
+            before, reverse = stale["before"], stale["reverse_command"]
         self.append(write, before, after, reverse)
         entry = self.entries[-1]
         entry["unconfirmed"] = True
@@ -2045,7 +2052,9 @@ def write_ruleset(
         key: value for key, value in before.items() if key not in RULESET_READ_ONLY
     }
     saved = log.path.with_name(f"{log.path.stem}.ruleset-{replaces}.json")
-    saved.write_text(json.dumps(restorable, indent=2) + "\n")
+    stale = log.unconfirmed("ruleset")
+    if stale is None or stale["before"] != str(saved):
+        saved.write_text(json.dumps(restorable, indent=2) + "\n")
     log.send(
         "ruleset",
         str(saved),
