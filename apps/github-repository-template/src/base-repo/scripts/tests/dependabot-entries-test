@@ -422,6 +422,51 @@ else
 fi
 
 
+# A uv.lock beside the manifest makes it uv's: pip's updater leaves the
+# lockfile behind, so a pip entry there watches nothing that lands cleanly.
+fixture "a pyproject.toml beside a uv.lock is watched by a uv entry" "$VERSION
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly" pyproject.toml uv.lock
+got="$(unwatched_in)"
+if [[ -z "$got" ]]; then
+  pass
+else
+  fail "reported '$got' for a uv project whose uv entry is right there"
+fi
+
+
+fixture "a pip entry does not cover a pyproject.toml beside a uv.lock" "$VERSION
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly" pyproject.toml uv.lock
+got="$(unwatched_in)"
+if [[ "$got" == "pyproject.toml" ]]; then
+  pass
+else
+  fail "reported '$got', so a pip entry read as moving uv.lock"
+fi
+
+
+fixture "a uv.lock elsewhere leaves a pyproject.toml pip's" "$VERSION
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: pip
+    directory: /tools/lint
+    schedule:
+      interval: weekly" pyproject.toml uv.lock tools/lint/pyproject.toml
+got="$(unwatched_in)"
+if [[ -z "$got" ]]; then
+  pass
+else
+  fail "reported '$got', so the root uv.lock claimed a nested manifest"
+fi
+
+
 # A repository with no config has nothing to compare against. Reporting every
 # manifest there would be a finding about a file that does not exist.
 fixture "no config reports nothing" ""

@@ -43,6 +43,11 @@
 # dependabot/dependabot-core#14909 on 2026-05-05, a date on the engine rather
 # than on its rollout. Mapping manifests and nothing else is the rule that does
 # not have to track which ecosystem gained it when.
+#
+# pyproject.toml earns pip here and uv where a uv.lock is tracked beside it,
+# which dependabot_unwatched_manifests decides because it holds the tracked
+# list. pip's updater does not move uv.lock, so a pip entry over a uv project
+# opens bumps whose lockfile still pins the old version.
 dependabot_ecosystem_of() {
   case "$1" in
     package.json) printf 'npm\n' ;;
@@ -277,6 +282,10 @@ dependabot_unwatched_manifests() {
 
     ecosystem="$(dependabot_ecosystem_of "${manifest##*/}")"
     [[ -n "$ecosystem" ]] || continue
+    if [[ "$ecosystem" == pip ]] \
+      && grep -qxF "${manifest%pyproject.toml}uv.lock" <<< "$tracked"; then
+      ecosystem=uv
+    fi
 
     directory="/${manifest%/*}"
     [[ "$manifest" == */* ]] || directory="/"
