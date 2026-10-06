@@ -21,7 +21,12 @@ requires-python = ">=3.11"
 package = false
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.14", "ty>=0.0.1a21"]
+dev = [
+    "pytest>=8",
+    "pytest-xdist>=3",
+    "ruff>=0.14",
+    "ty>=0.0.1a21",
+]
 
 [tool.ruff.format]
 # `*.md` is in ruff's own default include list, and `ruff format` rewrites the
@@ -48,3 +53,9 @@ exclude = ["*.md"]
 # widen what they see, it would narrow it to this path and silently drop any
 # Python later added under apps/ or libs/.
 testpaths = ["apps/repo-builder/src/scripts/tests"]
+# Most of the suite builds real git repositories and runs retrofit.py as a
+# subprocess, so it waits on processes rather than on Python, and a worker per
+# CPU cuts it roughly by the worker count. worksteal rather than the default
+# load, because a handful of hook tests take seconds each, and load can deal
+# several to one worker while the rest sit idle. `-n 0` runs it serially.
+addopts = ["-n", "auto", "--dist", "worksteal"]
