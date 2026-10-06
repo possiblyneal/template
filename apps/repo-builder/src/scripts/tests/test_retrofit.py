@@ -40,6 +40,15 @@ def payload_arguments(fixture: dict[str, str]) -> list[str]:
     ]
 
 
+# For a subcommand that commits itself: a CI runner has no ambient identity.
+COMMIT_IDENTITY = {
+    "GIT_AUTHOR_NAME": "Repo Builder Test",
+    "GIT_AUTHOR_EMAIL": "repo-builder-test@example.invalid",
+    "GIT_COMMITTER_NAME": "Repo Builder Test",
+    "GIT_COMMITTER_EMAIL": "repo-builder-test@example.invalid",
+}
+
+
 def records(candidate: Path) -> list[str]:
     """A record prefix beside the candidate, where a step's JSON lands."""
     return ["--records", str(candidate.parent / "records")]
@@ -717,10 +726,7 @@ class HooksTests(unittest.TestCase):
         return {
             **os.environ,
             "GIT_CONFIG_GLOBAL": str(root / "gitconfig"),
-            "GIT_AUTHOR_NAME": "Repo Builder Test",
-            "GIT_AUTHOR_EMAIL": "repo-builder-test@example.invalid",
-            "GIT_COMMITTER_NAME": "Repo Builder Test",
-            "GIT_COMMITTER_EMAIL": "repo-builder-test@example.invalid",
+            **COMMIT_IDENTITY,
         }
 
     def _hooks(
@@ -979,10 +985,7 @@ class HookOutcomeTests(unittest.TestCase):
                     **os.environ,
                     # This machine's own global hooks would run instead.
                     "GIT_CONFIG_GLOBAL": os.devnull,
-                    "GIT_AUTHOR_NAME": "Repo Builder Test",
-                    "GIT_AUTHOR_EMAIL": "repo-builder-test@example.invalid",
-                    "GIT_COMMITTER_NAME": "Repo Builder Test",
-                    "GIT_COMMITTER_EMAIL": "repo-builder-test@example.invalid",
+                    **COMMIT_IDENTITY,
                 },
             )
 
@@ -3435,6 +3438,8 @@ class ResumeTests(unittest.TestCase):
             "--default-branch",
             branch,
             *records(candidate),
+            # The merge commits, and this machine's global hooks would run on it.
+            env={**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, **COMMIT_IDENTITY},
         )
 
     def test_merges_a_default_branch_that_moved_cleanly(self) -> None:
