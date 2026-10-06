@@ -1719,7 +1719,8 @@ class WriteLog:
 
     A write's before-state is unobservable once it has landed, so a write
     already logged is never repeated: repeating it would log the applied value
-    as the one to restore.
+    as the one to restore. For the same reason an entry is written before its
+    request is sent, and stays `unconfirmed` where the host never answered.
     """
 
     def __init__(self, path: Path) -> None:
@@ -1729,7 +1730,23 @@ class WriteLog:
         )
 
     def logged(self, write: str) -> bool:
-        return any(entry["write"] == write for entry in self.entries)
+        return any(
+            entry["write"] == write and not entry.get("unconfirmed")
+            for entry in self.entries
+        )
+
+    def settle(self, write: str) -> bool:
+        """Confirm an unanswered write the host is now seen to hold."""
+        unconfirmed = [
+            entry
+            for entry in self.entries
+            if entry["write"] == write and entry.get("unconfirmed")
+        ]
+        for entry in unconfirmed:
+            del entry["unconfirmed"]
+        if unconfirmed:
+            self.save()
+        return bool(unconfirmed)
 
     def append(
         self, write: str, before: object, after: object, reverse: list[str]
@@ -1742,7 +1759,47 @@ class WriteLog:
                 "reverse_command": reverse,
             }
         )
-        self.path.write_text(json.dumps(self.entries, indent=2) + "\n")
+        self.save()
+
+    def send(
+        self,
+        write: str,
+        before: object,
+        after: object,
+        reverse: list[str],
+        request: list[str],
+    ) -> object:
+        """Send `request` to `gh`, logged first as unconfirmed.
+
+        A refusal the host answered proves nothing landed, so its entry is
+        dropped; one it never answered may have landed, so the entry stays
+        for the next run to settle rather than losing the before-state.
+        """
+        self.entries = [
+            entry
+            for entry in self.entries
+            if not (entry["write"] == write and entry.get("unconfirmed"))
+        ]
+        self.append(write, before, after, reverse)
+        entry = self.entries[-1]
+        entry["unconfirmed"] = True
+        self.save()
+        try:
+            answer = gh(*request)
+        except Refusal as refusal:
+            if refusal.status:
+                self.entries.remove(entry)
+                self.save()
+            raise
+        del entry["unconfirmed"]
+        self.save()
+        return answer
+
+    def save(self) -> None:
+        if self.entries:
+            self.path.write_text(json.dumps(self.entries, indent=2) + "\n")
+        else:
+            self.path.unlink(missing_ok=True)
 
 
 def flags(values: Mapping[str, object]) -> list[str]:
@@ -1759,12 +1816,12 @@ def write_merge_settings(repository: str, log: WriteLog) -> Outcome:
     before = {setting: repo.get(setting) for setting in MERGE_SETTINGS}
     if before == MERGE_SETTINGS:
         return Outcome.ALREADY_SET
-    gh("api", "-X", "PATCH", f"repos/{repository}", *flags(MERGE_SETTINGS))
-    log.append(
+    log.send(
         "merge-settings",
         before,
         MERGE_SETTINGS,
         ["gh", "api", "-X", "PATCH", f"repos/{repository}", *flags(before)],
+        ["api", "-X", "PATCH", f"repos/{repository}", *flags(MERGE_SETTINGS)],
     )
     return Outcome.DONE
 
@@ -1795,33 +1852,29 @@ def refuse_headed_pulls(repository: str, name: str) -> None:
         )
 
 
+def rename_branch(repository: str, old: str, new: str) -> list[str]:
+    return [
+        "api",
+        "-X",
+        "POST",
+        f"repos/{repository}/branches/{old}/rename",
+        "-f",
+        f"new_name={new}",
+    ]
+
+
 def write_default_branch(repository: str, name: str, log: WriteLog) -> Outcome:
     """Rename the default branch in place, which the host retargets every open
     pull request based on it to follow; one whose head it is, it closes."""
     before = read_repository(repository).get("default_branch")
     if before == name:
         return Outcome.ALREADY_SET
-    gh(
-        "api",
-        "-X",
-        "POST",
-        f"repos/{repository}/branches/{before}/rename",
-        "-f",
-        f"new_name={name}",
-    )
-    log.append(
+    log.send(
         "default-branch",
         before,
         name,
-        [
-            "gh",
-            "api",
-            "-X",
-            "POST",
-            f"repos/{repository}/branches/{name}/rename",
-            "-f",
-            f"new_name={before}",
-        ],
+        ["gh", *rename_branch(repository, name, str(before))],
+        rename_branch(repository, str(before), name),
     )
     return Outcome.DONE
 
@@ -1846,6 +1899,18 @@ def write_labels(
     return outcome
 
 
+def rename_label(repository: str, old: str, new: str) -> list[str]:
+    quoted = urllib.parse.quote(old, safe="")
+    return [
+        "api",
+        "-X",
+        "PATCH",
+        f"repos/{repository}/labels/{quoted}",
+        "-f",
+        f"new_name={new}",
+    ]
+
+
 def write_label(
     repository: str,
     name: str,
@@ -1857,38 +1922,23 @@ def write_label(
     """One label, its outcome recorded in `outcome` as it lands."""
     write = f"label:{name}"
     present = existing.get(name.casefold())
+    if present == name:
+        log.settle(write)
     if log.logged(write) or present == name:
         outcome.skipped.append({"label": name, "reason": "exists"})
     elif present is not None and not rename:
         outcome.skipped.append({"label": name, "reason": f"exists as {present}, kept"})
     elif present is not None:
-        quoted = urllib.parse.quote(present, safe="")
-        gh(
-            "api",
-            "-X",
-            "PATCH",
-            f"repos/{repository}/labels/{quoted}",
-            "-f",
-            f"new_name={name}",
-        )
-        log.append(
+        log.send(
             write,
             present,
             name,
-            [
-                "gh",
-                "api",
-                "-X",
-                "PATCH",
-                f"repos/{repository}/labels/{urllib.parse.quote(name, safe='')}",
-                "-f",
-                f"new_name={present}",
-            ],
+            ["gh", *rename_label(repository, name, present)],
+            rename_label(repository, present, name),
         )
         outcome.renamed.append({"from": present, "to": name})
     else:
-        gh("api", "-X", "POST", f"repos/{repository}/labels", "-f", f"name={name}")
-        log.append(
+        log.send(
             write,
             None,
             name,
@@ -1899,6 +1949,7 @@ def write_label(
                 "DELETE",
                 f"repos/{repository}/labels/{urllib.parse.quote(name, safe='')}",
             ],
+            ["api", "-X", "POST", f"repos/{repository}/labels", "-f", f"name={name}"],
         )
         outcome.created.append(name)
 
@@ -1916,8 +1967,13 @@ def write_toggle(write: str, endpoint: str, log: WriteLog) -> Outcome:
     before = answer.get("enabled") if isinstance(answer, dict) else answer is None
     if before:
         return Outcome.ALREADY_SET
-    gh("api", "-X", "PUT", endpoint)
-    log.append(write, False, True, ["gh", "api", "-X", "DELETE", endpoint])
+    log.send(
+        write,
+        False,
+        True,
+        ["gh", "api", "-X", "DELETE", endpoint],
+        ["api", "-X", "PUT", endpoint],
+    )
     return Outcome.DONE
 
 
@@ -1931,12 +1987,12 @@ def write_push_protection(repository: str, log: WriteLog) -> Outcome:
         raise Refusal("403", "push protection status is not shown to this credential")
     if before in (None, "unavailable"):
         raise Refusal("403", f"{UPGRADE_MESSAGE}: push protection is not offered")
-    gh("api", "-X", "PATCH", f"repos/{repository}", "-f", f"{key}=enabled")
-    log.append(
+    log.send(
         "push-protection",
         before,
         "enabled",
         ["gh", "api", "-X", "PATCH", f"repos/{repository}", "-f", f"{key}={before}"],
+        ["api", "-X", "PATCH", f"repos/{repository}", "-f", f"{key}=enabled"],
     )
     return Outcome.DONE
 
@@ -1962,7 +2018,9 @@ def write_ruleset(
     The body is the flow's to compose from the references, since which contexts
     it requires and which branch it names are judgements this command does not
     make. A ruleset replaced keeps its before-state beside the log, because the
-    command that restores it needs the whole document as its input.
+    command that restores it needs the whole document as its input. A creation
+    is logged only once answered, since its reverse names the id the answer
+    carries; its before-state is no ruleset, which an unanswered send cannot lose.
     """
     if replaces is None:
         created = gh_object(
@@ -1988,12 +2046,12 @@ def write_ruleset(
     }
     saved = log.path.with_name(f"{log.path.stem}.ruleset-{replaces}.json")
     saved.write_text(json.dumps(restorable, indent=2) + "\n")
-    gh("api", "-X", "PUT", endpoint, "--input", str(body))
-    log.append(
+    log.send(
         "ruleset",
         str(saved),
         str(body),
         ["gh", "api", "-X", "PUT", endpoint, "--input", str(saved)],
+        ["api", "-X", "PUT", endpoint, "--input", str(body)],
     )
     return Outcome.DONE
 
@@ -2019,14 +2077,14 @@ def write_runner_variable(repository: str, log: WriteLog) -> Outcome:
     if before == "self-hosted":
         return Outcome.ALREADY_SET
     run = ["variable", "set", "RUNNER", "--body", "self-hosted", "-R", repository]
-    gh(*run)
-    log.append(
+    log.send(
         "runner-variable",
         before,
         "self-hosted",
         ["gh", "variable", "delete", "RUNNER", "-R", repository]
         if before is None
         else ["gh", "variable", "set", "RUNNER", "--body", before, "-R", repository],
+        run,
     )
     return Outcome.DONE
 
@@ -2228,6 +2286,8 @@ def hosted_apply(arguments: argparse.Namespace) -> dict[str, object]:
             if outcome != Outcome.NOT_OFFERED:
                 reasons[write.name] = str(refusal)
                 findings.append(f"{write.name}: {refusal}")
+        if outcome == Outcome.ALREADY_SET and log.settle(write.name):
+            outcome = Outcome.LOGGED
         if isinstance(outcome, LabelOutcome):
             findings.extend(
                 f"{write.name}: {item['reason']}"
@@ -2722,9 +2782,14 @@ def repository_settings(
 def reversible_writes(report: Report, entries: list[dict]) -> None:
     report.section("### Hosted writes, reversible")
     for entry in entries:
+        unanswered = (
+            " (sent, never answered; check the host before reversing)"
+            if entry.get("unconfirmed")
+            else ""
+        )
         report.add(
             f"- {entry['write']}: was {json.dumps(entry['before'])} -> "
-            f"{json.dumps(entry['after'])}; reverse with `{shlex.join(entry['reverse_command'])}`"
+            f"{json.dumps(entry['after'])}{unanswered}; reverse with `{shlex.join(entry['reverse_command'])}`"
         )
     declined = report.optional("declined-writes")
     report.add(f"- {declined}" if declined else None)

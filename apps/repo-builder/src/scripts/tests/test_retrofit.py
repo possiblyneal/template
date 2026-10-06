@@ -15,7 +15,6 @@ from test_preflight import git, git_output
 MODULE_PATH = Path(__file__).parents[1] / "retrofit.py"
 SETUP = MODULE_PATH.parents[1] / "evals" / "setup_fixture.py"
 PAYLOAD = MODULE_PATH.parents[4] / "apps/github-repository-template/src/base-repo"
-ROOT_RECORD = MODULE_PATH.parents[4] / ".repo-template.json"
 
 
 def retrofit_fixture(directory: str) -> dict[str, str]:
@@ -33,10 +32,24 @@ def retrofit_fixture(directory: str) -> dict[str, str]:
 def write_record(
     destination: Path, commit: str, overrides: list[dict[str, str]] | None = None
 ) -> None:
-    """The record step 7 writes, borrowing this repository's ownership list."""
-    record = json.loads(ROOT_RECORD.read_text())
-    record["template"]["commit"] = commit
-    record["generation"] = {"features": {}, "overrides": overrides or []}
+    """The record step 7 writes, owning the fixture payload's paths."""
+    record = {
+        "schema_version": 1,
+        "template": {
+            "repository": "possiblyneal/template",
+            "subtree": "base-repo",
+            "commit": commit,
+        },
+        "destination": {"repository": "owner/ledger", "default_branch": "main"},
+        "generation": {"features": {}, "overrides": overrides or []},
+        "ownership": [
+            {"path": ".repo-template.json", "mode": "managed"},
+            {"path": "CLAUDE.md", "mode": "managed"},
+            {"path": "scripts/**", "mode": "managed"},
+            {"path": "apps/**", "mode": "product"},
+            {"path": "docs/**", "mode": "product"},
+        ],
+    }
     (destination / ".repo-template.json").write_text(json.dumps(record))
 
 
@@ -1919,6 +1932,55 @@ class HostedTests(unittest.TestCase):
             self.assertEqual(len(report["findings"]), 1)
             self.assertTrue(report["findings"][0].startswith("dependabot-alerts:"))
             self.assertFalse((Path(directory) / "candidate.writes.json").exists())
+
+    def test_an_unanswered_write_keeps_its_before_state_for_the_rerun(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            records = Path(directory) / "candidate"
+            responses: list[dict[str, object]] = [
+                {"args": ["api", "-X", "PATCH"], "stdout": "", "status": 1},
+                *self._responses(),
+            ]
+            arguments = [
+                "hosted",
+                "apply",
+                "--repository",
+                "owner/ledger",
+                "--records",
+                str(records),
+                "--approve",
+                "merge-settings",
+            ]
+            run(*arguments, env=stub_gh(directory, responses))
+            unanswered = json.loads(Path(f"{records}.writes.json").read_text())
+            shutil.rmtree(Path(directory) / "bin")
+            (Path(directory) / "gh.log").unlink()
+            landed: list[dict[str, object]] = [
+                {
+                    "args": ["api", REPO],
+                    "stdout": json.dumps(
+                        {
+                            "default_branch": "main",
+                            "allow_merge_commit": True,
+                            "allow_squash_merge": False,
+                            "allow_rebase_merge": False,
+                            "delete_branch_on_merge": True,
+                        }
+                    ),
+                },
+                *self._responses(),
+            ]
+
+            result = run(*arguments, env=stub_gh(directory, landed))
+
+            self.assertTrue(unanswered[0]["unconfirmed"])
+            self.assertEqual(unanswered[0]["before"]["allow_squash_merge"], True)
+            self.assertEqual(
+                json.loads(result.stdout)["writes"], {"merge-settings": "logged"}
+            )
+            settled = json.loads(Path(f"{records}.writes.json").read_text())
+            self.assertNotIn("unconfirmed", settled[0])
+            self.assertEqual(settled[0]["before"], unanswered[0]["before"])
+            self.assertFalse([call for call in gh_calls(directory) if "-X" in call])
 
     def test_a_resumed_apply_never_repeats_a_logged_write(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
