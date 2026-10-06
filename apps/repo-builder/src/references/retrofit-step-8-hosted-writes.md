@@ -6,7 +6,7 @@ Part of [Retrofit](retrofit.md). A **hosted write** changes the destination's st
 
 **Generate's ruleset probe is not performed**, so nothing is pushed at the default branch here. Enforcement is **not yet proven at this gate**; step 9's pull request proves it under [A written ruleset is proved satisfiable, not merely present](lifecycle.md#a-written-ruleset-is-proved-satisfiable-not-merely-present).
 
-Read the gate's question in one call and perform what it approved in a second. Neither touches the rename under 2:
+Read the gate's question in one call and perform what it approved in a second:
 
 ```bash
 python3 apps/repo-builder/src/scripts/retrofit.py hosted read \
@@ -15,19 +15,21 @@ python3 apps/repo-builder/src/scripts/retrofit.py hosted read \
 python3 apps/repo-builder/src/scripts/retrofit.py hosted apply \
   --repository <owner>/<repository> --records <records> \
   --approve <write> [--approve <write> ...] \
-  [--label <name> ...] [--keep-case-variants] \
+  [--default-branch <name>] [--label <name> ...] [--keep-case-variants] \
   [--ruleset <body.json> [--replace-ruleset <id>]]
 ```
 
 `read` reports `visibility`, `admin`, `default_branch`, `merge_settings`, `labels`, `dependabot`, `push_protection`, `rulesets` and `runner`. A refused reading carries `not offered` for the host's upgrade message and `permissions gap` for any other 403.
 
-`apply` takes `--approve` once per approved write — `merge-settings`, `labels`, `dependabot-alerts`, `security-updates`, `push-protection`, `ruleset`, `runner-variable` — performs only those, in that order, and reports `writes`, `reasons`, `write_log` and `findings`. A write already in the log reports `logged` and is not performed again. `--label` names the labels in force (under 3); `--keep-case-variants` is for a destination whose own `triage-labels.md` is in force. `--ruleset` is the body composed under 4; `--replace-ruleset` names the destination ruleset it repairs in place.
+`apply` takes `--approve` once per approved write — `merge-settings`, `default-branch`, `labels`, `dependabot-alerts`, `security-updates`, `push-protection`, `ruleset`, `runner-variable` — performs only those, in that order, and reports `writes`, `reasons`, `write_log` and `findings`. A write already in the log reports `logged` and is not performed again. Each write but a ruleset creation is logged before it is sent, so one the host never answered stays in the log marked `unconfirmed`, with its before-state, and the report says so; a rerun that finds it applied reports it `logged`, a retry keeps the before-state the first attempt read and keeps its entry whatever it is answered, and a first attempt answered with a refusal leaves no entry. A ruleset creation is logged once answered, since its reverse needs the id the answer carries: one never answered leaves no entry, so list the destination's rulesets before retrying it, or a second is created. `--default-branch` names the branch the rename under 2 produces. `--label` names the labels in force (under 3); `--keep-case-variants` is for a destination whose own `triage-labels.md` is in force. `--ruleset` is the body composed under 4; `--replace-ruleset` names the destination ruleset it repairs in place.
 
 Five writes, in this order, the last conditional.
 
 **1. Merge settings, in one call.** `allow_merge_commit`, `allow_squash_merge`, `allow_rebase_merge` and `delete_branch_on_merge` go in a single `PATCH`, since a half-applied merge policy is worse than none. State the four current values from `merge_settings` before overwriting them. All four `null` means the wrong field spelling (see [Step 5 — Configure the repository settings](generate.md#step-5--configure-the-repository-settings)), not every merge method disabled. Declinable; record a refusal and its reason in `generation.features`.
 
 **2. The default-branch rename.** **Declining is a hard stop**: the payload's workflows pin the branch name, so CI would never fire on the old one.
+
+`apply --approve default-branch` performs it and logs the old name, so the report names the reverse. It refuses the whole call before any write while the old name heads an open pull request, and a rename it does not perform stops every write after it. Enumerating by base ref, the ruleset repair and the clone commands stay the flow's.
 
 **An open pull request whose head is the branch being renamed is a hard stop before any write at all**, because the host closes it rather than retargeting it. Enumerate **by head ref as well as by base ref**. The stop names the remedies: merge it, close it deliberately, or copy the branch and open a fresh pull request, losing the review conversation.
 

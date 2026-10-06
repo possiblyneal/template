@@ -89,7 +89,7 @@ Each suite is `scripts/tests/<name>-test`, reports through the harness, and asse
 - `session-start-test` — the operator's global `session-start.sh`, declared `not_applicable` where it is absent
 - `changelog-check-test` — each structural rule, the shipped addon changelog, a missing file, a missing awk, an unrelated path
 - `precommit-hooks-test` — `libs/precommit.sh` against each YAML form. Needs no network, which is the point: this wiring fails silently
-- `dependabot-entries-test` — `libs/dependabot.sh` in both directions: every shape that must read as watched — the singular and plural keys, a glob directory, a second entry after a list — and every shape that must not, including a commented-out entry, a workspace file, a manifest outside the six, and an untracked one
+- `dependabot-entries-test` — `libs/dependabot.sh` in both directions: every shape that must read as watched — the singular and plural keys, a glob directory, a second entry after a list, a `uv` entry over a `pyproject.toml` with `uv.lock` beside it — and every shape that must not, including a commented-out entry, a workspace file, a manifest outside the six, and an untracked one
 - `github-parity-test` — each way the two trees can disagree, both documented exceptions, the index read rather than the working tree in both directions, no payload at all, and the record unreadable without `jq`
 - `structure-test` — each layout rule in both directions, `.structure-allow` at a path and at a prefix, every declaration value, and `jq` absent. Each fixture is a real repository with the script copied in, since it resolves its own root from `BASH_SOURCE`
 - `protect-branch-test` — bare, qualified, near-miss, and unset destinations

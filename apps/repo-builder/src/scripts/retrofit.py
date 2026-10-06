@@ -132,6 +132,33 @@ def workflows_without_pull_request(candidate: Path) -> list[str]:
     )
 
 
+def require_staged_record(
+    candidate: Path, changes: list[tuple[str, list[str]]], target: str
+) -> None:
+    """Refuse a candidate whose index lacks a valid record pinning `target`.
+
+    Nothing past step 7 reads the record until `sync` refuses the merged
+    default branch, so a candidate missing it would otherwise pass every check.
+    """
+    staged = {paths[-1] for status, paths in changes if status != "D"}
+    if ".repo-template.json" not in staged:
+        raise PreflightError(
+            "the candidate stages no .repo-template.json; write the record "
+            "step 7 owes before measuring"
+        )
+    if git_output(candidate, "diff", "--name-only", "--", ".repo-template.json"):
+        raise PreflightError(
+            ".repo-template.json differs from its staged copy; stage the record "
+            "being measured"
+        )
+    manifest, _, _ = preflight.validate_manifest(candidate / ".repo-template.json")
+    recorded = lookup(manifest, "template", "commit")
+    if recorded != target:
+        raise PreflightError(
+            f".repo-template.json records template commit {recorded}, not {target}"
+        )
+
+
 def proofs(arguments: argparse.Namespace) -> dict[str, object]:
     """Measure the copy proof and the rename-purity proof from the index.
 
@@ -157,6 +184,7 @@ def proofs(arguments: argparse.Namespace) -> dict[str, object]:
             "nothing is staged; stage the candidate before measuring, since "
             "both proofs read the index"
         )
+    require_staged_record(candidate, changes, target)
 
     prefix = subtree.rstrip("/")
     payload = [
@@ -1691,7 +1719,8 @@ class WriteLog:
 
     A write's before-state is unobservable once it has landed, so a write
     already logged is never repeated: repeating it would log the applied value
-    as the one to restore.
+    as the one to restore. For the same reason an entry is written before its
+    request is sent, and stays `unconfirmed` where the host never answered.
     """
 
     def __init__(self, path: Path) -> None:
@@ -1701,7 +1730,29 @@ class WriteLog:
         )
 
     def logged(self, write: str) -> bool:
-        return any(entry["write"] == write for entry in self.entries)
+        return any(
+            entry["write"] == write and not entry.get("unconfirmed")
+            for entry in self.entries
+        )
+
+    def unconfirmed(self, write: str) -> dict | None:
+        return next(
+            (
+                entry
+                for entry in self.entries
+                if entry["write"] == write and entry.get("unconfirmed")
+            ),
+            None,
+        )
+
+    def settle(self, write: str) -> bool:
+        """Confirm an unanswered write the host is now seen to hold."""
+        entry = self.unconfirmed(write)
+        if entry is None:
+            return False
+        del entry["unconfirmed"]
+        self.save()
+        return True
 
     def append(
         self, write: str, before: object, after: object, reverse: list[str]
@@ -1714,7 +1765,50 @@ class WriteLog:
                 "reverse_command": reverse,
             }
         )
-        self.path.write_text(json.dumps(self.entries, indent=2) + "\n")
+        self.save()
+
+    def send(
+        self,
+        write: str,
+        before: object,
+        after: object,
+        reverse: list[str],
+        request: list[str],
+    ) -> object:
+        """Send `request` to `gh`, logged first as unconfirmed.
+
+        A refusal the host answered proves nothing landed, so its entry is
+        dropped; one it never answered may have landed, so the entry stays
+        for the next run to settle rather than losing the before-state. A
+        retry keeps that entry's before-state and reverse, read before
+        anything could have landed, over the ones it read since, and keeps
+        the entry whatever the retry is answered: a refusal says only that
+        the retry did not land.
+        """
+        stale = self.unconfirmed(write)
+        if stale is not None:
+            self.entries.remove(stale)
+            before, reverse = stale["before"], stale["reverse_command"]
+        self.append(write, before, after, reverse)
+        entry = self.entries[-1]
+        entry["unconfirmed"] = True
+        self.save()
+        try:
+            answer = gh(*request)
+        except Refusal as refusal:
+            if refusal.status and stale is None:
+                self.entries.remove(entry)
+                self.save()
+            raise
+        del entry["unconfirmed"]
+        self.save()
+        return answer
+
+    def save(self) -> None:
+        if self.entries:
+            self.path.write_text(json.dumps(self.entries, indent=2) + "\n")
+        else:
+            self.path.unlink(missing_ok=True)
 
 
 def flags(values: Mapping[str, object]) -> list[str]:
@@ -1731,12 +1825,12 @@ def write_merge_settings(repository: str, log: WriteLog) -> Outcome:
     before = {setting: repo.get(setting) for setting in MERGE_SETTINGS}
     if before == MERGE_SETTINGS:
         return Outcome.ALREADY_SET
-    gh("api", "-X", "PATCH", f"repos/{repository}", *flags(MERGE_SETTINGS))
-    log.append(
+    log.send(
         "merge-settings",
         before,
         MERGE_SETTINGS,
         ["gh", "api", "-X", "PATCH", f"repos/{repository}", *flags(before)],
+        ["api", "-X", "PATCH", f"repos/{repository}", *flags(MERGE_SETTINGS)],
     )
     return Outcome.DONE
 
@@ -1749,6 +1843,49 @@ class LabelOutcome:
     renamed: list[dict[str, str]] = field(default_factory=list)
     skipped: list[dict[str, str]] = field(default_factory=list)
     refused: list[dict[str, str]] = field(default_factory=list)
+
+
+def refuse_headed_pulls(repository: str, name: str) -> None:
+    """Refuse a rename whose old branch heads an open pull request, which the
+    host would close rather than retarget, before any write is sent."""
+    before = read_repository(repository).get("default_branch")
+    if before == name:
+        return
+    owner = repository.split("/", 1)[0]
+    headed = gh("api", f"repos/{repository}/pulls?head={owner}:{before}&state=open")
+    if isinstance(headed, list) and headed:
+        numbers = ", ".join(f"#{lookup(pull, 'number')}" for pull in headed)
+        raise PreflightError(
+            f"{before} heads open pull request {numbers}, which the rename would "
+            "close; merge it, close it, or reopen it from a copy first"
+        )
+
+
+def rename_branch(repository: str, old: str, new: str) -> list[str]:
+    return [
+        "api",
+        "-X",
+        "POST",
+        f"repos/{repository}/branches/{old}/rename",
+        "-f",
+        f"new_name={new}",
+    ]
+
+
+def write_default_branch(repository: str, name: str, log: WriteLog) -> Outcome:
+    """Rename the default branch in place, which the host retargets every open
+    pull request based on it to follow; one whose head it is, it closes."""
+    before = read_repository(repository).get("default_branch")
+    if before == name:
+        return Outcome.ALREADY_SET
+    log.send(
+        "default-branch",
+        before,
+        name,
+        ["gh", *rename_branch(repository, name, str(before))],
+        rename_branch(repository, str(before), name),
+    )
+    return Outcome.DONE
 
 
 def write_labels(
@@ -1771,6 +1908,18 @@ def write_labels(
     return outcome
 
 
+def rename_label(repository: str, old: str, new: str) -> list[str]:
+    quoted = urllib.parse.quote(old, safe="")
+    return [
+        "api",
+        "-X",
+        "PATCH",
+        f"repos/{repository}/labels/{quoted}",
+        "-f",
+        f"new_name={new}",
+    ]
+
+
 def write_label(
     repository: str,
     name: str,
@@ -1782,38 +1931,23 @@ def write_label(
     """One label, its outcome recorded in `outcome` as it lands."""
     write = f"label:{name}"
     present = existing.get(name.casefold())
+    if present == name:
+        log.settle(write)
     if log.logged(write) or present == name:
         outcome.skipped.append({"label": name, "reason": "exists"})
     elif present is not None and not rename:
         outcome.skipped.append({"label": name, "reason": f"exists as {present}, kept"})
     elif present is not None:
-        quoted = urllib.parse.quote(present, safe="")
-        gh(
-            "api",
-            "-X",
-            "PATCH",
-            f"repos/{repository}/labels/{quoted}",
-            "-f",
-            f"new_name={name}",
-        )
-        log.append(
+        log.send(
             write,
             present,
             name,
-            [
-                "gh",
-                "api",
-                "-X",
-                "PATCH",
-                f"repos/{repository}/labels/{urllib.parse.quote(name, safe='')}",
-                "-f",
-                f"new_name={present}",
-            ],
+            ["gh", *rename_label(repository, name, present)],
+            rename_label(repository, present, name),
         )
         outcome.renamed.append({"from": present, "to": name})
     else:
-        gh("api", "-X", "POST", f"repos/{repository}/labels", "-f", f"name={name}")
-        log.append(
+        log.send(
             write,
             None,
             name,
@@ -1824,6 +1958,7 @@ def write_label(
                 "DELETE",
                 f"repos/{repository}/labels/{urllib.parse.quote(name, safe='')}",
             ],
+            ["api", "-X", "POST", f"repos/{repository}/labels", "-f", f"name={name}"],
         )
         outcome.created.append(name)
 
@@ -1841,8 +1976,13 @@ def write_toggle(write: str, endpoint: str, log: WriteLog) -> Outcome:
     before = answer.get("enabled") if isinstance(answer, dict) else answer is None
     if before:
         return Outcome.ALREADY_SET
-    gh("api", "-X", "PUT", endpoint)
-    log.append(write, False, True, ["gh", "api", "-X", "DELETE", endpoint])
+    log.send(
+        write,
+        False,
+        True,
+        ["gh", "api", "-X", "DELETE", endpoint],
+        ["api", "-X", "PUT", endpoint],
+    )
     return Outcome.DONE
 
 
@@ -1856,12 +1996,12 @@ def write_push_protection(repository: str, log: WriteLog) -> Outcome:
         raise Refusal("403", "push protection status is not shown to this credential")
     if before in (None, "unavailable"):
         raise Refusal("403", f"{UPGRADE_MESSAGE}: push protection is not offered")
-    gh("api", "-X", "PATCH", f"repos/{repository}", "-f", f"{key}=enabled")
-    log.append(
+    log.send(
         "push-protection",
         before,
         "enabled",
         ["gh", "api", "-X", "PATCH", f"repos/{repository}", "-f", f"{key}={before}"],
+        ["api", "-X", "PATCH", f"repos/{repository}", "-f", f"{key}=enabled"],
     )
     return Outcome.DONE
 
@@ -1887,7 +2027,9 @@ def write_ruleset(
     The body is the flow's to compose from the references, since which contexts
     it requires and which branch it names are judgements this command does not
     make. A ruleset replaced keeps its before-state beside the log, because the
-    command that restores it needs the whole document as its input.
+    command that restores it needs the whole document as its input. A creation
+    is logged only once answered, since its reverse names the id the answer
+    carries; its before-state is no ruleset, which an unanswered send cannot lose.
     """
     if replaces is None:
         created = gh_object(
@@ -1912,13 +2054,15 @@ def write_ruleset(
         key: value for key, value in before.items() if key not in RULESET_READ_ONLY
     }
     saved = log.path.with_name(f"{log.path.stem}.ruleset-{replaces}.json")
-    saved.write_text(json.dumps(restorable, indent=2) + "\n")
-    gh("api", "-X", "PUT", endpoint, "--input", str(body))
-    log.append(
+    stale = log.unconfirmed("ruleset")
+    if stale is None or stale["before"] != str(saved):
+        saved.write_text(json.dumps(restorable, indent=2) + "\n")
+    log.send(
         "ruleset",
         str(saved),
         str(body),
         ["gh", "api", "-X", "PUT", endpoint, "--input", str(saved)],
+        ["api", "-X", "PUT", endpoint, "--input", str(body)],
     )
     return Outcome.DONE
 
@@ -1944,14 +2088,14 @@ def write_runner_variable(repository: str, log: WriteLog) -> Outcome:
     if before == "self-hosted":
         return Outcome.ALREADY_SET
     run = ["variable", "set", "RUNNER", "--body", "self-hosted", "-R", repository]
-    gh(*run)
-    log.append(
+    log.send(
         "runner-variable",
         before,
         "self-hosted",
         ["gh", "variable", "delete", "RUNNER", "-R", repository]
         if before is None
         else ["gh", "variable", "set", "RUNNER", "--body", before, "-R", repository],
+        run,
     )
     return Outcome.DONE
 
@@ -2031,6 +2175,10 @@ class HostedWrite:
     observe: Callable[[dict], str | None] = unread
 
 
+# The rename is a hard stop: CI pins the new name, so nothing after it is
+# written while the branch keeps the old one.
+RENAMED = (Outcome.DONE, Outcome.ALREADY_SET, Outcome.LOGGED)
+
 # In the gate's order, which is the order `apply` performs them in.
 HOSTED_WRITES = (
     HostedWrite(
@@ -2038,6 +2186,13 @@ HOSTED_WRITES = (
         "Merge settings (merge commit only, head branches deleted)",
         lambda arguments, log: write_merge_settings(arguments.repository, log),
         observe_merge_settings,
+    ),
+    HostedWrite(
+        "default-branch",
+        None,
+        lambda arguments, log: write_default_branch(
+            arguments.repository, arguments.default_branch, log
+        ),
     ),
     HostedWrite(
         "labels",
@@ -2095,19 +2250,25 @@ HOSTED_WRITES = (
 def hosted_apply(arguments: argparse.Namespace) -> dict[str, object]:
     """Perform the writes the gate approved, in the gate's order, and no others.
 
-    There is no default-branch write here: the rename is a hard stop when
-    declined and repairs every clone, so it stays a step the flow runs itself.
-    A write approved later in the run, such as the runner variable once its
-    runner comes online, is a second call; what the earlier call recorded for
-    the writes this one does not approve is kept, so the report sees both.
+    The rename is logged like any other write so the report can name its
+    reverse. An open pull request it would close refuses the whole call before
+    any write, and a rename not performed stops the writes after it; the
+    ruleset repair and the clone commands stay the flow's. A write approved
+    later in the run, such as the runner variable once its runner comes
+    online, is a second call; what the earlier call recorded for the writes
+    this one does not approve is kept, so the report sees both.
     """
     approved = set(arguments.approve)
     earlier = arguments.previous
+    if "default-branch" in approved and not arguments.default_branch:
+        raise PreflightError("default-branch approved with no --default-branch name")
     if "labels" in approved and not arguments.label:
         raise PreflightError("labels approved with no --label to create")
     if "ruleset" in approved and arguments.ruleset is None:
         raise PreflightError("ruleset approved with no --ruleset body")
     log = WriteLog(write_log_path(arguments.records))
+    if "default-branch" in approved and not log.logged("default-branch"):
+        refuse_headed_pulls(arguments.repository, arguments.default_branch)
     writes: dict[str, object] = {}
     reasons: dict[str, str] = {}
     findings: list[str] = []
@@ -2136,6 +2297,8 @@ def hosted_apply(arguments: argparse.Namespace) -> dict[str, object]:
             if outcome != Outcome.NOT_OFFERED:
                 reasons[write.name] = str(refusal)
                 findings.append(f"{write.name}: {refusal}")
+        if outcome == Outcome.ALREADY_SET and log.settle(write.name):
+            outcome = Outcome.LOGGED
         if isinstance(outcome, LabelOutcome):
             findings.extend(
                 f"{write.name}: {item['reason']}"
@@ -2145,6 +2308,11 @@ def hosted_apply(arguments: argparse.Namespace) -> dict[str, object]:
             writes[write.name] = asdict(outcome)
         else:
             writes[write.name] = outcome
+        if write.name == "default-branch" and outcome not in RENAMED:
+            findings.append(
+                "default-branch: not renamed, so no later write was performed"
+            )
+            break
     return {
         "operation": "hosted apply",
         "repository": arguments.repository,
@@ -2625,9 +2793,14 @@ def repository_settings(
 def reversible_writes(report: Report, entries: list[dict]) -> None:
     report.section("### Hosted writes, reversible")
     for entry in entries:
+        unanswered = (
+            " (sent, never answered; check the host before reversing)"
+            if entry.get("unconfirmed")
+            else ""
+        )
         report.add(
             f"- {entry['write']}: was {json.dumps(entry['before'])} -> "
-            f"{json.dumps(entry['after'])}; reverse with `{shlex.join(entry['reverse_command'])}`"
+            f"{json.dumps(entry['after'])}{unanswered}; reverse with `{shlex.join(entry['reverse_command'])}`"
         )
     declined = report.optional("declined-writes")
     report.add(f"- {declined}" if declined else None)
@@ -3364,6 +3537,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         required=True,
     )
+    apply.add_argument("--default-branch", help="the name to rename it to")
     apply.add_argument("--label", action="append", default=[])
     apply.add_argument(
         "--keep-case-variants",

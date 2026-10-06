@@ -29,6 +29,30 @@ def retrofit_fixture(directory: str) -> dict[str, str]:
     return fixture
 
 
+def write_record(
+    destination: Path, commit: str, overrides: list[dict[str, str]] | None = None
+) -> None:
+    """The record step 7 writes, owning the fixture payload's paths."""
+    record = {
+        "schema_version": 1,
+        "template": {
+            "repository": "possiblyneal/template",
+            "subtree": "base-repo",
+            "commit": commit,
+        },
+        "destination": {"repository": "owner/ledger", "default_branch": "main"},
+        "generation": {"features": {}, "overrides": overrides or []},
+        "ownership": [
+            {"path": ".repo-template.json", "mode": "managed"},
+            {"path": "CLAUDE.md", "mode": "managed"},
+            {"path": "scripts/**", "mode": "managed"},
+            {"path": "apps/**", "mode": "product"},
+            {"path": "docs/**", "mode": "product"},
+        ],
+    }
+    (destination / ".repo-template.json").write_text(json.dumps(record))
+
+
 def payload_arguments(fixture: dict[str, str]) -> list[str]:
     return [
         "--template-repo",
@@ -88,6 +112,7 @@ class ProofsTests(unittest.TestCase):
         with (destination / "scripts/check").open("a") as check:
             check.write("# extended by the flow\n")
         (destination / ".gitignore").write_text("docs/agents/domain.md\n")
+        write_record(destination, fixture["target_commit"])
         git("add", "-A", cwd=destination)
         return destination
 
@@ -284,14 +309,10 @@ class ProofsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fixture = retrofit_fixture(directory)
             destination = self._overlay(fixture)
-            (destination / ".repo-template.json").write_text(
-                json.dumps(
-                    {
-                        "generation": {
-                            "overrides": [{"path": "scripts/check", "reason": "ours"}]
-                        }
-                    }
-                )
+            write_record(
+                destination,
+                fixture["target_commit"],
+                [{"path": "scripts/check", "reason": "ours"}],
             )
             git("add", "-A", cwd=destination)
             report = json.loads(self._proofs(fixture).stdout)
@@ -365,6 +386,37 @@ class ProofsTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 2)
             self.assertIn("nothing is staged", result.stderr)
+
+    def test_refuses_a_candidate_that_stages_no_record(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = retrofit_fixture(directory)
+            destination = self._overlay(fixture)
+            git("rm", "-q", "--cached", ".repo-template.json", cwd=destination)
+            result = self._proofs(fixture)
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("stages no .repo-template.json", result.stderr)
+
+    def test_refuses_a_record_pinning_another_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = retrofit_fixture(directory)
+            destination = self._overlay(fixture)
+            write_record(destination, "0" * 40)
+            git("add", "-A", cwd=destination)
+            result = self._proofs(fixture)
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("not " + fixture["target_commit"], result.stderr)
+
+    def test_refuses_a_record_edited_after_it_was_staged(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = retrofit_fixture(directory)
+            destination = self._overlay(fixture)
+            write_record(destination, "0" * 40)
+            result = self._proofs(fixture)
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("differs from its staged copy", result.stderr)
 
     def test_refuses_once_the_flow_has_committed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1729,6 +1781,135 @@ class HostedTests(unittest.TestCase):
                 ],
             )
 
+    def test_the_default_branch_rename_reverses_to_the_old_name(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            responses = self._master_responses([])
+            result = run(
+                "hosted",
+                "apply",
+                "--repository",
+                "owner/ledger",
+                "--records",
+                str(Path(directory) / "candidate"),
+                "--approve",
+                "default-branch",
+                "--default-branch",
+                "main",
+                env=stub_gh(directory, responses),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                json.loads(result.stdout)["writes"], {"default-branch": "done"}
+            )
+            self.assertEqual(
+                gh_calls(directory)[-1],
+                [
+                    "api",
+                    "-X",
+                    "POST",
+                    f"{REPO}/branches/master/rename",
+                    "-f",
+                    "new_name=main",
+                ],
+            )
+            entry, sent = self._reverse(directory, responses)
+            self.assertEqual((entry["before"], entry["after"]), ("master", "main"))
+            self.assertEqual(
+                sent,
+                [
+                    "api",
+                    "-X",
+                    "POST",
+                    f"{REPO}/branches/main/rename",
+                    "-f",
+                    "new_name=master",
+                ],
+            )
+
+    def _master_responses(self, headed: list[object]) -> list[dict[str, object]]:
+        """The host with `master` as its default branch, heading `headed`."""
+        repo = {"default_branch": "master", "permissions": {"admin": True}}
+        return [
+            {"args": ["api", REPO], "stdout": json.dumps(repo)},
+            {
+                "args": ["api", f"{REPO}/pulls?head=owner:master&state=open"],
+                "stdout": json.dumps(headed),
+            },
+            *self._responses(),
+        ]
+
+    def _rename(
+        self, directory: str, responses: list[dict[str, object]]
+    ) -> subprocess.CompletedProcess[str]:
+        return run(
+            "hosted",
+            "apply",
+            "--repository",
+            "owner/ledger",
+            "--records",
+            str(Path(directory) / "candidate"),
+            "--approve",
+            "merge-settings",
+            "--approve",
+            "default-branch",
+            "--default-branch",
+            "main",
+            "--approve",
+            "labels",
+            "--label",
+            "bug",
+            env=stub_gh(directory, responses),
+        )
+
+    def test_an_open_pull_request_headed_by_the_old_name_stops_every_write(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = self._rename(directory, self._master_responses([{"number": 7}]))
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("#7", result.stderr)
+            self.assertFalse(
+                any("-X" in call for call in gh_calls(directory)),
+                gh_calls(directory),
+            )
+
+    def test_a_refused_rename_stops_the_writes_after_it(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            refusal = {"status": "422", "message": "Validation Failed"}
+            responses: list[dict[str, object]] = [
+                *self._master_responses([]),
+                {
+                    "args": ["api", "-X", "POST", f"{REPO}/branches/master/rename"],
+                    "stdout": json.dumps(refusal),
+                    "status": 1,
+                },
+            ]
+            result = self._rename(directory, responses)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(
+                set(report["writes"]), {"merge-settings", "default-branch"}
+            )
+            self.assertEqual(report["writes"]["default-branch"], "refused")
+            self.assertIn(
+                "default-branch: not renamed, so no later write was performed",
+                report["findings"],
+            )
+
+    def test_a_default_branch_already_named_is_not_renamed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = self._apply(
+                directory, "--approve", "default-branch", "--default-branch", "main"
+            )
+
+            self.assertEqual(
+                json.loads(result.stdout)["writes"], {"default-branch": "already set"}
+            )
+            self.assertFalse((Path(directory) / "candidate.writes.json").exists())
+
     def test_names_an_upgrade_refusal_not_offered_and_a_403_a_gap(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             result = self._apply(
@@ -1751,6 +1932,109 @@ class HostedTests(unittest.TestCase):
             self.assertEqual(len(report["findings"]), 1)
             self.assertTrue(report["findings"][0].startswith("dependabot-alerts:"))
             self.assertFalse((Path(directory) / "candidate.writes.json").exists())
+
+    def test_an_unanswered_write_keeps_its_before_state_for_the_rerun(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            records = Path(directory) / "candidate"
+            responses: list[dict[str, object]] = [
+                {"args": ["api", "-X", "PATCH"], "stdout": "", "status": 1},
+                *self._responses(),
+            ]
+            arguments = [
+                "hosted",
+                "apply",
+                "--repository",
+                "owner/ledger",
+                "--records",
+                str(records),
+                "--approve",
+                "merge-settings",
+            ]
+            run(*arguments, env=stub_gh(directory, responses))
+            unanswered = json.loads(Path(f"{records}.writes.json").read_text())
+            shutil.rmtree(Path(directory) / "bin")
+            (Path(directory) / "gh.log").unlink()
+            landed: list[dict[str, object]] = [
+                {
+                    "args": ["api", REPO],
+                    "stdout": json.dumps(
+                        {
+                            "default_branch": "main",
+                            "allow_merge_commit": True,
+                            "allow_squash_merge": False,
+                            "allow_rebase_merge": False,
+                            "delete_branch_on_merge": True,
+                        }
+                    ),
+                },
+                *self._responses(),
+            ]
+
+            result = run(*arguments, env=stub_gh(directory, landed))
+
+            self.assertTrue(unanswered[0]["unconfirmed"])
+            self.assertEqual(unanswered[0]["before"]["allow_squash_merge"], True)
+            self.assertEqual(
+                json.loads(result.stdout)["writes"], {"merge-settings": "logged"}
+            )
+            settled = json.loads(Path(f"{records}.writes.json").read_text())
+            self.assertNotIn("unconfirmed", settled[0])
+            self.assertEqual(settled[0]["before"], unanswered[0]["before"])
+            self.assertFalse([call for call in gh_calls(directory) if "-X" in call])
+
+    def test_a_retried_ruleset_replacement_keeps_the_original(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            records = Path(directory) / "candidate"
+            body = Path(directory) / "ruleset.json"
+            body.write_text('{"name": "main"}')
+            endpoint = f"{REPO}/rulesets/9"
+            arguments = [
+                "hosted",
+                "apply",
+                "--repository",
+                "owner/ledger",
+                "--records",
+                str(records),
+                "--approve",
+                "ruleset",
+                "--ruleset",
+                str(body),
+                "--replace-ruleset",
+                "9",
+            ]
+
+            def attempt(current: str) -> None:
+                responses: list[dict[str, object]] = [
+                    {
+                        "args": ["api", endpoint],
+                        "stdout": json.dumps({"name": current}),
+                    },
+                    {"args": ["api", "-X", "PUT"], "stdout": "", "status": 1},
+                    *self._responses(),
+                ]
+                shutil.rmtree(Path(directory) / "bin", ignore_errors=True)
+                run(*arguments, env=stub_gh(directory, responses))
+
+            attempt("original")
+            attempt("main")
+            refused: list[dict[str, object]] = [
+                {"args": ["api", endpoint], "stdout": json.dumps({"name": "main"})},
+                {
+                    "args": ["api", "-X", "PUT"],
+                    "stdout": json.dumps({"status": "422", "message": "Invalid"}),
+                    "status": 1,
+                },
+                *self._responses(),
+            ]
+            shutil.rmtree(Path(directory) / "bin")
+            run(*arguments, env=stub_gh(directory, refused))
+            attempt("main")
+
+            saved = Path(f"{records}.writes.ruleset-9.json")
+            self.assertEqual(json.loads(saved.read_text()), {"name": "original"})
+            entries = json.loads(Path(f"{records}.writes.json").read_text())
+            self.assertEqual(len(entries), 1)
+            self.assertEqual(entries[0]["before"], str(saved))
 
     def test_a_resumed_apply_never_repeats_a_logged_write(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
