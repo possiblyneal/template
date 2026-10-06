@@ -26,6 +26,7 @@ One flat directory, not a `ci/` and a `scripts/` split. The boundary that split 
 - `libs/dependabot.sh` — the manifest-to-ecosystem mapping and which tracked manifests no `.github/dependabot.yml` entry watches; sourced by `doctor`
 - `libs/result.sh` — how a check reports: the four Result states, the printed layout, findings, and the tally; sourced by `libs/detect.sh`, and so by every command, and by `structure`
 - `libs/quadlet.sh` — `quadlet_validate <dir> <label>`, validation of a `quadlet` unit's `deploy/quadlet/` files, the label naming it in findings; sourced by `package`
+- `script-tests` — called by `check` and by `ci.yml`; runs every `tests/*-test` concurrently, a suite per CPU, and prints each suite's output whole once all have finished, so concurrent output never interleaves. A new suite must keep to its own scratch repositories, or own outright any path it writes inside this one, since it runs beside every other
 - `tests/*-test` — assertions about the wiring itself
 - `tests/libs/harness.sh` — the assertion counting those tests share, and the fixture primitives they compose: `scratch_repo`, `fixture`, `declare_unit`, `quadlet_pair`, `stub`, `minimal_path`, `skip`, `not_applicable`. `fixture <name>` is a fresh scratch repository named as the current case, the default a suite overrides when its cases need more; `minimal_path <tool…>` builds a directory of symlinks to just those tools and echoes it, for a case that runs a command with a named tool absent from `PATH`
 
