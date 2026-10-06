@@ -31,13 +31,20 @@ done
 results="$(mktemp -d)"
 trap 'rm -rf "$results"' EXIT
 
+# getconf rather than nproc, which macOS lacks; where it answers nothing usable
+# the suites run one at a time rather than not at all.
+cpus="$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)"
+[[ "$cpus" =~ ^[1-9][0-9]*$ ]] || cpus=1
+
 # stdin is closed for the same reason libs/detect.sh closes it for a
 # capability: a child that drains fd 0 blocks until the caller's stdin reaches
 # EOF, which for a terminal or an agent harness is never, and the run hangs with
-# nothing printed. getconf rather than nproc, which macOS lacks.
+# nothing printed. xargs stops starting suites once one is killed by a signal,
+# and its own status says nothing the per-suite records below do not, so it is
+# ignored and a suite with no record is reported as one that did not run.
 # shellcheck disable=SC2016 # expanded by the inner bash, per test
 printf '%s\0' "${test_scripts[@]}" |
-  xargs -0 -n 1 -P "$(getconf _NPROCESSORS_ONLN)" bash -c '
+  xargs -0 -n 1 -P "$cpus" bash -c '
     name="${2##*/}"
     status=0
     "$2" </dev/null >"$1/$name.out" 2>&1 || status=$?
@@ -47,7 +54,7 @@ printf '%s\0' "${test_scripts[@]}" |
 failed=()
 for test_script in "${test_scripts[@]}"; do
   name="${test_script##*/}"
-  cat "$results/$name.out"
+  cat "$results/$name.out" 2>/dev/null || echo "$test_script did not run."
   if [[ "$(cat "$results/$name.status" 2>/dev/null)" != 0 ]]; then
     failed+=("$test_script")
   fi
