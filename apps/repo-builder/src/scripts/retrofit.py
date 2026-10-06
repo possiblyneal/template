@@ -146,6 +146,11 @@ def require_staged_record(
             "the candidate stages no .repo-template.json; write the record "
             "step 7 owes before measuring"
         )
+    if git_output(candidate, "diff", "--name-only", "--", ".repo-template.json"):
+        raise PreflightError(
+            ".repo-template.json differs from its staged copy; stage the record "
+            "being measured"
+        )
     manifest, _, _ = preflight.validate_manifest(candidate / ".repo-template.json")
     recorded = lookup(manifest, "template", "commit")
     if recorded != target:
@@ -1774,6 +1779,22 @@ class LabelOutcome:
     refused: list[dict[str, str]] = field(default_factory=list)
 
 
+def refuse_headed_pulls(repository: str, name: str) -> None:
+    """Refuse a rename whose old branch heads an open pull request, which the
+    host would close rather than retarget, before any write is sent."""
+    before = read_repository(repository).get("default_branch")
+    if before == name:
+        return
+    owner = repository.split("/", 1)[0]
+    headed = gh("api", f"repos/{repository}/pulls?head={owner}:{before}&state=open")
+    if isinstance(headed, list) and headed:
+        numbers = ", ".join(f"#{lookup(pull, 'number')}" for pull in headed)
+        raise PreflightError(
+            f"{before} heads open pull request {numbers}, which the rename would "
+            "close; merge it, close it, or reopen it from a copy first"
+        )
+
+
 def write_default_branch(repository: str, name: str, log: WriteLog) -> Outcome:
     """Rename the default branch in place, which the host retargets every open
     pull request based on it to follow; one whose head it is, it closes."""
@@ -2085,6 +2106,10 @@ class HostedWrite:
     observe: Callable[[dict], str | None] = unread
 
 
+# The rename is a hard stop: CI pins the new name, so nothing after it is
+# written while the branch keeps the old one.
+RENAMED = (Outcome.DONE, Outcome.ALREADY_SET, Outcome.LOGGED)
+
 # In the gate's order, which is the order `apply` performs them in.
 HOSTED_WRITES = (
     HostedWrite(
@@ -2157,10 +2182,12 @@ def hosted_apply(arguments: argparse.Namespace) -> dict[str, object]:
     """Perform the writes the gate approved, in the gate's order, and no others.
 
     The rename is logged like any other write so the report can name its
-    reverse; the stops before it and the clone repairs after it stay the
-    flow's, since neither is a hosted write. A write approved later in the run, such as the runner variable once its
-    runner comes online, is a second call; what the earlier call recorded for
-    the writes this one does not approve is kept, so the report sees both.
+    reverse. An open pull request it would close refuses the whole call before
+    any write, and a rename not performed stops the writes after it; the
+    ruleset repair and the clone commands stay the flow's. A write approved
+    later in the run, such as the runner variable once its runner comes
+    online, is a second call; what the earlier call recorded for the writes
+    this one does not approve is kept, so the report sees both.
     """
     approved = set(arguments.approve)
     earlier = arguments.previous
@@ -2171,6 +2198,8 @@ def hosted_apply(arguments: argparse.Namespace) -> dict[str, object]:
     if "ruleset" in approved and arguments.ruleset is None:
         raise PreflightError("ruleset approved with no --ruleset body")
     log = WriteLog(write_log_path(arguments.records))
+    if "default-branch" in approved and not log.logged("default-branch"):
+        refuse_headed_pulls(arguments.repository, arguments.default_branch)
     writes: dict[str, object] = {}
     reasons: dict[str, str] = {}
     findings: list[str] = []
@@ -2208,6 +2237,11 @@ def hosted_apply(arguments: argparse.Namespace) -> dict[str, object]:
             writes[write.name] = asdict(outcome)
         else:
             writes[write.name] = outcome
+        if write.name == "default-branch" and outcome not in RENAMED:
+            findings.append(
+                "default-branch: not renamed, so no later write was performed"
+            )
+            break
     return {
         "operation": "hosted apply",
         "repository": arguments.repository,

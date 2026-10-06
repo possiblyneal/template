@@ -395,6 +395,16 @@ class ProofsTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("not " + fixture["target_commit"], result.stderr)
 
+    def test_refuses_a_record_edited_after_it_was_staged(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = retrofit_fixture(directory)
+            destination = self._overlay(fixture)
+            write_record(destination, "0" * 40)
+            result = self._proofs(fixture)
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("differs from its staged copy", result.stderr)
+
     def test_refuses_once_the_flow_has_committed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = retrofit_fixture(directory)
@@ -1760,11 +1770,7 @@ class HostedTests(unittest.TestCase):
 
     def test_the_default_branch_rename_reverses_to_the_old_name(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            repo = {"default_branch": "master", "permissions": {"admin": True}}
-            responses: list[dict[str, object]] = [
-                {"args": ["api", REPO], "stdout": json.dumps(repo)},
-                *self._responses(),
-            ]
+            responses = self._master_responses([])
             result = run(
                 "hosted",
                 "apply",
@@ -1806,6 +1812,78 @@ class HostedTests(unittest.TestCase):
                     "-f",
                     "new_name=master",
                 ],
+            )
+
+    def _master_responses(self, headed: list[object]) -> list[dict[str, object]]:
+        """The host with `master` as its default branch, heading `headed`."""
+        repo = {"default_branch": "master", "permissions": {"admin": True}}
+        return [
+            {"args": ["api", REPO], "stdout": json.dumps(repo)},
+            {
+                "args": ["api", f"{REPO}/pulls?head=owner:master&state=open"],
+                "stdout": json.dumps(headed),
+            },
+            *self._responses(),
+        ]
+
+    def _rename(
+        self, directory: str, responses: list[dict[str, object]]
+    ) -> subprocess.CompletedProcess[str]:
+        return run(
+            "hosted",
+            "apply",
+            "--repository",
+            "owner/ledger",
+            "--records",
+            str(Path(directory) / "candidate"),
+            "--approve",
+            "merge-settings",
+            "--approve",
+            "default-branch",
+            "--default-branch",
+            "main",
+            "--approve",
+            "labels",
+            "--label",
+            "bug",
+            env=stub_gh(directory, responses),
+        )
+
+    def test_an_open_pull_request_headed_by_the_old_name_stops_every_write(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = self._rename(directory, self._master_responses([{"number": 7}]))
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("#7", result.stderr)
+            self.assertFalse(
+                any("-X" in call for call in gh_calls(directory)),
+                gh_calls(directory),
+            )
+
+    def test_a_refused_rename_stops_the_writes_after_it(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            refusal = {"status": "422", "message": "Validation Failed"}
+            responses: list[dict[str, object]] = [
+                *self._master_responses([]),
+                {
+                    "args": ["api", "-X", "POST", f"{REPO}/branches/master/rename"],
+                    "stdout": json.dumps(refusal),
+                    "status": 1,
+                },
+            ]
+            result = self._rename(directory, responses)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(
+                set(report["writes"]), {"merge-settings", "default-branch"}
+            )
+            self.assertEqual(report["writes"]["default-branch"], "refused")
+            self.assertIn(
+                "default-branch: not renamed, so no later write was performed",
+                report["findings"],
             )
 
     def test_a_default_branch_already_named_is_not_renamed(self) -> None:

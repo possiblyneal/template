@@ -29,7 +29,7 @@ Five writes, in this order, the last conditional.
 
 **2. The default-branch rename.** **Declining is a hard stop**: the payload's workflows pin the branch name, so CI would never fire on the old one.
 
-`apply --approve default-branch` performs it and logs the old name, so the report names the reverse. Both stops below, the ruleset repair and the clone commands stay the flow's.
+`apply --approve default-branch` performs it and logs the old name, so the report names the reverse. It refuses the whole call before any write while the old name heads an open pull request, and a rename it does not perform stops every write after it. Enumerating by base ref, the ruleset repair and the clone commands stay the flow's.
 
 **An open pull request whose head is the branch being renamed is a hard stop before any write at all**, because the host closes it rather than retargeting it. Enumerate **by head ref as well as by base ref**. The stop names the remedies: merge it, close it deliberately, or copy the branch and open a fresh pull request, losing the review conversation.
 
