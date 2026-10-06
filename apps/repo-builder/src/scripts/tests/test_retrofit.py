@@ -2017,6 +2017,18 @@ class HostedTests(unittest.TestCase):
 
             attempt("original")
             attempt("main")
+            refused: list[dict[str, object]] = [
+                {"args": ["api", endpoint], "stdout": json.dumps({"name": "main"})},
+                {
+                    "args": ["api", "-X", "PUT"],
+                    "stdout": json.dumps({"status": "422", "message": "Invalid"}),
+                    "status": 1,
+                },
+                *self._responses(),
+            ]
+            shutil.rmtree(Path(directory) / "bin")
+            run(*arguments, env=stub_gh(directory, refused))
+            attempt("main")
 
             saved = Path(f"{records}.writes.ruleset-9.json")
             self.assertEqual(json.loads(saved.read_text()), {"name": "original"})

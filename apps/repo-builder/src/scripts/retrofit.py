@@ -1781,7 +1781,9 @@ class WriteLog:
         dropped; one it never answered may have landed, so the entry stays
         for the next run to settle rather than losing the before-state. A
         retry keeps that entry's before-state and reverse, read before
-        anything could have landed, over the ones it read since.
+        anything could have landed, over the ones it read since, and keeps
+        the entry whatever the retry is answered: a refusal says only that
+        the retry did not land.
         """
         stale = self.unconfirmed(write)
         if stale is not None:
@@ -1794,7 +1796,7 @@ class WriteLog:
         try:
             answer = gh(*request)
         except Refusal as refusal:
-            if refusal.status:
+            if refusal.status and stale is None:
                 self.entries.remove(entry)
                 self.save()
             raise
