@@ -15,6 +15,7 @@ from test_preflight import git, git_output
 MODULE_PATH = Path(__file__).parents[1] / "retrofit.py"
 SETUP = MODULE_PATH.parents[1] / "evals" / "setup_fixture.py"
 PAYLOAD = MODULE_PATH.parents[4] / "apps/github-repository-template/src/base-repo"
+ROOT_RECORD = MODULE_PATH.parents[4] / ".repo-template.json"
 
 
 def retrofit_fixture(directory: str) -> dict[str, str]:
@@ -27,6 +28,16 @@ def retrofit_fixture(directory: str) -> dict[str, str]:
     fixture = json.loads((root / "fixture.json").read_text())
     fixture["base"] = git_output("rev-parse", "HEAD", cwd=fixture["destination"])
     return fixture
+
+
+def write_record(
+    destination: Path, commit: str, overrides: list[dict[str, str]] | None = None
+) -> None:
+    """The record step 7 writes, borrowing this repository's ownership list."""
+    record = json.loads(ROOT_RECORD.read_text())
+    record["template"]["commit"] = commit
+    record["generation"] = {"features": {}, "overrides": overrides or []}
+    (destination / ".repo-template.json").write_text(json.dumps(record))
 
 
 def payload_arguments(fixture: dict[str, str]) -> list[str]:
@@ -88,6 +99,7 @@ class ProofsTests(unittest.TestCase):
         with (destination / "scripts/check").open("a") as check:
             check.write("# extended by the flow\n")
         (destination / ".gitignore").write_text("docs/agents/domain.md\n")
+        write_record(destination, fixture["target_commit"])
         git("add", "-A", cwd=destination)
         return destination
 
@@ -284,14 +296,10 @@ class ProofsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fixture = retrofit_fixture(directory)
             destination = self._overlay(fixture)
-            (destination / ".repo-template.json").write_text(
-                json.dumps(
-                    {
-                        "generation": {
-                            "overrides": [{"path": "scripts/check", "reason": "ours"}]
-                        }
-                    }
-                )
+            write_record(
+                destination,
+                fixture["target_commit"],
+                [{"path": "scripts/check", "reason": "ours"}],
             )
             git("add", "-A", cwd=destination)
             report = json.loads(self._proofs(fixture).stdout)
@@ -365,6 +373,27 @@ class ProofsTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 2)
             self.assertIn("nothing is staged", result.stderr)
+
+    def test_refuses_a_candidate_that_stages_no_record(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = retrofit_fixture(directory)
+            destination = self._overlay(fixture)
+            git("rm", "-q", "--cached", ".repo-template.json", cwd=destination)
+            result = self._proofs(fixture)
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("stages no .repo-template.json", result.stderr)
+
+    def test_refuses_a_record_pinning_another_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = retrofit_fixture(directory)
+            destination = self._overlay(fixture)
+            write_record(destination, "0" * 40)
+            git("add", "-A", cwd=destination)
+            result = self._proofs(fixture)
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("not " + fixture["target_commit"], result.stderr)
 
     def test_refuses_once_the_flow_has_committed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1728,6 +1757,67 @@ class HostedTests(unittest.TestCase):
                     "owner/ledger",
                 ],
             )
+
+    def test_the_default_branch_rename_reverses_to_the_old_name(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = {"default_branch": "master", "permissions": {"admin": True}}
+            responses: list[dict[str, object]] = [
+                {"args": ["api", REPO], "stdout": json.dumps(repo)},
+                *self._responses(),
+            ]
+            result = run(
+                "hosted",
+                "apply",
+                "--repository",
+                "owner/ledger",
+                "--records",
+                str(Path(directory) / "candidate"),
+                "--approve",
+                "default-branch",
+                "--default-branch",
+                "main",
+                env=stub_gh(directory, responses),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                json.loads(result.stdout)["writes"], {"default-branch": "done"}
+            )
+            self.assertEqual(
+                gh_calls(directory)[-1],
+                [
+                    "api",
+                    "-X",
+                    "POST",
+                    f"{REPO}/branches/master/rename",
+                    "-f",
+                    "new_name=main",
+                ],
+            )
+            entry, sent = self._reverse(directory, responses)
+            self.assertEqual((entry["before"], entry["after"]), ("master", "main"))
+            self.assertEqual(
+                sent,
+                [
+                    "api",
+                    "-X",
+                    "POST",
+                    f"{REPO}/branches/main/rename",
+                    "-f",
+                    "new_name=master",
+                ],
+            )
+
+    def test_a_default_branch_already_named_is_not_renamed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = self._apply(
+                directory, "--approve", "default-branch", "--default-branch", "main"
+            )
+
+            self.assertEqual(
+                json.loads(result.stdout)["writes"], {"default-branch": "already set"}
+            )
+            self.assertFalse((Path(directory) / "candidate.writes.json").exists())
 
     def test_names_an_upgrade_refusal_not_offered_and_a_403_a_gap(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

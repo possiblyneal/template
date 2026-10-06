@@ -132,6 +132,28 @@ def workflows_without_pull_request(candidate: Path) -> list[str]:
     )
 
 
+def require_staged_record(
+    candidate: Path, changes: list[tuple[str, list[str]]], target: str
+) -> None:
+    """Refuse a candidate whose index lacks a valid record pinning `target`.
+
+    Nothing past step 7 reads the record until `sync` refuses the merged
+    default branch, so a candidate missing it would otherwise pass every check.
+    """
+    staged = {paths[-1] for status, paths in changes if status != "D"}
+    if ".repo-template.json" not in staged:
+        raise PreflightError(
+            "the candidate stages no .repo-template.json; write the record "
+            "step 7 owes before measuring"
+        )
+    manifest, _, _ = preflight.validate_manifest(candidate / ".repo-template.json")
+    recorded = lookup(manifest, "template", "commit")
+    if recorded != target:
+        raise PreflightError(
+            f".repo-template.json records template commit {recorded}, not {target}"
+        )
+
+
 def proofs(arguments: argparse.Namespace) -> dict[str, object]:
     """Measure the copy proof and the rename-purity proof from the index.
 
@@ -157,6 +179,7 @@ def proofs(arguments: argparse.Namespace) -> dict[str, object]:
             "nothing is staged; stage the candidate before measuring, since "
             "both proofs read the index"
         )
+    require_staged_record(candidate, changes, target)
 
     prefix = subtree.rstrip("/")
     payload = [
@@ -1751,6 +1774,37 @@ class LabelOutcome:
     refused: list[dict[str, str]] = field(default_factory=list)
 
 
+def write_default_branch(repository: str, name: str, log: WriteLog) -> Outcome:
+    """Rename the default branch in place, which the host retargets every open
+    pull request based on it to follow; one whose head it is, it closes."""
+    before = read_repository(repository).get("default_branch")
+    if before == name:
+        return Outcome.ALREADY_SET
+    gh(
+        "api",
+        "-X",
+        "POST",
+        f"repos/{repository}/branches/{before}/rename",
+        "-f",
+        f"new_name={name}",
+    )
+    log.append(
+        "default-branch",
+        before,
+        name,
+        [
+            "gh",
+            "api",
+            "-X",
+            "POST",
+            f"repos/{repository}/branches/{name}/rename",
+            "-f",
+            f"new_name={before}",
+        ],
+    )
+    return Outcome.DONE
+
+
 def write_labels(
     repository: str, names: list[str], rename: bool, log: WriteLog
 ) -> LabelOutcome:
@@ -2040,6 +2094,13 @@ HOSTED_WRITES = (
         observe_merge_settings,
     ),
     HostedWrite(
+        "default-branch",
+        None,
+        lambda arguments, log: write_default_branch(
+            arguments.repository, arguments.default_branch, log
+        ),
+    ),
+    HostedWrite(
         "labels",
         None,
         lambda arguments, log: write_labels(
@@ -2095,14 +2156,16 @@ HOSTED_WRITES = (
 def hosted_apply(arguments: argparse.Namespace) -> dict[str, object]:
     """Perform the writes the gate approved, in the gate's order, and no others.
 
-    There is no default-branch write here: the rename is a hard stop when
-    declined and repairs every clone, so it stays a step the flow runs itself.
-    A write approved later in the run, such as the runner variable once its
+    The rename is logged like any other write so the report can name its
+    reverse; the stops before it and the clone repairs after it stay the
+    flow's, since neither is a hosted write. A write approved later in the run, such as the runner variable once its
     runner comes online, is a second call; what the earlier call recorded for
     the writes this one does not approve is kept, so the report sees both.
     """
     approved = set(arguments.approve)
     earlier = arguments.previous
+    if "default-branch" in approved and not arguments.default_branch:
+        raise PreflightError("default-branch approved with no --default-branch name")
     if "labels" in approved and not arguments.label:
         raise PreflightError("labels approved with no --label to create")
     if "ruleset" in approved and arguments.ruleset is None:
@@ -3364,6 +3427,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         required=True,
     )
+    apply.add_argument("--default-branch", help="the name to rename it to")
     apply.add_argument("--label", action="append", default=[])
     apply.add_argument(
         "--keep-case-variants",
