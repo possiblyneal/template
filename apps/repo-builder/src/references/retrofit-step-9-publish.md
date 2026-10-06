@@ -34,4 +34,13 @@ gh pr create --repo <owner>/<repository> --base <default-branch> \
 
 **Then, optionally, the merge, at a second gate**, offered only once every required check is green, and nothing beside it. Where no check can run for the billing reason, say so in place of the poll. **Declining is the default**, leaving the pull request to the destination's own people, who have unreviewed code in it and branches in flight. Taking it merges, then reads the default branch's check suites, fills the report's line for them, and owes the clone a working hook surface under [Working hooks in the destination after a merge](lifecycle.md#working-hooks-in-the-destination-after-a-merge), except that a default branch carrying no `.pre-commit-config.yaml` makes `retrofit.py hooks` record not-applicable and install nothing.
 
+**Taking the merge also brings the operator's clone onto it.** Carry each moved live file step 6's data split names as written into `apps/<unit>/state/` and `git restore` its old path, and carry any runtime state among the proofs record's `emptied` residue, such as an old cache or save directory, into that `state/` where its target is absent, then:
+
+```bash
+python3 apps/repo-builder/src/scripts/retrofit.py sync --clone <clone> \
+  --default-branch <default-branch> --records <records>
+```
+
+It refuses before the merge has landed, fast-forwards the default branch only where the clone is clean with it checked out, and then deletes each `emptied` directory the pulled tree leaves with nothing tracked, residue and all, recording what each held under `removed` and each already absent under `gone`. A directory holding a file the proofs record's residue did not name stays, since that file arrived after the plan was read. Anything that kept it from pulling or deleting is a finding the report names under Left for the operator, and the residue stays with it.
+
 Then run step 2's sweep and render the report under [Report additions](retrofit-report.md#report-additions).
