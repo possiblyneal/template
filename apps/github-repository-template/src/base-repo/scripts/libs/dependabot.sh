@@ -45,9 +45,10 @@
 # dependabot/docker/file_fetcher.rb in dependabot-core), so one entry per
 # directory covers every such file in it. The names mapped are the
 # conventional ones -- Dockerfile, Containerfile, and either with a `.suffix`
-# or a `name.` prefix -- rather than that whole regex, which would also map a
-# notes file that merely mentions one. An ignore file named for its
-# Containerfile is not an image pin and maps to nothing.
+# or a `name.` prefix -- rather than that whole regex. A name that only
+# contains the word, such as docker-notes.md or my-dockerfile-guide.txt, earns
+# nothing; Dockerfile.<anything> does, and Dependabot reads it too. An ignore
+# file named for its Containerfile is not an image pin and maps to nothing.
 #
 # go.work and settings.gradle.kts are absent on purpose. They are workspace
 # files: they say where the modules are, and the modules are what Dependabot
@@ -63,6 +64,8 @@
 # list. pip's updater does not move uv.lock, so a pip entry over a uv project
 # opens bumps whose lockfile still pins the old version.
 dependabot_ecosystem_of() {
+  # Lowercased for docker alone: Dependabot matches those names in any case,
+  # while every language manifest below is read under its exact name.
   case "${1,,}" in
     *.dockerignore | *.containerignore) return 0 ;;
     dockerfile | containerfile | dockerfile.* | containerfile.* \
