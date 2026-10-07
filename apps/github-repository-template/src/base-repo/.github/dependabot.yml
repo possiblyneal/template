@@ -19,10 +19,10 @@
 # since pip's updater leaves uv.lock pinning the old version.
 #
 # A workspace is the one case where several manifests take a single entry. The
-# root Cargo.toml holding [workspace], or the root pyproject.toml holding
-# [tool.uv.workspace], earns it and a member listed in its members earns none:
-# the fetcher reads that list and bumps every member from the root's job,
-# moving the root lockfile with it. A member entry opens a duplicate pull
+# root Cargo.toml holding [workspace], the root pyproject.toml holding
+# [tool.uv.workspace], or the root package.json holding workspaces, earns it and
+# a member listed there earns none: the fetcher reads that list and bumps every
+# member from the root's job, moving the root lockfile with it. A member entry opens a duplicate pull
 # request, and where a cargo member pins its own versions rather than
 # inheriting with { workspace = true } that job sees no lockfile at all.
 #

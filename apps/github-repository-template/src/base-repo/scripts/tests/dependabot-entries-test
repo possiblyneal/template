@@ -467,6 +467,25 @@ else
 fi
 
 
+# A workspace member is bumped through the root's entry and earns none of its
+# own -- npm here, the same rule as Cargo and uv. This library compares literal
+# directories and reads no manifest's content, so it still names the member,
+# and scripts/doctor's advisory is what carries the exception. The case holds
+# the answer that advisory is written against: it fails if the root is
+# reported, or if the member is dropped by a rule only npm would get.
+fixture "an npm workspace member is named for the advisory, not the root" "$VERSION
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly" package.json package-lock.json apps/web/package.json
+got="$(unwatched_in)"
+if [[ "$got" == "apps/web/package.json" ]]; then
+  pass
+else
+  fail "reported '$got' rather than the workspace member alone"
+fi
+
+
 # A repository with no config has nothing to compare against. Reporting every
 # manifest there would be a finding about a file that does not exist.
 fixture "no config reports nothing" ""
