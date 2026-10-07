@@ -29,11 +29,26 @@
 # The manifest filenames Dependabot reads, and the package-ecosystem each one
 # earns: dependabot_ecosystem_of <basename>, empty for anything else.
 #
-# Deliberately the same six languages the rest of the template detects, and the
-# same six the mapping table in apps/repo-builder/src/references/lifecycle.md
-# states. A seventh recognized here and nowhere else is a shape no other check
-# can see, so a manifest outside this list is reported by a /repo-builder flow
-# on its own gate rather than mapped here.
+# Deliberately the same six languages the rest of the template detects, plus
+# docker, and the same set the mapping table in
+# apps/repo-builder/src/references/lifecycle.md states. Anything else recognized
+# here and nowhere else is a shape no other check can see, so a manifest outside
+# this list is reported by a /repo-builder flow on its own gate rather than
+# mapped here.
+#
+# docker is the one entry that is not a language, and the layout is why: it
+# gives base-image pins a place of their own in deploy/containerfile/, and
+# scripts/package reads the Containerfile a quadlet .build names, so the shape
+# is one the template already sees. Without an entry those FROM lines are pins
+# nothing ever bumps. Dependabot's docker fetcher matches /dockerfile|
+# containerfile/i against every file in the entry's directory (docker/lib/
+# dependabot/docker/file_fetcher.rb in dependabot-core), so one entry per
+# directory covers every such file in it. The names mapped are the
+# conventional ones -- Dockerfile, Containerfile, and either with a `.suffix`
+# or a `name.` prefix -- rather than that whole regex. A name that only
+# contains the word, such as docker-notes.md or my-dockerfile-guide.txt, earns
+# nothing; Dockerfile.<anything> does, and Dependabot reads it too. An ignore
+# file named for its Containerfile is not an image pin and maps to nothing.
 #
 # go.work and settings.gradle.kts are absent on purpose. They are workspace
 # files: they say where the modules are, and the modules are what Dependabot
@@ -49,6 +64,17 @@
 # list. pip's updater does not move uv.lock, so a pip entry over a uv project
 # opens bumps whose lockfile still pins the old version.
 dependabot_ecosystem_of() {
+  # Lowercased for docker alone: Dependabot matches those names in any case,
+  # while every language manifest below is read under its exact name.
+  case "${1,,}" in
+    *.dockerignore | *.containerignore) return 0 ;;
+    dockerfile | containerfile | dockerfile.* | containerfile.* \
+      | *.dockerfile | *.containerfile)
+      printf 'docker\n'
+      return 0
+      ;;
+  esac
+
   case "$1" in
     package.json) printf 'npm\n' ;;
     pyproject.toml) printf 'pip\n' ;;

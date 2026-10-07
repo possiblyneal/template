@@ -349,26 +349,26 @@ def require_managed_overrides(
         )
 
 
-REPLACED_OUTRIGHT_PATHS = (".gitignore",)
-"""Payload paths the flows replace outright, under `lifecycle.md`'s Overridden
-paths, so none can be an override."""
+MERGED_NOT_OVERRIDDEN_PATHS = (".gitignore",)
+"""Payload paths a flow merges rather than lets a destination override, under
+`lifecycle.md`'s Overridden paths, so none can be an override."""
 
 
-def refuse_replaced_outright_overrides(overrides: dict[str, str]) -> None:
-    """Refuse an override on a path the flows replace outright.
+def refuse_merged_path_overrides(overrides: dict[str, str]) -> None:
+    """Refuse an override on a path the flows merge rather than override.
 
     Separate from `require_managed_overrides` because ownership cannot settle
     it: `.gitignore` is managed, so the rules admit the entry and the mistake
     survives ownership alone.
     """
-    for replaced_path in REPLACED_OUTRIGHT_PATHS:
-        if replaced_path not in overrides:
+    for merged_path in MERGED_NOT_OVERRIDDEN_PATHS:
+        if merged_path not in overrides:
             continue
         raise PreflightError(
-            f"manifest.generation.overrides names a path the flows replace "
-            f"outright: {replaced_path}; the payload's version lands and the "
-            "destination's own rules are reported rather than re-added, so "
-            "this is a merge to raise at the next update, not an override"
+            f"manifest.generation.overrides names a path the flows merge "
+            f"rather than override: {merged_path}; an update reconciles it and "
+            "keeps the destination's own rules, so an entry only stops every "
+            "later payload change to it from landing"
         )
 
 
@@ -427,7 +427,7 @@ def validate_manifest(
         seen.add(pattern)
         rules.append(OwnershipRule(pattern, str(mode), index))
     require_managed_overrides(overrides, rules)
-    refuse_replaced_outright_overrides(overrides)
+    refuse_merged_path_overrides(overrides)
     return manifest, rules, overrides
 
 
