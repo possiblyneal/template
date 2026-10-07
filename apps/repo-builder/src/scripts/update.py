@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -50,6 +51,8 @@ def payload_mode(template_repo: Path, target: str, subtree: str, path: str) -> s
 
 def is_ignored(destination: Path, path: str) -> bool:
     found = run_git(destination, "check-ignore", "-q", "--", path, check=False)
+    if found.returncode not in (0, 1):
+        raise PreflightError(found.stderr.strip() or "git check-ignore failed")
     return found.returncode == 0
 
 
@@ -95,62 +98,91 @@ def apply_one(
     target: str,
     subtree: str,
 ) -> dict[str, str]:
-    """Land one change and describe it."""
+    """Land one change and describe it.
+
+    An expired override's old path is untracked, so nothing is removed for it:
+    the payload's version lands at the new path.
+    """
     status = str(change["status"])
     path = str(change["path"])
+    expired = bool(change.get("override_expired"))
     if status.startswith("D"):
+        if expired or change.get("destination_state") == "absent":
+            return {"path": path, "action": "already-absent"}
         remove(destination, path)
         return {"path": path, "action": "delete"}
     if status.startswith("R"):
         old_path = str(change["old_path"])
-        remove(destination, old_path)
+        if not expired:
+            remove(destination, old_path)
         write_payload(destination, template_repo, target, subtree, path)
         return {"path": path, "action": "move", "old_path": old_path}
     write_payload(destination, template_repo, target, subtree, path)
     return {"path": path, "action": "write"}
 
 
-def left_reason(change: dict[str, object], codeql_omitted: bool) -> str | None:
+def left_reason(
+    change: dict[str, object],
+    codeql_omitted: bool,
+    rules: list[preflight.OwnershipRule],
+) -> str | None:
     """Why `apply` does not land a change, or None where it does."""
     path = str(change["path"])
     if path == DEPENDABOT:
         return "derive"
+    if "old_path" in change and (
+        preflight.classify_path(str(change["old_path"]), rules)[0] != "managed"
+    ):
+        return "product-owned"
     if path.startswith(AUTOMATION_PREFIX):
         if codeql_omitted and path == CODEQL:
             return "codeql-omitted-by-choice"
         return None
     if change["ownership"] != "managed":
         return "product-owned"
+    if change.get("override_expired"):
+        return None
     state = change["destination_state"]
     if state == "unmodified":
         return None
-    if state == "absent" and str(change["status"]).startswith("A"):
+    if state == "absent" and str(change["status"])[0] in "AD":
         return None
     return str(state)
 
 
 def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
-    arguments.manifest = MANIFEST
-    result = preflight.update_preflight(arguments)
+    result = preflight.update_preflight(
+        argparse.Namespace(**{**vars(arguments), "manifest": MANIFEST})
+    )
     template = result["template"]
     assert isinstance(template, dict)
     target, subtree = str(template["target_commit"]), str(template["subtree"])
     destination = arguments.destination.resolve()
     template_repo = arguments.template_repo.resolve()
-    manifest = json.loads((destination / MANIFEST).read_text(encoding="utf-8"))
-    features = manifest.get("generation", {}).get("features", {})
-    codeql_omitted = features.get("codeql") == "omitted-by-choice"
+    manifest, rules, _ = preflight.validate_manifest(destination / MANIFEST)
+    generation = manifest.get("generation", {})
+    assert isinstance(generation, dict)
+    features = generation.get("features", {})
+    codeql_omitted = isinstance(features, dict) and (
+        features.get("codeql") == "omitted-by-choice"
+    )
 
-    applied: list[dict[str, str]] = []
+    applied: dict[str, int] = {}
+    discarded: list[dict[str, str]] = []
     left: list[dict[str, str]] = []
-    overridden: list[dict[str, object]] = []
+    overridden: list[dict[str, str]] = []
     changes = result["changes"]
     assert isinstance(changes, list)
     for change in changes:
         if change.get("overridden"):
-            overridden.append(change)
+            overridden.append(
+                {
+                    "path": str(change["path"]),
+                    "reason": str(change.get("override_reason")),
+                }
+            )
             continue
-        reason = left_reason(change, codeql_omitted)
+        reason = left_reason(change, codeql_omitted, rules)
         if reason:
             left.append(
                 {
@@ -161,30 +193,49 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
                 }
             )
             continue
-        applied.append(apply_one(change, destination, template_repo, target, subtree))
+        landed = apply_one(change, destination, template_repo, target, subtree)
+        applied[landed["action"]] = applied.get(landed["action"], 0) + 1
+        lost = landed.get("old_path", landed["path"])
+        if lost.startswith(AUTOMATION_PREFIX) and (
+            change.get("destination_state") == "modified"
+        ):
+            discarded.append({"path": lost, "action": landed["action"]})
     return {
         "operation": "update-apply",
         "template": template,
         "destination": result["destination"],
-        "applied": applied,
+        "applied": dict(sorted(applied.items())),
+        "discarded": discarded,
         "left": left,
         "overridden": overridden,
         "unmatched_overrides": result["unmatched_overrides"],
-        "summary": {
-            "applied": len(applied),
-            "left": len(left),
-            "overridden": len(overridden),
-        },
     }
 
 
 def ignored_payload_paths(
-    destination: Path, template_repo: Path, target: str, subtree: str
+    destination: Path, template_repo: Path, recorded: str, target: str, subtree: str
 ) -> list[str]:
-    """Payload paths the destination's ignore rules exclude and disk holds."""
+    """Delta paths the destination's ignore rules exclude and disk holds.
+
+    Only paths the update could have written: a payload path it never touched
+    may carry a long-standing local edit, which is not this update's to prove.
+    """
+    prefix = f"{subtree.rstrip('/')}/"
+    delta = preflight.nul_fields(
+        template_repo,
+        "diff",
+        "--name-only",
+        "--diff-filter=d",
+        "-z",
+        "--find-renames",
+        recorded,
+        target,
+        "--",
+        subtree,
+    )
     paths = [
         path
-        for path in preflight.tree_paths(template_repo, target, subtree)
+        for path in (entry.removeprefix(prefix) for entry in delta)
         if (destination / path).is_file() or (destination / path).is_symlink()
     ]
     if not paths:
@@ -215,7 +266,10 @@ def prove_copies(arguments: argparse.Namespace) -> dict[str, object]:
     staged = preflight.nul_fields(
         destination, "diff", "--cached", "--name-only", "--diff-filter=d", "-z"
     )
-    ignored = ignored_payload_paths(destination, template_repo, target, subtree)
+    recorded = preflight.resolve_commit(template_repo, str(template["commit"]))
+    ignored = ignored_payload_paths(
+        destination, template_repo, recorded, target, subtree
+    )
     paths = sorted({*staged, *ignored, MANIFEST})
     authored: list[str] = []
     for path in paths:
@@ -256,11 +310,13 @@ def advance_commit(arguments: argparse.Namespace) -> dict[str, object]:
     assert isinstance(template, dict)
     old = str(template["commit"])
     text = path.read_text(encoding="utf-8")
-    if text.count(old) != 1:
+    pair = re.compile(rf'("commit"\s*:\s*"){re.escape(old)}(")')
+    found = len(pair.findall(text))
+    if found != 1:
         raise PreflightError(
-            f"{MANIFEST} holds {old} {text.count(old)} times; refusing to rewrite it"
+            f'{MANIFEST} holds {found} "commit": "{old}" pairs; refusing to rewrite it'
         )
-    path.write_text(text.replace(old, new), encoding="utf-8")
+    path.write_text(pair.sub(lambda m: f"{m[1]}{new}{m[2]}", text), encoding="utf-8")
     try:
         preflight.validate_manifest(path)
     except PreflightError:

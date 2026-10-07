@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -21,6 +22,16 @@ OWNERSHIP = [
     {"path": "docs/**", "mode": "managed"},
     {"path": "apps/**", "mode": "product"},
 ]
+
+
+def load_module() -> Any:
+    sys.path.insert(0, str(MODULE_PATH.parent))
+    try:
+        import update
+
+        return update
+    finally:
+        sys.path.remove(str(MODULE_PATH.parent))
 
 
 def run(*arguments: str) -> subprocess.CompletedProcess[str]:
@@ -177,9 +188,13 @@ class ApplyTests(unittest.TestCase):
                 "scripts/mode",
                 "scripts/absent",
                 "scripts/overridden",
+                "scripts/expired",
+                "scripts/gone-already",
                 "apps/product",
+                "apps/pmove",
                 ".github/workflows/ci.yml",
                 ".github/dependabot.yml",
+                ".github/PULL_REQUEST_TEMPLATE.md",
             )
         }
         cls.fixture = Fixture(
@@ -193,33 +208,40 @@ class ApplyTests(unittest.TestCase):
                 "scripts/mode": NEW,
                 "scripts/absent": NEW,
                 "scripts/overridden": NEW,
+                "scripts/expired": NEW,
+                "scripts/gone-already": None,
+                ".github/PULL_REQUEST_TEMPLATE.md": None,
                 "scripts/added": NEW,
                 "scripts/added-script": NEW,
                 "apps/product": NEW,
                 ".github/workflows/ci.yml": NEW,
                 ".github/dependabot.yml": NEW,
             },
-            moves={"scripts/legacy": "scripts/renamed"},
+            moves={
+                "scripts/legacy": "scripts/renamed",
+                "apps/pmove": "scripts/from-product",
+            },
             held={
                 "scripts/modified": "destination edit\n",
                 "scripts/deleted-modified": "destination edit\n",
                 "scripts/absent": None,
                 "scripts/overridden": "destination edit\n",
+                "scripts/expired": None,
+                "scripts/gone-already": None,
                 ".github/workflows/ci.yml": "destination edit\n",
+                ".github/PULL_REQUEST_TEMPLATE.md": "destination edit\n",
             },
             executable=frozenset({"scripts/mode", "scripts/added-script"}),
-            overrides=[{"path": "scripts/overridden", "reason": "ours"}],
+            overrides=[
+                {"path": "scripts/overridden", "reason": "ours"},
+                {"path": "scripts/expired", "reason": "gone since"},
+            ],
         )
         cls.result = cls.fixture.command("apply")
 
     @classmethod
     def tearDownClass(cls) -> None:
         cls.directory.cleanup()
-
-    def applied(self) -> dict[str, dict[str, str]]:
-        entries = self.result["applied"]
-        assert isinstance(entries, list)
-        return {entry["path"]: entry for entry in entries}
 
     def left(self) -> dict[str, dict[str, str]]:
         entries = self.result["left"]
@@ -230,23 +252,17 @@ class ApplyTests(unittest.TestCase):
         return (self.fixture.destination / path).read_text()
 
     def test_an_unmodified_path_takes_the_payload(self) -> None:
-        self.assertEqual(self.applied()["scripts/unmodified"]["action"], "write")
         self.assertEqual(self.read("scripts/unmodified"), NEW)
 
     def test_an_unmodified_deletion_is_deleted_and_staged(self) -> None:
-        self.assertEqual(self.applied()["scripts/deleted"]["action"], "delete")
         self.assertFalse((self.fixture.destination / "scripts/deleted").exists())
         self.assertEqual(self.fixture.staged()["scripts/deleted"], "D")
 
     def test_an_unmodified_rename_moves_the_file(self) -> None:
-        entry = self.applied()["scripts/renamed"]
-        self.assertEqual(entry["action"], "move")
-        self.assertEqual(entry["old_path"], "scripts/legacy")
         self.assertFalse((self.fixture.destination / "scripts/legacy").exists())
         self.assertEqual(self.read("scripts/renamed"), "scripts/legacy v1\n")
 
     def test_an_absent_add_writes_the_payload(self) -> None:
-        self.assertEqual(self.applied()["scripts/added"]["action"], "write")
         self.assertEqual(self.read("scripts/added"), NEW)
         self.assertEqual(self.fixture.staged()["scripts/added"], "A")
 
@@ -279,18 +295,45 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(self.read("apps/product"), "apps/product v1\n")
 
     def test_an_overridden_path_is_reported_and_skipped(self) -> None:
-        overridden = self.result["overridden"]
-        assert isinstance(overridden, list)
         self.assertEqual(
-            [entry["path"] for entry in overridden], ["scripts/overridden"]
+            self.result["overridden"],
+            [{"path": "scripts/overridden", "reason": "ours"}],
         )
-        self.assertNotIn("scripts/overridden", self.applied())
         self.assertNotIn("scripts/overridden", self.left())
         self.assertEqual(self.read("scripts/overridden"), "destination edit\n")
 
     def test_the_automation_directory_is_replaced_even_when_modified(self) -> None:
-        self.assertEqual(self.applied()[".github/workflows/ci.yml"]["action"], "write")
         self.assertEqual(self.read(".github/workflows/ci.yml"), NEW)
+
+    def test_destination_edits_the_automation_replacement_discards_are_named(
+        self,
+    ) -> None:
+        self.assertEqual(
+            self.result["discarded"],
+            [
+                {"path": ".github/PULL_REQUEST_TEMPLATE.md", "action": "delete"},
+                {"path": ".github/workflows/ci.yml", "action": "write"},
+            ],
+        )
+        self.assertFalse(
+            (self.fixture.destination / ".github/PULL_REQUEST_TEMPLATE.md").exists()
+        )
+
+    def test_an_expired_override_takes_the_payload(self) -> None:
+        self.assertEqual(self.read("scripts/expired"), NEW)
+        self.assertEqual(self.fixture.staged()["scripts/expired"], "A")
+        self.assertNotIn("scripts/expired", self.left())
+
+    def test_a_deletion_the_destination_already_made_is_applied_as_a_no_op(
+        self,
+    ) -> None:
+        self.assertNotIn("scripts/gone-already", self.left())
+        self.assertFalse((self.fixture.destination / "scripts/gone-already").exists())
+
+    def test_a_rename_from_a_product_owned_path_keeps_its_old_path(self) -> None:
+        self.assertEqual(self.left()["scripts/from-product"]["reason"], "product-owned")
+        self.assertEqual(self.read("apps/pmove"), "apps/pmove v1\n")
+        self.assertFalse((self.fixture.destination / "scripts/from-product").exists())
 
     def test_dependabot_is_left_for_derivation(self) -> None:
         self.assertEqual(self.left()[".github/dependabot.yml"]["reason"], "derive")
@@ -307,9 +350,10 @@ class ApplyTests(unittest.TestCase):
         )
         self.assertTrue(modes.startswith("100755"))
 
-    def test_the_summary_counts_each_outcome(self) -> None:
+    def test_applied_is_counted_by_action(self) -> None:
         self.assertEqual(
-            self.result["summary"], {"applied": 7, "left": 5, "overridden": 1}
+            self.result["applied"],
+            {"already-absent": 1, "delete": 2, "move": 1, "write": 6},
         )
 
     def test_the_output_carries_the_preflight_blocks(self) -> None:
@@ -378,6 +422,29 @@ class ApplyEdgeTests(unittest.TestCase):
             self.assertEqual((fixture.destination / "docs/local.md").read_text(), NEW)
             self.assertEqual(fixture.staged(), {"scripts/keep": "M"})
 
+    def test_an_expired_rename_writes_the_new_path_and_removes_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                directory,
+                {"scripts/old": OLD},
+                {},
+                moves={"scripts/old": "scripts/new"},
+                held={"scripts/old": None},
+                overrides=[{"path": "scripts/old", "reason": "gone"}],
+            )
+
+            result = fixture.command("apply")
+
+            self.assertEqual(result["applied"], {"move": 1})
+            self.assertEqual((fixture.destination / "scripts/new").read_text(), OLD)
+
+    def test_a_git_failure_reading_the_ignore_rules_is_a_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            module = load_module()
+
+            with self.assertRaises(module.PreflightError):
+                module.is_ignored(Path(directory), "scripts/a")
+
     def test_preflight_failures_are_failures_of_the_command(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = Fixture(directory, {"scripts/a": OLD}, {"scripts/a": NEW})
@@ -430,6 +497,22 @@ class ProofTests(unittest.TestCase):
             self.assertEqual(result["total"], 4)
             self.assertEqual(result["identical"], 2)
 
+    def test_an_ignored_path_the_update_never_touched_is_not_proved(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                directory,
+                {"scripts/keep": OLD, "docs/standing": OLD},
+                {"scripts/keep": NEW},
+                ignore="docs/standing\n",
+            )
+            fixture.command("apply")
+            (fixture.destination / "docs/standing").write_text("local edit\n")
+
+            result = fixture.command("proof")
+
+            self.assertEqual(result["authored"], [".repo-template.json"])
+            self.assertEqual(result["total"], 2)
+
     def test_a_deleted_path_is_not_compared(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = Fixture(
@@ -470,19 +553,39 @@ class AdvanceTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(json.loads(result.stdout)["new_commit"], fixture.target)
 
-    def test_a_commit_that_occurs_twice_is_refused(self) -> None:
+    def test_the_old_commit_in_another_field_is_left_alone(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = Fixture(directory, {"scripts/a": OLD}, {"scripts/a": NEW})
             record = fixture.destination / ".repo-template.json"
             manifest = json.loads(record.read_text())
-            manifest["generation"]["note"] = fixture.old_commit
+            manifest["generation"]["overrides"] = [
+                {"path": "scripts/a", "reason": f"kept since {fixture.old_commit}"}
+            ]
+            record.write_text(json.dumps(manifest, indent=4) + "\n")
+            git("commit", "-q", "-am", "note", cwd=fixture.destination)
+
+            result = fixture.command("advance")
+
+            self.assertEqual(result["new_commit"], fixture.target)
+            written = json.loads(record.read_text())
+            self.assertEqual(written["template"]["commit"], fixture.target)
+            self.assertIn(
+                fixture.old_commit, written["generation"]["overrides"][0]["reason"]
+            )
+
+    def test_a_commit_pair_that_occurs_twice_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(directory, {"scripts/a": OLD}, {"scripts/a": NEW})
+            record = fixture.destination / ".repo-template.json"
+            manifest = json.loads(record.read_text())
+            manifest["generation"]["twin"] = {"commit": fixture.old_commit}
             record.write_text(json.dumps(manifest, indent=4) + "\n")
             before = record.read_text()
 
             result = run("advance", *fixture.arguments())
 
             self.assertEqual(result.returncode, 2)
-            self.assertIn("2 times", result.stderr)
+            self.assertIn("holds 2", result.stderr)
             self.assertEqual(record.read_text(), before)
 
     def test_a_missing_manifest_is_refused(self) -> None:
