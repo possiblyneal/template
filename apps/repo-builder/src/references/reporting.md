@@ -18,7 +18,7 @@ git -C "<destination>" diff --cached --name-only --diff-filter=d |
   done
 ```
 
-`<commit>` and `<prefix>` are each flow's own. Generate and update read the payload subtree at the target commit; adopt reads `repository-addons/` at the recorded commit, which is a sibling of the subtree rather than inside it. Where the template renamed a file its two names are two paths, so read the destination path against the payload's new one. A path `cat-file` cannot find was never a copy, and belongs to the authored surface instead.
+An update runs this proof with `update.py proof` rather than by hand. `<commit>` and `<prefix>` are each flow's own. Generate and update read the payload subtree at the target commit; adopt reads `repository-addons/` at the recorded commit, which is a sibling of the subtree rather than inside it. Where the template renamed a file its two names are two paths, so read the destination path against the payload's new one. A path `cat-file` cannot find was never a copy, and belongs to the authored surface instead.
 
 **Payload paths the destination's ignore file excludes are outside this loop**, and there are always some — the payload ships `.env` and its agent configuration that way. `--cached` never lists them, and resolving them through the destination's own object database fails for the same reason, so a count taken from this loop alone has a smaller denominator than the set the flow wrote and the two do not reconcile for a reader. Prove those against disk instead, comparing `git -C "<destination>" hash-object "<path>"` with `git -C "<template>" rev-parse "<commit>:<prefix>/<path>"`, and report one count over the whole set.
 
