@@ -272,6 +272,8 @@ class ProofsTests(unittest.TestCase):
             git("add", "-A", cwd=destination)
             # Untracked and not ignored holds the directory open just the same.
             (destination / "src/notes.txt").write_text("mine\n")
+            # The operator's own setting does not hide residue from the record.
+            git("config", "status.showUntrackedFiles", "no", cwd=destination)
             prefix = Path(directory) / "ledger.aaaaaaaaaaaa"
             result = run(*self._arguments(fixture, prefix))
 
@@ -286,8 +288,13 @@ class ProofsTests(unittest.TestCase):
             self.assertEqual(report["preserved"], [])
             emptied = {item["path"]: item["residue"] for item in report["emptied"]}
             self.assertEqual(emptied["tests"], [])
-            self.assertIn("src/notes.txt", emptied["src"])
-            self.assertTrue(all(path.startswith("src/") for path in emptied["src"]))
+            self.assertEqual(
+                sorted(emptied["src"]), ["src/__pycache__/rates.pyc", "src/notes.txt"]
+            )
+            # The summary is one entry per directory holding nothing tracked;
+            # the move is staged in this clone, so `src/` is one.
+            summary = {item["path"]: item["summary"] for item in report["emptied"]}
+            self.assertEqual(summary["src"], ["src/", "src/__pycache__/"])
             self.assertEqual(
                 report["workflows_without_pull_request"],
                 [".github/workflows/release.yml"],
@@ -1126,9 +1133,10 @@ class SyncTests(unittest.TestCase):
             "emptied": [
                 {
                     "path": "src",
-                    "residue": ["src/ledger/__pycache__/", "src/notes.txt"],
+                    "residue": ["src/ledger/__pycache__/rates.pyc", "src/notes.txt"],
+                    "summary": ["src/ledger/__pycache__/", "src/notes.txt"],
                 },
-                {"path": "tests", "residue": []},
+                {"path": "tests", "residue": [], "summary": []},
             ]
         }
         Path(directory, "records.proofs.json").write_text(json.dumps(proofs))
@@ -1162,10 +1170,7 @@ class SyncTests(unittest.TestCase):
                 [
                     {
                         "path": "src",
-                        "residue": [
-                            "src/ledger/__pycache__/rates.pyc",
-                            "src/notes.txt",
-                        ],
+                        "residue": ["src/ledger/__pycache__/", "src/notes.txt"],
                     }
                 ],
             )
@@ -1221,6 +1226,17 @@ class SyncTests(unittest.TestCase):
             )
             self.assertEqual(report["kept"], ["src"])
             self.assertTrue((clone / "src/save.dat").is_file())
+
+    def test_keeps_a_directory_whose_summarized_residue_gained_a_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            clone = self._merged(directory)
+            (clone / "src/ledger/__pycache__/late.pyc").write_text("new\n")
+
+            report = self._sync(directory, clone)
+
+            self.assertEqual(report["removed"], [])
+            self.assertEqual(report["kept"], ["src"])
+            self.assertTrue((clone / "src/ledger/__pycache__/late.pyc").is_file())
 
     def test_a_rerun_records_a_removed_directory_as_gone(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -2318,8 +2334,8 @@ PROOFS = {
     "replaced": ["README.md"],
     "overridden": [{"path": "README.md", "reason": "the product's own front page"}],
     "emptied": [
-        {"path": "docs/adr", "residue": []},
-        {"path": "src", "residue": []},
+        {"path": "docs/adr", "residue": [], "summary": []},
+        {"path": "src", "residue": [], "summary": []},
     ],
     "workflows_without_pull_request": [".github/workflows/release.yml"],
 }
@@ -3131,7 +3147,13 @@ class RecordedLinesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             proofs = {
                 **PROOFS,
-                "emptied": [{"path": "src", "residue": ["src/__pycache__/"]}],
+                "emptied": [
+                    {
+                        "path": "src",
+                        "residue": ["src/__pycache__/x.pyc"],
+                        "summary": ["src/__pycache__/"],
+                    }
+                ],
             }
             lines, _ = render_report(
                 self,
@@ -3196,12 +3218,18 @@ class RecordedLinesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             proofs = {
                 **PROOFS,
-                "emptied": [{"path": "src", "residue": ["src/__pycache__/"]}],
+                "emptied": [
+                    {
+                        "path": "src",
+                        "residue": ["src/__pycache__/x.pyc"],
+                        "summary": ["src/__pycache__/"],
+                    }
+                ],
             }
             synced = {
                 "pulled": True,
                 "head": "1234567890ab" + "0" * 28,
-                "removed": [{"path": "src", "residue": ["src/__pycache__/x.pyc"]}],
+                "removed": [{"path": "src", "residue": ["src/__pycache__/"]}],
                 "findings": [],
             }
             lines, _ = render_report(
@@ -3210,7 +3238,7 @@ class RecordedLinesTests(unittest.TestCase):
 
             self.assertIn(
                 "- Directories emptied by a move: src: removed from the clone after "
-                "the pull, with src/__pycache__/x.pyc inside",
+                "the pull, with src/__pycache__/ inside",
                 lines,
             )
             self.assertIn("- Operator's clone: fast-forwarded to 1234567890ab", lines)
@@ -3220,7 +3248,10 @@ class RecordedLinesTests(unittest.TestCase):
 
     def test_reads_a_kept_directory_as_kept(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            proofs = {**PROOFS, "emptied": [{"path": "src", "residue": []}]}
+            proofs = {
+                **PROOFS,
+                "emptied": [{"path": "src", "residue": [], "summary": []}],
+            }
             synced = {
                 "pulled": True,
                 "head": "1234567890ab" + "0" * 28,
@@ -3243,7 +3274,13 @@ class RecordedLinesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             proofs = {
                 **PROOFS,
-                "emptied": [{"path": "src", "residue": ["src/__pycache__/"]}],
+                "emptied": [
+                    {
+                        "path": "src",
+                        "residue": ["src/__pycache__/x.pyc"],
+                        "summary": ["src/__pycache__/"],
+                    }
+                ],
             }
             synced = {
                 "pulled": True,
