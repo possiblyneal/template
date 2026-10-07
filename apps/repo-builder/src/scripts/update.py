@@ -168,20 +168,23 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
     )
 
     applied: dict[str, int] = {}
+    removed: list[dict[str, str]] = []
     discarded: list[dict[str, str]] = []
     left: list[dict[str, str]] = []
     overridden: list[dict[str, str]] = []
+    refused_overrides: list[dict[str, str]] = []
     changes = result["changes"]
     assert isinstance(changes, list)
     for change in changes:
         if change.get("overridden"):
-            overridden.append(
-                {
-                    "path": str(change["path"]),
-                    "reason": str(change.get("override_reason")),
-                }
-            )
-            continue
+            entry = {
+                "path": str(change["path"]),
+                "reason": str(change.get("override_reason")),
+            }
+            if not entry["path"].startswith(AUTOMATION_PREFIX):
+                overridden.append(entry)
+                continue
+            refused_overrides.append(entry)
         reason = left_reason(change, codeql_omitted, rules)
         if reason:
             left.append(
@@ -195,19 +198,23 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
             continue
         landed = apply_one(change, destination, template_repo, target, subtree)
         applied[landed["action"]] = applied.get(landed["action"], 0) + 1
+        if landed["action"] != "write":
+            removed.append(landed)
         lost = landed.get("old_path", landed["path"])
         if lost.startswith(AUTOMATION_PREFIX) and (
             change.get("destination_state") == "modified"
         ):
-            discarded.append({"path": lost, "action": landed["action"]})
+            discarded.append(landed)
     return {
         "operation": "update-apply",
         "template": template,
         "destination": result["destination"],
         "applied": dict(sorted(applied.items())),
+        "removed": removed,
         "discarded": discarded,
         "left": left,
         "overridden": overridden,
+        "refused_overrides": refused_overrides,
         "unmatched_overrides": result["unmatched_overrides"],
     }
 

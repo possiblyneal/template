@@ -356,6 +356,21 @@ class ApplyTests(unittest.TestCase):
             {"already-absent": 1, "delete": 2, "move": 1, "write": 6},
         )
 
+    def test_every_removal_is_named_for_the_reference_grep(self) -> None:
+        self.assertEqual(
+            self.result["removed"],
+            [
+                {"path": ".github/PULL_REQUEST_TEMPLATE.md", "action": "delete"},
+                {"path": "scripts/deleted", "action": "delete"},
+                {"path": "scripts/gone-already", "action": "already-absent"},
+                {
+                    "path": "scripts/renamed",
+                    "action": "move",
+                    "old_path": "scripts/legacy",
+                },
+            ],
+        )
+
     def test_the_output_carries_the_preflight_blocks(self) -> None:
         template = self.result["template"]
         assert isinstance(template, dict)
@@ -406,6 +421,52 @@ class ApplyEdgeTests(unittest.TestCase):
             )
             self.assertEqual(
                 (fixture.destination / ".github/workflows/new.yml").read_text(), OLD
+            )
+
+    def test_a_discarded_automation_move_names_both_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                directory,
+                {".github/workflows/old.yml": OLD},
+                {},
+                moves={".github/workflows/old.yml": ".github/workflows/new.yml"},
+                held={".github/workflows/old.yml": "destination edit\n"},
+            )
+
+            result = fixture.command("apply")
+
+            self.assertEqual(
+                result["discarded"],
+                [
+                    {
+                        "path": ".github/workflows/new.yml",
+                        "action": "move",
+                        "old_path": ".github/workflows/old.yml",
+                    }
+                ],
+            )
+
+    def test_an_override_on_the_automation_directory_is_refused_and_landed(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                directory,
+                {".github/workflows/ci.yml": OLD},
+                {".github/workflows/ci.yml": NEW},
+                held={".github/workflows/ci.yml": "destination edit\n"},
+                overrides=[{"path": ".github/workflows/ci.yml", "reason": "ours"}],
+            )
+
+            result = fixture.command("apply")
+
+            self.assertEqual(
+                result["refused_overrides"],
+                [{"path": ".github/workflows/ci.yml", "reason": "ours"}],
+            )
+            self.assertEqual(result["overridden"], [])
+            self.assertEqual(
+                (fixture.destination / ".github/workflows/ci.yml").read_text(), NEW
             )
 
     def test_an_ignored_path_is_written_to_disk_and_not_staged(self) -> None:
