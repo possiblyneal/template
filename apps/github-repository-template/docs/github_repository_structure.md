@@ -19,7 +19,7 @@ Every job in all four workflows takes its runner from a `RUNNER` repository vari
 
 `.github/zizmor.yml`: Configuration for zizmor, a GitHub Actions workflow security linter run through pre-commit.
 
-`.github/dependabot.yml`: Opens one grouped weekly pull request per ecosystem — the pinned action versions in `.github/`, the hook revisions in `.pre-commit-config.yaml`, and one entry per language manifest the repository tracks, which every `/repo-builder` flow derives rather than shipping.
+`.github/dependabot.yml`: Opens one grouped weekly pull request per ecosystem — the pinned action versions in `.github/`, the hook revisions in `.pre-commit-config.yaml`, one entry per language manifest the repository tracks, and one per directory holding a Dockerfile or Containerfile, which every `/repo-builder` flow derives rather than shipping.
 
 `.github/ISSUE_TEMPLATE/`: Structured issue forms — `bug_report.yml`, `feature_request.yml`, and `config.yml`, which disables blank issues and carries a commented-out `contact_links` block to uncomment once a destination for questions exists.
 

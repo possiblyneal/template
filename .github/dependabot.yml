@@ -1,9 +1,9 @@
 # Only the ecosystems whose manifests this template ships are listed. An entry
 # naming a manifest that is not there fails the run with dependency_file_not_found
-# rather than being skipped, so npm, pip, cargo, gomod, gradle, and swift cannot
-# be listed ahead of the manifest that would justify one.
+# rather than being skipped, so npm, pip, cargo, gomod, gradle, swift, and docker
+# cannot be listed ahead of the manifest that would justify one.
 #
-# Every /repo-builder flow that writes this file derives the language entries
+# Every /repo-builder flow that writes this file derives the ecosystem entries
 # from the manifests the repository tracks and appends them below, re-deriving
 # the whole set each run -- so an entry survives by being rebuilt rather than by
 # being carried, and this file being replaced whole by an update cannot drop it.
@@ -13,23 +13,26 @@
 #
 # The ecosystem per manifest: npm for package.json, pip for pyproject.toml,
 # gomod for go.mod, cargo for Cargo.toml, gradle for build.gradle.kts, swift for
-# Package.swift. go.work and settings.gradle.kts are workspace files and earn no
-# entry of their own; they say where the modules are, and the modules are what
-# Dependabot reads. A pyproject.toml beside a uv.lock earns uv instead of pip,
-# since pip's updater leaves uv.lock pinning the old version.
+# Package.swift, and docker for a Dockerfile or Containerfile, one entry per
+# directory holding any, since the docker updater reads every such file there.
+# go.work and settings.gradle.kts are workspace files and earn no entry of their
+# own; they say where the modules are, and the modules are what Dependabot
+# reads. A pyproject.toml beside a uv.lock earns uv instead of pip, since pip's
+# updater leaves uv.lock pinning the old version.
 #
-# A workspace is the one case where several manifests take a single entry. The
-# root Cargo.toml holding [workspace], the root pyproject.toml holding
+# A workspace also takes a single entry for several manifests. The root
+# Cargo.toml holding [workspace], the root pyproject.toml holding
 # [tool.uv.workspace], or the root package.json holding workspaces, earns it and
 # a member listed there earns none: the fetcher reads that list and bumps every
-# member from the root's job, moving the root lockfile with it. A member entry opens a duplicate pull
-# request, and where a cargo member pins its own versions rather than
-# inheriting with { workspace = true } that job sees no lockfile at all.
+# member from the root's job, moving the root lockfile with it. A member entry
+# opens a duplicate pull request, and where a cargo member pins its own versions
+# rather than inheriting with { workspace = true } that job sees no lockfile at
+# all.
 #
-# An entry for an ecosystem outside that list -- docker, terraform, nuget and
-# the rest Dependabot supports -- stays yours to keep here. The derivation
-# rebuilds only what it maps, so a flow reads this file before replacing it and
-# reports such an entry by name on its gate rather than dropping it silently.
+# An entry for an ecosystem outside that list -- terraform, nuget and the rest
+# Dependabot supports -- stays yours to keep here. The derivation rebuilds only
+# what it maps, so a flow reads this file before replacing it and reports such
+# an entry by name on its gate rather than dropping it silently.
 #
 # This file governs version updates, the scheduled bumps for dependencies with
 # nothing wrong with them. Security updates are a separate feature that reads

@@ -212,11 +212,11 @@ else
 fi
 
 
-# The decision the operator made: the six the template detects and no seventh.
-# A manifest outside that vocabulary is a shape the rest of the checks cannot
-# see, and reporting it here would promise an entry the derivation will not
-# write.
-fixture "a manifest outside the six is not reported" "$VERSION
+# The decision the operator made: the six the template detects, plus docker for
+# the Containerfiles the layout gives a place, and nothing else. A manifest
+# outside that vocabulary is a shape the rest of the checks cannot see, and
+# reporting it here would promise an entry the derivation will not write.
+fixture "a manifest outside the mapped set is not reported" "$VERSION
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -464,6 +464,53 @@ if [[ -z "$got" ]]; then
   pass
 else
   fail "reported '$got', so the root uv.lock claimed a nested manifest"
+fi
+
+
+# Base-image pins live in Containerfiles, and the layout gives them
+# deploy/containerfile/. Dependabot's docker fetcher reads every Dockerfile or
+# Containerfile in the entry's directory, so one entry covers all of them there.
+fixture "a docker entry covers every Containerfile in its directory" "$VERSION
+  - package-ecosystem: docker
+    directory: /deploy/containerfile
+    schedule:
+      interval: weekly" deploy/containerfile/Containerfile \
+  deploy/containerfile/backend.Containerfile deploy/containerfile/Dockerfile.dev
+got="$(unwatched_in)"
+if [[ -z "$got" ]]; then
+  pass
+else
+  fail "reported '$got' for Containerfiles whose docker entry is right there"
+fi
+
+
+fixture "a Containerfile with no docker entry is reported" "$VERSION
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly" apps/svc/deploy/quadlet/Containerfile \
+  apps/svc/deploy/quadlet/svc.build deploy/containerfile/web.dockerfile
+got="$(unwatched_in)"
+if [[ "$got" == "apps/svc/deploy/quadlet/Containerfile deploy/containerfile/web.dockerfile" ]]; then
+  pass
+else
+  fail "reported '$got' rather than both unwatched Containerfiles"
+fi
+
+
+# The ignore file named for a Containerfile is not an image pin, and a file
+# that only mentions one in its name is not a Containerfile.
+fixture "a container ignore file or a notes file is not a Containerfile" "$VERSION
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly" deploy/containerfile/Containerfile.dockerignore \
+  docs/containerfile-notes.md
+got="$(unwatched_in)"
+if [[ -z "$got" ]]; then
+  pass
+else
+  fail "reported '$got', which pins no base image"
 fi
 
 
