@@ -1,6 +1,6 @@
 # Repo Builder Lifecycle Contract
 
-This file holds what is true regardless of operation: the manifest, ownership, how checks are run and reported, the remote gates, and failure behavior. Reviewing and reporting are in [`reporting.md`](reporting.md), read at the end of a flow. Read this file, then the one flow being performed.
+This file holds what is true regardless of operation: the manifest, ownership, how checks are run and reported, the remote gates, and failure behavior. Reviewing and reporting are in [`reporting.md`](reporting.md), read at the end of a flow. Read this file, then the one flow being performed; a retrofit and an update read no section of it whole, since [`retrofit.md`](retrofit.md) and [`update.md`](update.md) state the rules they need inline, each linking its section for the reasoning.
 
 - [`generate.md`](generate.md) — build a repository from the payload, including into a destination that already has content
 - [`update.md`](update.md) — carry a bounded template delta into a repository already generated from it
