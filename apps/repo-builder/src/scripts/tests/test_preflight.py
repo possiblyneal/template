@@ -197,7 +197,9 @@ class PreflightUnitTests(unittest.TestCase):
 
     def test_an_override_on_the_ignore_file_is_refused(self) -> None:
         """Ownership admits it -- .gitignore is managed -- so this is the guard."""
-        with self.assertRaisesRegex(preflight.PreflightError, "merge rather than override"):
+        with self.assertRaisesRegex(
+            preflight.PreflightError, "merge rather than override"
+        ):
             preflight.refuse_merged_path_overrides(
                 {".gitignore": "the destination keeps its own"}
             )
