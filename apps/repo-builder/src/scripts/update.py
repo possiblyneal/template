@@ -159,7 +159,7 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
     target, subtree = str(template["target_commit"]), str(template["subtree"])
     destination = arguments.destination.resolve()
     template_repo = arguments.template_repo.resolve()
-    manifest, rules, _ = preflight.validate_manifest(destination / MANIFEST)
+    manifest, rules, overrides = preflight.validate_manifest(destination / MANIFEST)
     generation = manifest.get("generation", {})
     assert isinstance(generation, dict)
     features = generation.get("features", {})
@@ -172,19 +172,28 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
     discarded: list[dict[str, str]] = []
     left: list[dict[str, str]] = []
     overridden: list[dict[str, str]] = []
-    refused_overrides: list[dict[str, str]] = []
+    unmatched = result["unmatched_overrides"]
+    assert isinstance(unmatched, list)
+    refused_overrides = [
+        {"path": entry["path"], "reason": entry["reason"]}
+        for entry in unmatched
+        if entry["path"].startswith(AUTOMATION_PREFIX)
+    ]
     changes = result["changes"]
     assert isinstance(changes, list)
     for change in changes:
+        refused = False
         if change.get("overridden"):
+            path = str(change["path"])
             entry = {
-                "path": str(change["path"]),
+                "path": path if path in overrides else str(change["old_path"]),
                 "reason": str(change.get("override_reason")),
             }
-            if not entry["path"].startswith(AUTOMATION_PREFIX):
+            if not path.startswith(AUTOMATION_PREFIX):
                 overridden.append(entry)
                 continue
             refused_overrides.append(entry)
+            refused = True
         reason = left_reason(change, codeql_omitted, rules)
         if reason:
             left.append(
@@ -202,7 +211,7 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
             removed.append(landed)
         lost = landed.get("old_path", landed["path"])
         if lost.startswith(AUTOMATION_PREFIX) and (
-            change.get("destination_state") == "modified"
+            refused or change.get("destination_state") == "modified"
         ):
             discarded.append(landed)
     return {
@@ -215,7 +224,11 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
         "left": left,
         "overridden": overridden,
         "refused_overrides": refused_overrides,
-        "unmatched_overrides": result["unmatched_overrides"],
+        "unmatched_overrides": [
+            entry
+            for entry in unmatched
+            if not entry["path"].startswith(AUTOMATION_PREFIX)
+        ],
     }
 
 

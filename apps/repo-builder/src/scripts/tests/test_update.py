@@ -468,6 +468,47 @@ class ApplyEdgeTests(unittest.TestCase):
             self.assertEqual(
                 (fixture.destination / ".github/workflows/ci.yml").read_text(), NEW
             )
+            self.assertEqual(
+                result["discarded"],
+                [{"path": ".github/workflows/ci.yml", "action": "write"}],
+            )
+
+    def test_an_automation_override_on_a_rename_names_the_recorded_path(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                directory,
+                {".github/workflows/old.yml": OLD},
+                {},
+                moves={".github/workflows/old.yml": ".github/workflows/new.yml"},
+                held={".github/workflows/old.yml": "destination edit\n"},
+                overrides=[{"path": ".github/workflows/old.yml", "reason": "ours"}],
+            )
+
+            result = fixture.command("apply")
+
+            self.assertEqual(
+                result["refused_overrides"],
+                [{"path": ".github/workflows/old.yml", "reason": "ours"}],
+            )
+
+    def test_an_automation_override_outside_the_delta_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                directory,
+                {"scripts/a": OLD, ".github/workflows/ci.yml": OLD},
+                {"scripts/a": NEW},
+                overrides=[{"path": ".github/workflows/ci.yml", "reason": "ours"}],
+            )
+
+            result = fixture.command("apply")
+
+            self.assertEqual(
+                result["refused_overrides"],
+                [{"path": ".github/workflows/ci.yml", "reason": "ours"}],
+            )
+            self.assertEqual(result["unmatched_overrides"], [])
 
     def test_an_ignored_path_is_written_to_disk_and_not_staged(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
