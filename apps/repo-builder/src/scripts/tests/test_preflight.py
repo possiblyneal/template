@@ -197,13 +197,13 @@ class PreflightUnitTests(unittest.TestCase):
 
     def test_an_override_on_the_ignore_file_is_refused(self) -> None:
         """Ownership admits it -- .gitignore is managed -- so this is the guard."""
-        with self.assertRaisesRegex(preflight.PreflightError, "replace outright"):
-            preflight.refuse_replaced_outright_overrides(
+        with self.assertRaisesRegex(preflight.PreflightError, "merge rather than override"):
+            preflight.refuse_merged_path_overrides(
                 {".gitignore": "the destination keeps its own"}
             )
 
     def test_an_override_on_another_managed_path_still_passes(self) -> None:
-        preflight.refuse_replaced_outright_overrides({".claude/settings.json": "kept"})
+        preflight.refuse_merged_path_overrides({".claude/settings.json": "kept"})
 
     def test_an_override_the_delta_reaches_is_not_reported_as_unmatched(self) -> None:
         changes = preflight.parse_name_status(
