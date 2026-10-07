@@ -166,6 +166,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # Go's autobuild runs whatever `go` is on PATH, and without this that is
+      # the one CodeQL's bundle carries, which trails the current release. A
+      # module whose go directive is newer refuses to build under it and the
+      # scan fails before analyzing anything. `stable` rather than a version
+      # file: the matrix has one go entry for the whole repository, which may
+      # hold several modules and no go.work, and the newest release satisfies
+      # every directive among them. It is also what setup-toolchains and
+      # security.yml install, so the scan builds with the toolchain CI checks.
+      - name: Set up Go
+        if: matrix.language == 'go'
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
