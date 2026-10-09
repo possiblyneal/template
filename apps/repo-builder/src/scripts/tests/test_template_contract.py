@@ -150,6 +150,7 @@ class TemplateContractTest(unittest.TestCase):
         if such_as is None:
             self.fail("the Commands section lost its `ls scripts/` line")
         names |= set(CODE_SPAN.findall(such_as.group(1)))
+        self.assertTrue(names, "the Commands section names no command")
         for name in sorted(names):
             script = PAYLOAD / "scripts" / name
             with self.subTest(command=name):
