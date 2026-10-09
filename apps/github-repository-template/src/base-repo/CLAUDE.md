@@ -1,3 +1,44 @@
+## Template Contract
+
+These sections are identical in every repository built from the template. Do not edit them here: a repository whose shape needs to differ has found a gap in the template, so fix it there and let the next update carry it. This repository's own instructions start at Purpose.
+
+### Commands
+
+Use these instead of per-language tools. Each runs for every language present and reports `pass`, `not-applicable`, `unavailable`, or `FAIL`.
+
+- `scripts/check` — the full local gate CI runs: lint, format, type check, test, build, security audit, pre-commit over every file
+- `scripts/fix` — lint autofix, then formatting
+- `scripts/summarize <command…>` — run a check and print only its Result table; read `check` output through this
+- `scripts/run [unit] [--entry <name>] [-- args…]` — start a unit; the unit name is required when `apps/` holds several
+
+`ls scripts/` lists the rest, such as `doctor`, `integration`, and `package`.
+
+### Layout
+
+`scripts/structure` enforces these on every commit.
+
+- Root holds only `apps/`, `docs/`, `libs/`, `scripts/`, `tests/`, `tools/`, `deploy/`, `assets/`, `gradle/`, `tmp/`, and the dot-folders `.claude/`, `.github/`, `.devcontainer/`. Root-level `libs/`, `tests/`, `scripts/`, `tools/`, `deploy/`, and `assets/` hold only what spans several units.
+- A root file not on the allowlist in `scripts/structure` needs an entry in `.structure-allow`.
+- `apps/<unit>/` is one unit: the smallest piece delivered on its own. Its code goes in `apps/<unit>/src/`.
+- Split a unit into domains only for distinct business areas: `apps/<unit>/<domain>/src/`. A unit has `src/` or domains, never both. Domains do not nest.
+- A root, unit, or domain may hold its own `libs/`, `tests/`, `scripts/`, `tools/`, `assets/`, `docs/`, or `deploy/`, scoped to it. These never contain `src/`.
+- `deploy/` holds only `quadlet/`, `containerfile/`, `compose/`, `systemd/`, and `env/`.
+- `docs/` takes Markdown; anything else there needs `.structure-allow`.
+- Below a `src/`, the language decides the layout.
+- Files a program reads go in `assets/`. Files it writes while running go in `apps/<unit>/state/`, which is gitignored.
+- `tests/integration/` is the integration tier, run by `scripts/integration` and left out of the gate.
+- A path ending in `/` in `.structure-allow` exempts that whole prefix, for vendored or fixture trees.
+
+Every unit has a `.unit.json` at its root:
+
+```json
+{ "schema_version": 1, "run": "oneshot", "ships": { "kind": "executable", "targets": ["linux-amd64"] } }
+```
+
+- `run`: `oneshot` (exits on its own), `longlived` (runs until stopped), or `none`.
+- `ships.kind`: `executable`, `quadlet`, or `none`. `ships.targets` (`linux-amd64`, `macos-arm64`) is required for `executable` and rejected otherwise.
+- Any pairing of `run` and `ships` is valid.
+
 ## Purpose
 
 ## Ownership
