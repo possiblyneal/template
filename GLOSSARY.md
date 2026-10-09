@@ -81,6 +81,12 @@ The rule that governs an addon — it arrives when a repository has a reason for
 it, not at generation.
 _Avoid_: optional, as-needed
 
+**Template Contract**:
+The opening section of a generated repository's root `CLAUDE.md` — Commands and
+Layout as bare rules, identical in every generated repository and changed only
+through the template.
+_Avoid_: template rules, shared instructions
+
 ### Flows
 
 **Flow**:

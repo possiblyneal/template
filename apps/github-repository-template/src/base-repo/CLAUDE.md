@@ -1,12 +1,12 @@
 ## Template Contract
 
-These sections are identical in every repository built from the template. Do not edit them here: a repository whose shape needs to differ has found a gap in the template, so fix it there and let the next update carry it. This repository's own instructions start at Purpose.
+These sections are identical in every repository built from the template. Do not edit them here: a repository whose shape needs to differ has found a gap in the template, so fix it there and let the next template update (`/repo-builder`) carry it. This repository's own instructions start at Purpose.
 
 ### Commands
 
-Use these instead of per-language tools. Each runs for every language present and reports `pass`, `not-applicable`, `unavailable`, or `FAIL`.
+Use these instead of per-language tools. `check` and `fix` run for every language present and report `pass`, `not-applicable`, `unavailable`, or `FAIL`.
 
-- `scripts/check` — the full local gate CI runs: lint, format, type check, test, build, security audit, pre-commit over every file
+- `scripts/check` — the full local gate, a superset of CI: doctor, script tests, structure, lint, format, type check, test, build, security audit, pre-commit over every file
 - `scripts/fix` — lint autofix, then formatting
 - `scripts/summarize <command…>` — run a check and print only its Result table; read `check` output through this
 - `scripts/run [unit] [--entry <name>] [-- args…]` — start a unit; the unit name is required when `apps/` holds several
@@ -15,21 +15,27 @@ Use these instead of per-language tools. Each runs for every language present an
 
 ### Layout
 
-`scripts/structure` enforces these on every commit.
+`scripts/check` fails on any of these; pre-commit runs `scripts/structure` over the placement rules on every commit.
 
-- Root holds only `apps/`, `docs/`, `libs/`, `scripts/`, `tests/`, `tools/`, `deploy/`, `assets/`, `gradle/`, `tmp/`, and the dot-folders `.claude/`, `.github/`, `.devcontainer/`. Root-level `libs/`, `tests/`, `scripts/`, `tools/`, `deploy/`, and `assets/` hold only what spans several units.
-- A root file not on the allowlist in `scripts/structure` needs an entry in `.structure-allow`.
-- `apps/<unit>/` is one unit: the smallest piece delivered on its own. Its code goes in `apps/<unit>/src/`.
+- Root holds only `apps/`, `docs/`, `libs/`, `scripts/`, `tests/`, `tools/`, `deploy/`, `assets/`, `gradle/`, `tmp/`, and the dot-folders `.claude/`, `.github/`, `.devcontainer/`.
+- Root files are permitted by name: the shipped dotfiles, `CLAUDE.md`, `GLOSSARY.md`, `.structure-allow`, `.repo-template.json`, adopted addons, and each language's root manifests and lockfiles. Any other root file or folder needs an entry in `.structure-allow`.
+- `apps/<unit>/` is one unit: the smallest piece delivered on its own. Its code goes in `apps/<unit>/src/`. Nothing sits directly in `apps/`.
 - Split a unit into domains only for distinct business areas: `apps/<unit>/<domain>/src/`. A unit has `src/` or domains, never both. Domains do not nest.
 - A root, unit, or domain may hold its own `libs/`, `tests/`, `scripts/`, `tools/`, `assets/`, `docs/`, or `deploy/`, scoped to it. These never contain `src/`.
+- `tools/` holds one directory per program, never loose files.
 - `deploy/` holds only `quadlet/`, `containerfile/`, `compose/`, `systemd/`, and `env/`.
 - `docs/` takes Markdown; anything else there needs `.structure-allow`.
 - Below a `src/`, the language decides the layout.
+- A path ending in `/` in `.structure-allow` exempts that whole prefix, for vendored or fixture trees.
+- A package whose language has no root manifest fails the gate; add the root workspace manifest (`go.work`, `settings.gradle.kts`, and so on) that lists it.
+
+These are conventions `scripts/structure` does not check:
+
+- Root-level `libs/`, `tests/`, `scripts/`, `tools/`, `deploy/`, and `assets/` hold only what spans several units.
 - Files a program reads go in `assets/`. Files it writes while running go in `apps/<unit>/state/`, which is gitignored.
 - `tests/integration/` is the integration tier, run by `scripts/integration` and left out of the gate.
-- A path ending in `/` in `.structure-allow` exempts that whole prefix, for vendored or fixture trees.
 
-Every unit has a `.unit.json` at its root:
+Every unit has a `.unit.json` at its root, never at a domain's:
 
 ```json
 { "schema_version": 1, "run": "oneshot", "ships": { "kind": "executable", "targets": ["linux-amd64"] } }

@@ -28,7 +28,7 @@ This repository was generated from its own payload, so the root files are that p
 
 ## Commands
 
-Use these instead of per-language tools; each detects the languages present and fails when an expected check cannot run. The payload's `CLAUDE.md` Template Contract restates this section and Layout below as bare rules; a change to either changes it too.
+Use these instead of per-language tools; each detects the languages present and fails when an expected check cannot run. The payload's `CLAUDE.md` Template Contract restates this section and Layout below as bare rules; `apps/github-repository-template/CLAUDE.md` owns keeping the two in step.
 
 - `scripts/doctor` — verify local toolchains, dependencies, hooks, and configuration without contacting hosted services
 - `scripts/repo-settings check` — inspect GitHub-hosted security and branch settings; run explicitly because it needs network access and repository administration visibility
