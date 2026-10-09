@@ -1,3 +1,18 @@
+## Mission
+
+This repository builds repositories for AI agents first and people second.
+
+Every repository generated from it shares one shape: the same folders, the same commands, the same checks, and the same kinds of docs in the same places. The only thing that differs from one repository to the next is the program itself and the files that belong to it. An addon is part of the shape too: a repository adopts it only when it has a reason to, but once adopted it sits where it sits everywhere else. An agent that has learned one repository has learned the rest, so it spends its context on the task instead of on finding its way around.
+
+Judge every structural decision by four questions:
+
+1. **Is it the same everywhere?** If a repository needs its structure to differ, that's a gap in the template. Fix it here so every repository gets the fix, rather than letting one repository drift on its own.
+2. **Can an agent find it without searching?** A file's location should follow from what the file is, so the path can be predicted before anything is opened.
+3. **Does it cost fewer tokens to understand?** The nearest `CLAUDE.md`, the glossary, and one command per job should answer what would otherwise take a sweep of the tree.
+4. **Is the work as good or better?** Saving tokens never justifies a worse result. If a shortcut makes the agent's output worse, it doesn't belong here.
+
+When something is easy for an agent to navigate, a person can usually navigate it too. Where the two needs conflict, the agent's needs win.
+
 ## What this repository is
 
 This repository builds other repositories. It holds two trees and they must not be confused:
@@ -13,7 +28,7 @@ This repository was generated from its own payload, so the root files are that p
 
 ## Commands
 
-Use these instead of per-language tools; each detects the languages present and fails when an expected check cannot run.
+Use these instead of per-language tools; each detects the languages present and fails when an expected check cannot run. The payload's `CLAUDE.md` Template Contract restates this section and Layout below as bare rules; `apps/github-repository-template/CLAUDE.md` owns keeping the two in step.
 
 - `scripts/doctor` — verify local toolchains, dependencies, hooks, and configuration without contacting hosted services
 - `scripts/repo-settings check` — inspect GitHub-hosted security and branch settings; run explicitly because it needs network access and repository administration visibility

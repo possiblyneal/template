@@ -52,3 +52,7 @@ The payload's root `CLAUDE.md` no longer carries the `## Agent skills` block thi
 The decision itself is unchanged: the three files still ship, and step 6 still confirms them. What changes is the provision, and it is not restored by anything downstream. `/wayfinder`, `/triage`, `/to-spec`, and `/to-tickets` each say the tracker "should have been provided to you"; `wayfinder/SKILL.md` then defaults to local markdown outright and the others leave it unspecified, which is the worse state of the two. So the gap lasts until something names the tracker in a file that loads automatically. The destination's indexing pass does not necessarily do it: that pass writes child `CLAUDE.md` files and a Child Index of paths, and a bullet naming `docs/CLAUDE.md` names no tracker.
 
 The exposure also starts before the destination is indexed at all. `generate.md` step 7 charts the wayfinding map, and `references/wayfinding.md` has `/wayfinder` reading `docs/agents/issue-tracker.md` — which the vendored skill does not do by path. So the generate's own charting runs in the window, which is the failure this record's Context paragraph describes. A generated repository carries the right files from its first commit and does not yet advertise them; closing that is work this amendment records rather than performs.
+
+## Amendment — 2026-10-09
+
+The payload's root `CLAUDE.md` now opens with a Template Contract — Commands and Layout — ahead of the empty section skeleton the 2026-09-22 amendment describes. The contract names no tracker, so the gap that amendment records is unchanged.

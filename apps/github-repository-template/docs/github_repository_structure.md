@@ -47,7 +47,7 @@ The specific operating parameters for the AI agent.
 
 `.mcp.json`: Configures Model Context Protocol servers for this project. Ships empty.
 
-`CLAUDE.md`: The project's system prompt — conventions, commands, and context the AI needs to operate.
+`CLAUDE.md`: The project's system prompt. Opens with the Template Contract — Commands and Layout, identical in every generated repository so an agent that knows one knows them all — then the repository's own sections and Child Index, which its first session fills.
 
 `CLAUDE.local.md`: Personal, per-machine instructions loaded alongside `CLAUDE.md`, excluded by `.gitignore`. Not shipped.
 
