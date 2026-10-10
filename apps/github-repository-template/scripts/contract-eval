@@ -178,7 +178,14 @@ run_one() {
   failed="$(jq -cn --arg task "$task" --arg arm "$arm" --argjson rep "$rep" \
     '{task: $task, arm: $arm, rep: $rep, pass: false, error: true}')"
   mkdir -p "$out/$name"
-  if ! fixture "$dir" "$arm" "$task" >"$out/$name/fixture.log" 2>&1; then
+  # Not `if ! fixture`: bash ignores set -e inside a tested command, so a
+  # failed step would leave a broken fixture counted as built.
+  local status
+  set +e
+  (set -e; fixture "$dir" "$arm" "$task") >"$out/$name/fixture.log" 2>&1
+  status=$?
+  set -e
+  if ((status)); then
     echo "$failed" >"$result"
     echo "done $name: fixture failed, see $out/$name/fixture.log"
     return
