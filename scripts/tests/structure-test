@@ -4,7 +4,9 @@ set -uo pipefail
 # Exercises where a file sits, which is all scripts/structure judges. The three
 # rules it reports not-applicable -- whether libs/ is shared, whether tests/
 # spans apps, whether a file sits at its own scope -- have no fixture here
-# because they have no mechanical answer to assert.
+# because they have no mechanical answer to assert. What is covered: each
+# layout rule in both directions, .structure-allow at a path and at a prefix,
+# every declaration value, and jq absent.
 #
 # Each fixture is a real Git repository with the scripts tree copied into it,
 # rather than the script run against a directory from outside. scripts/structure

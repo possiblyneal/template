@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Inspect the hosted GitHub settings the repository's files rely on but cannot
+# enforce: rulesets, push protection, merge methods, CODEOWNERS. Run explicitly,
+# never from check or ci, since it needs the network and admin visibility.
+#
+# It reports and never changes. A ruleset write replaces the whole ruleset
+# rather than merging into it, so a fix applied from here would silently drop
+# whatever rules the repository added on its own.
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 

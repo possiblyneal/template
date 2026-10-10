@@ -8,6 +8,10 @@ cd "$repo_root"
 # shellcheck source=libs/detect.sh
 source "$repo_root/scripts/libs/detect.sh"
 
+# Audits lockfiles rather than building, and security.yml relies on that: it
+# sets up toolchains inline instead of through setup-toolchains, so nothing in
+# .github/system-packages.txt is installed for it. A build here would need both.
+
 # Before the audit, which would run green over the package it cannot see.
 judge_orphan_manifests
 tally || exit 1

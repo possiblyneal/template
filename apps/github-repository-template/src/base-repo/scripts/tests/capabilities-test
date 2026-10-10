@@ -14,6 +14,14 @@ set -uo pipefail
 # asked of `language_capabilities probe`, and dispatch of `CI_DRY_RUN=1`, which
 # reports each pairing scripts/ci would run and runs none of them.
 #
+# Covered: the twelve-by-six probe table, dispatch under CI_DRY_RUN=1, and real
+# runs of ci, security, run, integration, fix, and package against stubbed
+# toolchains. fix is asked for both halves in order, and a language with no
+# lint autofix must not fail it. The integration tier's five cases run in both
+# directions: not-applicable with no tier, dispatch on a tier under a unit, the
+# gate's pytest and `go test` runs leaving it out, and the tier's own run
+# naming it.
+#
 # Not `set -e`: a failing assertion is recorded and the remaining cases still
 # run, so one break does not hide the rest.
 

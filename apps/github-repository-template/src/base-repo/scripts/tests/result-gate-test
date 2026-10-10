@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-# The result library's contract, and one assertion per command that ends with
-# its tally: an unavailable line is a failing exit. Each fixture is a Node
+# The result library's contract -- the four states enforced, findings deduped
+# -- and one assertion per command that ends with its tally: an unavailable
+# line or a recorded orphan is a failing exit. Each fixture is a Node
 # package naming no script and no bin, so every Node adapter answers NO_RUNNER
 # and the line is unavailable rather than FAIL -- the outcome that used to be
 # decoded from a return value by each command, and by two of them into a green

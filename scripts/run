@@ -11,6 +11,18 @@ source "$repo_root/scripts/libs/detect.sh"
 # shellcheck source=libs/unit.sh
 source "$repo_root/scripts/libs/unit.sh"
 
+# Starts one unit, dispatching on the run fact it declared: run: none stops
+# here, and every other value reaches the adapter rather than gating it. A run
+# is one foreground process, so the unit must be named when apps/ holds
+# several, and --entry when its manifest declares several programs. The context
+# reaches the adapter as the libs/unit.sh globals, unit_args and unit_entry
+# among them.
+#
+# An entry point is named, never declared. Each run adapter checks --entry
+# against the names its language's own manifest holds -- [project.scripts],
+# bin keys, main package import paths -- so a list in .unit.json would be a
+# second copy of one the adapter already reads, and the two would drift.
+#
 # Everything after `--` belongs to the program, so this script's own arguments
 # stay unambiguous however the program spells its flags.
 #

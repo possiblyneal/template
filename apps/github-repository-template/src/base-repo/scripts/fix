@@ -18,6 +18,15 @@ source "$repo_root/scripts/libs/detect.sh"
 # anyway, so a flag would only be a way to run half of a command whose whole
 # purpose is to rewrite. Where a language has no lint autofix at all the
 # capability reports not-applicable, so this stays green on the three that do not.
+# Those are Go, Swift and Kotlin: go vet reports without rewriting, and the
+# rewriting swift format and ktlint do is the formatting already run here.
+# unavailable would name a tool that could be installed, and fail this on every
+# Go repository for it.
+#
+# A lint-fix FAIL means findings remain that the tool could not fix itself.
+# ruff, eslint and clippy each exit non-zero for those, and translating that
+# away would mean telling a real tool error from a leftover finding by exit
+# code alone.
 if ! language_capabilities has-any; then
   echo "No project manifest found, so there is nothing to format yet."
   exit 0

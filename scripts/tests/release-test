@@ -6,6 +6,7 @@ set -uo pipefail
 # no-op, so what is under test is the walk over apps/ and the artifact list it
 # builds -- which is where a wrong answer is silent, because a release with the
 # right tag and no assets looks exactly like a release that had none to attach.
+# Each way the walk aborts before the tag is cut is a case too.
 #
 # Nothing here needs a compiler or a container runtime. The one case that needs
 # a built file seeds the unit's dist/ instead: whether a toolchain produces the

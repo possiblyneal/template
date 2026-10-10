@@ -9,7 +9,8 @@ set -euo pipefail
 # have the package and fails in CI with a message about the build script rather
 # than about the missing library. A repository that has one of these lists the
 # package in .github/system-packages.txt; a repository with no such file runs
-# no apt at all.
+# no apt at all. The file is an addition by occasion, so as shipped this
+# installs nothing.
 #
 # The parsing lives here rather than in the composite action so it runs locally
 # exactly as it runs in GitHub Actions, and so scripts/tests/ can reach it. The

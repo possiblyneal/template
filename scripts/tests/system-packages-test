@@ -5,6 +5,18 @@ set -uo pipefail
 # and, more importantly, what it refuses. The file is hand-written and the
 # consequence of misreading it is an opaque compile error much later in CI, so
 # every ambiguous line has to fail here and say why.
+#
+# Covered: an absent manifest, comments and blank lines, a comments-only file,
+# each refusal a line can earn including every apt action suffix and every glob
+# metacharacter, a version-pinned name surviving them, and an unreadable
+# manifest. install must reach apt-get with exactly the packages the host lacks
+# -- all of them, some of them, a pinned name whose installed version differs
+# -- reach it not at all where the host has every one, where a pin is satisfied
+# exactly, where dpkg-query answers with one record per architecture, or where
+# there is no file, and fail naming only the absent packages where root cannot
+# be reached. The multi-architecture case renders the caller's own -f= format
+# rather than a fixed string, so dropping the newline from it fails the case
+# rather than passing on a separator the stub supplied.
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
