@@ -42,6 +42,15 @@ done
 for tool in claude jq uv; do
   command -v "$tool" >/dev/null || { echo "contract-eval needs $tool" >&2; exit 1; }
 done
+[[ -z "$(git -C "$repo_root" status --porcelain -- "$payload")" ]] ||
+  { echo "commit $payload first: fixtures are built from HEAD" >&2; exit 1; }
+# The bare arm deletes from the contract's heading up to ## Purpose; without a
+# Purpose after it, that range would run to the end of the file.
+strip_contract='/^## Template Contract$/,/^## Purpose$/{/^## Purpose$/!d}'
+contract_md="$(git -C "$repo_root" show "HEAD:$payload/CLAUDE.md")"
+if ! awk '/^## Template Contract$/ {c = 1} /^## Purpose$/ && c {p = 1} END {exit !p}' <<<"$contract_md"; then
+  echo "payload CLAUDE.md: no Template Contract ending at ## Purpose" >&2; exit 1
+fi
 [[ -s "$HOME/.claude/.credentials.json" ]] || { echo "no Claude login at ~/.claude/.credentials.json" >&2; exit 1; }
 
 out="$repo_root/tmp/contract-eval/$(date +%Y%m%dT%H%M%S)"
@@ -65,20 +74,23 @@ prompt() {
 # outcome holds.
 grade() {
   case "$1" in
-    unit-script) find apps/greeter/scripts -type f -perm -u+x 2>/dev/null | grep -q . ;;
+    unit-script) [[ -n "$(find apps/greeter/scripts -type f -perm -u+x 2>/dev/null)" ]] ;;
     new-unit)
       jq -e '.run == "longlived" and .ships.kind == "quadlet" and (.ships | has("targets") | not)' \
         apps/worker/.unit.json >/dev/null 2>&1 && [[ -d apps/worker/src ]] &&
-        ! find apps/worker/deploy/quadlet -iname 'Containerfile*' 2>/dev/null | grep -q . ;;
-    integration-test) find apps/greeter/tests/integration -name '*.py' 2>/dev/null | grep -q . ;;
+        [[ -z "$(find apps/worker/deploy/quadlet -iname 'Containerfile*' 2>/dev/null)" ]] ;;
+    integration-test)
+      [[ -n "$(find apps/greeter/tests/integration -name '*.py' 2>/dev/null)" ]] &&
+        scripts/integration >/dev/null 2>&1 ;;
     lint) uv run --quiet ruff check apps/greeter >/dev/null 2>&1 && uv run --quiet ruff format --check apps/greeter >/dev/null 2>&1 ;;
+    *) return 1 ;;
   esac
 }
 
 fixture() {
   local dir="$1" arm="$2" task="$3"
   mkdir -p "$dir"
-  git -C "$repo_root" archive HEAD "$payload" | tar -x -C "$dir" --strip-components=4
+  git -C "$repo_root" archive "HEAD:$payload" | tar -x -C "$dir"
   rm -rf "$dir/apps/app-name"
   mkdir -p "$dir/apps/greeter/src/greeter" "$dir/apps/greeter/tests"
   printf '{ "schema_version": 1, "run": "oneshot", "ships": { "kind": "none" } }\n' >"$dir/apps/greeter/.unit.json"
@@ -93,8 +105,10 @@ greeter = { workspace = true }
 dev = ["greeter", "pytest", "ruff"]
 
 # Without a section of its own, pytest climbs to the enclosing repository's
-# pyproject.toml, since fixtures sit under its tmp/.
+# pyproject.toml, since fixtures sit under its tmp/. ruff climbs the same way.
 [tool.pytest.ini_options]
+
+[tool.ruff]
 EOF
   cat >"$dir/apps/greeter/pyproject.toml" <<'EOF'
 [project]
@@ -137,7 +151,7 @@ EOF
   # Both arms get the sections a real repository fills in on first use, so
   # neither spends its run indexing; only the bare arm loses the contract.
   local claude_md="$dir/CLAUDE.md"
-  [[ "$arm" == bare ]] && sed -i '/^## Template Contract$/,/^## Purpose$/{/^## Purpose$/!d}' "$claude_md"
+  [[ "$arm" == bare ]] && sed -i "$strip_contract" "$claude_md"
   sed -i '/^## Purpose$/a\
 \
 A greeting command-line program in apps/greeter.' "$claude_md"
@@ -150,7 +164,7 @@ excludes() {
   local dir="$1" list=("$HOME/.claude/CLAUDE.md" "$HOME/.claude/rules/**")
   dir="$(dirname "$dir")"
   while [[ "$dir" != / ]]; do
-    list+=("$dir/CLAUDE.md" "$dir/.claude/CLAUDE.md")
+    list+=("$dir/CLAUDE.md" "$dir/.claude/CLAUDE.md" "$dir/CLAUDE.local.md")
     dir="$(dirname "$dir")"
   done
   jq -cn '{claudeMdExcludes: $ARGS.positional}' --args "${list[@]}"
@@ -158,8 +172,17 @@ excludes() {
 
 run_one() {
   local task="$1" arm="$2" rep="$3" name="$1-$2-$3"
-  local dir="$out/$name/repo" transcript="$out/$name/claude.json"
-  fixture "$dir" "$arm" "$task"
+  local dir="$out/$name/repo" transcript="$out/$name/claude.json" result="$out/$name/result.json"
+  # Every run writes a result, so a failure is counted rather than missing.
+  local failed
+  failed="$(jq -cn --arg task "$task" --arg arm "$arm" --argjson rep "$rep" \
+    '{task: $task, arm: $arm, rep: $rep, pass: false, error: true}')"
+  mkdir -p "$out/$name"
+  if ! fixture "$dir" "$arm" "$task" >"$out/$name/fixture.log" 2>&1; then
+    echo "$failed" >"$result"
+    echo "done $name: fixture failed, see $out/$name/fixture.log"
+    return
+  fi
   (cd "$dir" && CLAUDE_CONFIG_DIR="$out/config" claude -p "$(prompt "$task")" \
     --model "$model" --output-format json --setting-sources project \
     --settings "$(excludes "$dir")" --dangerously-skip-permissions \
@@ -167,16 +190,14 @@ run_one() {
   local structure=false task_pass=false
   (cd "$dir" && git add -A && scripts/structure >"$out/$name/structure.log" 2>&1) && structure=true
   (cd "$dir" && grade "$task") && task_pass=true
-  jq -c --arg task "$task" --arg arm "$arm" --argjson rep "$rep" \
+  [[ -s "$transcript" ]] && jq -c --arg task "$task" --arg arm "$arm" --argjson rep "$rep" \
     --argjson structure "$structure" --argjson task_pass "$task_pass" '{
       task: $task, arm: $arm, rep: $rep, structure: $structure, task_pass: $task_pass,
       pass: ($structure and $task_pass), error: .is_error, turns: .num_turns,
       input: (.usage.input_tokens + .usage.cache_creation_input_tokens + .usage.cache_read_input_tokens),
       output: .usage.output_tokens, cost: .total_cost_usd, seconds: (.duration_ms / 1000)
-    }' "$transcript" 2>/dev/null >"$out/$name/result.json" ||
-    jq -cn --arg task "$task" --arg arm "$arm" --argjson rep "$rep" \
-      '{task: $task, arm: $arm, rep: $rep, pass: false, error: true}' >"$out/$name/result.json"
-  echo "done $name: $(jq -c '{pass, turns, cost}' "$out/$name/result.json")"
+    }' "$transcript" 2>/dev/null >"$result" || echo "$failed" >"$result"
+  echo "done $name: $(jq -c '{pass, turns, cost}' "$result")"
 }
 
 running=0
@@ -194,16 +215,16 @@ wait
 cat "$out"/*/result.json >"$out/results.jsonl"
 echo
 echo "Results: $out/results.jsonl"
+# A run with no transcript is counted under errors and left out of the means,
+# rather than averaged in as zero tokens.
 jq -rs '
-  def mean(f): (map(f // 0) | add / length);
-  ["task", "arm", "runs", "pass", "turns", "input", "output", "cost"],
-  (group_by([.task, .arm])[] | [
-    .[0].task, .[0].arm, length, (map(select(.pass)) | length),
-    (mean(.turns) | floor), (mean(.input) | floor), (mean(.output) | floor),
-    (mean(.cost) * 100 | round / 100)
-  ]),
-  (group_by(.arm)[] | [
-    "ALL", .[0].arm, length, (map(select(.pass)) | length),
-    (mean(.turns) | floor), (mean(.input) | floor), (mean(.output) | floor),
-    (mean(.cost) * 100 | round / 100)
-  ]) | @tsv' "$out/results.jsonl" | column -t
+  def mean(f): [.[] | f | numbers] | if length == 0 then "-" else add / length end;
+  def row($name): [
+    $name, .[0].arm, "\(map(select(.pass)) | length)/\(length)", (map(select(.error)) | length),
+    (mean(.turns) | floor? // .), (mean(.input) | floor? // .), (mean(.output) | floor? // .),
+    (mean(.cost) | (. * 100 | round / 100)? // .)
+  ];
+  ["task", "arm", "pass", "errors", "turns", "input", "output", "cost"],
+  (group_by([.task, .arm])[] | row(.[0].task)),
+  (group_by(.arm)[] | row("ALL"))
+  | @tsv' "$out/results.jsonl" | column -t
