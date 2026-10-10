@@ -1,0 +1,209 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Measures what the payload CLAUDE.md's Template Contract is worth to an agent
+# working in a generated repository. Each task runs in two arms that differ
+# only in that section: `contract` keeps it, `bare` deletes it. Every run gets
+# a fresh fixture generated from the committed payload, with one Python unit,
+# and is graded on the fixture it leaves behind: scripts/structure must pass
+# and the task's own check must hold. Tokens, turns, and cost come from
+# `claude -p --output-format json`.
+#
+# The agent sees the fixture's CLAUDE.md and nothing else. CLAUDE_CONFIG_DIR
+# points at a directory holding only the operator's credentials, user settings
+# are not loaded, and claudeMdExcludes drops every CLAUDE.md above the fixture,
+# this repository's included, so the operator's own instructions reach neither
+# arm. --bare would isolate more simply but skips the stored login.
+#
+# Not part of the gate: it is a model run that costs money, not a check.
+#
+# Usage: contract-eval [--reps N] [--jobs N] [--model NAME] [--task NAME]...
+# Results land in tmp/contract-eval/<timestamp>/: results.jsonl, one line per
+# run, plus each run's fixture and transcript for inspection.
+
+repo_root="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
+payload=apps/github-repository-template/src/base-repo
+tasks_all=(unit-script new-unit integration-test lint)
+reps=1 max_jobs=4 model=sonnet tasks=()
+
+while (($#)); do
+  case "$1" in
+    --reps) reps="$2"; shift 2 ;;
+    --jobs) max_jobs="$2"; shift 2 ;;
+    --model) model="$2"; shift 2 ;;
+    --task) tasks+=("$2"); shift 2 ;;
+    *) echo "usage: contract-eval [--reps N] [--jobs N] [--model NAME] [--task NAME]..." >&2; exit 2 ;;
+  esac
+done
+((${#tasks[@]})) || tasks=("${tasks_all[@]}")
+for name in "${tasks[@]}"; do
+  [[ " ${tasks_all[*]} " == *" $name "* ]] || { echo "unknown task: $name (${tasks_all[*]})" >&2; exit 2; }
+done
+for tool in claude jq uv; do
+  command -v "$tool" >/dev/null || { echo "contract-eval needs $tool" >&2; exit 1; }
+done
+[[ -s "$HOME/.claude/.credentials.json" ]] || { echo "no Claude login at ~/.claude/.credentials.json" >&2; exit 1; }
+
+out="$repo_root/tmp/contract-eval/$(date +%Y%m%dT%H%M%S)"
+mkdir -p "$out/config"
+ln -s "$HOME/.claude/.credentials.json" "$out/config/.credentials.json"
+
+export GIT_AUTHOR_NAME=eval GIT_AUTHOR_EMAIL=eval@example.invalid
+export GIT_COMMITTER_NAME=eval GIT_COMMITTER_EMAIL=eval@example.invalid
+
+prompt() {
+  case "$1" in
+    unit-script) echo "Add a shell script that deletes the greeter unit's local state. It belongs to the greeter unit only." ;;
+    new-unit) echo "Add a new unit named worker: a Python program that prints 'worker started' and then runs until it is stopped. It will be deployed as a Podman quadlet. A skeleton is enough." ;;
+    integration-test) echo "Add an integration test for greeter that runs 'python -m greeter Ada' as a subprocess and checks its output." ;;
+    lint) echo "CI fails on lint and formatting in the greeter unit. Fix it." ;;
+  esac
+  echo "Work only inside this repository. Do not commit."
+}
+
+# Run in the fixture after the agent stops; exit 0 when the task's own
+# outcome holds.
+grade() {
+  case "$1" in
+    unit-script) find apps/greeter/scripts -type f -perm -u+x 2>/dev/null | grep -q . ;;
+    new-unit)
+      jq -e '.run == "longlived" and .ships.kind == "quadlet" and (.ships | has("targets") | not)' \
+        apps/worker/.unit.json >/dev/null 2>&1 && [[ -d apps/worker/src ]] &&
+        ! find apps/worker/deploy/quadlet -iname 'Containerfile*' 2>/dev/null | grep -q . ;;
+    integration-test) find apps/greeter/tests/integration -name '*.py' 2>/dev/null | grep -q . ;;
+    lint) uv run --quiet ruff check apps/greeter >/dev/null 2>&1 && uv run --quiet ruff format --check apps/greeter >/dev/null 2>&1 ;;
+  esac
+}
+
+fixture() {
+  local dir="$1" arm="$2" task="$3"
+  mkdir -p "$dir"
+  git -C "$repo_root" archive HEAD "$payload" | tar -x -C "$dir" --strip-components=4
+  rm -rf "$dir/apps/app-name"
+  mkdir -p "$dir/apps/greeter/src/greeter" "$dir/apps/greeter/tests"
+  printf '{ "schema_version": 1, "run": "oneshot", "ships": { "kind": "none" } }\n' >"$dir/apps/greeter/.unit.json"
+  cat >"$dir/pyproject.toml" <<'EOF'
+[tool.uv.workspace]
+members = ["apps/greeter"]
+
+[tool.uv.sources]
+greeter = { workspace = true }
+
+[dependency-groups]
+dev = ["greeter", "pytest", "ruff"]
+
+# Without a section of its own, pytest climbs to the enclosing repository's
+# pyproject.toml, since fixtures sit under its tmp/.
+[tool.pytest.ini_options]
+EOF
+  cat >"$dir/apps/greeter/pyproject.toml" <<'EOF'
+[project]
+name = "greeter"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[project.scripts]
+greeter = "greeter.__main__:main"
+
+[build-system]
+requires = ["uv_build>=0.8,<0.11"]
+build-backend = "uv_build"
+EOF
+  if [[ "$task" == lint ]]; then
+    printf 'import os,sys\ndef greet( name ):\n    return "Hello, "+name+"!"\n' >"$dir/apps/greeter/src/greeter/__init__.py"
+  else
+    printf 'def greet(name: str) -> str:\n    return f"Hello, {name}!"\n' >"$dir/apps/greeter/src/greeter/__init__.py"
+  fi
+  cat >"$dir/apps/greeter/src/greeter/__main__.py" <<'EOF'
+import sys
+
+from greeter import greet
+
+
+def main() -> None:
+    print(greet(sys.argv[1] if len(sys.argv) > 1 else "world"))
+
+
+if __name__ == "__main__":
+    main()
+EOF
+  cat >"$dir/apps/greeter/tests/test_greet.py" <<'EOF'
+from greeter import greet
+
+
+def test_greet() -> None:
+    assert greet("Ada") == "Hello, Ada!"
+EOF
+  # Both arms get the sections a real repository fills in on first use, so
+  # neither spends its run indexing; only the bare arm loses the contract.
+  local claude_md="$dir/CLAUDE.md"
+  [[ "$arm" == bare ]] && sed -i '/^## Template Contract$/,/^## Purpose$/{/^## Purpose$/!d}' "$claude_md"
+  sed -i '/^## Purpose$/a\
+\
+A greeting command-line program in apps/greeter.' "$claude_md"
+  sed -i '/^## Child Index$/,$d' "$claude_md"
+  printf '## Child Index\n\nNone.\n' >>"$claude_md"
+  (cd "$dir" && uv sync --quiet && git init -q && git add -A && git commit -qm "chore: fixture")
+}
+
+excludes() {
+  local dir="$1" list=("$HOME/.claude/CLAUDE.md" "$HOME/.claude/rules/**")
+  dir="$(dirname "$dir")"
+  while [[ "$dir" != / ]]; do
+    list+=("$dir/CLAUDE.md" "$dir/.claude/CLAUDE.md")
+    dir="$(dirname "$dir")"
+  done
+  jq -cn '{claudeMdExcludes: $ARGS.positional}' --args "${list[@]}"
+}
+
+run_one() {
+  local task="$1" arm="$2" rep="$3" name="$1-$2-$3"
+  local dir="$out/$name/repo" transcript="$out/$name/claude.json"
+  fixture "$dir" "$arm" "$task"
+  (cd "$dir" && CLAUDE_CONFIG_DIR="$out/config" claude -p "$(prompt "$task")" \
+    --model "$model" --output-format json --setting-sources project \
+    --settings "$(excludes "$dir")" --dangerously-skip-permissions \
+    --no-session-persistence </dev/null >"$transcript" 2>"$out/$name/stderr") || true
+  local structure=false task_pass=false
+  (cd "$dir" && git add -A && scripts/structure >"$out/$name/structure.log" 2>&1) && structure=true
+  (cd "$dir" && grade "$task") && task_pass=true
+  jq -c --arg task "$task" --arg arm "$arm" --argjson rep "$rep" \
+    --argjson structure "$structure" --argjson task_pass "$task_pass" '{
+      task: $task, arm: $arm, rep: $rep, structure: $structure, task_pass: $task_pass,
+      pass: ($structure and $task_pass), error: .is_error, turns: .num_turns,
+      input: (.usage.input_tokens + .usage.cache_creation_input_tokens + .usage.cache_read_input_tokens),
+      output: .usage.output_tokens, cost: .total_cost_usd, seconds: (.duration_ms / 1000)
+    }' "$transcript" 2>/dev/null >"$out/$name/result.json" ||
+    jq -cn --arg task "$task" --arg arm "$arm" --argjson rep "$rep" \
+      '{task: $task, arm: $arm, rep: $rep, pass: false, error: true}' >"$out/$name/result.json"
+  echo "done $name: $(jq -c '{pass, turns, cost}' "$out/$name/result.json")"
+}
+
+running=0
+for task in "${tasks[@]}"; do
+  for arm in contract bare; do
+    for ((rep = 1; rep <= reps; rep++)); do
+      if ((running >= max_jobs)); then wait -n || true; ((running--)); fi
+      run_one "$task" "$arm" "$rep" &
+      ((++running))
+    done
+  done
+done
+wait
+
+cat "$out"/*/result.json >"$out/results.jsonl"
+echo
+echo "Results: $out/results.jsonl"
+jq -rs '
+  def mean(f): (map(f // 0) | add / length);
+  ["task", "arm", "runs", "pass", "turns", "input", "output", "cost"],
+  (group_by([.task, .arm])[] | [
+    .[0].task, .[0].arm, length, (map(select(.pass)) | length),
+    (mean(.turns) | floor), (mean(.input) | floor), (mean(.output) | floor),
+    (mean(.cost) * 100 | round / 100)
+  ]),
+  (group_by(.arm)[] | [
+    "ALL", .[0].arm, length, (map(select(.pass)) | length),
+    (mean(.turns) | floor), (mean(.input) | floor), (mean(.output) | floor),
+    (mean(.cost) * 100 | round / 100)
+  ]) | @tsv' "$out/results.jsonl" | column -t
