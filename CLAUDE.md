@@ -2,7 +2,7 @@
 
 This repository builds repositories for AI agents first and people second.
 
-Every repository generated from it shares one shape: the same folders, the same commands, the same checks, and the same kinds of docs in the same places. The only thing that differs from one repository to the next is the program itself and the files that belong to it. An addon is part of the shape too: a repository adopts it only when it has a reason to, but once adopted it sits where it sits everywhere else. An agent that has learned one repository has learned the rest, so it spends its context on the task instead of on finding its way around.
+Every repository generated from it shares one shape: the same folders, the same commands, the same checks, and the same kinds of docs in the same places. What is shared is that each file exists and where it sits, not what it says. The program and its files differ from one repository to the next, and so do the contents of the files that describe it: every repository has a `CLAUDE.md` and a `docs/LESSONS.md`, but each holds that repository's own contract and lessons. So does local configuration: every repository has a `.env`, and some fill it. An addon is part of the shape too: a repository adopts it only when it has a reason to, but once adopted it sits where it sits everywhere else. An agent that has learned one repository has learned the rest, so it spends its context on the task instead of on finding its way around.
 
 Judge every structural decision by four questions:
 
