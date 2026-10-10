@@ -8,11 +8,11 @@ Every portable shell script, whether a person runs it or a workflow does. Projec
 
 One flat directory, not a `ci/` and a `scripts/` split: `check` calls `ci` and `security`, `release` calls `ci`, and every script sources the same detection library, so a file's caller is not a property that stays put. A helper that must be built before it runs belongs in `tools/`.
 
-Each script's header comment says what it does, who calls it, and why it is shaped that way; each `tests/*-test` header says what that suite covers. Read the header before editing the file. This document holds only the rules that span scripts.
+Each script's header comment says what it does and why it is shaped that way, and the lists below say who calls it; each `tests/*-test` header says what that suite covers. Read the header before editing the file. This document holds only the rules that span scripts.
 
 - Run by a person: `doctor`, `check`, `fix`, `clean`, `run`, `integration`, `package`, `summarize`, `repo-settings check`
 - Called by `.github/`: `ci`, `security`, `release`, `detect`, `changelog-check`, `system-packages`, `script-tests`
-- Called by pre-commit: `adr-index`, `structure`, `github-parity`, `attribute-commit`, `changelog-check`, `protect-branch`, `worktree-cleanup`
+- Called by pre-commit: `adr-index`, `structure`, `github-parity`, `attribute-commit` (`prepare-commit-msg`), `changelog-check` and `protect-branch` (`pre-push`), `worktree-cleanup` (`post-checkout`, `post-merge`, and SessionStart with `--report`)
 - Sourced: `libs/detect.sh`, `libs/result.sh`, `libs/unit.sh`, `libs/precommit.sh`, `libs/dependabot.sh`, `libs/quadlet.sh`, `tests/libs/harness.sh`
 
 ## Local Contracts
@@ -33,10 +33,14 @@ Adding a language: add it to `DETECT_LANGUAGES`, add its `has_<lang>` detector, 
 
 Adding a check: add it to `DETECT_CAPABILITIES` and write an adapter per language, or declare it not-applicable in `_capability_is_not_applicable`.
 
-Adding a suite: name it `tests/<name>-test`, report through `tests/libs/harness.sh`, assert through the public surface, and say what it covers in its header. It runs concurrently beside every other suite, so it keeps to its own scratch repositories.
+Adding a suite: name it `tests/<name>-test`, report through `tests/libs/harness.sh`, assert through the public surface, and say what it covers in its header. It runs concurrently beside every other suite, so it keeps to its own scratch repositories, or owns outright any path it writes in this one.
 
 Changes here almost always belong in `apps/github-repository-template/src/base-repo/scripts/` too. Decide explicitly; a fix in one tree only is how the two drift.
 
 ## Verification
 
 `scripts/check` runs every suite through `script-tests` before the checks they guard, then `structure` and `github-parity` before `ci`. `ci.yml` runs them the same way before toolchain setup, with `pre-commit` installed first so `adr-index-test` and `commitlint-test` do not skip their hook-wiring cases. shellcheck runs via pre-commit with `-x`.
+
+## Child Index
+
+None.

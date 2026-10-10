@@ -206,7 +206,7 @@ swift_each() {
 # A listing that fails or comes back empty is a failure, not an empty success:
 # it means the module graph could not be read at all.
 #
-# gofmt is the one Go check that does not go through this: it reads files
+# Of the gate's Go checks, gofmt alone skips this: it reads files
 # rather than packages, so it runs once at the root.
 #
 # Read on fd 3, not stdin, for the same reason as swift_each: go test and go run

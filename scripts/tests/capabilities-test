@@ -17,7 +17,7 @@ set -uo pipefail
 # Covered: the twelve-by-six probe table, dispatch under CI_DRY_RUN=1, and real
 # runs of ci, security, run, integration, fix, and package against stubbed
 # toolchains. fix is asked for both halves in order, and a language with no
-# lint autofix must not fail it. The integration tier's five cases run in both
+# lint autofix must not fail it. The integration tier's cases run in both
 # directions: not-applicable with no tier, dispatch on a tier under a unit, the
 # gate's pytest and `go test` runs leaving it out, and the tier's own run
 # naming it.
