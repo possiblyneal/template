@@ -6,7 +6,9 @@ set -uo pipefail
 # a body the endpoint answers or an error document it refuses with, and an
 # absent file meaning GitHub's own 404. Nothing here reaches the network, and
 # every judgment is asserted on the result line it prints, since the layout is
-# a contract and this is the suite that holds it to one.
+# a contract and this is the suite that holds it to one. Covered: every
+# preflight absence, every judgment in each of its answers, and the two
+# orderings. Skips without jq.
 #
 # Not `set -e`: a failing assertion is recorded and the remaining cases still
 # run, so one break does not hide the rest.

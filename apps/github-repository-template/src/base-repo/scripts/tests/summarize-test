@@ -3,7 +3,9 @@ set -uo pipefail
 
 # What summarize keeps and what it drops. The cases run a stub command rather
 # than a real check, so they assert the filter's contract -- the layout
-# libs/result.sh documents -- and not the current output of any one check.
+# libs/result.sh documents -- and not the current output of any one check. They
+# also hold that it exits with the command's own status, and that a failure
+# outside the table leaves the whole run in tmp/summarize-failure.log.
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 

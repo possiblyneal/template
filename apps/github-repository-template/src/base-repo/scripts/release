@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Cut a GitHub release for a v1.2.3 tag, from release.yml or by hand. The only
+# script here that writes to GitHub: it runs scripts/ci, packages every unit,
+# and only then creates the tag's release with whatever the units produced.
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
@@ -32,8 +36,8 @@ version="${tag#v}"
 echo "Preparing release for $tag"
 
 # A changelog is an addition by occasion, so a project may not have reached it
-# yet. Both cases release; only the source of the notes differs, and the choice
-# is announced so a missing changelog is never mistaken for an empty one.
+# yet. Both cases release; only the source of the notes differs -- the section
+# or generated notes, never both -- and the choice is announced so a missing changelog is never mistaken for an empty one.
 notes_args=()
 
 if [[ -f CHANGELOG.md ]]; then

@@ -21,6 +21,11 @@
 # closes the pipe kills the writer with SIGPIPE and pipefail reports 141, which
 # a detection function reads as "absent" — the one wrong answer that is silent
 # rather than loud.
+#
+# Four runners exit non-zero without a real failure, and each is translated
+# where its adapter calls it: pytest on collecting no tests (exit 5), npm's
+# placeholder test script, `uv run` on a tool that is not installed, and
+# `uv audit` on a uv that predates it.
 
 # Every result line here goes through the result library, so a caller that
 # sources this file has the layout and the tally without sourcing it twice.
@@ -200,6 +205,9 @@ swift_each() {
 #
 # A listing that fails or comes back empty is a failure, not an empty success:
 # it means the module graph could not be read at all.
+#
+# Of the gate's Go checks, gofmt alone skips this: it reads files
+# rather than packages, so it runs once at the root.
 #
 # Read on fd 3, not stdin, for the same reason as swift_each: go test and go run
 # can read stdin, which would otherwise consume the remaining module list.
@@ -619,6 +627,11 @@ for (const n of Object.keys(s)) if (n.startsWith("dev:")) console.log(n.slice(4)
 # `format-write` already runs: there is no lint autofix in any of the three to be
 # missing. An `unavailable` would say a tool could be installed to fill the gap
 # and would fail `scripts/fix` on every Go repository for it.
+#
+# A lint-fix FAIL is left untranslated: it means findings remain that the tool
+# could not fix on its own. ruff, eslint and clippy each exit non-zero for
+# those, and translating that away would mean telling a real tool error apart
+# from a leftover finding by exit code alone.
 _capability_lint_fix_node() { has_npm_script lint:fix || return "$NO_RUNNER"; npm run lint:fix; }
 _capability_lint_fix_python() { uv_run ruff check --fix .; }
 # --allow-dirty and --allow-staged because cargo fix refuses an unclean tree,

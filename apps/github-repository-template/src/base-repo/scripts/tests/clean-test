@@ -6,7 +6,8 @@ set -uo pipefail
 # target were searched and cleaned here even though detect.sh prunes all of
 # them as directories holding another project's files. Cleaning inside a
 # virtualenv or a vendored tree deletes gitignored files with nothing in git
-# status to show for it.
+# status to show for it. So this asserts that clean prunes the directories
+# libs/detect.sh names.
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 

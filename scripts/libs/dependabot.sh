@@ -1,6 +1,20 @@
 # shellcheck shell=bash
 # Which manifests Dependabot is watching, and which tracked ones it is not.
-# Sourced by scripts/doctor, which reports the gap.
+# Sourced by scripts/doctor, which reports the gap as a passing row carrying
+# the advisory rather than as a finding. The entries are derived per
+# repository by the /repo-builder flows, so a manifest added since the last
+# update flow owes one: a line for the operator to read, never a red gate on a
+# repository for gaining a module. Nor is it not-applicable, which says the
+# check did not apply; here it applied and found something, and the detail is
+# what separates the two passing rows. A workspace member is still named here:
+# the exception for it is the advisory's, in scripts/doctor.
+#
+# The derivation rule in apps/repo-builder/src/references/lifecycle.md excludes
+# the payload tree at apps/github-repository-template/src/base-repo/, and this
+# file does not. It is mirrored into that payload, so an exclusion naming its
+# own path would ship to every generated repository as a rule about a
+# directory none of them has. The two agree while the payload ships no
+# manifest; one added there is reported here and skipped by the derivation.
 #
 # Sourced, never executed: no shebang, no executable bit, a .sh extension so
 # linters recognize it. The same rule libs/detect.sh follows, for the same

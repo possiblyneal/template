@@ -4,6 +4,8 @@ set -euo pipefail
 # Prune Git's records for worktrees whose directories have already disappeared.
 # This never removes a live worktree directory. Git invokes this after checkout
 # and merge; SessionStart invokes --report so starting a session stays read-only.
+# --report is the only argument read: the hook stages pass their own, which
+# change nothing here.
 
 mode="prune"
 if [[ "${1:-}" == "--report" ]]; then

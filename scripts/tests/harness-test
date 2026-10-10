@@ -3,10 +3,12 @@ set -uo pipefail
 
 # The harness is the one module here whose defect no other suite can see: a
 # report that reads green over a run that verified nothing is exactly what the
-# other fifteen trust it not to do. So each case writes a small suite that
+# other suites trust it not to do. So each case writes a small suite that
 # sources the harness, runs it as a process, and asserts on what a caller of
 # scripts/check would see -- the tally line and the exit status -- plus what
-# it leaves behind on disk.
+# it leaves behind on disk: for all-pass, one-fail, all-skip, skip-beside-pass,
+# a declared not-applicable, and a suite that counted nothing, plus each
+# fixture primitive.
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 

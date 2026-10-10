@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # Runs every scripts/tests/*-test concurrently, a test per CPU, and prints each
 # one's output whole once all have finished, in name order, so concurrent
-# output never interleaves. Exits non-zero naming every test that failed.
+# output never interleaves. Exits non-zero naming every test that failed. A
+# suite that hangs prints nothing until it is killed, since its output is held
+# until then.
 #
 # The suites are independent: each builds its own scratch repositories, and the
 # one that writes inside this repository, summarize-test, is the only writer of
-# the path it writes. Most of their time is spent waiting on git and child
+# the path it writes. A new suite must keep to the same terms, since it runs
+# beside every other. Most of their time is spent waiting on git and child
 # processes, which is why running them side by side cuts the wall time.
 set -euo pipefail
 

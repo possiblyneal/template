@@ -4,7 +4,10 @@ set -uo pipefail
 # scripts/script-tests runs every suite at once and holds each one's output
 # until all have finished, so what it prints at the end is the only record of
 # which suite failed. These cases run it over suites written here, in a scratch
-# copy whose scripts/tests/ holds nothing else.
+# copy whose scripts/tests/ holds nothing else: passing suites print in name
+# order, every failing suite is named with its output kept, a killed runner
+# fails the run, and a non-executable suite, an empty tests/, and a suite
+# reading stdin are each handled.
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 

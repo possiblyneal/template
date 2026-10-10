@@ -1,12 +1,16 @@
 # shellcheck shell=bash
 # How a check reports: the four Result states, the printed layout, the findings
 # under a failed check, and the tally that becomes the process exit status.
+# Sourced by libs/detect.sh, and so by every capability command, and directly
+# by structure, github-parity, changelog-check, protect-branch, and
+# repo-settings.
 #
 # Sourced, never executed: no shebang, no executable bit, a .sh extension so
 # linters recognize it. The same rule libs/detect.sh follows, for the same
 # reason.
 #
-# The layout is an interface. A suite that greps a column relies on it:
+# The layout is an interface. A suite that greps a column relies on it, and
+# scripts/summarize is the one command that parses it:
 #
 #   <check>            <state>          <detail>
 #                        <finding>
@@ -69,6 +73,7 @@ verdict() {
 }
 
 # The process exit status: non-zero once any check reported FAIL or unavailable.
+# A command's last line, so its status is the tally.
 tally() {
   return "$result_failed"
 }

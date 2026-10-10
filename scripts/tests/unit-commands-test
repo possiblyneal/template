@@ -8,6 +8,15 @@ set -uo pipefail
 # command that picked a unit rather than refusing would start the wrong program
 # as often as the right one, and nothing in the output would say so.
 #
+# Covered: unit resolution, `run: none` and `ships: none`, quadlet validation
+# with no container runtime, arguments after --, a declared run fact reaching
+# the adapter rather than gating it, dist/ cleared only where a language
+# packages there, and --entry in each direction: refused with the names
+# printed when a unit holds two and none was given, starting the one named,
+# passing the program its own arguments, naming what the unit declares when an
+# undeclared one is asked for, and a usage error with no value. Skips without
+# jq.
+#
 # Every case sets CI_DRY_RUN, which is the seam scripts/ci already uses: the
 # commands report what they would dispatch and run nothing, so the result comes
 # from the resolution alone and is the same on a machine with no toolchains.

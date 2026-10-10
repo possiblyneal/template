@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# The full local gate, in the order below. Local means it reads no hosted
+# GitHub state, not that it stays offline: commitlint-test and pre-commit's own
+# hook environments fetch on first use.
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 

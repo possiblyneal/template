@@ -2,8 +2,8 @@
 set -uo pipefail
 
 # Proves cleanup uses Git's stale-worktree metadata pruning, not directory
-# deletion. post-checkout and post-merge pass their own positional arguments,
-# which the script must ignore rather than read as paths.
+# deletion, and is idempotent. post-checkout and post-merge pass their own
+# positional arguments, which the script must ignore rather than read as paths.
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 

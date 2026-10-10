@@ -3,7 +3,8 @@ set -uo pipefail
 
 # Exercises scripts/github-parity: every way the two .github/ trees can
 # disagree, the two documented exceptions, and the states it reports when it
-# cannot decide.
+# cannot decide: the index read rather than the working tree in both
+# directions, no payload at all, and the record unreadable without jq.
 #
 # Each fixture is a real Git repository with the scripts tree copied into it,
 # for the reason structure-test gives: the script resolves its own repository

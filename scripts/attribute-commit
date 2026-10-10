@@ -17,7 +17,8 @@ set -euo pipefail
 # This rewrites and never inserts. `trailer-exists` in .commitlintrc.yaml is
 # what requires the result, and a script that supplied the trailer when none was
 # present would satisfy that rule on every message, leaving it to report a
-# record nothing actually made.
+# record nothing actually made. A commit written by hand adds its own
+# Generated-By line rather than passing unnoticed.
 #
 # pre-commit passes the message file as the first argument at this stage. The
 # other two arguments Git supplies -- the source and the commit object -- are

@@ -3,7 +3,8 @@ set -uo pipefail
 
 # Exercises deterministic Keep a Changelog structure only. Whether a change
 # merits an entry remains an author and reviewer decision, so these fixtures do
-# not try to infer it from a source diff.
+# not try to infer it from a source diff. Covered: each structural rule, the
+# shipped addon changelog, a missing file, a missing awk, and an unrelated path.
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 

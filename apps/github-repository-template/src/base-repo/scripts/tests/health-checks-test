@@ -2,7 +2,7 @@
 set -uo pipefail
 
 # Keeps local startup checks offline while proving hosted repository checks stay
-# available through their explicit command.
+# available through their explicit command, with gh stubbed.
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 

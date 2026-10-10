@@ -15,6 +15,10 @@ source "$repo_root/scripts/libs/unit.sh"
 # shellcheck source=libs/quadlet.sh
 source "$repo_root/scripts/libs/quadlet.sh"
 
+# Delivers what the unit declared it ships: an executable per declared target
+# into its dist/, or its deploy/quadlet/ files validated and nothing built. The
+# unit's context reaches the adapters as the libs/unit.sh globals.
+#
 # Packaging is not a check, so nothing in the gate calls this. It exists as a
 # command because a developer building and trying a binary should not have to
 # cut a release to do it.

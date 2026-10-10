@@ -12,7 +12,13 @@ set -uo pipefail
 # line.
 #
 # So the cases here run in both directions: every shape that must be read as
-# watched, and every shape that must not be.
+# watched -- the singular and plural keys, a glob directory, a second entry
+# after a list, a uv entry over a pyproject.toml with uv.lock beside it, one
+# docker entry over every Containerfile in its directory -- and every shape that
+# must not be: a commented-out entry, a workspace file, a manifest outside the
+# mapped set, a container ignore file, an untracked one, and an npm workspace
+# member, still named because the doctor advisory rather than the library
+# carries the workspace exception.
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 

@@ -5,7 +5,9 @@ set -uo pipefail
 # quietly. Rewriting too much takes a human co-author's GitHub attribution away;
 # rewriting too little leaves the message without the trailer commitlint
 # requires, so the commit is refused for a reason that reads as a rule problem
-# rather than a hook that never ran.
+# rather than a hook that never ran. So the cases: the agent trailer is
+# rewritten, a human co-author is not, no trailer is inserted where none was,
+# and a missing message file is not an error.
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 

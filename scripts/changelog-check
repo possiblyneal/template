@@ -3,7 +3,8 @@ set -euo pipefail
 
 # Validate only the changelog paths supplied by pre-commit. Whether a change is
 # notable remains a judgment for the pull request; this script checks the
-# structure of an entry that was chosen to be recorded.
+# structure of an entry that was chosen to be recorded. It runs at pre-push,
+# and again in ci.yml over the pull request's range.
 
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=libs/result.sh

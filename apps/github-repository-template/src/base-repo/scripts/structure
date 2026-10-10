@@ -3,6 +3,7 @@ set -euo pipefail
 
 # Audit the repository's shape against the layout rules, which live here: each
 # check below carries the rule it enforces, as a literal list or a literal test.
+# Runs from scripts/check and from pre-commit on every commit.
 #
 # This checks where a file sits, and reads the contents of exactly one file --
 # a unit's .unit.json, which exists because how a unit runs and what it ships

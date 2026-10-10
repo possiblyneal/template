@@ -5,7 +5,8 @@ set -euo pipefail
 # template payload holds its own configuration at .github/ and the copy every
 # generated repository is cut from at
 # apps/github-repository-template/src/base-repo/.github/, and the two are
-# byte-identical by discipline rather than by mechanism.
+# byte-identical by discipline rather than by mechanism. Runs from
+# scripts/check and from pre-commit on every commit.
 #
 # Dependabot is what ends that discipline. Its github-actions ecosystem reaches
 # root only -- the reference requires directory / to find workflow files -- so

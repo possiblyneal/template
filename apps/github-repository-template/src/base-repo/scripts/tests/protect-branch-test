@@ -5,7 +5,8 @@ set -uo pipefail
 # current branch, so the case that matters is a push to main made from a branch
 # that is not main -- the one no-commit-to-branch cannot see. The refs it must
 # let through matter just as much: a guard that fails an ordinary feature push
-# gets bypassed with --no-verify, and then it protects nothing.
+# gets bypassed with --no-verify, and then it protects nothing. Destinations
+# are tried bare, qualified, near-miss, and unset.
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
