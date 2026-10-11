@@ -148,20 +148,11 @@ Copy this file to create an ADR. Replace the placeholders in the copy.
     write(
         repo,
         "base-repo/docs/LESSONS.md",
-        """---
-type: Template
-title: Repository Lessons Learned
-generated: { by: "<actor>", at: "<ISO 8601 timestamp>" }
-status: draft
----
+        """# Lessons learned
 
-<Replace the metadata and this placeholder.>
-
-# Lessons learned
+Add only durable, repeatable, non-obvious constraints.
 
 ## Lessons
-
-<Add repository lessons here.>
 """,
     )
     write(
