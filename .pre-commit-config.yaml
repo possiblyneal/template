@@ -10,7 +10,7 @@
 # install every one of them.
 #
 # The first two are a pair and fail loudly rather than silently: without the
-# prepare-commit-msg hook nothing rewrites the attribution trailer, and the
+# prepare-commit-msg hook nothing writes the attribution trailer, and the
 # commit-msg hook then rejects every message for the trailer that is missing.
 default_install_hook_types: [pre-commit, prepare-commit-msg, commit-msg, pre-push, post-checkout, post-merge]
 
@@ -171,10 +171,10 @@ repos:
         pass_filenames: false
         stages: [pre-push]
 
-      # Rewrites the agent's attribution trailer before commitlint reads the
+      # Writes the agent's attribution trailer before commitlint reads the
       # message. It has to run at prepare-commit-msg rather than commit-msg:
       # both stages get the message file, but hooks within a stage have no
-      # ordering guarantee against a third-party repo's, so a rewrite sharing
+      # ordering guarantee against a third-party repo's, so a hook sharing
       # commit-msg with commitlint could land after the rule that reads it.
       #
       # pass_filenames is left at its default: at this stage the one filename

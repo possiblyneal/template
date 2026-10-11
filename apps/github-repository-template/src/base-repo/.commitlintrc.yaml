@@ -26,24 +26,25 @@ rules:
   footer-leading-blank: [2, always]
 
   # The model that wrote a commit is worth recording: it is the only per-commit
-  # statement of what produced the change. `scripts/attribute-commit` rewrites
-  # Claude Code's `Co-Authored-By: <model> <noreply@anthropic.com>` into
-  # `Generated-By: <model>` at prepare-commit-msg -- a tool is not a co-author
-  # -- and this rule is what makes the trailer required rather than incidental,
-  # so a commit made with that hook uninstalled fails here instead of landing
-  # unattributed.
+  # statement of what produced the change. `scripts/attribute-commit` writes
+  # `Generated-By: <model ID>` at prepare-commit-msg from CLAUDE_COMMIT_MODEL,
+  # which the user-level commit-model hook exports into an agent's git commands,
+  # and rewrites a stray `Co-Authored-By: <model> <noreply@anthropic.com>` into
+  # it -- a tool is not a co-author. This rule is what makes the trailer
+  # required rather than incidental, so a commit made without it fails here
+  # instead of landing unattributed.
   #
-  # It follows that a commit written by hand, with no agent trailer to rewrite,
-  # is refused. That is the rule working: every commit in this repository is
-  # agent-written, and one that is not should say so deliberately by adding its
-  # own `Generated-By:` line rather than by passing unnoticed.
+  # It follows that a commit made outside Claude Code, with no `Generated-By`
+  # written, is refused. That is the rule working: every commit in this
+  # repository is agent-written, and one that is not should say so deliberately
+  # by adding its own `Generated-By:` line rather than by passing unnoticed.
   #
   # The rule matches through `git interpret-trailers --parse`, which reads a
   # trailer only in the message's last paragraph. A `Generated-By:` line run on
   # from the body is invisible to it and fails, which is the same defect
   # footer-leading-blank names one rule up.
   #
-  # A human co-author keeps their own `Co-Authored-By:` line: the hook rewrites
-  # only trailers addressed to noreply@anthropic.com, and nothing here forbids
-  # the others.
+  # A human co-author keeps their own `Co-Authored-By:` line: the hook's
+  # rewrite touches only trailers addressed to noreply@anthropic.com, and
+  # nothing here forbids the others.
   trailer-exists: [2, always, "Generated-By:"]
