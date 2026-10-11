@@ -319,7 +319,7 @@ def proofs(arguments: argparse.Namespace) -> dict[str, object]:
         "workflows_without_pull_request": workflows_without_pull_request(candidate),
         "manifests": manifest_changes(candidate, base, changes),
         "configuration": unit_configuration(candidate),
-        "issue_tracker": issue_tracker(candidate, set(identical_paths)),
+        "issue_tracker": issue_tracker(candidate),
     }
 
 
@@ -439,23 +439,18 @@ def unit_configuration(candidate: Path) -> dict[str, list[str]]:
     return configuration
 
 
-ISSUE_TRACKER = "docs/agents/issue-tracker.md"
+DEFAULT_TRACKER = "GitHub Issues via gh"
 
 
-def issue_tracker(
-    candidate: Path, payload_copies: set[str]
-) -> dict[str, object] | None:
-    """The tracker the candidate's issue-tracker doc names in its heading."""
-    path = candidate / ISSUE_TRACKER
-    if not path.is_file():
-        return None
-    heading = next(iter(path.read_text().splitlines()), "")
-    if not heading.startswith("# Issue tracker:"):
-        return None
-    return {
-        "tracker": heading.removeprefix("# Issue tracker:").strip(),
-        "payload": ISSUE_TRACKER in payload_copies,
-    }
+def issue_tracker(candidate: Path) -> dict[str, object]:
+    """The tracker `generation.features.issue_tracker` records, else the default."""
+    record = candidate / ".repo-template.json"
+    try:
+        features = json.loads(record.read_text())["generation"]["features"]
+        recorded = features["issue_tracker"].strip()
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        recorded = ""
+    return {"tracker": recorded or DEFAULT_TRACKER, "recorded": bool(recorded)}
 
 
 # The payload's hooks that rewrite a file rather than judge it. Run before the
@@ -2391,8 +2386,7 @@ SLOTS = {
     "ships-nothing": Slot("unit and language, or none"),
     "declared-not-built": Slot("deployable, its descriptor and owning unit, or none"),
     "issue-tracker": Slot(
-        "tracker, recorded in docs/agents/issue-tracker.md, shipped by the payload "
-        "or kept from the destination"
+        "tracker, from generation.features.issue_tracker or the GitHub default"
     ),
     "labels-reason": Slot("reason no labels were created"),
     "declined-writes": Slot(
@@ -2805,12 +2799,9 @@ def repository_settings(
     labels = labels_line(report, writes.get("labels"), bool(apply_record))
     tracker = proofs.get("issue_tracker")
     derived = tracker and (
-        f"{tracker['tracker']}, recorded in {ISSUE_TRACKER}, "
-        + (
-            "shipped by the payload"
-            if tracker["payload"]
-            else "kept from the destination"
-        )
+        f"{tracker['tracker']}, recorded in generation.features.issue_tracker"
+        if tracker["recorded"]
+        else f"{tracker['tracker']} (the default)"
     )
     report.add(
         f"- Issue tracker: {report.fill('issue-tracker', derived)}; labels: {labels}"

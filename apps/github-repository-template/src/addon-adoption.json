@@ -399,7 +399,7 @@
       "reviews": [
         {
           "section": "the categories, against this repository's label vocabulary",
-          "decision": "The shipped categories key on `*` and on `dependencies`, the label Dependabot applies to its own pull requests, so the file is true of a repository on its first day. Extend it only with labels that exist and are actually applied -- a category naming an unused label renders as no heading at all, which reads as \"no changes of that kind\" rather than as a typo. For a repository set up by /setup-matt-pocock-skills, docs/agents/ records the triage label vocabulary this should agree with."
+          "decision": "The shipped categories key on `*` and on `dependencies`, the label Dependabot applies to its own pull requests, so the file is true of a repository on its first day. Extend it only with labels that exist and are actually applied -- a category naming an unused label renders as no heading at all, which reads as \"no changes of that kind\" rather than as a typo. The triage labels it should agree with are the seven canonical roles, or the names a triage_labels departure in .repo-template.json generation.features records."
         },
         {
           "section": "which paths actually reach this file",

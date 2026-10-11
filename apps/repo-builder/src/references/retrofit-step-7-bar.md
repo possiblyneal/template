@@ -31,6 +31,8 @@ The ownership array is the payload's default. **A destination path still matchin
 
 **The record carries no field naming the flow, no list of layout moves, no run or ship facts beside the unit names, and no destination-specific ownership entry**: an update could branch on any field it can read.
 
+**A destination's own `docs/agents/` files become departures here**, as generate's [Into a repository that already has content](generate.md#into-a-repository-that-already-has-content) reads them: keep the files, read each against the defaults, and record under `generation.features` a tracker that is not GitHub Issues via `gh` as `issue_tracker`, a role carrying another label string in `triage_labels`, and pull requests treated as requests as `prs_are_requests: true`. A file matching the defaults records nothing. The proofs record's `issue_tracker` and step 8's labels read what is recorded.
+
 ## The tool declaration and dependabot
 
 **The tool declaration adds only what is missing**, at the template's floors, keeping any specifier the destination already declares and any settings it already has. [Tools the first manifest must declare](lifecycle.md#tools-the-first-manifest-must-declare) is the per-language list: tool lines and the configuration boundaries it names, nothing else; making moved code build or import is step 6's repair. The language adapter wins where it differs: write the line it reads (for instance `test = "unittest"`) in the root manifest, where the adapter's own pattern finds it, instead of the list's tools.
@@ -67,7 +69,7 @@ python3 apps/repo-builder/src/scripts/retrofit.py proofs --template-repo . \
 
 `normalize` runs `git add --renormalize`, clears the executable bit from staged files not starting with `#!`, and runs the configuration's whitespace, end-of-file, line-ending and `adr-index` hooks over the staged paths, re-staging what they rewrite. It reports `renormalized`, `executable_cleared`, `rewritten` and `still_failing`. Fix each `still_failing` entry by hand before the proofs.
 
-`proofs` measures from the index, so it runs with nothing committed. It records `copy` (with `differing` and `missing`), `rename_purity`, `authored`, `deleted`, `applied`, `preserved`, `payload_total`, `overridden`, `emptied` and `workflows_without_pull_request`, plus what the report renders in place of slots: `manifests` (each staged manifest, `new` or `edited` against `<base-commit>`, with the keys it `added`, `changed` and `removed`, each null where either side does not parse), `configuration` (the tool configuration the root and each declared unit's root carry) and `issue_tracker` (the tracker `docs/agents/issue-tracker.md` names, and whether the payload shipped it). A move edited past git's rename threshold appears as a deletion plus an `authored` path. It refuses an empty index, a candidate already past `<base-commit>`, an index without a staged `.repo-template.json` that validates and records `<commit>`, a record edited since it was staged, and a root or unit `pyproject.toml` that does not parse. Nothing else reads the record before `sync` finds it missing from the merged default branch.
+`proofs` measures from the index, so it runs with nothing committed. It records `copy` (with `differing` and `missing`), `rename_purity`, `authored`, `deleted`, `applied`, `preserved`, `payload_total`, `overridden`, `emptied` and `workflows_without_pull_request`, plus what the report renders in place of slots: `manifests` (each staged manifest, `new` or `edited` against `<base-commit>`, with the keys it `added`, `changed` and `removed`, each null where either side does not parse), `configuration` (the tool configuration the root and each declared unit's root carry) and `issue_tracker` (the tracker `generation.features.issue_tracker` records, else the GitHub default, and whether it was recorded). A move edited past git's rename threshold appears as a deletion plus an `authored` path. It refuses an empty index, a candidate already past `<base-commit>`, an index without a staged `.repo-template.json` that validates and records `<commit>`, a record edited since it was staged, and a root or unit `pyproject.toml` that does not parse. Nothing else reads the record before `sync` finds it missing from the merged default branch.
 
 **Fix the references the moves left behind, before the first commit**, as [step 6](retrofit-step-6-layout.md) says:
 
@@ -102,7 +104,7 @@ Where the destination's test capability collects anything, report its result on 
 
 ```bash
 git -C <candidate> add -A [-- . '<exclude pathspec>'...]
-(cd <candidate> && scripts/summarize scripts/check) > <records>.check.txt
+(cd <candidate> && scripts/check) > <records>.check.txt
 ```
 
 **Then execute the facts step 5 confirmed:**

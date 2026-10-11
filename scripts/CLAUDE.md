@@ -6,7 +6,7 @@ Every portable shell script, whether a person runs it or a workflow does. Projec
 
 ## Ownership
 
-One flat directory, not a `ci/` and a `scripts/` split: `check` calls `ci` and `security`, `release` calls `ci`, and every script sources the same detection library, so a file's caller is not a property that stays put. A helper that must be built before it runs belongs in `tools/`.
+One flat directory, not a `ci/` and a `scripts/` split: `check` calls `ci` and `security` and runs itself under `summarize`, `release` calls `ci`, and every script sources the same detection library, so a file's caller is not a property that stays put. A helper that must be built before it runs belongs in `tools/`.
 
 Each script's header comment says what it does and why it is shaped that way, and the lists below say who calls it; each `tests/*-test` header says what that suite covers. Read the header before editing the file. This document holds only the rules that span scripts.
 

@@ -114,6 +114,12 @@ The inverse of an overridden path: there the destination's version won, here the
 payload's did and the destination's is gone.
 _Avoid_: replaced file, deleted file, clobbered
 
+**Departure**:
+A deliberate difference from the template's default that a destination records
+in `generation.features`, such as an omitted file or a tracker other than GitHub
+Issues. Absent a record, the default holds.
+_Avoid_: override, exception, customization
+
 **Retired**:
 Of a superseded gate script: deleted with its callers repointed at the payload
 command covering it, so the behaviour survives under a different name.

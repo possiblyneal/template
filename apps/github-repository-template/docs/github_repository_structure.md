@@ -79,7 +79,9 @@ The specific operating parameters for the AI agent.
 
 `scripts/script-tests`: Runs every `scripts/tests/*-test` concurrently, one per CPU, and prints each one's output whole once all have finished, naming every test that failed. Called by `scripts/check` and by `ci.yml`, so both run the suites the same way. The suites spend their time waiting on git and child processes, so running them side by side cuts the wall time several-fold.
 
-`scripts/summarize`: Runs a check command and prints only its Result table — one line per check, the findings under any that failed — dropping every other thing the command wrote. Exits with that command's status, so it can stand in for the command rather than only report on it. It is the one consumer of the printed layout `scripts/libs/result.sh` documents, which is where a change to the column widths has to be reflected.
+`scripts/check`: The full local gate. By default it prints only the Result table and the findings under any check that failed, by running itself under `scripts/summarize`, and it writes the complete run to `tmp/check.log` every time, passing or failing, since a pre-commit fixer repairs the file and a re-run no longer reproduces the failure. `--verbose` streams the whole run live, still writing the log. Exits with the gate's status either way.
+
+`scripts/summarize`: Runs a check command and prints only its Result table — one line per check, the findings under any that failed — dropping every other thing the command wrote. Exits with that command's status, so it can stand in for the command rather than only report on it. `scripts/check` is its first caller; it stays the way to read `scripts/ci` and any other command. It is the one consumer of the printed layout `scripts/libs/result.sh` documents, which is where a change to the column widths has to be reflected.
 
 `scripts/run`: Starts a unit, dispatching on the `run` fact its `.unit.json` declares — a one-shot runs the program's own entry point, a long-lived one runs the dev server, `none` exits saying there is nothing to run. Names the unit when `apps/` holds several, since a run is one foreground process; `--entry <name>` names one of the programs the unit's own language manifest declares, required for the same reason when it declares several; everything after `--` reaches the program unchanged.
 
@@ -111,13 +113,11 @@ The specific operating parameters for the AI agent.
 
 `docs/adrs/`: Architectural Decision Records — why past decisions were made.
 
-`docs/specs/`: Convention (not a shipped directory) for specs of contracts spanning multiple apps. The shipped `docs/agents/issue-tracker.md` puts specs on the issue tracker instead, so a repository keeping them as files creates this directory itself.
+`docs/specs/`: Convention (not a shipped directory) for specs of contracts spanning multiple apps. The default tracker, GitHub Issues, holds specs as issues instead, so a repository keeping them as files creates this directory itself.
 
 `docs/LESSONS.md`: Repository-specific knowledge that prevents recurring mistakes.
 
 `docs/plans/`: Plans written in plan mode, tracked so they land in the diff with the code they describe.
-
-`docs/agents/`: How the engineering skills read the repository — `issue-tracker.md` names where issues live and how to work them, `triage-labels.md` the label vocabulary, `domain.md` the glossary and ADR layout. Shipped rather than collected, for the reasons `docs/adrs/0002-ship-agent-skill-configuration-in-the-payload.md` records; `apps/repo-builder/src/references/generate.md` step 6 confirms these files and creates the labels they name. Editable by hand afterwards. Read by path rather than through any index, which is what keeps all three reachable in a repository whose `CLAUDE.md` it has not written yet.
 
 ### Root Configuration Files
 

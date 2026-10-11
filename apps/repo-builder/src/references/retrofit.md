@@ -28,7 +28,7 @@ Read each step's file when the flow reaches it.
 4. [Provision the environment and the hooks](retrofit-step-4-provision.md)
 5. [Read the destination's units](retrofit-step-5-units.md)
 6. [Reconcile the destination's layout](retrofit-step-6-layout.md)
-7. [Dispose the collisions, write both records, meet the bar](retrofit-step-7-bar.md) — `retrofit.py normalize`, `proofs`, `references`, `autofix`, `scripts/summarize scripts/check`, `retrofit.py facts`, `/code-review`; [`retrofit-unmet-bar.md`](retrofit-unmet-bar.md) only when the bar is unmet
+7. [Dispose the collisions, write both records, meet the bar](retrofit-step-7-bar.md) — `retrofit.py normalize`, `proofs`, `references`, `autofix`, `scripts/check`, `retrofit.py facts`, `/code-review`; [`retrofit-unmet-bar.md`](retrofit-unmet-bar.md) only when the bar is unmet
 8. [The hosted-write gate](retrofit-step-8-hosted-writes.md) — `retrofit.py hosted read`, `hosted apply`
 9. [Publish, prove, and offer the merge](retrofit-step-9-publish.md) — `retrofit.py pr-body`, `gh pr create`; `retrofit.py hooks` and `sync` after a taken merge
 
