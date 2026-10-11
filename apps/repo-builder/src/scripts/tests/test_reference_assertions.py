@@ -41,7 +41,7 @@ SKILL = REPOSITORY_ROOT / "apps/repo-builder/src"
 # naming `scripts/preflight.py` means this unit's copy. So is `docs/adrs/`:
 # the payload ships only the template there, and a reference citing a record
 # is citing one of this repository's, checked separately below.
-DESTINATION_PREFIXES = ("docs/agents/", ".github/")
+DESTINATION_PREFIXES = (".github/",)
 
 # This repository's own decision records, cited by the references for the
 # reasoning behind a rule rather than described as payload content.

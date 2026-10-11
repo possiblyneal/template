@@ -5,8 +5,8 @@ description: The payload carries docs/agents/, so a generated repository is conf
 scope: [global]
 tags: [template-payload, agent-configuration, generation]
 generated: { by: "agent/claude-opus-5", at: "2026-09-01T17:53:28Z" }
-superseded_by:
-status: accepted
+superseded_by: docs/adrs/0007-carry-agent-skill-defaults-in-the-skills.md
+status: superseded
 ---
 
 # Ship Agent Skill Configuration in the Template Payload
