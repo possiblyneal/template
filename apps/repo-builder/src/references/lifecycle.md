@@ -181,7 +181,7 @@ The value is exactly `omitted-by-choice` with no reason: `scripts/github-parity`
 
 `.github/dependabot.yml` is [replaced, not reconciled](#the-automation-directory-is-replaced-not-reconciled), and the payload's copy lists only `github-actions` and `pre-commit`. It cannot list language ecosystems ahead of their manifests: an entry naming a missing manifest fails the whole run with `dependency_file_not_found`.
 
-So every flow that writes the file **derives the language entries from the manifests the destination actually holds** and appends them to the payload's two. The file's header documents the mapping for humans; it is not the mechanism.
+So every flow that writes the file **derives the language entries from the manifests the destination actually holds** and appends them to the payload's two. The file's header documents the mapping for humans; it is not the mechanism. An update's `apply` performs this derivation, entries and second `pre-commit` directory included, and reports the parsed result and every dropped pair.
 
 **The list is re-derived every run, never preserved.** A hand-added entry does not survive an update (this repository's own `uv` entry says so). Rebuilding from disk is why this is not an [override](#overridden-paths), not one of update's four reconciliation rules, and not a per-destination exception. A manifest deleted since the last run loses its entry, which matters because a stale entry fails the run.
 
