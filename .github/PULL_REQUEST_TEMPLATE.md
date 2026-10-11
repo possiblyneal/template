@@ -15,9 +15,9 @@
 <!-- The reader is a reviewer agent that checks the diff against this body, and
      later agents that find it by commit. It already has the diff and every
      commit body, so carry only what neither shows, across the whole change,
-     in the repository's GLOSSARY.md terms. Every heading stays; a section with
-     nothing in it says "None", which is a claim a reviewer can check where an
-     absent section is not. -->
+     in the terms of the repository's GLOSSARY.md where it has one. Every
+     heading stays; a section with nothing in it says "None", which is a claim
+     a reviewer can check where an absent section is not. -->
 
 ## Intent
 

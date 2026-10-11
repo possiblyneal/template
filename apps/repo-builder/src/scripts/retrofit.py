@@ -2427,7 +2427,11 @@ SLOTS = {
     "read-back": Slot("the issues and decisions read back"),
     "redone": Slot("anything performed again and why, or none"),
     "retries": Slot("transient failures retried and their outcomes, or none", "none"),
-    "not-verified": Slot("anything else not exercised, or nothing"),
+    "not-verified": Slot("anything else not exercised, or None"),
+    "door": Slot(
+        "two-way: a revert restores everything | one-way: data, schema, a "
+        "published interface, or anything a revert leaves changed"
+    ),
     "risk-database": Slot("yes / no"),
     "risk-auth": Slot("yes / no"),
     "risk-api": Slot("yes / no"),
@@ -3398,10 +3402,12 @@ def render_pr_body(arguments: argparse.Namespace) -> dict[str, object]:
     report.add(
         "",
         "**Door:** "
-        + (
-            "one-way: a revert leaves the hosted settings below changed"
+        + fill(
+            "door",
+            "one-way: hosted settings were written before this pull request and "
+            "stay whether it merges or not; reverse each with the commands below"
             if entries
-            else "two-way: a revert restores everything"
+            else None,
         ),
         "",
         *rollback_lines(entries),

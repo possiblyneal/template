@@ -3361,6 +3361,13 @@ class PullRequestBodyTests(unittest.TestCase):
             self.assertIn(
                 "gh api -X PATCH repos/o/ledger -F allow_squash_merge=true", body
             )
+            self.assertIn("**Door:** one-way: hosted settings were written", body)
+
+    def test_leaves_the_door_to_the_operator_without_hosted_writes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            body = self._render(directory)
+
+            self.assertIn("**Door:** [[FILL: door:", body)
 
 
 class ReferencesTests(unittest.TestCase):
