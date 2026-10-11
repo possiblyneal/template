@@ -154,6 +154,20 @@ else
   fail "the message parses as: $(trailers "$out")"
 fi
 
+# git's own default skips a trailer whose key and value already appear in any
+# case, so the same model in lowercase would block the insert silently.
+fixture "a lowercase trailer naming the same model still gets the insert"
+out="$(rewrite "feat: add a thing
+
+A body.
+
+generated-by: glm-5.1" glm-5.1)"
+if [[ "$(trailers "$out")" == $'generated-by: glm-5.1\nGenerated-By: glm-5.1' ]]; then
+  pass
+else
+  fail "the message parses as: $(trailers "$out")"
+fi
+
 # A `---` line is a patch divider to interpret-trailers by default, which would
 # put the trailer above it, mid-body, and stop the footers below from parsing.
 fixture "a --- line in the body does not move the trailer"
