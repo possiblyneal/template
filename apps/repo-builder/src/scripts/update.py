@@ -148,23 +148,25 @@ def ecosystems_of(library: str, names: list[str], cwd: Path) -> dict[str, str]:
 def workspace_globs(manifest: Path) -> list[str]:
     """Member globs a workspace manifest lists; none for a manifest that is not one."""
     try:
-        if manifest.name == "package.json":
-            workspaces = json.loads(manifest.read_text()).get("workspaces", [])
-            members = (
-                workspaces.get("packages", [])
-                if isinstance(workspaces, dict)
-                else workspaces
-            )
-        else:
-            data = tomllib.loads(manifest.read_text())
-            if manifest.name == "Cargo.toml":
-                members = data.get("workspace", {}).get("members", [])
-            else:
-                members = data.get("tool", {}).get("uv", {}).get("workspace", {})
-                members = members.get("members", [])
+        members = workspace_members(manifest)
     except (OSError, ValueError, AttributeError):
         return []
+    if not isinstance(members, list):
+        return []
     return [member for member in members if isinstance(member, str)]
+
+
+def workspace_members(manifest: Path) -> object:
+    text = manifest.read_text()
+    if manifest.name == "package.json":
+        workspaces = json.loads(text).get("workspaces", [])
+        if isinstance(workspaces, dict):
+            return workspaces.get("packages", [])
+        return workspaces
+    data = tomllib.loads(text)
+    if manifest.name == "Cargo.toml":
+        return data.get("workspace", {}).get("members", [])
+    return data.get("tool", {}).get("uv", {}).get("workspace", {}).get("members", [])
 
 
 def is_workspace_member(directory: str, workspace: str, globs: list[str]) -> bool:
@@ -221,15 +223,24 @@ def entry_text(ecosystem: str, directories: list[str]) -> str:
 
 
 def add_payload_pre_commit(text: str, subtree: str) -> str:
-    """Point the payload's `pre-commit` entry at the destination's payload copy too."""
-    start = text.index("  - package-ecosystem: pre-commit\n")
+    """Point the payload's `pre-commit` entry at the destination's payload copy too.
+
+    Edits the payload's text in place, so a payload entry of another shape is
+    refused rather than left half-edited.
+    """
+    opening = "  - package-ecosystem: pre-commit\n"
+    directory = "    directory: /\n"
+    group = "      pre-commit:\n        patterns:"
+    start = text.find(opening)
     head, entry = text[:start], text[start:]
+    if start < 0 or directory not in entry or group not in entry:
+        raise PreflightError(
+            f"payload {DEPENDABOT} has no pre-commit entry of the expected shape"
+        )
     entry = entry.replace(
-        "    directory: /\n",
-        f"    directories:\n      - /\n      - /{subtree}\n",
-        1,
+        directory, f"    directories:\n      - /\n      - /{subtree}\n", 1
     ).replace(
-        "      pre-commit:\n        patterns:",
+        group,
         "      pre-commit:\n        group-by: dependency-name\n        patterns:",
         1,
     )
@@ -334,10 +345,10 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
     changes = result["changes"]
     assert isinstance(changes, list)
     touches_dependabot = any(change["path"] == DEPENDABOT for change in changes)
-    library = old_pairs = None
+    baseline = None
     if touches_dependabot:
         library = dependabot_library(template_repo, target, subtree)
-        old_pairs = watched_pairs(library, destination / DEPENDABOT)
+        baseline = (library, watched_pairs(library, destination / DEPENDABOT))
 
     applied: dict[str, int] = {}
     removed: list[dict[str, str]] = []
@@ -385,7 +396,8 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
         ):
             discarded.append(landed)
     dependabot = None
-    if library is not None and old_pairs is not None:
+    if baseline is not None:
+        library, old_pairs = baseline
         if (destination / DEPENDABOT).is_file():
             derive_dependabot(destination, subtree, library)
         watched = watched_pairs(library, destination / DEPENDABOT)
