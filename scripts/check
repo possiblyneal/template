@@ -8,6 +8,35 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+# By default only the Result table reaches the caller, because the rest of the
+# run -- pre-commit's hook list, test progress, compiler noise -- is what an
+# agent would otherwise read to learn what the table already says. The filter is
+# scripts/summarize rather than a second one here: check runs itself under it
+# with --verbose, so the raw run still exists, and the exit status is the
+# gate's because summarize passes its command's through.
+#
+# The full run is written to tmp/check.log every time, passing or failing. A
+# pre-commit fixer repairs the file and exits non-zero, so a re-run passes and
+# the cause is gone; the log is what a failure outside the table is diagnosed
+# from. --verbose streams the same text live. --gate is the internal entry that
+# runs the steps below and nothing else, so the tee wraps exactly one run.
+case "${1:-}" in
+  "")
+    exec scripts/summarize "${BASH_SOURCE[0]}" --verbose
+    ;;
+  --verbose)
+    mkdir -p tmp
+    # pipefail (set above) makes the pipeline's status the gate's, not tee's.
+    "${BASH_SOURCE[0]}" --gate 2>&1 | tee tmp/check.log
+    exit "${PIPESTATUS[0]}"
+    ;;
+  --gate) ;;
+  *)
+    echo "usage: scripts/check [--verbose]" >&2
+    exit 2
+    ;;
+esac
+
 if [[ ! -x scripts/doctor ]]; then
   echo "scripts/doctor is missing or not executable."
   exit 1

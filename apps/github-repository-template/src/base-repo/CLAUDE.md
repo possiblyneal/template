@@ -6,9 +6,9 @@ These sections are identical in every repository built from the template. Do not
 
 Use these instead of per-language tools. `check` and `fix` run for every language present and report `pass`, `not-applicable`, `unavailable`, or `FAIL`.
 
-- `scripts/check` — the full local gate, a superset of CI except the pull request's changelog check: doctor, script tests, structure, lint, format, type check, test, build, security audit, pre-commit over every file
+- `scripts/check` — the full local gate, a superset of CI except the pull request's changelog check: doctor, script tests, structure, lint, format, type check, test, build, security audit, pre-commit over every file. Prints only the Result table, with the full run in `tmp/check.log`; `--verbose` streams everything
 - `scripts/fix` — lint autofix, then formatting
-- `scripts/summarize <command…>` — run a check and print only its Result table; read `check` output through this
+- `scripts/summarize <command…>` — run a check and print only its Result table; read `ci` and other commands through this, since `check` already does
 - `scripts/run [unit] [--entry <name>] [-- args…]` — start a unit; the unit name is required when `apps/` holds several
 
 `ls scripts/` lists the rest, such as `doctor`, `integration`, and `package`.
