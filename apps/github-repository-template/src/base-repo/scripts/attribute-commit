@@ -24,8 +24,11 @@ set -euo pipefail
 #
 # Nor is anything inserted while a rebase or cherry-pick replays commits: git
 # runs this hook for each one, and stamping them would name the session's model
-# on commits it did not write. An empty message gains nothing either, so git
-# still aborts the commit for it.
+# on commits it did not write.
+#
+# An empty message gains the trailer like any other, so git does not abort it;
+# commitlint's empty-header rule refuses it instead. The hook runs before the
+# editor opens and cannot tell an empty message from one about to be written.
 #
 # pre-commit passes the message file as the first argument at this stage. The
 # other two arguments Git supplies -- the source and the commit object -- are
@@ -52,11 +55,7 @@ attributed() {
   git interpret-trailers --parse --no-divider "$msg_file" | grep -qi '^Generated-By:'
 }
 
-empty() {
-  ! grep -qv -e '^[[:space:]]*$' -e '^#' "$msg_file"
-}
-
-if [[ -n "${CLAUDE_COMMIT_MODEL:-}" ]] && ! empty && ! attributed && ! replaying; then
+if [[ -n "${CLAUDE_COMMIT_MODEL:-}" ]] && ! attributed && ! replaying; then
   git interpret-trailers --in-place --no-divider \
     --trailer "Generated-By: $CLAUDE_COMMIT_MODEL" "$msg_file"
 fi

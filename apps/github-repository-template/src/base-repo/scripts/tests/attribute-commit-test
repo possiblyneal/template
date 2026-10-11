@@ -152,17 +152,6 @@ else
   fail "the message parses as: $(trailers "$out")"
 fi
 
-# git aborts a commit whose message is empty; a trailer would make it non-empty
-# and commit a message that says nothing.
-fixture "an empty message stays empty"
-out="$(rewrite "
-# Please enter the commit message for your changes." glm-5.1)"
-if ! grep -qv -e '^[[:space:]]*$' -e '^#' <<< "$out"; then
-  pass
-else
-  fail "an empty message became: $out"
-fi
-
 # A `---` line is a patch divider to interpret-trailers by default, which would
 # put the trailer above it, mid-body, and stop the footers below from parsing.
 fixture "a --- line in the body does not move the trailer"
