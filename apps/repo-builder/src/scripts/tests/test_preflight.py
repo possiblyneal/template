@@ -265,8 +265,8 @@ class PreflightUnitTests(unittest.TestCase):
             "generation": {
                 "overrides": [
                     {
-                        "path": "docs/agents/issue-tracker.md",
-                        "reason": "tracks elsewhere",
+                        "path": "docs/LESSONS.md",
+                        "reason": "kept as is",
                     }
                 ]
             }
@@ -274,7 +274,7 @@ class PreflightUnitTests(unittest.TestCase):
 
         self.assertEqual(
             preflight.validate_overrides(manifest),
-            {"docs/agents/issue-tracker.md": "tracks elsewhere"},
+            {"docs/LESSONS.md": "kept as is"},
         )
 
     def test_a_malformed_override_names_the_offending_entry(self) -> None:
@@ -891,9 +891,6 @@ class RetrofitTests(unittest.TestCase):
                     "CLAUDE.md",
                     "docs/LESSONS.md",
                     "docs/adrs/0000-template.md",
-                    "docs/agents/domain.md",
-                    "docs/agents/issue-tracker.md",
-                    "docs/agents/triage-labels.md",
                     "scripts/check",
                     "scripts/legacy",
                 ],

@@ -152,17 +152,30 @@ def no_remote_check(candidate: Path) -> Check:
     )
 
 
-def agent_docs_checks(candidate: Path) -> list[Check]:
-    """The payload ships `docs/agents/`, so a generate confirms it rather than writing it."""
-    agents = candidate / "docs/agents"
+def recorded_features(candidate: Path) -> dict[str, object]:
+    """`generation.features` from the candidate's manifest; empty where absent."""
+    manifest_path = candidate / ".repo-template.json"
+    if not manifest_path.is_file():
+        return {}
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    generation = manifest.get("generation", {}) if isinstance(manifest, dict) else {}
+    features = generation.get("features", {}) if isinstance(generation, dict) else {}
+    return features if isinstance(features, dict) else {}
+
+
+def default_tracker_checks(candidate: Path) -> list[Check]:
+    """The payload ships no tracker docs, so the default holds unless a departure says otherwise."""
+    features = recorded_features(candidate)
+    departures = [
+        key
+        for key in ("issue_tracker", "prs_are_requests", "triage_labels")
+        if key in features
+    ]
     return [
         (
-            "engineering-skill config shipped",
-            all(
-                (agents / name).is_file()
-                for name in ("issue-tracker.md", "domain.md", "triage-labels.md")
-            ),
-            "docs/agents holds issue-tracker.md, domain.md, and triage-labels.md",
+            "tracker and labels at their defaults",
+            not departures,
+            "generation.features records no tracker, label, or PR departure",
         ),
     ]
 
@@ -283,7 +296,7 @@ def generation(root: Path, fixture: dict[str, object]) -> list[Check]:
             "report describes empty main base and content PR",
         ),
         no_remote_check(candidate),
-        *agent_docs_checks(candidate),
+        *default_tracker_checks(candidate),
     ]
 
 
@@ -389,7 +402,7 @@ def generation_multi(root: Path, fixture: dict[str, object]) -> list[Check]:
             "report names each deployable with the constraint that selected its language",
         ),
         no_remote_check(candidate),
-        *agent_docs_checks(candidate),
+        *default_tracker_checks(candidate),
     ]
 
 
@@ -397,11 +410,11 @@ def generation_handoff(root: Path, fixture: dict[str, object]) -> list[Check]:
     """The decomposition is fogged: the generate stops at the wayfinding handoff."""
     candidate = root.parent / "candidate"
     report = root.parent / "report.md"
-    # The eval forbids contacting GitHub, so step 6 has no remote to propose from
-    # and records local markdown. `/wayfinder` charts where that file sends it.
+    # The eval's prompt names local markdown as the tracker, a departure from the
+    # GitHub default that generate records. `/wayfinder` charts where it sends it.
     map_dir = candidate / ".scratch"
     map_files = sorted(map_dir.glob("**/*.md")) if map_dir.is_dir() else []
-    tracker = candidate / "docs/agents/issue-tracker.md"
+    tracker = recorded_features(candidate).get("issue_tracker")
     return [
         (
             "candidate materialized",
@@ -421,9 +434,8 @@ def generation_handoff(root: Path, fixture: dict[str, object]) -> list[Check]:
         ),
         (
             "tracker recorded before charting",
-            tracker.is_file()
-            and "markdown" in tracker.read_text(encoding="utf-8").lower(),
-            "docs/agents/issue-tracker.md records the local-markdown tracker",
+            isinstance(tracker, str) and "markdown" in tracker.lower(),
+            "generation.features.issue_tracker records the local-markdown tracker",
         ),
         (
             "map charted on the tracker",
@@ -463,7 +475,6 @@ def generation_handoff(root: Path, fixture: dict[str, object]) -> list[Check]:
             "the Wayfinding line records which trigger fired",
         ),
         no_remote_check(candidate),
-        *agent_docs_checks(candidate),
     ]
 
 

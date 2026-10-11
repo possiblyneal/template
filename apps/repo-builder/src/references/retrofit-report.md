@@ -31,7 +31,7 @@ Every slot left after the renderer runs is one no record can fill, for the reaso
 - `layout-corrections`, `unmovable`, `data-split`, `ignore-rules`: each is the operator's answer to a question the flow asked.
 - `references-repaired`: the rewrite is an edit the flow made by hand, and the references record is rewritten after it, so it holds only what remains.
 - Application boundaries, `adr-fields-defaulted`, `unit-map`, `declared-not-built`: the evidence behind each is read from the destination's files by the flow, and the proofs record holds only the ADR paths written. `ships-nothing` renders from the facts record: a unit shipping `none` beside a manifest no packaging adapter reads.
-- `issue-tracker` renders from the proofs record, which reads the heading of `docs/agents/issue-tracker.md`; it is a slot only where that first heading names no tracker after `Issue tracker:`.
+- `issue-tracker` renders from the proofs record, which reads `generation.features.issue_tracker` from the candidate's `.repo-template.json` and falls back to GitHub Issues via `gh`; it is a slot only where the proofs record carries no tracker.
 - `labels-reason` and `declined-writes`: the reason a write was not approved is the operator's, and `hosted apply` records only the writes it was asked to make.
 - `irreversible-writes`: the cost of having made it is a judgement over the write.
 - `ruleset-enforcement` and `default-branch`: step 9 reads the host after the report's records are written.

@@ -44,7 +44,7 @@ git branch -u "origin/<new>" <new>
 git remote set-head origin -a
 ```
 
-**3. Labels**, with the case-insensitive guard and payload-spelling rename [Remote action gates](lifecycle.md#remote-action-gates) specifies: a label carried under a different case is renamed, not created beside it, and the rename is its own line. List `code-reviewed` where the destination lacks it, since step 9 applies it.
+**3. Labels**, with the case-insensitive guard and spelling-in-force rename [Remote action gates](lifecycle.md#remote-action-gates) specifies: a label carried under a different case is renamed, not created beside it, and the rename is its own line. List `code-reviewed` where the destination lacks it, since step 9 applies it.
 
 **4. Security settings and the branch ruleset** — dependency alerts, security updates, push protection, and the ruleset generate creates. Declinable and recorded. Push protection refused on a private destination on a free plan is reported, not failed.
 
