@@ -30,7 +30,10 @@ def retrofit_fixture(directory: str) -> dict[str, str]:
 
 
 def write_record(
-    destination: Path, commit: str, overrides: list[dict[str, str]] | None = None
+    destination: Path,
+    commit: str,
+    overrides: list[dict[str, str]] | None = None,
+    features: dict[str, object] | None = None,
 ) -> None:
     """The record step 7 writes, owning the fixture payload's paths."""
     record = {
@@ -41,7 +44,7 @@ def write_record(
             "commit": commit,
         },
         "destination": {"repository": "owner/ledger", "default_branch": "main"},
-        "generation": {"features": {}, "overrides": overrides or []},
+        "generation": {"features": features or {}, "overrides": overrides or []},
         "ownership": [
             {"path": ".repo-template.json", "mode": "managed"},
             {"path": "CLAUDE.md", "mode": "managed"},
@@ -111,7 +114,7 @@ class ProofsTests(unittest.TestCase):
         moved_test.write_text(moved_test.read_text() + "# rode along\n")
         with (destination / "scripts/check").open("a") as check:
             check.write("# extended by the flow\n")
-        (destination / ".gitignore").write_text("docs/agents/domain.md\n")
+        (destination / ".gitignore").write_text("docs/adrs/0000-template.md\n")
         write_record(destination, fixture["target_commit"])
         git("add", "-A", cwd=destination)
         return destination
@@ -161,8 +164,10 @@ class ProofsTests(unittest.TestCase):
             (destination / "apps/ledger/pyproject.toml").write_text(
                 '[project]\nname = "ledger"\n\n[tool.ruff]\n'
             )
-            (destination / "docs/agents/issue-tracker.md").write_text(
-                "# Issue tracker: Local markdown\n"
+            write_record(
+                destination,
+                fixture["target_commit"],
+                features={"issue_tracker": "Local markdown under .scratch/"},
             )
             git("add", "-A", cwd=destination)
             result = self._proofs(fixture)
@@ -186,7 +191,19 @@ class ProofsTests(unittest.TestCase):
             )
             self.assertIn(".", report["configuration"])
             self.assertEqual(
-                report["issue_tracker"], {"tracker": "Local markdown", "payload": False}
+                report["issue_tracker"],
+                {"tracker": "Local markdown under .scratch/", "recorded": True},
+            )
+
+    def test_the_issue_tracker_defaults_to_github_without_a_departure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = retrofit_fixture(directory)
+            self._overlay(fixture)
+            report = json.loads(self._proofs(fixture).stdout)
+
+            self.assertEqual(
+                report["issue_tracker"],
+                {"tracker": "GitHub Issues via gh", "recorded": False},
             )
 
     def test_leaves_an_unparsable_manifest_to_a_slot(self) -> None:
@@ -281,7 +298,7 @@ class ProofsTests(unittest.TestCase):
             report = json.loads(result.stdout)
             self.assertEqual(Path(f"{prefix}.proofs.json").read_text(), result.stdout)
             self.assertEqual(report["payload_total"], report["copy"]["total"])
-            # The destination ignores docs/agents/domain.md, so the branch never
+            # The destination ignores docs/adrs/0000-template.md, so the branch never
             # carries that copy.
             self.assertEqual(report["applied"], report["copy"]["total"] - 1)
             self.assertEqual(report["unchanged"], 0)
@@ -304,11 +321,15 @@ class ProofsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fixture = retrofit_fixture(directory)
             destination = self._overlay(fixture)
-            (destination / "docs/agents/domain.md").write_text("changed\n")
+            (destination / "docs/adrs/0000-template.md").write_text("changed\n")
             report = json.loads(self._proofs(fixture).stdout)
 
             self.assertIn(
-                {"class": "extended", "ignored": True, "path": "docs/agents/domain.md"},
+                {
+                    "class": "extended",
+                    "ignored": True,
+                    "path": "docs/adrs/0000-template.md",
+                },
                 report["copy"]["differing"],
             )
 
@@ -338,13 +359,11 @@ class ProofsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fixture = retrofit_fixture(directory)
             destination = self._overlay(fixture)
-            git("rm", "-q", "--cached", "docs/agents/triage-labels.md", cwd=destination)
-            (destination / "docs/agents/triage-labels.md").unlink()
+            git("rm", "-q", "--cached", "scripts/legacy", cwd=destination)
+            (destination / "scripts/legacy").unlink()
             report = json.loads(self._proofs(fixture).stdout)
 
-            self.assertEqual(
-                report["copy"]["missing"], ["docs/agents/triage-labels.md"]
-            )
+            self.assertEqual(report["copy"]["missing"], ["scripts/legacy"])
 
     def test_names_an_impure_move_with_its_line_delta(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -676,16 +695,16 @@ class AutofixTests(unittest.TestCase):
     def _candidate(self, directory: str, fixture: dict[str, str]) -> Path:
         copy = git_output(
             "show",
-            f"{fixture['target_commit']}:{fixture['subtree']}/docs/agents/domain.md",
+            f"{fixture['target_commit']}:{fixture['subtree']}/docs/adrs/0000-template.md",
             cwd=fixture["template_repo"],
         )
         candidate = candidate_repository(
             directory,
-            {"docs/agents/domain.md": f"{copy}\n".encode(), "rates.py": b"x=1\n"},
+            {"docs/adrs/0000-template.md": f"{copy}\n".encode(), "rates.py": b"x=1\n"},
         )
         write_script(
             candidate / "scripts/fix",
-            "echo '# fixed' >> rates.py; echo '# fixed' >> docs/agents/domain.md",
+            "echo '# fixed' >> rates.py; echo '# fixed' >> docs/adrs/0000-template.md",
         )
         git("add", "-A", cwd=candidate)
         git("commit", "-q", "-m", "chore: fix script", cwd=candidate)
@@ -700,7 +719,7 @@ class AutofixTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             report = json.loads(result.stdout)
             self.assertEqual(report["rewritten"], ["rates.py"])
-            self.assertEqual(report["reverted"], ["docs/agents/domain.md"])
+            self.assertEqual(report["reverted"], ["docs/adrs/0000-template.md"])
             self.assertEqual(report["passes"], 2)
             self.assertEqual(
                 git_output("status", "--porcelain", cwd=candidate), "M rates.py"
@@ -3030,12 +3049,31 @@ AUTOFIX = {
     "passes": 1,
     "exit_status": 0,
     "rewritten": ["apps/ledger/src/rates.py"],
-    "reverted": ["docs/agents/domain.md"],
+    "reverted": ["docs/adrs/0000-template.md"],
 }
 
 
 class RecordedLinesTests(unittest.TestCase):
     """Report lines the records settle that the session used to fill."""
+
+    def test_names_a_recorded_tracker_as_a_departure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            proofs = {
+                **PROOFS,
+                "issue_tracker": {"tracker": "Linear, team LED", "recorded": True},
+            }
+            lines, slots = render_report(self, directory, SUMMARY_PASS, proofs=proofs)
+
+            self.assertTrue(
+                any(
+                    line.startswith(
+                        "- Issue tracker: Linear, team LED, recorded in "
+                        "generation.features.issue_tracker; "
+                    )
+                    for line in lines
+                )
+            )
+            self.assertNotIn("issue-tracker", slots)
 
     def test_reads_an_autofix_that_rewrote_nothing_and_left_findings(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -3067,7 +3105,7 @@ class RecordedLinesTests(unittest.TestCase):
                     ".": ["pyproject.toml [tool.ruff]"],
                     "apps/ledger": [],
                 },
-                "issue_tracker": {"tracker": "GitHub", "payload": True},
+                "issue_tracker": {"tracker": "GitHub Issues via gh", "recorded": False},
             }
             facts = {
                 **FACTS,
@@ -3113,8 +3151,7 @@ class RecordedLinesTests(unittest.TestCase):
             self.assertTrue(
                 any(
                     line.startswith(
-                        "- Issue tracker: GitHub, recorded in "
-                        "docs/agents/issue-tracker.md, shipped by the payload; "
+                        "- Issue tracker: GitHub Issues via gh (the default); "
                     )
                     for line in lines
                 )
@@ -3201,7 +3238,7 @@ class RecordedLinesTests(unittest.TestCase):
             self.assertTrue(
                 any(
                     line.startswith(
-                        "- Payload paths the autofix rewrote: docs/agents/domain.md, "
+                        "- Payload paths the autofix rewrote: docs/adrs/0000-template.md, "
                         "reverted in the candidate"
                     )
                     for line in lines

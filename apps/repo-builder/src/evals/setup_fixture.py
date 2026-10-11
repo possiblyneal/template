@@ -101,26 +101,6 @@ def template_payload(repo: Path) -> None:
         '{"schema_version": 1, "run": "none", "ships": {"kind": "none"}}\n',
     )
     write(repo, "base-repo/apps/app-name/src/.gitkeep", "")
-    # The payload ships `docs/agents/` rather than a flow collecting it, so the
-    # fixture ships it too: a generate confirms these three and creates the
-    # labels they name. `issue-tracker.md` records local markdown, which is the
-    # tracker every scenario here uses, since none may contact GitHub.
-    write(
-        repo,
-        "base-repo/docs/agents/issue-tracker.md",
-        "# Issue tracker\n\nIssues live as local markdown under `.scratch/`.\n",
-    )
-    write(
-        repo,
-        "base-repo/docs/agents/domain.md",
-        "# Domain\n\nThe glossary lives in `GLOSSARY.md`; ADRs live in `docs/adrs/`.\n",
-    )
-    write(
-        repo,
-        "base-repo/docs/agents/triage-labels.md",
-        "# Triage labels\n\nbug, enhancement, needs-triage, needs-info, "
-        "ready-for-agent, ready-for-human, wontfix\n",
-    )
     write(
         repo,
         "base-repo/docs/adrs/0000-template.md",
