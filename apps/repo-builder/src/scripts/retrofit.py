@@ -2435,7 +2435,10 @@ SLOTS = {
     "risk-explained": Slot(
         "for every yes, what specifically changed and what happens if it is wrong"
     ),
-    "scope": Slot("anything touched beyond the payload and the moves it required"),
+    "read-first": Slot(
+        "path:line where the change pivots, then the moves and payload copies to skim"
+    ),
+    "out-of-scope": Slot("what a reviewer would otherwise report missing, or None"),
 }
 
 
@@ -3337,8 +3340,8 @@ def render_pr_body(arguments: argparse.Namespace) -> dict[str, object]:
     """Fill the payload's pull-request template from the records.
 
     The headings are the payload's `.github/PULL_REQUEST_TEMPLATE.md`, which a
-    test holds this to. What the records settle is written; the summary, the
-    decisions and the scope are `[[FILL: ...]]` slots.
+    test holds this to. What the records settle is written; the summary, where to
+    read first and what is out of scope are `[[FILL: ...]]` slots.
     """
     prefix = arguments.records
     proofs = load_required(prefix, "proofs")
@@ -3347,21 +3350,30 @@ def render_pr_body(arguments: argparse.Namespace) -> dict[str, object]:
     report = Report(decided(prefix))
     fill = report.fill
     report.add(
-        "## Summary",
+        "## Intent",
+        "",
+        "Bring this repository under the repository template at "
+        f"{proofs['template']['commit'][:12]}, recorded in `.repo-template.json`, "
+        "so later template changes reach it by update.",
         "",
         fill("summary"),
     )
-    report.section("## Linked issue or goal")
+    report.section("## Read first")
+    report.add("", fill("read-first"))
+    report.section("## Decisions")
     report.add(
         "",
-        "none — goal: bring this repository under the repository template at "
-        f"{proofs['template']['commit'][:12]}, recorded in `.repo-template.json`, "
-        "so later template changes reach it by update",
+        f"- Unit map: {fill('unit-map')}",
+        merged_line(report, proofs),
+        f"- Conflicted: {fill('conflicted')}",
+        f"- Overridden: {overridden_line(proofs)}",
     )
-    report.section("## Verification")
+    report.section("## Out of scope")
+    report.add("", fill("out-of-scope"))
+    report.section("## Verified")
     report.add(
         "",
-        "Evidence link: the checks on this pull request, and `scripts/check` on the candidate:",
+        "The checks on this pull request, and `scripts/check` on the candidate:",
         "",
         "```",
         check,
@@ -3374,17 +3386,27 @@ def render_pr_body(arguments: argparse.Namespace) -> dict[str, object]:
             load(prefix, "facts"),
             load(prefix, "autofix"),
         ),
-        "",
-        "Not verified:",
+    )
+    report.section("## Not verified")
+    report.add(
         "",
         f"- Workflows with no `pull_request` trigger, which this pull request never ran: "
         f"{joined(proofs['workflows_without_pull_request'])}",
         f"- {fill('not-verified')}",
     )
-    report.section("## Risk")
+    report.section("## Merge danger")
     report.add(
         "",
-        "Answer each. These are checkable against the diff.",
+        "**Door:** "
+        + (
+            "one-way: a revert leaves the hosted settings below changed"
+            if entries
+            else "two-way: a revert restores everything"
+        ),
+        "",
+        *rollback_lines(entries),
+        "",
+        "**Blast radius:**",
         "",
         "- Database migration or schema change: "
         + fill("risk-database", untouched(proofs, DATABASE_PATHS)),
@@ -3397,30 +3419,6 @@ def render_pr_body(arguments: argparse.Namespace) -> dict[str, object]:
         f"- Deletes or overwrites existing data: {data_risk(proofs)}",
         "",
         fill("risk-explained"),
-        "",
-        "Rollback:",
-        "",
-        *rollback_lines(entries),
-    )
-    report.section("## Decisions a reviewer should check")
-    report.add(
-        "",
-        f"- Unit map: {fill('unit-map')}",
-        merged_line(report, proofs),
-        f"- Conflicted: {fill('conflicted')}",
-        f"- Overridden: {overridden_line(proofs)}",
-    )
-    report.section("## Scope")
-    report.add("", fill("scope"))
-    report.section("## Screenshots or demos")
-    report.add("", "N/A")
-    report.section("## Checklist")
-    report.add(
-        "",
-        "- [ ] Verification section links a CI run or contains raw output.",
-        '- [ ] Every "yes" under Risk is explained.',
-        "- [ ] Decisions section lists real judgment calls, or the change genuinely had none.",
-        "- [ ] No secrets, tokens, passwords, or private data in the diff or in this description.",
     )
 
     output = record_path(prefix, "pr-body.md")
