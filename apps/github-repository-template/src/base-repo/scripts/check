@@ -22,12 +22,12 @@ cd "$repo_root"
 # runs the steps below and nothing else, so the tee wraps exactly one run.
 case "${1:-}" in
   "")
-    exec scripts/summarize "${BASH_SOURCE[0]}" --verbose
+    exec scripts/summarize scripts/check --verbose
     ;;
   --verbose)
     mkdir -p tmp
     # pipefail (set above) makes the pipeline's status the gate's, not tee's.
-    "${BASH_SOURCE[0]}" --gate 2>&1 | tee tmp/check.log
+    scripts/check --gate 2>&1 | tee tmp/check.log
     exit "${PIPESTATUS[0]}"
     ;;
   --gate) ;;

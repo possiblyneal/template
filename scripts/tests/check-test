@@ -105,6 +105,16 @@ else
   fail "wanted the FAIL line and a non-zero exit through summarize, got exit $status: $out"
 fi
 
+gate_fixture "runs from a subdirectory"
+mkdir -p "$work/sub"
+out="$(cd "$work/sub" && ../scripts/check 2>&1)"
+status=$?
+if (( status == 0 )) && grep -qE '^lint +pass' <<< "$out"; then
+  pass
+else
+  fail "wanted the table and exit 0 from a subdirectory, got exit $status: $out"
+fi
+
 gate_fixture "an unknown argument is a usage error"
 (cd "$work" && scripts/check --bogus >/dev/null 2>&1)
 status=$?

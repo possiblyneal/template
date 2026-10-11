@@ -31,6 +31,8 @@ The ownership array is the payload's default. **A destination path still matchin
 
 **The record carries no field naming the flow, no list of layout moves, no run or ship facts beside the unit names, and no destination-specific ownership entry**: an update could branch on any field it can read.
 
+**A destination's own `docs/agents/` files become departures here**, as generate's [Into a repository that already has content](generate.md#into-a-repository-that-already-has-content) reads them: keep the files, read each against the defaults, and record under `generation.features` a tracker that is not GitHub Issues via `gh` as `issue_tracker`, a role carrying another label string in `triage_labels`, and pull requests treated as requests as `prs_are_requests: true`. A file matching the defaults records nothing. The proofs record's `issue_tracker` and step 8's labels read what is recorded.
+
 ## The tool declaration and dependabot
 
 **The tool declaration adds only what is missing**, at the template's floors, keeping any specifier the destination already declares and any settings it already has. [Tools the first manifest must declare](lifecycle.md#tools-the-first-manifest-must-declare) is the per-language list: tool lines and the configuration boundaries it names, nothing else; making moved code build or import is step 6's repair. The language adapter wins where it differs: write the line it reads (for instance `test = "unittest"`) in the root manifest, where the adapter's own pattern finds it, instead of the list's tools.
@@ -102,7 +104,7 @@ Where the destination's test capability collects anything, report its result on 
 
 ```bash
 git -C <candidate> add -A [-- . '<exclude pathspec>'...]
-(cd <candidate> && scripts/summarize scripts/check) > <records>.check.txt
+(cd <candidate> && scripts/check) > <records>.check.txt
 ```
 
 **Then execute the facts step 5 confirmed:**
