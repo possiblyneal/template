@@ -10,10 +10,13 @@ helpers by import. What `apply` leaves is what the flow reconciles by hand.
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import json
 import os
+import posixpath
 import re
 import subprocess
+import tomllib
 from pathlib import Path
 
 import preflight
@@ -23,6 +26,7 @@ SCHEMA_VERSION = 1
 MANIFEST = ".repo-template.json"
 AUTOMATION_PREFIX = ".github/"
 DEPENDABOT = ".github/dependabot.yml"
+DEPENDABOT_LIBRARY = "scripts/libs/dependabot.sh"
 CODEQL = ".github/workflows/codeql.yml"
 EXECUTABLE = "100755"
 SYMLINK = "120000"
@@ -91,6 +95,179 @@ def remove(destination: Path, path: str) -> None:
         (destination / path).unlink(missing_ok=True)
 
 
+def dependabot_library(template_repo: Path, target: str, subtree: str) -> str:
+    """The payload's dependabot.sh at the target: the one source of the mapping."""
+    try:
+        content = blob_bytes(template_repo, f"{target}:{subtree}/{DEPENDABOT_LIBRARY}")
+    except PreflightError as error:
+        raise PreflightError(
+            f"payload has no {DEPENDABOT_LIBRARY} at {target} to derive dependabot.yml"
+        ) from error
+    return content.decode()
+
+
+def run_library(
+    library: str, driver: str, *arguments: str, cwd: Path, stdin: str = ""
+) -> list[str]:
+    """Run bash `driver` with the payload's dependabot library sourced; its lines."""
+    found = subprocess.run(
+        ["bash", "-c", f"{library}\n{driver}", "bash", *arguments],
+        cwd=cwd,
+        input=stdin,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if found.returncode != 0:
+        raise PreflightError(found.stderr.strip() or "dependabot.sh failed")
+    return found.stdout.splitlines()
+
+
+def watched_pairs(library: str, config: Path) -> list[tuple[str, str]]:
+    """The (ecosystem, directory) pairs a config watches, read by the library."""
+    lines = run_library(
+        library, 'dependabot_watched_pairs "$1"', str(config), cwd=config.parent
+    )
+    return [(pair[0], pair[1]) for pair in (line.split("\t") for line in lines)]
+
+
+def ecosystems_of(library: str, names: list[str], cwd: Path) -> dict[str, str]:
+    """The ecosystem each manifest basename earns; a name earning none is absent."""
+    driver = (
+        'while IFS= read -r name; do printf "%s\\t%s\\n" "$name" '
+        '"$(dependabot_ecosystem_of "$name")"; done'
+    )
+    lines = run_library(library, driver, cwd=cwd, stdin="\n".join(names) + "\n")
+    return {
+        name: ecosystem
+        for name, ecosystem in (line.split("\t") for line in lines)
+        if ecosystem
+    }
+
+
+def workspace_globs(manifest: Path) -> list[str]:
+    """Member globs a workspace manifest lists; none for a manifest that is not one."""
+    try:
+        members = workspace_members(manifest)
+    except (OSError, ValueError, AttributeError):
+        return []
+    if not isinstance(members, list):
+        return []
+    return [member for member in members if isinstance(member, str)]
+
+
+def workspace_members(manifest: Path) -> object:
+    text = manifest.read_text()
+    if manifest.name == "package.json":
+        workspaces = json.loads(text).get("workspaces", [])
+        if isinstance(workspaces, dict):
+            return workspaces.get("packages", [])
+        return workspaces
+    data = tomllib.loads(text)
+    if manifest.name == "Cargo.toml":
+        return data.get("workspace", {}).get("members", [])
+    return data.get("tool", {}).get("uv", {}).get("workspace", {}).get("members", [])
+
+
+def is_workspace_member(directory: str, workspace: str, globs: list[str]) -> bool:
+    return any(
+        fnmatch.fnmatchcase(directory, posixpath.normpath(posixpath.join(workspace, g)))
+        for g in globs
+        if not g.startswith("!")
+    )
+
+
+def manifest_directories(
+    destination: Path, tracked: list[str], ecosystems: dict[str, str]
+) -> dict[str, list[str]]:
+    """Directories to watch per ecosystem, from the tracked manifests."""
+    manifests = [path for path in tracked if posixpath.basename(path) in ecosystems]
+    members = {
+        path: workspace_globs(destination / path)
+        for path in manifests
+        if posixpath.basename(path) in ("Cargo.toml", "pyproject.toml", "package.json")
+    }
+    paths = set(tracked)
+    found: dict[str, set[str]] = {}
+    for path in manifests:
+        name, directory = posixpath.basename(path), posixpath.dirname(path) or "."
+        if any(
+            other != path
+            and posixpath.basename(other) == name
+            and is_workspace_member(directory, posixpath.dirname(other) or ".", globs)
+            for other, globs in members.items()
+        ):
+            continue
+        ecosystem = ecosystems[name]
+        lockfile = posixpath.normpath(posixpath.join(directory, "uv.lock"))
+        if ecosystem == "pip" and lockfile in paths:
+            ecosystem = "uv"
+        found.setdefault(ecosystem, set()).add(
+            "/" if directory == "." else f"/{directory}"
+        )
+    return {ecosystem: sorted(found[ecosystem]) for ecosystem in sorted(found)}
+
+
+def entry_text(ecosystem: str, directories: list[str]) -> str:
+    if len(directories) == 1:
+        location = f"    directory: {directories[0]}\n"
+    else:
+        listed = "".join(f"      - {directory}\n" for directory in directories)
+        location = f"    directories:\n{listed}"
+    return (
+        f"  - package-ecosystem: {ecosystem}\n{location}"
+        "    schedule:\n      interval: weekly\n"
+        "    cooldown:\n      default-days: 7\n"
+        f'    groups:\n      {ecosystem}:\n        patterns:\n          - "*"\n'
+    )
+
+
+def add_payload_pre_commit(text: str, subtree: str) -> str:
+    """Point the payload's `pre-commit` entry at the destination's payload copy too.
+
+    Edits the payload's text in place, so a payload entry of another shape is
+    refused rather than left half-edited.
+    """
+    opening = "  - package-ecosystem: pre-commit\n"
+    directory = "    directory: /\n"
+    group = "      pre-commit:\n        patterns:"
+    start = text.find(opening)
+    head, entry = text[:start], text[start:]
+    if start < 0 or directory not in entry or group not in entry:
+        raise PreflightError(
+            f"payload {DEPENDABOT} has no pre-commit entry of the expected shape"
+        )
+    entry = entry.replace(
+        directory, f"    directories:\n      - /\n      - /{subtree}\n", 1
+    ).replace(
+        group,
+        "      pre-commit:\n        group-by: dependency-name\n        patterns:",
+        1,
+    )
+    return head + entry
+
+
+def derive_dependabot(destination: Path, subtree: str, library: str) -> None:
+    """Append the entries the destination's tracked manifests earn, and stage."""
+    prefix = f"{subtree.rstrip('/')}/"
+    tracked = preflight.nul_fields(destination, "ls-files", "-z")
+    kept = [path for path in tracked if not path.startswith(prefix)]
+    names = sorted({posixpath.basename(path) for path in kept})
+    ecosystems = ecosystems_of(library, names, destination)
+    config = destination / DEPENDABOT
+    text = config.read_text()
+    if f"{prefix}.pre-commit-config.yaml" in tracked:
+        text = add_payload_pre_commit(text, subtree.rstrip("/"))
+    if not text.endswith("\n"):
+        text += "\n"
+    for ecosystem, directories in manifest_directories(
+        destination, kept, ecosystems
+    ).items():
+        text += "\n" + entry_text(ecosystem, directories)
+    config.write_text(text)
+    stage(destination, DEPENDABOT)
+
+
 def apply_one(
     change: dict[str, object],
     destination: Path,
@@ -128,8 +305,6 @@ def left_reason(
 ) -> str | None:
     """Why `apply` does not land a change, or None where it does."""
     path = str(change["path"])
-    if path == DEPENDABOT:
-        return "derive"
     if "old_path" in change and (
         preflight.classify_path(str(change["old_path"]), rules)[0] != "managed"
     ):
@@ -167,6 +342,14 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
         features.get("codeql") == "omitted-by-choice"
     )
 
+    changes = result["changes"]
+    assert isinstance(changes, list)
+    touches_dependabot = any(change["path"] == DEPENDABOT for change in changes)
+    baseline = None
+    if touches_dependabot:
+        library = dependabot_library(template_repo, target, subtree)
+        baseline = (library, watched_pairs(library, destination / DEPENDABOT))
+
     applied: dict[str, int] = {}
     removed: list[dict[str, str]] = []
     discarded: list[dict[str, str]] = []
@@ -179,8 +362,6 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
         for entry in unmatched
         if entry["path"].startswith(AUTOMATION_PREFIX)
     ]
-    changes = result["changes"]
-    assert isinstance(changes, list)
     for change in changes:
         refused = False
         if change.get("overridden"):
@@ -214,6 +395,16 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
             refused or change.get("destination_state") == "modified"
         ):
             discarded.append(landed)
+    dependabot = None
+    if baseline is not None:
+        library, old_pairs = baseline
+        if (destination / DEPENDABOT).is_file():
+            derive_dependabot(destination, subtree, library)
+        watched = watched_pairs(library, destination / DEPENDABOT)
+        dependabot = {
+            "watched": [list(pair) for pair in watched],
+            "dropped": [list(pair) for pair in sorted(set(old_pairs) - set(watched))],
+        }
     return {
         "operation": "update-apply",
         "template": template,
@@ -222,6 +413,7 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
         "removed": removed,
         "discarded": discarded,
         "left": left,
+        "dependabot": dependabot,
         "overridden": overridden,
         "refused_overrides": refused_overrides,
         "unmatched_overrides": [

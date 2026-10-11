@@ -12,6 +12,10 @@ from typing import Any, ClassVar
 from test_preflight import git, git_output
 
 MODULE_PATH = Path(__file__).parents[1] / "update.py"
+PAYLOAD = Path(__file__).parents[5] / "apps/github-repository-template/src/base-repo"
+LIBRARY_PATH = "scripts/libs/dependabot.sh"
+LIBRARY = (PAYLOAD / LIBRARY_PATH).read_text()
+DEPENDABOT_PAYLOAD = (PAYLOAD / ".github/dependabot.yml").read_text()
 SUBTREE = "base-repo"
 OLD = "old\n"
 NEW = "new\n"
@@ -193,9 +197,11 @@ class ApplyTests(unittest.TestCase):
                 "apps/product",
                 "apps/pmove",
                 ".github/workflows/ci.yml",
-                ".github/dependabot.yml",
                 ".github/PULL_REQUEST_TEMPLATE.md",
             )
+        } | {
+            LIBRARY_PATH: LIBRARY,
+            ".github/dependabot.yml": DEPENDABOT_PAYLOAD,
         }
         cls.fixture = Fixture(
             cls.directory.name,
@@ -215,7 +221,7 @@ class ApplyTests(unittest.TestCase):
                 "scripts/added-script": NEW,
                 "apps/product": NEW,
                 ".github/workflows/ci.yml": NEW,
-                ".github/dependabot.yml": NEW,
+                ".github/dependabot.yml": DEPENDABOT_PAYLOAD + "# v2\n",
             },
             moves={
                 "scripts/legacy": "scripts/renamed",
@@ -335,11 +341,12 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(self.read("apps/pmove"), "apps/pmove v1\n")
         self.assertFalse((self.fixture.destination / "scripts/from-product").exists())
 
-    def test_dependabot_is_left_for_derivation(self) -> None:
-        self.assertEqual(self.left()[".github/dependabot.yml"]["reason"], "derive")
-        self.assertEqual(
-            self.read(".github/dependabot.yml"), ".github/dependabot.yml v1\n"
+    def test_dependabot_is_landed_rather_than_left(self) -> None:
+        self.assertNotIn(".github/dependabot.yml", self.left())
+        self.assertTrue(
+            self.read(".github/dependabot.yml").startswith(DEPENDABOT_PAYLOAD)
         )
+        self.assertEqual(self.fixture.staged()[".github/dependabot.yml"], "M")
 
     def test_the_payload_mode_travels_with_the_write(self) -> None:
         self.assertTrue(self.fixture.mode("scripts/mode"))
@@ -353,7 +360,7 @@ class ApplyTests(unittest.TestCase):
     def test_applied_is_counted_by_action(self) -> None:
         self.assertEqual(
             self.result["applied"],
-            {"already-absent": 1, "delete": 2, "move": 1, "write": 6},
+            {"already-absent": 1, "delete": 2, "move": 1, "write": 7},
         )
 
     def test_every_removal_is_named_for_the_reference_grep(self) -> None:
@@ -377,6 +384,207 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(template["target_commit"], self.fixture.target)
         self.assertIn("unmatched_overrides", self.result)
         self.assertIn("destination", self.result)
+
+
+DESTINATION_DEPENDABOT = (
+    DEPENDABOT_PAYLOAD
+    + """
+  - package-ecosystem: terraform
+    directory: /infra
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: gomod
+    directory: /apps/old
+    schedule:
+      interval: weekly
+"""
+)
+CARGO_WORKSPACE = '[workspace]\nmembers = ["crates/*"]\n'
+
+
+def derivation_fixture(directory: str, tracked: dict[str, str]) -> Fixture:
+    """The real library and payload file, a destination tracking `tracked`.
+
+    The destination already holds its own `dependabot.yml` with a terraform
+    entry and a gomod entry for a directory that no longer has a module.
+    """
+    return Fixture(
+        directory,
+        {LIBRARY_PATH: LIBRARY, ".github/dependabot.yml": DEPENDABOT_PAYLOAD},
+        {
+            LIBRARY_PATH: LIBRARY,
+            ".github/dependabot.yml": DEPENDABOT_PAYLOAD + "# v2\n",
+        },
+        held={**tracked, ".github/dependabot.yml": DESTINATION_DEPENDABOT},
+    )
+
+
+def gomod_entry(directory: str) -> str:
+    return f"""  - package-ecosystem: gomod
+    directory: {directory}
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      gomod:
+        patterns:
+          - "*"
+"""
+
+
+class DependabotDerivationTests(unittest.TestCase):
+    """`apply` derives the ecosystem entries from the destination's tracked manifests."""
+
+    result: ClassVar[dict[str, Any]]
+    fixture: ClassVar[Fixture]
+    written: ClassVar[str]
+    directory: ClassVar[tempfile.TemporaryDirectory[str]]
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.directory = tempfile.TemporaryDirectory()
+        cls.fixture = derivation_fixture(
+            cls.directory.name,
+            {
+                "apps/glydr/go.mod": "module glydr\n",
+                "apps/glydr/Dockerfile": "FROM scratch\n",
+                "apps/glydr/Dockerfile.dev": "FROM scratch\n",
+                "apps/glydr/notes.md": "not a manifest\n",
+                "deploy/containerfile/Containerfile": "FROM scratch\n",
+                "package.json": '{"workspaces": ["apps/web"]}\n',
+                "apps/web/package.json": "{}\n",
+                "apps/admin/package.json": "{}\n",
+                "pyproject.toml": "[project]\nname = 'root'\n",
+                "uv.lock": "",
+                "apps/tool/pyproject.toml": "[project]\nname = 'tool'\n",
+                "Cargo.toml": CARGO_WORKSPACE,
+                "crates/a/Cargo.toml": "[package]\nname = 'a'\n",
+                "crates/b/Cargo.toml": "[package]\nname = 'b'\n",
+                "apps/other/Cargo.toml": "[package]\nname = 'other'\n",
+                f"{SUBTREE}/package.json": "{}\n",
+                f"{SUBTREE}/.pre-commit-config.yaml": "repos: []\n",
+            },
+        )
+        cls.result = cls.fixture.command("apply")
+        cls.written = (cls.fixture.destination / ".github/dependabot.yml").read_text()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.directory.cleanup()
+
+    def watched(self, ecosystem: str) -> list[str]:
+        return [
+            directory
+            for name, directory in self.result["dependabot"]["watched"]
+            if name == ecosystem
+        ]
+
+    def test_the_payload_file_is_kept_and_the_entries_follow_it(self) -> None:
+        self.assertTrue(
+            self.written.startswith(
+                DEPENDABOT_PAYLOAD.split("  - package-ecosystem: pre-commit")[0]
+            )
+        )
+        self.assertIn("\n\n" + gomod_entry("/apps/glydr"), self.written)
+        self.assertTrue(self.written.endswith('          - "*"\n'))
+
+    def test_the_written_file_is_staged(self) -> None:
+        self.assertEqual(self.fixture.staged()[".github/dependabot.yml"], "M")
+        self.assertEqual(
+            git_output("diff", ".github/dependabot.yml", cwd=self.fixture.destination),
+            "",
+        )
+
+    def test_ecosystems_are_ordered_and_a_docker_directory_is_listed_once(self) -> None:
+        self.assertEqual(
+            self.watched("docker"), ["/apps/glydr", "/deploy/containerfile"]
+        )
+        names = [name for name, _ in self.result["dependabot"]["watched"]]
+        self.assertEqual(
+            list(dict.fromkeys(names)),
+            [
+                "github-actions",
+                "pre-commit",
+                "cargo",
+                "docker",
+                "gomod",
+                "npm",
+                "pip",
+                "uv",
+            ],
+        )
+
+    def test_a_pyproject_beside_a_uv_lock_earns_uv_and_the_rest_earn_pip(self) -> None:
+        self.assertEqual(self.watched("uv"), ["/"])
+        self.assertEqual(self.watched("pip"), ["/apps/tool"])
+
+    def test_several_directories_are_one_entry_with_a_directories_list(self) -> None:
+        self.assertEqual(self.watched("npm"), ["/", "/apps/admin"])
+        self.assertIn(
+            "  - package-ecosystem: npm\n    directories:\n      - /\n      - /apps/admin\n",
+            self.written,
+        )
+        self.assertEqual(self.written.count("package-ecosystem: npm"), 1)
+
+    def test_a_workspace_member_earns_no_entry(self) -> None:
+        self.assertEqual(self.watched("cargo"), ["/", "/apps/other"])
+        self.assertNotIn("/apps/web", self.watched("npm"))
+
+    def test_the_payload_subtree_earns_no_entry_and_adds_its_pre_commit_directory(
+        self,
+    ) -> None:
+        self.assertNotIn(f"/{SUBTREE}", self.watched("npm"))
+        self.assertEqual(self.watched("pre-commit"), ["/", f"/{SUBTREE}"])
+        self.assertIn(
+            f"    directories:\n      - /\n      - /{SUBTREE}\n    schedule:",
+            self.written,
+        )
+        self.assertIn(
+            "      pre-commit:\n        group-by: dependency-name\n        patterns:",
+            self.written,
+        )
+
+    def test_an_old_entry_the_file_lacks_is_dropped_by_pair(self) -> None:
+        self.assertEqual(
+            self.result["dependabot"]["dropped"],
+            [["gomod", "/apps/old"], ["terraform", "/infra"]],
+        )
+
+    def test_dependabot_is_no_longer_left_for_derivation(self) -> None:
+        self.assertEqual(self.result["left"], [])
+
+    def test_a_missing_library_is_a_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                directory,
+                {".github/dependabot.yml": DEPENDABOT_PAYLOAD},
+                {".github/dependabot.yml": DEPENDABOT_PAYLOAD + "# v2\n"},
+            )
+
+            result = run("apply", *fixture.arguments())
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn(LIBRARY_PATH, result.stderr)
+
+    def test_dependabot_is_null_when_the_delta_does_not_hold_the_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(directory, {"scripts/a": OLD}, {"scripts/a": NEW})
+
+            self.assertIsNone(fixture.command("apply")["dependabot"])
+
+    def test_an_unparsable_workspace_manifest_counts_as_no_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = derivation_fixture(
+                directory,
+                {"Cargo.toml": "[workspace\n", "crates/a/Cargo.toml": "[package]\n"},
+            )
+
+            result = fixture.command("apply")
+
+            watched = [p for p in result["dependabot"]["watched"] if p[0] == "cargo"]
+            self.assertEqual(watched, [["cargo", "/"], ["cargo", "/crates/a"]])
 
 
 class ApplyEdgeTests(unittest.TestCase):
