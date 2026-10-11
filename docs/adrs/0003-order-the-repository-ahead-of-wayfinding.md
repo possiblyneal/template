@@ -78,3 +78,7 @@ The repository is created at a remote action gate that precedes any content, so
 that gate authorizes an empty repository and a second gate at step 11 authorizes
 publishing reviewed content. Two gates rather than one is a direct consequence of
 this ordering.
+
+## Amendment — 2026-10-11
+
+`docs/agents/issue-tracker.md` no longer exists: [ADR-0007](0007-carry-agent-skill-defaults-in-the-skills.md) moved the tracker mechanics into `/wayfinder`, which defaults to GitHub Issues and reads a departure from `generation.features.issue_tracker`. The ordering decision above is unchanged.

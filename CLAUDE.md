@@ -139,17 +139,7 @@ Secret scanning, push protection, code scanning, and rulesets are free on a publ
 
 ## Agent skills
 
-### Issue tracker
-
-GitHub Issues on `possiblyneal/template`, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-The seven canonical roles, unrenamed. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context: `GLOSSARY.md` at the root, ADRs in `docs/adrs/`. See `docs/agents/domain.md`.
+The engineering skills (`/wayfinder`, `/triage`, `/ship`) carry the GitHub Issues, `gh`, and seven-role label defaults. A repository that differs records a departure in `.repo-template.json` `generation.features`; this repository records none. See `docs/adrs/0007-carry-agent-skill-defaults-in-the-skills.md`.
 
 ## Child Index
 

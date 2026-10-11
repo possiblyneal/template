@@ -113,13 +113,11 @@ The specific operating parameters for the AI agent.
 
 `docs/adrs/`: Architectural Decision Records — why past decisions were made.
 
-`docs/specs/`: Convention (not a shipped directory) for specs of contracts spanning multiple apps. The shipped `docs/agents/issue-tracker.md` puts specs on the issue tracker instead, so a repository keeping them as files creates this directory itself.
+`docs/specs/`: Convention (not a shipped directory) for specs of contracts spanning multiple apps. The default tracker, GitHub Issues, holds specs as issues instead, so a repository keeping them as files creates this directory itself.
 
 `docs/LESSONS.md`: Repository-specific knowledge that prevents recurring mistakes.
 
 `docs/plans/`: Plans written in plan mode, tracked so they land in the diff with the code they describe.
-
-`docs/agents/`: How the engineering skills read the repository — `issue-tracker.md` names where issues live and how to work them, `triage-labels.md` the label vocabulary, `domain.md` the glossary and ADR layout. Shipped rather than collected, for the reasons `docs/adrs/0002-ship-agent-skill-configuration-in-the-payload.md` records; `apps/repo-builder/src/references/generate.md` step 6 confirms these files and creates the labels they name. Editable by hand afterwards. Read by path rather than through any index, which is what keeps all three reachable in a repository whose `CLAUDE.md` it has not written yet.
 
 ### Root Configuration Files
 

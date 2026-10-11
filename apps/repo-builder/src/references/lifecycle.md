@@ -146,7 +146,7 @@ Bound: the overlay of an absent path, a collision disposed to the payload, the i
 
 The replacement is not declinable and has no `features` entry. A refusal is a refusal of the flow, not of one directory.
 
-**The carve-out is exactly that path prefix.** Rule 4 of [Into a repository that already has content](generate.md#into-a-repository-that-already-has-content), never delete destination content to resolve a collision, still binds everywhere else. `docs/agents/` is decided per file under the collision rules, and a destination's `issue-tracker.md` still wins.
+**The carve-out is exactly that path prefix.** Rule 4 of [Into a repository that already has content](generate.md#into-a-repository-that-already-has-content), never delete destination content to resolve a collision, still binds everywhere else. A destination's own `docs/agents/` files are product the payload no longer ships, and step 6 reads them as departures.
 
 A destination's own `PULL_REQUEST_TEMPLATE.md` and `ISSUE_TEMPLATE/` go too, since they are inside the prefix. Name them in the report as a loss. Where the destination had its own `.github/PULL_REQUEST_TEMPLATE/` directory, [addon adoption](addon-adoption.md) offers the payload's `release.md` and `hotfix.md` back afterwards; say so in the same report line.
 

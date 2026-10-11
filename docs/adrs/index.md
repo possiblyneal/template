@@ -5,8 +5,9 @@
 | # | Decision | Status |
 | --- | --- | --- |
 | [0001](0001-declare-unit-delivery-as-two-facts.md) | Declare Unit Delivery as Two Independent Facts Rather Than One Shape Name | accepted |
-| [0002](0002-ship-agent-skill-configuration-in-the-payload.md) | Ship Agent Skill Configuration in the Template Payload | accepted |
+| [0002](0002-ship-agent-skill-configuration-in-the-payload.md) | Ship Agent Skill Configuration in the Template Payload | superseded by [0007](0007-carry-agent-skill-defaults-in-the-skills.md) |
 | [0003](0003-order-the-repository-ahead-of-wayfinding.md) | Create the Destination Repository Before Wayfinding Runs, and End the Generate at Charting | accepted |
 | [0004](0004-select-the-runner-through-a-repository-variable.md) | Select the Runner Through a Repository Variable | accepted |
 | [0005](0005-stage-a-retrofit-locally-and-write-the-host-last.md) | Stage a Retrofit Locally and Write to the Host Last | accepted |
 | [0006](0006-let-a-quadlet-unit-run-a-registry-image.md) | Let a Quadlet Unit Run a Registry Image It Does Not Build | accepted |
+| [0007](0007-carry-agent-skill-defaults-in-the-skills.md) | Carry the GitHub Tracker and Label Defaults in the Skills, and Record Departures in the Manifest | accepted |
