@@ -5,10 +5,12 @@ set -euo pipefail
 # commitlint reads the message.
 #
 # A tool is not a co-author, but the model is worth keeping: it is the only
-# per-commit record of what produced the change. Claude Code's user-level
-# commit-model hook exports CLAUDE_COMMIT_MODEL, the model ID from the session
-# transcript, into every Bash command that runs git; when the message has no
-# Generated-By line, this inserts one from it.
+# per-commit record of what produced the change. CLAUDE_COMMIT_MODEL is
+# optional and set from outside this repository, by an agent-side hook that
+# exports the session's model ID into every git command it runs; when the
+# message has no Generated-By trailer, this inserts one from it. Without the
+# variable the author writes the trailer. An --amend run by an agent is
+# stamped like any other commit, making the agent its author of record.
 #
 # A Co-Authored-By addressed to noreply@anthropic.com is rewritten first, from
 # habit or with Claude Code's git instructions on, and the address dropped: it
@@ -22,7 +24,8 @@ set -euo pipefail
 #
 # Nor is anything inserted while a rebase or cherry-pick replays commits: git
 # runs this hook for each one, and stamping them would name the session's model
-# on commits it did not write.
+# on commits it did not write. An empty message gains nothing either, so git
+# still aborts the commit for it.
 #
 # pre-commit passes the message file as the first argument at this stage. The
 # other two arguments Git supplies -- the source and the commit object -- are
@@ -43,7 +46,17 @@ replaying() {
   return 1
 }
 
-if [[ -n "${CLAUDE_COMMIT_MODEL:-}" ]] && ! grep -q '^Generated-By:' "$msg_file" && ! replaying; then
+# Read the trailers the way commitlint does, from the last paragraph and in any
+# case, so a Generated-By line in the body does not count as one.
+attributed() {
+  git interpret-trailers --parse --no-divider "$msg_file" | grep -qi '^Generated-By:'
+}
+
+empty() {
+  ! grep -qv -e '^[[:space:]]*$' -e '^#' "$msg_file"
+}
+
+if [[ -n "${CLAUDE_COMMIT_MODEL:-}" ]] && ! empty && ! attributed && ! replaying; then
   git interpret-trailers --in-place --no-divider \
     --trailer "Generated-By: $CLAUDE_COMMIT_MODEL" "$msg_file"
 fi

@@ -18,11 +18,13 @@ script="$repo_root/scripts/attribute-commit"
 # Writes the message to a file, rewrites it in place, and prints the result --
 # the same shape prepare-commit-msg hands the script. The second argument is
 # CLAUDE_COMMIT_MODEL, cleared when absent so a real session's value cannot leak in.
+# Runs inside the case's scratch repository, so the caller's rebase or
+# cherry-pick cannot make every case a replay.
 rewrite() {
   local msg_file="$work/COMMIT_EDITMSG"
   printf '%s\n' "$1" > "$msg_file"
-  env -u CLAUDE_COMMIT_MODEL ${2:+CLAUDE_COMMIT_MODEL="$2"} \
-    "$script" "$msg_file" > /dev/null 2>&1
+  (cd "$work" && env -u CLAUDE_COMMIT_MODEL ${2:+CLAUDE_COMMIT_MODEL="$2"} \
+    "$script" "$msg_file" > /dev/null 2>&1)
   cat "$msg_file"
 }
 
@@ -124,6 +126,43 @@ else
   fail "the message parses as: $(trailers "$out")"
 fi
 
+# commitlint reads trailers from the last paragraph, so a Generated-By line in
+# the body is prose to it and the commit still needs one inserted.
+fixture "a Generated-By line in the body does not block the insert"
+out="$(rewrite "feat: add a thing
+
+Generated-By: is the trailer this adds.
+
+Refs: #3" glm-5.1)"
+if [[ "$(trailers "$out")" == $'Refs: #3\nGenerated-By: glm-5.1' ]]; then
+  pass
+else
+  fail "the message parses as: $(trailers "$out")"
+fi
+
+fixture "a lowercase generated-by trailer is not duplicated"
+out="$(rewrite "feat: add a thing
+
+A body.
+
+generated-by: by hand" glm-5.1)"
+if [[ "$(trailers "$out")" == "generated-by: by hand" ]]; then
+  pass
+else
+  fail "the message parses as: $(trailers "$out")"
+fi
+
+# git aborts a commit whose message is empty; a trailer would make it non-empty
+# and commit a message that says nothing.
+fixture "an empty message stays empty"
+out="$(rewrite "
+# Please enter the commit message for your changes." glm-5.1)"
+if ! grep -qv -e '^[[:space:]]*$' -e '^#' <<< "$out"; then
+  pass
+else
+  fail "an empty message became: $out"
+fi
+
 # A `---` line is a patch divider to interpret-trailers by default, which would
 # put the trailer above it, mid-body, and stop the footers below from parsing.
 fixture "a --- line in the body does not move the trailer"
@@ -143,9 +182,8 @@ fi
 # A rebase or cherry-pick replays commits someone else wrote; stamping them with
 # the session's model would record a model that did not write them.
 fixture "a replayed commit is not stamped"
-git init -q "$work/repo"
-mkdir -p "$work/repo/.git/rebase-merge"
-out="$(cd "$work/repo" && rewrite "feat: a human's commit
+mkdir -p "$work/.git/rebase-merge"
+out="$(rewrite "feat: a human's commit
 
 A body." glm-5.1)"
 if [[ -z "$(trailers "$out")" ]]; then

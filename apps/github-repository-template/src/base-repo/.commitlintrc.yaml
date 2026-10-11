@@ -44,7 +44,7 @@ rules:
   # from the body is invisible to it and fails, which is the same defect
   # footer-leading-blank names one rule up.
   #
-  # A human co-author keeps their own `Co-Authored-By:` line: the hook rewrites
-  # only trailers addressed to noreply@anthropic.com, and nothing here forbids
-  # the others.
+  # A human co-author keeps their own `Co-Authored-By:` line: the hook's
+  # rewrite touches only trailers addressed to noreply@anthropic.com, and
+  # nothing here forbids the others.
   trailer-exists: [2, always, "Generated-By:"]
