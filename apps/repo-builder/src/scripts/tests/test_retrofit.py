@@ -3361,6 +3361,13 @@ class PullRequestBodyTests(unittest.TestCase):
             self.assertIn(
                 "gh api -X PATCH repos/o/ledger -F allow_squash_merge=true", body
             )
+            self.assertIn("**Door:** one-way: hosted settings were written", body)
+
+    def test_leaves_the_door_to_the_operator_without_hosted_writes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            body = self._render(directory)
+
+            self.assertIn("**Door:** [[FILL: door:", body)
 
 
 class ReferencesTests(unittest.TestCase):
@@ -3683,7 +3690,11 @@ class DecideTests(unittest.TestCase):
     def test_each_decision_joins_the_earlier_ones(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             prefix = str(Path(directory) / "records")
-            for key, value in (("summary", "first"), ("scope", "x"), ("summary", "s")):
+            for key, value in (
+                ("summary", "first"),
+                ("out-of-scope", "x"),
+                ("summary", "s"),
+            ):
                 result = run(
                     "decide", "--records", prefix, "--key", key, "--value", value
                 )
@@ -3691,13 +3702,13 @@ class DecideTests(unittest.TestCase):
 
             self.assertEqual(
                 json.loads(Path(f"{prefix}.decisions.json").read_text())["decisions"],
-                {"summary": "s", "scope": "x"},
+                {"summary": "s", "out-of-scope": "x"},
             )
 
     def test_refuses_an_empty_value_and_keeps_the_earlier_ones(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             prefix = str(Path(directory) / "records")
-            run("decide", "--records", prefix, "--key", "scope", "--value", "x")
+            run("decide", "--records", prefix, "--key", "out-of-scope", "--value", "x")
             result = run(
                 "decide", "--records", prefix, "--key", "summary", "--value", " "
             )
@@ -3706,7 +3717,7 @@ class DecideTests(unittest.TestCase):
             self.assertIn("non-empty", result.stderr)
             self.assertEqual(
                 json.loads(Path(f"{prefix}.decisions.json").read_text())["decisions"],
-                {"scope": "x"},
+                {"out-of-scope": "x"},
             )
 
     def test_refuses_a_key_no_renderer_reads(self) -> None:

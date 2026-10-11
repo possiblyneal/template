@@ -12,72 +12,51 @@
 
 <!-- Not an ordinary change? [Release](?expand=1&template=release.md) · [Hotfix](?expand=1&template=hotfix.md) -->
 
-## Summary
+<!-- The reader is a reviewer agent that checks the diff against this body, and
+     later agents that find it by commit. It already has the diff and every
+     commit body, so carry only what neither shows, across the whole change,
+     in the terms of the repository's GLOSSARY.md where it has one. Every
+     heading stays; a section with nothing in it says "None", which is a claim
+     a reviewer can check where an absent section is not. -->
 
-<!-- What changed and why. Two or three sentences. -->
+## Intent
 
-## Linked issue or goal
+<!-- `Closes #N` for each issue this PR finishes, one per line, or where the
+     request came from when there is none. Then the problem and the outcome,
+     concrete enough that a gap between this and the diff is visible. A diagram
+     only when the change's shape spans files and no single hunk shows it. -->
 
-<!-- URL or exact ticket ID, so a reviewer can fetch the original requirements and
-     check this PR against what was actually asked for. Write "none" if there is
-     no issue, and state the goal here instead. -->
+## Read first
 
-## Verification
+<!-- `path:line` on the head side (`path` for a new file) where the change
+     pivots, kept current after fix commits. Then the mechanical parts --
+     renames, generated, vendored -- marked as safe to skim. -->
 
-Evidence link:
+## Decisions
 
-<!-- Link the CI run, or paste raw command output. A reviewer should be able to
-     confirm this PR works without taking anyone's word for it. Summaries of
-     results are not evidence; the run or the output is. -->
+<!-- "X over Y, because Z", only for what could reasonably have gone another
+     way. It stops Y returning as a review finding or a rewrite. "None" claims
+     the change had no judgment calls, which is rarely true. -->
 
-Not verified:
+## Out of scope
 
-<!-- What did you NOT check, and why? Untested paths, skipped cases, anything
-     that only ran locally, anything you could not exercise. "Nothing" is a valid
-     answer only if it is true. This section is more useful than the one above. -->
+<!-- What a reviewer would otherwise report as missing, with the follow-up
+     issue. The linked issue wins where the two conflict. -->
 
-## Risk
+## Verified
 
-Answer each. These are checkable against the diff.
+<!-- `command`, rerunnable from the repository root as written, and what it
+     printed. Red before the change and green after is the strongest evidence;
+     a screenshot for a visual change. A summary of results is not evidence. -->
 
-- Database migration or schema change: yes / no
-- Authentication, authorization, or permission logic touched: yes / no
-- Secrets, credentials, or security config touched: yes / no
-- Public API, CLI, or on-disk format changed in a way existing callers would notice: yes / no
-- Dependencies added, removed, or upgraded: yes / no
-- Deletes or overwrites existing data: yes / no
+## Not verified
 
-<!-- For every "yes", explain below what specifically changed and what happens if
-     it is wrong. -->
+<!-- What was not checked, and why: untested paths, cases skipped, anything
+     that ran only locally or could not be exercised. This section is more use
+     to a reviewer than the one above. -->
 
-Rollback:
+## Merge danger
 
-<!-- How to undo this. If reverting the commit is enough, say so. If not, list
-     the migration reversal, config change, or data restore required. -->
+**Door:** <!-- two-way: a revert restores everything | one-way: data, schema, a published interface, or anything a revert leaves changed -->
 
-## Decisions a reviewer should check
-
-<!-- What did you choose that could reasonably have gone another way? What were
-     you unsure about? Where would a second opinion be most valuable?
-
-     A diff shows what changed. It does not show what was considered and
-     rejected, what was guessed, or which assumption the whole change rests on.
-     Put those here. Leaving this empty claims the change had no judgment calls
-     in it, which is rarely true. -->
-
-## Scope
-
-<!-- Anything touched that is not obviously part of the linked issue, and why it
-     was necessary. Unrelated cleanup, drive-by refactors, and formatting churn
-     belong in their own PR. -->
-
-## Screenshots or demos
-
-<!-- Required for UI changes. Otherwise write N/A. -->
-
-## Checklist
-
-- [ ] Verification section links a CI run or contains raw output.
-- [ ] Every "yes" under Risk is explained.
-- [ ] Decisions section lists real judgment calls, or the change genuinely had none.
-- [ ] No secrets, tokens, passwords, or private data in the diff or in this description.
+**Blast radius:** <!-- the callers, consumers, and surfaces this reaches -->
