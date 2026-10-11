@@ -50,13 +50,19 @@ replaying() {
   return 1
 }
 
-# Read the trailers the way commitlint does, from the last paragraph and in any
-# case, so a Generated-By line in the body does not count as one.
+# Asks what `trailer-exists` will see: commitlint runs this same parse and
+# matches the key case-sensitively, so a Generated-By line in the body, or one
+# spelled in lowercase, does not count.
 attributed() {
-  git interpret-trailers --parse --no-divider "$msg_file" | grep -qi '^Generated-By:'
+  git interpret-trailers --parse "$msg_file" | grep -q '^Generated-By:'
 }
 
+# --if-exists add, because git compares keys case-insensitively and would
+# otherwise treat a lowercase trailer as this one and skip it. --no-divider
+# keeps a `---` body line from pulling the trailer up mid-message; commitlint,
+# whose parse stops at that line, then refuses the commit rather than
+# accepting a trailer buried in the body.
 if [[ -n "${CLAUDE_COMMIT_MODEL:-}" ]] && ! attributed && ! replaying; then
-  git interpret-trailers --in-place --no-divider \
+  git interpret-trailers --in-place --no-divider --if-exists add \
     --trailer "Generated-By: $CLAUDE_COMMIT_MODEL" "$msg_file"
 fi

@@ -140,13 +140,29 @@ else
   fail "the message parses as: $(trailers "$out")"
 fi
 
-fixture "a lowercase generated-by trailer is not duplicated"
+# commitlint matches the key case-sensitively, so a lowercase trailer leaves the
+# commit unattributed to it and the insert is still owed.
+fixture "a lowercase generated-by trailer still gets the insert"
 out="$(rewrite "feat: add a thing
 
 A body.
 
 generated-by: by hand" glm-5.1)"
-if [[ "$(trailers "$out")" == "generated-by: by hand" ]]; then
+if [[ "$(trailers "$out")" == $'generated-by: by hand\nGenerated-By: glm-5.1' ]]; then
+  pass
+else
+  fail "the message parses as: $(trailers "$out")"
+fi
+
+# git's own default skips a trailer whose key and value already appear in any
+# case, so the same model in lowercase would block the insert silently.
+fixture "a lowercase trailer naming the same model still gets the insert"
+out="$(rewrite "feat: add a thing
+
+A body.
+
+generated-by: glm-5.1" glm-5.1)"
+if [[ "$(trailers "$out")" == $'generated-by: glm-5.1\nGenerated-By: glm-5.1' ]]; then
   pass
 else
   fail "the message parses as: $(trailers "$out")"
