@@ -83,7 +83,7 @@ Where a new file goes. `scripts/structure` enforces every placement rule here as
 - `gradle/` — the Gradle wrapper, which Gradle writes and locates by that name
 - `tmp/` — gitignored scratch space
 
-Root *files* are permitted by name: the eight the template ships, `.repo-template.json`, `.structure-allow`, `GLOSSARY.md`, `GLOSSARY-MAP.md`, every addition by occasion, and the root workspace manifests and lockfiles of five of the six languages (Swift has none; see the orphan-manifest rule). `.gitkeep` is permitted anywhere. Anything else needs an entry in `.structure-allow`.
+Root *files* are permitted by name: the eight the template ships, `.repo-template.json`, `.gitmodules`, `.structure-allow`, `GLOSSARY.md`, `GLOSSARY-MAP.md`, every addition by occasion, and the root workspace manifests and lockfiles of five of the six languages (Swift has none; see the orphan-manifest rule). `.gitkeep` is permitted anywhere. Anything else needs an entry in `.structure-allow`.
 
 **`apps/` holds the smallest deployable units**, possibly just one.
 
