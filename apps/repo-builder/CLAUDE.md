@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Develops the `/repo-builder` skill, which builds a repository from the payload at `apps/github-repository-template/src/base-repo/` and carries later template deltas into repositories already generated from it. The skill is this repository's product, so it lives under `apps/` like any other unit; a clone links it into place rather than holding a second copy.
+Develops the `/repo-builder` skill, which builds a repository from the payload at `apps/github-repository-template/src/base-repo/` and carries later template deltas into repositories already generated from it. The skill is this repository's product, so it lives under `apps/` like any other unit; the tracked symlink at `.claude/skills/repo-builder` points at it rather than holding a second copy.
 
 ## Ownership
 

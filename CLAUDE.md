@@ -144,7 +144,7 @@ The engineering skills (`/wayfinder`, `/triage`, `/ship`) carry the GitHub Issue
 ## Child Index
 
 - `apps/github-repository-template/CLAUDE.md` — the template payload and the reference docs explaining it
-- `apps/repo-builder/CLAUDE.md` — the `/repo-builder` skill, and how it is linked into a clone
+- `apps/repo-builder/CLAUDE.md` — the `/repo-builder` skill, and the tracked link that exposes it
 - `scripts/CLAUDE.md` — the language-capabilities interface, and what adding a language or check requires
 - `docs/CLAUDE.md` — ADRs, specs, plans, research records, and lessons
 
