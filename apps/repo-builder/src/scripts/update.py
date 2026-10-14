@@ -298,6 +298,8 @@ def apply_one(
         write_payload(destination, template_repo, target, subtree, path)
         return {"path": path, "action": "move", "old_path": old_path}
     write_payload(destination, template_repo, target, subtree, path)
+    if change.get("destination_state") == "current":
+        return {"path": path, "action": "already-current"}
     return {"path": path, "action": "write"}
 
 
@@ -321,7 +323,7 @@ def left_reason(
     if change.get("override_expired"):
         return None
     state = change["destination_state"]
-    if state == "unmodified":
+    if state in ("unmodified", "current"):
         return None
     if state == "absent" and str(change["status"])[0] in "AD":
         return None
@@ -391,7 +393,7 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
             continue
         landed = apply_one(change, destination, template_repo, target, subtree)
         applied[landed["action"]] = applied.get(landed["action"], 0) + 1
-        if landed["action"] != "write":
+        if landed["action"] not in ("write", "already-current"):
             removed.append(landed)
         lost = landed.get("old_path", landed["path"])
         if lost.startswith(AUTOMATION_PREFIX) and (
