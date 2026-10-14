@@ -54,7 +54,7 @@ Every flow ends in the [Final report](reporting.md#final-report).
 5. Install the hooks ([`### Working hooks in a candidate`](lifecycle.md#working-hooks-in-a-candidate)): update runs in the operator's own clone at `--local` scope. Link any hook the clone already had under `<type>.legacy` before pinning `core.hooksPath`, verify with `git -C <tree> rev-parse --git-path hooks`, never unset the operator's global key, report a global `core.hooksPath` and leave the local one pinned. Then install the destination's dependencies: where it has a root `package-lock.json`, run `npm ci` in it first, since the Node adapters call `npm run` against an installed `node_modules` while uv (`uv run`), cargo, go, SwiftPM and Gradle resolve dependencies on first use. Then run the destination's checks, and run the reconciled settings check, which reports rather than gates:
 
    ```bash
-   <destination>/scripts/check | tee <destination>.check.txt
+   <destination>/scripts/check > <destination>.check.txt; echo "exit $?"
    <destination>/scripts/repo-settings check | tee <destination>.settings.txt
    ```
 
@@ -100,4 +100,4 @@ Then run the mechanical steps over all of them with scripts, not a subagent each
      --destination <destination> [<destination> ...]
    ```
 
-Spawn one subagent per destination only for a `reconcile`, `install-failed`, `check-failed` or `stopped` status. It continues that destination's flow from its records (from step 4 for `reconcile`, whose apply is already done) and returns only the [Final report](reporting.md#final-report) block. A subagent cannot ask the user, so it stops at each remote gate and returns what it would do. The parent owns every gate's confirmation.
+Spawn one subagent per destination only for a `reconcile`, `install-failed`, `check-failed` or `stopped` status. It continues that destination's flow from its records (from step 4 for `reconcile`, whose apply is already done) and returns only the [Final report](reporting.md#final-report) block. A subagent cannot ask the user, so it stops at each remote gate and returns what it would do. The parent owns every gate's confirmation. For each `ready` destination the parent writes the Final report itself from the `run` entry and the records beside the clone.
