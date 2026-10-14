@@ -73,7 +73,7 @@ Every flow ends in the [Final report](reporting.md#final-report).
 8. Create a feature branch from the current remote default branch. Commit only the bounded lifecycle diff. Render the body from the four records with `update.py pr-body` (the same three arguments), which writes `<destination>.pr-body.md` with the destination template's headings and lists any unfilled `[[FILL: <name>]]` slots under `slots`; fill them, then present the remote gate, push, and open the PR with `--body-file <destination>.pr-body.md`. Do not merge.
 
    Settings drift from step 5 is its own gate line: each setting with its current value, its proposed value, and the exact `gh api` command, never folded into the push line. Drift the user declines is reported as declined, not carried forward or re-raised next update. An update that changes the four workflows also offers the runner variable ([`## The runner variable is set only where it is safe and answerable`](lifecycle.md#the-runner-variable-is-set-only-where-it-is-safe-and-answerable)), on its own line and not as drift: `gh variable set RUNNER --body self-hosted -R <owner>/<repository>`, only on a private repository whose `dev-<repository>` runner reads `online`; otherwise say which condition failed and offer nothing.
-9. Verify PR base/head, changed paths, the recorded target commit, check results, and preserved product paths. Re-read any patched setting rather than trusting a 200, and where `RUNNER` was set read `runner_name` off the jobs. When the PR's branch falls behind the default branch, update it with `gh api -X PUT repos/<owner>/<repo>/pulls/<n>/update-branch`; `gh pr update-branch` does not exist.
+9. Verify PR base/head, changed paths, the recorded target commit, check results, and preserved product paths. Re-read any patched setting rather than trusting a 200, and where `RUNNER` was set read `runner_name` off the jobs. `update.py verify --destination <destination> [<destination> ...]` does the PR read for a published destination: it waits on `gh pr checks`, then records base, head, changed-file count, the head's `template.commit` and a count by check conclusion in `<destination>.verify.json`; a destination with no `published` record is `not-published`. When the PR's branch falls behind the default branch, update it with `gh api -X PUT repos/<owner>/<repo>/pulls/<n>/update-branch`; `gh pr update-branch` does not exist.
 
 ## Several destinations
 
@@ -99,5 +99,15 @@ Then run the mechanical steps over all of them with scripts, not a subagent each
    python3 <template-repo>/apps/repo-builder/src/scripts/update.py publish \
      --destination <destination> [<destination> ...]
    ```
+
+   Each result lands in `<destination>.publish.json`, whose `detail` is the pull request URL when `published`.
+4. Verify the published pull requests, which waits for their checks and reads each back (step 9 of the single flow, for the rest of its list):
+
+   ```bash
+   python3 <template-repo>/apps/repo-builder/src/scripts/update.py verify \
+     --destination <destination> [<destination> ...]
+   ```
+
+   Each entry is `{destination, status, pull_request, base, head, files, template_commit, checks}`, `status` `verified` or `not-published` (`detail` why).
 
 Spawn one subagent per destination only for a `reconcile`, `install-failed`, `check-failed` or `stopped` status. It continues that destination's flow from its records (from step 4 for `reconcile`, whose apply is already done) and returns only the [Final report](reporting.md#final-report) block. A subagent cannot ask the user, so it stops at each remote gate and returns what it would do. The parent owns every gate's confirmation. For each `ready` destination the parent writes the Final report itself from the `run` entry and the records beside the clone.

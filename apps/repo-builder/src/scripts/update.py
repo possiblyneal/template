@@ -862,8 +862,66 @@ def publish(arguments: argparse.Namespace) -> dict[str, object]:
             result = publish_destination(destination)
         except PreflightError as error:
             result = {"status": "failed", "detail": str(error)}
-        results.append({"destination": str(destination), **result})
+        entry: dict[str, object] = {"destination": str(destination), **result}
+        record_json(destination, ".publish.json", entry)
+        results.append(entry)
     return {"operation": "update-publish", "destinations": results}
+
+
+def verify_destination(destination: Path) -> dict[str, object]:
+    record = Path(f"{destination}.publish.json")
+    published = (
+        json.loads(record.read_text(encoding="utf-8")) if record.is_file() else {}
+    )
+    if published.get("status") != "published":
+        detail = published.get("detail") or f"missing {record}"
+        return {"status": "not-published", "detail": detail}
+    url = published["detail"]
+    # A failing check exits non-zero; its conclusions, read below, are the result.
+    execute(destination, "gh", "pr", "checks", url, "--watch")
+    viewed = execute(
+        destination,
+        "gh",
+        "pr",
+        "view",
+        url,
+        "--json",
+        "number,url,baseRefName,headRefName,headRefOid,files,statusCheckRollup",
+    )
+    if viewed.returncode != 0:
+        raise PreflightError(f"gh pr view failed: {tail(viewed.stderr)}")
+    view = json.loads(viewed.stdout)
+    manifest = json.loads(
+        git_output(destination, "show", f"{view['headRefOid']}:.repo-template.json")
+    )
+    checks: dict[str, int] = {}
+    for check in view["statusCheckRollup"]:
+        key = check.get("conclusion") or check.get("status")
+        checks[key] = checks.get(key, 0) + 1
+    return {
+        "status": "verified",
+        "pull_request": url,
+        "base": view["baseRefName"],
+        "head": view["headRefName"],
+        "files": len(view["files"]),
+        "template_commit": manifest["template"]["commit"],
+        "checks": checks,
+    }
+
+
+def verify(arguments: argparse.Namespace) -> dict[str, object]:
+    """Read each published pull request's checks and recorded template commit."""
+    results = []
+    for given in arguments.destination:
+        destination = given.resolve()
+        try:
+            result = verify_destination(destination)
+        except (PreflightError, OSError, ValueError, KeyError) as error:
+            result = {"status": "failed", "detail": str(error)}
+        entry = {"destination": str(destination), **result}
+        record_json(destination, ".verify.json", entry)
+        results.append(entry)
+    return {"operation": "update-verify", "destinations": results}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -891,6 +949,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pushing.add_argument("--destination", type=Path, nargs="+", required=True)
     pushing.set_defaults(handler=publish)
+    reading = subparsers.add_parser(
+        "verify", help="read each published pull request's checks back"
+    )
+    reading.add_argument("--destination", type=Path, nargs="+", required=True)
+    reading.set_defaults(handler=verify)
     return parser
 
 

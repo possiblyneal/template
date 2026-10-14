@@ -1354,6 +1354,106 @@ class PublishTests(unittest.TestCase):
             self.assertIn("[[FILL:", entry["detail"])
             self.assertEqual(git_output("branch", "--list", cwd=origin), "* main")
 
+    def test_it_records_each_result_beside_the_clone(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture, _ = self.ready(directory)
+            git("switch", "-q", "main", cwd=fixture.destination)
+
+            self.publish(directory, fixture.destination)
+
+            record = json.loads(Path(f"{fixture.destination}.publish.json").read_text())
+            self.assertEqual(record["status"], "refused")
+            self.assertIn("repo-builder/", record["detail"])
+
+
+class VerifyTests(unittest.TestCase):
+    """Reading the checks and the pull request back after publish."""
+
+    ready = PublishTests.ready
+    publish = PublishTests.publish
+    URL = "https://github.com/owner/destination/pull/7"
+
+    def verify(
+        self, directory: str, view: dict[str, Any], *destinations: Path
+    ) -> list[dict[str, Any]]:
+        gh = Path(directory) / "gh-verify"
+        gh.mkdir()
+        env = stub_gh(
+            str(gh),
+            [
+                {"args": ["pr", "checks"], "status": 1, "stdout": "ignored\n"},
+                {"args": ["pr", "view"], "stdout": json.dumps(view)},
+            ],
+        )
+        result = run_with("verify", "--destination", *map(str, destinations), env=env)
+        assert result.returncode == 0, result.stderr
+        self.calls = gh_calls(str(gh))
+        return json.loads(result.stdout)["destinations"]
+
+    def test_it_reads_the_checks_and_the_template_commit_back(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture, _ = self.ready(directory)
+            destination = fixture.destination
+            self.publish(directory, destination)
+            head = git_output("rev-parse", "HEAD", cwd=destination)
+            view = {
+                "number": 7,
+                "url": self.URL,
+                "baseRefName": "main",
+                "headRefName": f"repo-builder/{fixture.target[:12]}",
+                "headRefOid": head,
+                "files": [{"path": "a"}, {"path": "b"}],
+                "statusCheckRollup": [
+                    {"conclusion": "SUCCESS", "status": "COMPLETED"},
+                    {"conclusion": "SUCCESS", "status": "COMPLETED"},
+                    {"conclusion": "FAILURE", "status": "COMPLETED"},
+                    {"conclusion": "", "status": "IN_PROGRESS"},
+                ],
+            }
+
+            [entry] = self.verify(directory, view, destination)
+
+            expected = {
+                "destination": str(destination),
+                "status": "verified",
+                "pull_request": self.URL,
+                "base": "main",
+                "head": f"repo-builder/{fixture.target[:12]}",
+                "files": 2,
+                "template_commit": fixture.target,
+                "checks": {"SUCCESS": 2, "FAILURE": 1, "IN_PROGRESS": 1},
+            }
+            self.assertEqual(entry, expected)
+            record = json.loads(Path(f"{destination}.verify.json").read_text())
+            self.assertEqual(
+                {k: v for k, v in record.items() if k in expected}, expected
+            )
+            self.assertEqual(
+                [call[:3] for call in self.calls],
+                [["pr", "checks", self.URL], ["pr", "view", self.URL]],
+            )
+            self.assertIn("--watch", self.calls[0])
+
+    def test_an_unpublished_destination_is_reported_and_the_rest_still_run(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture, _ = self.ready(directory)
+            destination = fixture.destination
+            Path(f"{destination}.publish.json").write_text(
+                json.dumps({"status": "refused", "detail": "nothing ahead"})
+            )
+            other = Path(directory) / "never-published"
+
+            entries = self.verify(directory, {}, other, destination)
+
+            self.assertEqual(
+                [(e["destination"], e["status"]) for e in entries],
+                [(str(other), "not-published"), (str(destination), "not-published")],
+            )
+            self.assertIn("nothing ahead", entries[1]["detail"])
+            self.assertEqual(self.calls, [])
+
 
 if __name__ == "__main__":
     unittest.main()
