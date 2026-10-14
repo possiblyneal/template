@@ -10,6 +10,7 @@ helpers by import. What `apply` leaves is what the flow reconciles by hand.
 from __future__ import annotations
 
 import argparse
+import base64
 import fnmatch
 import json
 import os
@@ -866,6 +867,74 @@ def publish(arguments: argparse.Namespace) -> dict[str, object]:
     return {"operation": "update-publish", "destinations": results}
 
 
+def recorded_commit(repository: str) -> str | None:
+    """The commit a repository's `.repo-template.json` records; None without a record."""
+    found = execute(Path.cwd(), "gh", "api", f"repos/{repository}/contents/{MANIFEST}")
+    if found.returncode != 0:
+        return None
+    try:
+        record = json.loads(base64.b64decode(json.loads(found.stdout)["content"]))
+        return str(record["template"]["commit"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def list_eligible(arguments: argparse.Namespace) -> dict[str, object]:
+    """Judge each non-archived repository's recorded commit against the target."""
+    target = preflight.resolve_commit(arguments.template_repo, arguments.target)
+    listed = execute(
+        Path.cwd(),
+        "gh",
+        "repo",
+        "list",
+        arguments.owner,
+        "--no-archived",
+        "--limit",
+        "1000",
+        "--json",
+        "nameWithOwner",
+    )
+    if listed.returncode != 0:
+        raise PreflightError(f"gh repo list failed: {tail(listed.stderr)}")
+    if arguments.clone:
+        arguments.clone.mkdir(parents=True, exist_ok=True)
+        (arguments.clone / "pytest.ini").write_text("", encoding="utf-8")
+    repositories = []
+    for entry in json.loads(listed.stdout):
+        name = str(entry["nameWithOwner"])
+        commit = recorded_commit(name)
+        if commit is None:
+            continue
+        behind = run_git(
+            arguments.template_repo,
+            "merge-base",
+            "--is-ancestor",
+            commit,
+            target,
+            check=False,
+        )
+        verdict = (
+            "current"
+            if commit == target
+            else "eligible"
+            if behind.returncode == 0
+            else "not-ancestor"
+        )
+        result: dict[str, object] = {
+            "repository": name,
+            "commit": commit,
+            "verdict": verdict,
+        }
+        clone = arguments.clone / name.split("/")[-1] if arguments.clone else None
+        if verdict == "eligible" and clone and not clone.exists():
+            cloned = execute(Path.cwd(), "gh", "repo", "clone", name, str(clone))
+            if cloned.returncode != 0:
+                raise PreflightError(f"gh repo clone {name}: {tail(cloned.stderr)}")
+            result["cloned"] = str(clone)
+        repositories.append(result)
+    return {"operation": "update-eligible", "repositories": repositories}
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -891,6 +960,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pushing.add_argument("--destination", type=Path, nargs="+", required=True)
     pushing.set_defaults(handler=publish)
+    listing = subparsers.add_parser(
+        "eligible", help="list an owner's repositories behind the target"
+    )
+    listing.add_argument("--owner", required=True)
+    listing.add_argument("--template-repo", type=Path, required=True)
+    listing.add_argument("--target", required=True, help="template ref or commit")
+    listing.add_argument("--clone", type=Path, help="clone each eligible one here")
+    listing.set_defaults(handler=list_eligible)
     return parser
 
 

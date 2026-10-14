@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import shutil
@@ -7,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -1353,6 +1355,134 @@ class PublishTests(unittest.TestCase):
             self.assertEqual(entry["status"], "refused")
             self.assertIn("[[FILL:", entry["detail"])
             self.assertEqual(git_output("branch", "--list", cwd=origin), "* main")
+
+
+class EligibleTests(unittest.TestCase):
+    """Listing the owner's repositories and judging each recorded commit."""
+
+    def stubbed(
+        self, directory: str, commits: Mapping[str, str | None]
+    ) -> tuple[dict[str, str], str]:
+        """A host listing `commits`, a repository's recorded commit or no record."""
+        responses: list[dict[str, Any]] = [
+            {
+                "args": ["repo", "list", "owner"],
+                "stdout": json.dumps(
+                    [{"nameWithOwner": f"owner/{name}"} for name in commits]
+                ),
+            },
+            {"args": ["repo", "clone"]},
+        ]
+        for name, commit in commits.items():
+            args = ["api", f"repos/owner/{name}/contents/.repo-template.json"]
+            if commit is None:
+                responses.append({"args": args, "status": 1, "stderr": "Not Found"})
+                continue
+            record = json.dumps({"template": {"commit": commit}}).encode()
+            content = base64.encodebytes(record).decode()
+            responses.append({"args": args, "stdout": json.dumps({"content": content})})
+        gh = Path(directory) / "gh"
+        gh.mkdir()
+        return stub_gh(str(gh), responses), str(gh)
+
+    def eligible(
+        self, fixture: Fixture, env: dict[str, str], *extra: str
+    ) -> subprocess.CompletedProcess[str]:
+        return run_with(
+            "eligible",
+            "--owner",
+            "owner",
+            "--template-repo",
+            str(fixture.template),
+            "--target",
+            fixture.target,
+            *extra,
+            env=env,
+        )
+
+    def sibling(self, fixture: Fixture) -> str:
+        git("switch", "-q", "-c", "side", fixture.old_commit, cwd=fixture.template)
+        write(fixture.template, "side.txt", "side\n")
+        git("add", "-A", cwd=fixture.template)
+        git("commit", "-q", "-m", "side", cwd=fixture.template)
+        side = git_output("rev-parse", "HEAD", cwd=fixture.template)
+        git("switch", "-q", "main", cwd=fixture.template)
+        return side
+
+    def test_each_recorded_commit_gets_a_verdict_and_a_missing_record_is_omitted(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(directory, {"a": OLD}, {"a": NEW})
+            commits = {
+                "behind": fixture.old_commit,
+                "same": fixture.target,
+                "side": self.sibling(fixture),
+                "unknown": "0123456789abcdef0123456789abcdef01234567",
+                "bare": None,
+            }
+            env, _ = self.stubbed(directory, commits)
+
+            result = self.eligible(fixture, env)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            output = json.loads(result.stdout)
+            self.assertEqual(output["operation"], "update-eligible")
+            self.assertEqual(
+                output["repositories"],
+                [
+                    {
+                        "repository": "owner/behind",
+                        "commit": fixture.old_commit,
+                        "verdict": "eligible",
+                    },
+                    {
+                        "repository": "owner/same",
+                        "commit": fixture.target,
+                        "verdict": "current",
+                    },
+                    {
+                        "repository": "owner/side",
+                        "commit": commits["side"],
+                        "verdict": "not-ancestor",
+                    },
+                    {
+                        "repository": "owner/unknown",
+                        "commit": commits["unknown"],
+                        "verdict": "not-ancestor",
+                    },
+                ],
+            )
+
+    def test_clone_fetches_only_eligible_repositories_after_an_empty_pytest_ini(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(directory, {"a": OLD}, {"a": NEW})
+            commits = {
+                "behind": fixture.old_commit,
+                "have": fixture.old_commit,
+                "same": fixture.target,
+            }
+            env, gh = self.stubbed(directory, commits)
+            clones = Path(directory) / "update"
+            (clones / "have").mkdir(parents=True)
+
+            result = self.eligible(fixture, env, "--clone", str(clones))
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((clones / "pytest.ini").read_text(), "")
+            by_name = {
+                entry["repository"]: entry
+                for entry in json.loads(result.stdout)["repositories"]
+            }
+            self.assertEqual(by_name["owner/behind"]["cloned"], str(clones / "behind"))
+            self.assertNotIn("cloned", by_name["owner/have"])
+            self.assertNotIn("cloned", by_name["owner/same"])
+            self.assertEqual(
+                [call for call in gh_calls(gh) if call[:2] == ["repo", "clone"]],
+                [["repo", "clone", "owner/behind", str(clones / "behind")]],
+            )
 
 
 if __name__ == "__main__":
