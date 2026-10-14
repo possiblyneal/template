@@ -29,7 +29,7 @@ rules:
   # statement of what produced the change. `scripts/attribute-commit` writes
   # `Generated-By: <model ID>` at prepare-commit-msg from CLAUDE_COMMIT_MODEL,
   # which the user-level commit-model hook exports into an agent's git commands,
-  # and rewrites a stray `Co-Authored-By: <model> <noreply@anthropic.com>` into
+  # or from the session file that hook writes (see the script), and rewrites a stray `Co-Authored-By: <model> <noreply@anthropic.com>` into
   # it -- a tool is not a co-author. This rule is what makes the trailer
   # required rather than incidental, so a commit made without it fails here
   # instead of landing unattributed.

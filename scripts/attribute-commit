@@ -5,11 +5,16 @@ set -euo pipefail
 # commitlint reads the message.
 #
 # A tool is not a co-author, but the model is worth keeping: it is the only
-# per-commit record of what produced the change. CLAUDE_COMMIT_MODEL is
-# optional and set from outside this repository, by an agent-side hook that
-# exports the session's model ID into every git command it runs; when the
-# message has no Generated-By trailer, this inserts one from it. Without the
-# variable the author writes the trailer. An --amend run by an agent is
+# per-commit record of what produced the change. The model comes from outside
+# this repository, from an agent-side hook, by one of two routes. CLAUDE_COMMIT_MODEL
+# is the session's model ID exported into a git command. Claude Code ignores an
+# environment rewritten by a hook that grants no permission
+# (anthropics/claude-code#32060), so the hook also writes the ID, whenever a Bash
+# command contains git, to ${XDG_CACHE_HOME:-~/.cache}/claude-commit-model/<id>,
+# named by CLAUDE_CODE_SESSION_ID, which Claude Code sets in every Bash command.
+# The variable wins when both exist. When the message has no Generated-By
+# trailer, this inserts one from whichever it finds. With neither the author
+# writes the trailer. An --amend run by an agent is
 # stamped like any other commit, making the agent its author of record.
 #
 # A Co-Authored-By addressed to noreply@anthropic.com is rewritten first, from
@@ -17,7 +22,7 @@ set -euo pipefail
 # exists so GitHub can attribute a Co-Authored-By to an account, which does not
 # apply to a Generated-By naming a model. A human co-author keeps their line.
 #
-# Without CLAUDE_COMMIT_MODEL nothing is inserted. A commit made outside Claude
+# Without a model from either source nothing is inserted. A commit made outside Claude
 # Code carries no trailer unless its author writes one, and `trailer-exists` in
 # .commitlintrc.yaml refuses it: a script that supplied the trailer
 # unconditionally would leave that rule reporting a record nothing made.
@@ -62,7 +67,16 @@ attributed() {
 # keeps a `---` body line from pulling the trailer up mid-message; commitlint,
 # whose parse stops at that line, then refuses the commit rather than
 # accepting a trailer buried in the body.
-if [[ -n "${CLAUDE_COMMIT_MODEL:-}" ]] && ! attributed && ! replaying; then
+#
+# The session ID is joined into a path, so only a plain ID is read; anything
+# with a slash or dot could climb out of the cache directory.
+model="${CLAUDE_COMMIT_MODEL:-}"
+session_file="${XDG_CACHE_HOME:-$HOME/.cache}/claude-commit-model/${CLAUDE_CODE_SESSION_ID:-}"
+if [[ -z "$model" && "${CLAUDE_CODE_SESSION_ID:-}" =~ ^[A-Za-z0-9-]+$ && -f "$session_file" ]]; then
+  IFS= read -r model < "$session_file" || true
+fi
+
+if [[ -n "$model" ]] && ! attributed && ! replaying; then
   git interpret-trailers --in-place --no-divider --if-exists add \
-    --trailer "Generated-By: $CLAUDE_COMMIT_MODEL" "$msg_file"
+    --trailer "Generated-By: $model" "$msg_file"
 fi
