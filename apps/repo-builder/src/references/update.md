@@ -77,11 +77,19 @@ Every flow ends in the [Final report](reporting.md#final-report).
 
 ## Several destinations
 
-List the eligible destinations in one call first: `gh repo list <owner> --no-archived --json nameWithOwner`, since an archived repository refuses the push, then per repository `gh api repos/<r>/contents/.repo-template.json` to read the recorded commit, keeping those whose commit is a strict ancestor of the target.
+List and clone the eligible destinations in one call first: it lists `<owner>`'s non-archived repositories (an archived one refuses the push), reads each recorded commit, and gives a verdict of `current`, `eligible` (a strict ancestor of the target) or `not-ancestor`; a repository without a record is omitted. With `--clone` it writes the empty `tmp/update/pytest.ini` of step 1 and clones each `eligible` one to `tmp/update/<repo>`, skipping a directory that exists, and adds `cloned` to its entry:
+
+```bash
+python3 <template-repo>/apps/repo-builder/src/scripts/update.py eligible \
+  --owner <owner> \
+  --template-repo <template-repo> \
+  --target <ref-or-commit> \
+  --clone tmp/update
+```
 
 Then run the mechanical steps over all of them with scripts, not a subagent each:
 
-1. Clone each with `gh repo clone <owner>/<repo> tmp/update/<repo>`, after the empty `tmp/update/pytest.ini` of step 1.
+1. Pass each `cloned` path as a `--destination`.
 2. Run them in one call; it applies, installs dependencies and hooks, proves, advances, checks, reads the settings, branches `repo-builder/<first 12 of target>`, commits with the `Generated-By` trailer and renders the body, for each destination in turn, writing the records beside each clone:
 
    ```bash
@@ -92,7 +100,7 @@ Then run the mechanical steps over all of them with scripts, not a subagent each
      --generated-by <model>
    ```
 
-   Each entry is `{destination, status, detail, drift, settings_unavailable}`, `drift` the settings check's `FAIL` rows and `settings_unavailable` its `unavailable` rows or why it could not run, `status` one of `ready`, `reconcile` (`detail` the paths left), `install-failed`, `check-failed` (`detail` the `scripts/check` log) or `stopped` (`detail` the error). One destination's stop does not stop the rest.
+   The output is `{ok, operation, schema_version, destinations: [...]}`, each entry `{destination, status, detail, drift, settings_unavailable}`, `drift` the settings check's `FAIL` rows and `settings_unavailable` its `unavailable` rows or why it could not run, `status` one of `ready`, `reconcile` (`detail` the paths left), `install-failed`, `check-failed` (`detail` the `scripts/check` log) or `stopped` (`detail` the error). One destination's stop does not stop the rest.
 3. Present the remote gate: a push and pull request per `ready` destination, and each `drift` line as its own settings gate with its `gh api` command, as step 8 describes. Then publish the confirmed ones, which pushes each branch and opens its pull request with `<destination>.pr-body.md`, refusing one off a `repo-builder/` branch, with nothing ahead of the origin default branch, or with a `[[FILL:` slot left:
 
    ```bash
