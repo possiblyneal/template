@@ -31,7 +31,6 @@ DEPENDABOT_LIBRARY = "scripts/libs/dependabot.sh"
 CODEQL = ".github/workflows/codeql.yml"
 EXECUTABLE = "100755"
 SYMLINK = "120000"
-DRIFT = "optional missing:"
 SLOT = "[[FILL:"
 
 
@@ -559,7 +558,7 @@ def render_pr_body(arguments: argparse.Namespace) -> dict[str, object]:
     is written; a heading they do not cover, or a `left` that needs a hand
     merge, becomes a `[[FILL: <name>]]` slot.
     """
-    destination = arguments.destination
+    destination = arguments.destination.resolve()
     apply = json.loads(read_record(destination, ".apply.json"))
     proof = json.loads(read_record(destination, ".proof.json"))
     check = read_record(destination, ".check.txt")
@@ -579,11 +578,20 @@ def render_pr_body(arguments: argparse.Namespace) -> dict[str, object]:
     commits = git_output(
         template_repo, "log", "--format=%h %s", f"{recorded}..{target}", "--", subtree
     ).splitlines()
+    overridden = {entry["path"] for entry in apply["overridden"]}
     delta = [
-        line.removeprefix(f"{subtree}/")
+        path
         for line in git_output(
-            template_repo, "diff", "--name-only", recorded, target, "--", subtree
+            template_repo,
+            "diff",
+            "--name-only",
+            "--no-renames",
+            recorded,
+            target,
+            "--",
+            subtree,
         ).splitlines()
+        if (path := line.removeprefix(f"{subtree}/")) not in overridden
     ]
     authored = proof["authored"]
     dropped = (apply["dependabot"] or {}).get("dropped", [])
@@ -660,8 +668,8 @@ def execute(cwd: Path, *command: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             command, cwd=cwd, text=True, capture_output=True, check=False
         )
-    except FileNotFoundError as error:
-        raise PreflightError(f"{command[0]} is required but was not found") from error
+    except OSError as error:
+        raise PreflightError(f"{command[0]} cannot run: {error.strerror}") from error
 
 
 def tail(text: str, lines: int = 3) -> str:
@@ -681,9 +689,41 @@ def record_json(destination: Path, suffix: str, result: dict[str, object]) -> No
 
 
 def outcome(
-    status: str, detail: str = "", drift: list[str] | None = None
+    status: str,
+    detail: str = "",
+    drift: list[str] | None = None,
+    unavailable: list[str] | None = None,
 ) -> dict[str, object]:
-    return {"status": status, "detail": detail, "drift": drift or []}
+    return {
+        "status": status,
+        "detail": detail,
+        "drift": drift or [],
+        "settings_unavailable": unavailable or [],
+    }
+
+
+def read_settings(destination: Path) -> tuple[list[str], list[str]]:
+    """Drift (a setting that is off) and what could not be read, from the result rows.
+
+    A `not-applicable` row is a setting the plan does not offer, which is
+    neither. A non-zero exit with no row to show for it is unavailable too.
+    The record holds the reason when the check could not run at all.
+    """
+    record = Path(f"{destination}.settings.txt")
+    try:
+        settings = execute(
+            destination, str(destination / "scripts/repo-settings"), "check"
+        )
+    except PreflightError as error:
+        record.write_text(f"{error}\n", encoding="utf-8")
+        return [], [str(error)]
+    record.write_text(settings.stdout, encoding="utf-8")
+    rows = [line.strip() for line in settings.stdout.splitlines()]
+    drift = [row for row in rows if row.split()[1:2] == ["FAIL"]]
+    unavailable = [row for row in rows if row.split()[1:2] == ["unavailable"]]
+    if settings.returncode != 0 and not drift and not unavailable:
+        unavailable.append(tail(settings.stderr + settings.stdout))
+    return drift, unavailable
 
 
 def run_destination(
@@ -720,16 +760,21 @@ def run_destination(
     prior_text = manifest.read_text(encoding="utf-8")
     advanced = advance_commit(step)
 
-    checked = execute(destination, str(destination / "scripts/check"))
-    Path(f"{destination}.check.txt").write_text(checked.stdout, encoding="utf-8")
-    if checked.returncode != 0:
+    def restore() -> None:
         manifest.write_text(prior_text, encoding="utf-8")
         run_git(destination, "add", "--", MANIFEST)
+
+    try:
+        checked = execute(destination, str(destination / "scripts/check"))
+    except PreflightError:
+        restore()
+        raise
+    Path(f"{destination}.check.txt").write_text(checked.stdout, encoding="utf-8")
+    if checked.returncode != 0:
+        restore()
         return outcome("check-failed", f"{destination}/tmp/check.log")
 
-    settings = execute(destination, str(destination / "scripts/repo-settings"), "check")
-    Path(f"{destination}.settings.txt").write_text(settings.stdout, encoding="utf-8")
-    drift = [line.strip() for line in settings.stdout.splitlines() if DRIFT in line]
+    drift, unavailable = read_settings(destination)
 
     short = target[:12]
     run_git(destination, "switch", "-c", f"repo-builder/{short}")
@@ -742,17 +787,19 @@ def run_destination(
         f"chore(template): update to template {short}",
         "-m",
         (
-            "Carries the template payload from "
-            f"{advanced['old_commit']} to {advanced['new_commit']}."
+            "Carries the template payload from\n"
+            f"{advanced['old_commit']}\nto {advanced['new_commit']}."
         ),
         "--trailer",
         f"Generated-By: {arguments.generated_by}",
     )
     if committed.returncode != 0:
-        return outcome("stopped", tail(committed.stderr + committed.stdout), drift)
+        return outcome(
+            "stopped", tail(committed.stderr + committed.stdout), drift, unavailable
+        )
 
     render_pr_body(step)
-    return outcome("ready", drift=drift)
+    return outcome("ready", drift=drift, unavailable=unavailable)
 
 
 def run_update(arguments: argparse.Namespace) -> dict[str, object]:
@@ -781,10 +828,12 @@ def publish_destination(destination: Path) -> dict[str, str]:
         return {"status": "refused", "detail": f"missing {body}"}
     if SLOT in body.read_text(encoding="utf-8"):
         return {"status": "refused", "detail": f"{body} holds a {SLOT} slot"}
-    run_git(destination, "push", "-q", "-u", "origin", branch)
     base = git_output(
         destination, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"
     ).removeprefix("origin/")
+    if git_output(destination, "rev-list", "--count", f"origin/{base}..HEAD") == "0":
+        return {"status": "refused", "detail": f"nothing ahead of origin/{base}"}
+    run_git(destination, "push", "-q", "-u", "origin", branch)
     created = execute(
         destination,
         "gh",

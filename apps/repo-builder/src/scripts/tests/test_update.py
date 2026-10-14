@@ -914,12 +914,11 @@ class AdvanceTests(unittest.TestCase):
             self.assertIn("manifest does not exist", result.stderr)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 CHECK_TABLE = "| lint | pass |\n| test | pass |\n"
-SETTINGS_OUTPUT = "ruleset: ok\noptional missing: secret scanning\n"
+PASS_ROW = (
+    "rulesets           pass             an active branch ruleset on owner/destination"
+)
+SETTINGS_OUTPUT = PASS_ROW + "\n"
 
 
 def headings(text: str) -> list[str]:
@@ -996,6 +995,27 @@ class PrBodyTests(unittest.TestCase):
             self.assertIn("[[FILL: decisions]]", body)
             self.assertNotIn("None. Every delta path landed", body)
 
+    def test_the_blast_radius_names_both_sides_of_a_move_and_no_override(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                directory,
+                {"scripts/old-name": OLD, "scripts/kept": OLD},
+                {"scripts/kept": NEW},
+                moves={"scripts/old-name": "scripts/new-name"},
+                held={"scripts/kept": "destination edit\n"},
+                overrides=[{"path": "scripts/kept", "reason": "ours"}],
+            )
+            self.records(fixture)
+
+            _, body = self.render(fixture)
+
+            radius = body[body.index("**Blast radius:**") :]
+            self.assertIn("- `scripts/old-name`", radius)
+            self.assertIn("- `scripts/new-name`", radius)
+            self.assertNotIn("scripts/kept", radius)
+
     def test_a_missing_record_fails_naming_it(self) -> None:
         for suffix in (".apply.json", ".proof.json", ".check.txt", ".settings.txt"):
             with (
@@ -1016,12 +1036,14 @@ class PrBodyTests(unittest.TestCase):
 
 
 CHECK_STUB = '#!/bin/sh\nprintf "%s\\n" "$CHECK_OUTPUT"\nexit "${CHECK_STATUS:-0}"\n'
-SETTINGS_STUB = '#!/bin/sh\nprintf "%s\\n" "$SETTINGS_OUTPUT"\n'
+SETTINGS_STUB = (
+    '#!/bin/sh\nprintf "%s\\n" "$SETTINGS_OUTPUT"\nexit "${SETTINGS_STATUS:-0}"\n'
+)
 RUN_ENV = {
     **COMMIT_IDENTITY,
     "GIT_CONFIG_GLOBAL": os.devnull,
     "CHECK_OUTPUT": CHECK_TABLE.rstrip(),
-    "SETTINGS_OUTPUT": "ruleset: ok",
+    "SETTINGS_OUTPUT": PASS_ROW,
 }
 
 
@@ -1093,6 +1115,7 @@ class RunTests(unittest.TestCase):
                     "status": "ready",
                     "detail": "",
                     "drift": [],
+                    "settings_unavailable": [],
                 },
             )
             branch = f"repo-builder/{fixture.target[:12]}"
@@ -1105,10 +1128,11 @@ class RunTests(unittest.TestCase):
             )
             message = git_output("log", "-1", "--format=%B", cwd=destination)
             self.assertIn(
-                f"Carries the template payload from {fixture.old_commit} "
+                f"Carries the template payload from\n{fixture.old_commit}\n"
                 f"to {fixture.target}.",
                 message,
             )
+            self.assertLessEqual(max(map(len, message.splitlines())), 100)
             self.assertIn("Generated-By: claude-test", message)
             manifest = git_output("show", "HEAD:.repo-template.json", cwd=destination)
             self.assertIn(f'"commit": "{fixture.target}"', manifest)
@@ -1167,19 +1191,45 @@ class RunTests(unittest.TestCase):
     def test_settings_drift_is_reported_without_stopping(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = run_fixture(directory)
-            output = (
-                "ruleset: ok\n"
-                "optional missing: secret scanning\n"
-                "optional missing: rulesets"
-            )
+            off = "push-protection    FAIL             disabled on owner/destination"
+            unread = "admin              unavailable      settings need admin to read"
+            output = f"{PASS_ROW}\n{off}\n{unread}"
 
-            [entry] = run_command(fixture, env={**RUN_ENV, "SETTINGS_OUTPUT": output})
+            [entry] = run_command(
+                fixture,
+                env={**RUN_ENV, "SETTINGS_OUTPUT": output, "SETTINGS_STATUS": "1"},
+            )
 
             self.assertEqual(entry["status"], "ready")
-            self.assertEqual(
-                entry["drift"],
-                ["optional missing: secret scanning", "optional missing: rulesets"],
-            )
+            self.assertEqual(entry["drift"], [off])
+            self.assertEqual(entry["settings_unavailable"], [unread])
+
+    def test_a_settings_check_that_cannot_run_is_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = run_fixture(directory)
+            git("rm", "-q", "scripts/repo-settings", cwd=fixture.destination)
+            git("commit", "-q", "-m", "no settings", cwd=fixture.destination)
+
+            [entry] = run_command(fixture)
+
+            self.assertEqual(entry["status"], "ready")
+            self.assertEqual(entry["drift"], [])
+            [reason] = entry["settings_unavailable"]
+            self.assertIn("scripts/repo-settings", reason)
+
+    def test_a_check_that_cannot_run_restores_the_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = run_fixture(directory)
+            destination = fixture.destination
+            (destination / "scripts/check").chmod(0o644)
+            git("commit", "-q", "-am", "not executable", cwd=destination)
+
+            [entry] = run_command(fixture)
+
+            self.assertEqual(entry["status"], "stopped")
+            self.assertIn("scripts/check", entry["detail"])
+            staged = git_output("show", ":.repo-template.json", cwd=destination)
+            self.assertIn(f'"commit": "{fixture.old_commit}"', staged)
 
     def test_one_destination_stopping_does_not_stop_the_others(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1281,6 +1331,17 @@ class PublishTests(unittest.TestCase):
             self.assertIn("repo-builder/", entry["detail"])
             self.assertEqual(git_output("branch", "--list", cwd=origin), "* main")
 
+    def test_a_branch_with_nothing_to_publish_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture, origin = self.ready(directory)
+            git("push", "-q", "origin", "HEAD:main", cwd=fixture.destination)
+
+            [entry] = self.publish(directory, fixture.destination)
+
+            self.assertEqual(entry["status"], "refused")
+            self.assertIn("nothing ahead of origin/main", entry["detail"])
+            self.assertEqual(git_output("branch", "--list", cwd=origin), "* main")
+
     def test_a_body_with_an_open_slot_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture, origin = self.ready(directory)
@@ -1292,3 +1353,7 @@ class PublishTests(unittest.TestCase):
             self.assertEqual(entry["status"], "refused")
             self.assertIn("[[FILL:", entry["detail"])
             self.assertEqual(git_output("branch", "--list", cwd=origin), "* main")
+
+
+if __name__ == "__main__":
+    unittest.main()
