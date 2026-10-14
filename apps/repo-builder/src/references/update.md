@@ -79,4 +79,25 @@ Every flow ends in the [Final report](reporting.md#final-report).
 
 List the eligible destinations in one call first: `gh repo list <owner> --no-archived --json nameWithOwner`, since an archived repository refuses the push, then per repository `gh api repos/<r>/contents/.repo-template.json` to read the recorded commit, keeping those whose commit is a strict ancestor of the target.
 
-An update over several repositories runs one subagent per destination, each running this flow and returning only the [Final report](reporting.md#final-report) block. A subagent cannot ask the user, so it stops at each remote gate and returns what it would do. The parent assembles the reports and owns every gate's confirmation.
+Then run the mechanical steps over all of them with scripts, not a subagent each:
+
+1. Clone each with `gh repo clone <owner>/<repo> tmp/update/<repo>`, after the empty `tmp/update/pytest.ini` of step 1.
+2. Run them in one call; it applies, installs dependencies and hooks, proves, advances, checks, reads the settings, branches `repo-builder/<first 12 of target>`, commits with the `Generated-By` trailer and renders the body, for each destination in turn, writing the records beside each clone:
+
+   ```bash
+   python3 <template-repo>/apps/repo-builder/src/scripts/update.py run \
+     --template-repo <template-repo> \
+     --target <ref-or-commit> \
+     --destination <destination> [<destination> ...] \
+     --generated-by <model>
+   ```
+
+   Each entry is `{destination, status, detail, drift}`, `status` one of `ready`, `reconcile` (`detail` the paths left), `install-failed`, `check-failed` (`detail` the `scripts/check` log) or `stopped` (`detail` the error). One destination's stop does not stop the rest.
+3. Present the remote gate: a push and pull request per `ready` destination, and each `drift` line as its own settings gate with its `gh api` command, as step 8 describes. Then publish the confirmed ones, which pushes each branch and opens its pull request with `<destination>.pr-body.md`, refusing one off a `repo-builder/` branch or with a `[[FILL:` slot left:
+
+   ```bash
+   python3 <template-repo>/apps/repo-builder/src/scripts/update.py publish \
+     --destination <destination> [<destination> ...]
+   ```
+
+Spawn one subagent per destination only for a `reconcile`, `install-failed`, `check-failed` or `stopped` status. It continues that destination's flow from its records (from step 4 for `reconcile`, whose apply is already done) and returns only the [Final report](reporting.md#final-report) block. A subagent cannot ask the user, so it stops at each remote gate and returns what it would do. The parent owns every gate's confirmation.
