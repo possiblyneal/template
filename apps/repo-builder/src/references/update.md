@@ -118,4 +118,13 @@ Then run the mechanical steps over all of them with scripts, not a subagent each
 
    Each entry is `{destination, status, pull_request, base, head, files, template_commit, checks}`, `status` `verified` or `not-published` (`detail` why).
 
-Spawn one subagent per destination only for a `reconcile`, `install-failed`, `check-failed` or `stopped` status. It continues that destination's flow from its records (from step 4 for `reconcile`, whose apply is already done) and returns only the [Final report](reporting.md#final-report) block. A subagent cannot ask the user, so it stops at each remote gate and returns what it would do. The parent owns every gate's confirmation. For each `ready` destination the parent writes the Final report itself from the `run` entry and the records beside the clone.
+5. Render the Final report from the six records beside each clone (`.apply.json`, `.proof.json`, `.check.txt`, `.settings.txt`, `.publish.json`, `.verify.json`); a missing one fails naming it. It writes `report.md` in the first destination's parent directory and returns `{operation, path, slots}`, each slot a line the records cannot settle:
+
+   ```bash
+   python3 <template-repo>/apps/repo-builder/src/scripts/update.py report \
+     --template-repo <template-repo> \
+     --target <ref-or-commit> \
+     --destination <destination> [<destination> ...]
+   ```
+
+Spawn one subagent per destination only for a `reconcile`, `install-failed`, `check-failed` or `stopped` status. It continues that destination's flow from its records (from step 4 for `reconcile`, whose apply is already done) and returns only the [Final report](reporting.md#final-report) block. A subagent cannot ask the user, so it stops at each remote gate and returns what it would do. The parent owns every gate's confirmation. The parent's Final report is the `report` output below, with each `[[FILL: <name>]]` slot it lists decided.

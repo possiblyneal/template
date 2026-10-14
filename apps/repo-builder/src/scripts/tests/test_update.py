@@ -178,7 +178,7 @@ class Fixture:
 class ApplyTests(unittest.TestCase):
     """Each state a delta path can arrive in, decided once by a single run."""
 
-    result: ClassVar[dict[str, object]]
+    result: ClassVar[dict[str, Any]]
     fixture: ClassVar[Fixture]
     directory: ClassVar[tempfile.TemporaryDirectory[str]]
 
@@ -396,6 +396,18 @@ class ApplyTests(unittest.TestCase):
                 "move": 1,
                 "write": 7,
             },
+        )
+
+    def test_applied_paths_are_listed_by_action_beside_the_counts(self) -> None:
+        paths = self.result["applied_paths"]
+        self.assertEqual(
+            paths["already-current"], ["scripts/current", "scripts/current-script"]
+        )
+        self.assertEqual(paths["move"], ["scripts/renamed"])
+        self.assertIn("scripts/added", paths["write"])
+        self.assertEqual(
+            {action: len(listed) for action, listed in paths.items()},
+            self.result["applied"],
         )
 
     def test_every_removal_is_named_for_the_reference_grep(self) -> None:
@@ -1504,6 +1516,224 @@ class VerifyTests(unittest.TestCase):
             )
             self.assertIn("nothing ahead", entries[1]["detail"])
             self.assertEqual(self.calls, [])
+
+
+class ReportTests(unittest.TestCase):
+    """The several-destinations Final report, rendered from six records each."""
+
+    URL = "https://github.com/owner/{}/pull/7"
+    ROWS = (
+        "rulesets           pass             an active branch ruleset\n"
+        "secret-scanning    FAIL             disabled\n"
+        "code-scanning      unavailable      needs administration\n"
+    )
+
+    def setUp(self) -> None:
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.fixture = Fixture(
+            self.directory.name, {"scripts/a": OLD}, {"scripts/a": NEW}
+        )
+        self.names = ("alpha", "beta")
+
+    def destination(self, name: str) -> Path:
+        return Path(self.directory.name) / "clones" / name
+
+    def records(self, name: str, **changes: Any) -> None:
+        """Write the six records one clone leaves, `changes` overriding a record."""
+        destination = self.destination(name)
+        destination.parent.mkdir(exist_ok=True)
+        apply = {
+            "template": {
+                "recorded_commit": self.fixture.old_commit,
+                "target_commit": self.fixture.target,
+                "subtree": SUBTREE,
+            },
+            "destination": {"repository": f"owner/{name}"},
+            "applied_paths": {
+                "write": ["scripts/shared", f"scripts/only-{name}"],
+                "already-current": ["scripts/current"] if name == "beta" else [],
+            },
+            "removed": [{"path": "scripts/old", "action": "delete"}],
+            "left": [],
+            "overridden": [],
+        }
+        records: dict[str, Any] = {
+            "apply": apply,
+            "proof": {
+                "identical": 4,
+                "total": 5,
+                "authored": [".repo-template.json"],
+            },
+            "check": CHECK_TABLE,
+            "settings": PASS_ROW + "\n",
+            "publish": {"status": "published", "detail": self.URL.format(name)},
+            "verify": {
+                "status": "verified",
+                "pull_request": self.URL.format(name),
+                "files": 3,
+                "template_commit": self.fixture.target,
+                "checks": {"SUCCESS": 3},
+            },
+        } | changes
+        suffixes = {
+            "apply": ".apply.json",
+            "proof": ".proof.json",
+            "check": ".check.txt",
+            "settings": ".settings.txt",
+            "publish": ".publish.json",
+            "verify": ".verify.json",
+        }
+        for key, suffix in suffixes.items():
+            content = records[key]
+            Path(f"{destination}{suffix}").write_text(
+                content if isinstance(content, str) else json.dumps(content)
+            )
+
+    def report(self) -> tuple[dict[str, Any], str]:
+        result = run(
+            "report",
+            "--template-repo",
+            str(self.fixture.template),
+            "--target",
+            self.fixture.target,
+            "--destination",
+            *[str(self.destination(name)) for name in self.names],
+        )
+        assert result.returncode == 0, result.stderr
+        written = json.loads(result.stdout)
+        return written, Path(written["path"]).read_text()
+
+    def test_it_renders_a_row_per_destination_and_the_shared_sections(self) -> None:
+        for name in self.names:
+            self.records(name)
+
+        written, report = self.report()
+
+        self.assertEqual(written["operation"], "update-report")
+        self.assertEqual(
+            written["path"], str(self.destination("alpha").parent / "report.md")
+        )
+        self.assertEqual(written["slots"], [])
+        for line in (
+            "- Status: finished",
+            "- Operation: update",
+            f"- Template: `{self.fixture.old_commit}` -> `{self.fixture.target}`",
+            "- Destinations: 2",
+            "| owner/alpha | https://github.com/owner/alpha/pull/7 | 3 | pass | SUCCESS 3 |",
+            "| owner/beta | https://github.com/owner/beta/pull/7 | 3 | pass | SUCCESS 3 |",
+            (
+                "- Applied: `scripts/shared` (all); `scripts/only-alpha` (owner/alpha); "
+                "`scripts/only-beta` (owner/beta)"
+            ),
+            "- Already current: `scripts/current` (owner/beta)",
+            "- Preserved/Merged/Conflicted: none",
+            "- Renamed/deleted: delete `scripts/old` (all)",
+            "- Overridden: none",
+            "- Authored surface: `.repo-template.json` (all)",
+            "- Drift: none found",
+            "- `scripts/check`: pass on 2/2 destinations",
+            "- Copied paths byte-identical to their source: 8/10",
+            "- Template commit on each head equals the target: 2/2",
+            "- Code review: skipped, as Reviewing the pull request directs",
+            (
+                "- Left for the operator: "
+                f"{self.destination('alpha')}: carries an open pull request"
+            ),
+            "Review and merge the 2 pull requests.",
+        ):
+            self.assertIn(line, report.splitlines())
+
+    def test_a_missing_record_fails_naming_it(self) -> None:
+        for name in self.names:
+            self.records(name)
+        missing = Path(f"{self.destination('beta')}.verify.json")
+        missing.unlink()
+
+        result = run(
+            "report",
+            "--template-repo",
+            str(self.fixture.template),
+            "--target",
+            self.fixture.target,
+            "--destination",
+            *[str(self.destination(name)) for name in self.names],
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(f"missing record {missing}", result.stderr)
+
+    def test_a_failing_destination_is_shown_and_leaves_slots(self) -> None:
+        self.records("alpha")
+        self.records(
+            "beta",
+            check="| lint | FAIL |\n| test | pass |\n",
+            settings=self.ROWS,
+            verify={
+                "status": "verified",
+                "pull_request": self.URL.format("beta"),
+                "files": 5,
+                "template_commit": self.fixture.old_commit,
+                "checks": {"SUCCESS": 2, "FAILURE": 1},
+            },
+        )
+
+        written, report = self.report()
+
+        lines = report.splitlines()
+        self.assertEqual(written["slots"], ["status", "pending-action"])
+        self.assertIn("- Status: [[FILL: status]]", lines)
+        self.assertIn(
+            "| owner/beta | https://github.com/owner/beta/pull/7 | 5 | FAIL "
+            "| FAILURE 1, SUCCESS 2 |",
+            lines,
+        )
+        self.assertIn(
+            "- Drift: owner/beta: secret-scanning    FAIL             disabled", lines
+        )
+        self.assertIn(
+            "- Unavailable: owner/beta: code-scanning      unavailable      "
+            "needs administration",
+            lines,
+        )
+        self.assertIn("- `scripts/check`: pass on 1/2 destinations", lines)
+        self.assertIn("- Template commit on each head equals the target: 1/2", lines)
+        self.assertIn("[[FILL: pending-action]]", lines)
+
+    def test_a_left_path_makes_the_hand_reconciled_lines_a_slot(self) -> None:
+        self.records("alpha")
+        self.records(
+            "beta",
+            apply={
+                "template": {
+                    "recorded_commit": self.fixture.old_commit,
+                    "target_commit": self.fixture.target,
+                    "subtree": SUBTREE,
+                },
+                "destination": {"repository": "owner/beta"},
+                "applied_paths": {},
+                "removed": [
+                    {"path": "scripts/new", "action": "move", "old_path": "scripts/was"}
+                ],
+                "left": [{"path": "scripts/x", "reason": "modified"}],
+                "overridden": [{"path": "scripts/kept", "reason": "ours"}],
+            },
+        )
+
+        written, report = self.report()
+
+        lines = report.splitlines()
+        self.assertEqual(written["slots"], ["preserved-merged-conflicted"])
+        self.assertIn(
+            "- Preserved/Merged/Conflicted: [[FILL: preserved-merged-conflicted]]",
+            lines,
+        )
+        self.assertIn(
+            "- Renamed/deleted: delete `scripts/old` (owner/alpha); "
+            "move `scripts/was` -> `scripts/new` (owner/beta)",
+            lines,
+        )
+        self.assertIn("- Overridden: `scripts/kept`: ours (owner/beta)", lines)
 
 
 class EligibleTests(unittest.TestCase):

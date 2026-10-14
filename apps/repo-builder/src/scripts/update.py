@@ -355,7 +355,7 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
         library = dependabot_library(template_repo, target, subtree)
         baseline = (library, watched_pairs(library, destination / DEPENDABOT))
 
-    applied: dict[str, int] = {}
+    applied: dict[str, list[str]] = {}
     removed: list[dict[str, str]] = []
     discarded: list[dict[str, str]] = []
     left: list[dict[str, str]] = []
@@ -392,7 +392,7 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
             )
             continue
         landed = apply_one(change, destination, template_repo, target, subtree)
-        applied[landed["action"]] = applied.get(landed["action"], 0) + 1
+        applied.setdefault(landed["action"], []).append(landed["path"])
         if landed["action"] not in ("write", "already-current"):
             removed.append(landed)
         lost = landed.get("old_path", landed["path"])
@@ -414,7 +414,8 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
         "operation": "update-apply",
         "template": template,
         "destination": result["destination"],
-        "applied": dict(sorted(applied.items())),
+        "applied": {action: len(paths) for action, paths in sorted(applied.items())},
+        "applied_paths": dict(sorted(applied.items())),
         "removed": removed,
         "discarded": discarded,
         "left": left,
@@ -995,6 +996,153 @@ def verify(arguments: argparse.Namespace) -> dict[str, object]:
     return {"operation": "update-verify", "destinations": results}
 
 
+def settled(conclusion: str) -> bool:
+    return conclusion.lower() in ("success", "skipped", "neutral")
+
+
+def aggregate(found: dict[str, list[str]], total: int) -> str:
+    """Each label with the destinations it applies to, `all` when every one does."""
+    return (
+        "; ".join(
+            f"{label} ({'all' if len(names) == total else ', '.join(names)})"
+            for label, names in found.items()
+        )
+        or "none"
+    )
+
+
+def render_report(arguments: argparse.Namespace) -> dict[str, object]:
+    """Render the several-destinations Final report from each clone's records.
+
+    Reconciliation, File list and Verification are aggregated across the
+    destinations by path. What the records cannot settle is a
+    `[[FILL: <name>]]` slot, listed under `slots`; a missing record fails.
+    """
+    destinations = [given.resolve() for given in arguments.destination]
+    target = preflight.resolve_commit(arguments.template_repo, arguments.target)
+    slots: list[str] = []
+
+    def slot(name: str) -> str:
+        slots.append(name)
+        return f"[[FILL: {name}]]"
+
+    rows: list[str] = []
+    olds: list[str] = []
+    applied: dict[str, list[str]] = {}
+    current: dict[str, list[str]] = {}
+    removed: dict[str, list[str]] = {}
+    overridden: dict[str, list[str]] = {}
+    authored: dict[str, list[str]] = {}
+    drift: list[str] = []
+    unavailable: list[str] = []
+    checks_passed = identical = total = on_target = 0
+    finished = True
+    left = False
+    for destination in destinations:
+        apply = json.loads(read_record(destination, ".apply.json"))
+        proof = json.loads(read_record(destination, ".proof.json"))
+        check = read_record(destination, ".check.txt")
+        settings = read_record(destination, ".settings.txt")
+        published = json.loads(read_record(destination, ".publish.json"))
+        verified = json.loads(read_record(destination, ".verify.json"))
+        name = str(apply["destination"]["repository"])
+        olds.append(str(apply["template"]["recorded_commit"]))
+        left = left or bool(apply["left"])
+        passed = "FAIL" not in {
+            word for line in check.splitlines() for word in line.split()
+        }
+        checks_passed += passed
+        conclusions = verified.get("checks", {})
+        finished = (
+            finished
+            and verified["status"] == "verified"
+            and published["status"] == "published"
+            and all(settled(key) for key in conclusions)
+        )
+        on_target += verified.get("template_commit") == target
+        ci = ", ".join(f"{key} {count}" for key, count in sorted(conclusions.items()))
+        rows.append(
+            f"| {name} | {published['detail']} | {verified.get('files', '-')} "
+            f"| {'pass' if passed else 'FAIL'} | {ci or 'none'} |"
+        )
+        identical += proof["identical"]
+        total += proof["total"]
+        paths = apply["applied_paths"]
+        for path in paths.get("write", []):
+            applied.setdefault(f"`{path}`", []).append(name)
+        for path in paths.get("already-current", []):
+            current.setdefault(f"`{path}`", []).append(name)
+        for entry in apply["removed"]:
+            label = (
+                f"move `{entry['old_path']}` -> `{entry['path']}`"
+                if entry["action"] == "move"
+                else f"{entry['action']} `{entry['path']}`"
+            )
+            removed.setdefault(label, []).append(name)
+        for entry in apply["overridden"]:
+            label = f"`{entry['path']}`: {entry['reason']}"
+            overridden.setdefault(label, []).append(name)
+        for path in proof["authored"]:
+            authored.setdefault(f"`{path}`", []).append(name)
+        found = [line.strip() for line in settings.splitlines()]
+        drift += [f"{name}: {row}" for row in found if row.split()[1:2] == ["FAIL"]]
+        unavailable += [
+            f"{name}: {row}" for row in found if row.split()[1:2] == ["unavailable"]
+        ]
+    count = len(destinations)
+    lines = [
+        "## Repo Builder Result",
+        "",
+        f"- Status: {'finished' if finished else slot('status')}",
+        "- Operation: update",
+        f"- Template: `{', '.join(dict.fromkeys(olds))}` -> `{target}`",
+        f"- Destinations: {count}",
+        "",
+        "| Repository | Pull request | Files | `scripts/check` | CI checks |",
+        "| --- | --- | --- | --- | --- |",
+        *rows,
+        "",
+        "### Reconciliation",
+        f"- Applied: {aggregate(applied, count)}",
+        f"- Already current: {aggregate(current, count)}",
+        "- Preserved/Merged/Conflicted: "
+        + (slot("preserved-merged-conflicted") if left else "none"),
+        f"- Renamed/deleted: {aggregate(removed, count)}",
+        f"- Overridden: {aggregate(overridden, count)}",
+        "",
+        "### File list",
+        f"- Authored surface: {aggregate(authored, count)}",
+        "",
+        "### Repository settings",
+        *[f"- Drift: {row}" for row in drift],
+        *[f"- Unavailable: {row}" for row in unavailable],
+        *(["- Drift: none found"] if not drift and not unavailable else []),
+        "",
+        "### Verification",
+        f"- `scripts/check`: pass on {checks_passed}/{count} destinations",
+        f"- Copied paths byte-identical to their source: {identical}/{total}",
+        f"- Template commit on each head equals the target: {on_target}/{count}",
+        "- Code review: skipped, as Reviewing the pull request directs",
+        "",
+        "### Cleanup",
+        *[
+            f"- Left for the operator: {destination}: carries an open pull request"
+            for destination in destinations
+        ],
+        "",
+        "### Pending action",
+        (
+            f"Review and merge the {count} pull requests."
+            if finished
+            else slot("pending-action")
+        ),
+        "",
+    ]
+    path = destinations[0].parent / "report.md"
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return {"operation": "update-report", "path": str(path), "slots": slots}
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -1033,6 +1181,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     reading.add_argument("--destination", type=Path, nargs="+", required=True)
     reading.set_defaults(handler=verify)
+    reporting = subparsers.add_parser(
+        "report", help="render the several-destinations Final report"
+    )
+    reporting.add_argument("--template-repo", type=Path, required=True)
+    reporting.add_argument("--target", required=True, help="template ref or commit")
+    reporting.add_argument("--destination", type=Path, nargs="+", required=True)
+    reporting.set_defaults(handler=render_report)
     return parser
 
 
