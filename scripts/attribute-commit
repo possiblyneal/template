@@ -76,38 +76,32 @@ attributed() {
   git interpret-trailers --parse "$msg_file" | grep -q '^Generated-By:'
 }
 
-# Prints the model the entries record for the command this commit runs
-# under, or nothing. The session ID is joined into a path, so only a plain ID
-# is read; anything with a slash or dot could climb out of the cache
-# directory. Each read appends an x and strips it, since command substitution
-# would otherwise drop trailing newlines and an exact match needs them.
-session_model() {
-  local sid="${CLAUDE_CODE_SESSION_ID:-}" claude="${CLAUDE_PID:-}"
-  [[ "$sid" =~ ^[A-Za-z0-9-]+$ && "$claude" =~ ^[0-9]+$ ]] || return 0
-
-  local pid=$$ parent shell="" steps
+# Prints the PID of the Bash tool's shell running this commit -- the ancestor
+# whose parent is Claude Code -- or nothing.
+claude_shell() {
+  local claude="${CLAUDE_PID:-}" pid=$$ parent steps
+  [[ "$claude" =~ ^[0-9]+$ ]] || return 0
   for (( steps = 0; steps < 32; steps++ )); do
     parent="$(ps -o ppid= -p "$pid" 2>/dev/null)" || return 0
     parent="${parent//[[:space:]]/}"
     if [[ "$parent" == "$claude" ]]; then
-      shell="$pid"
-      break
+      printf '%s' "$pid"
+      return 0
     fi
     [[ "$parent" =~ ^[0-9]+$ && "$parent" != 0 ]] || return 0
     pid="$parent"
   done
-  [[ -n "$shell" ]] || return 0
+}
 
-  # /proc keeps a multi-line command intact; ps may not, which then matches
-  # nothing and leaves commitlint to refuse the commit.
-  local cmdline
-  if [[ -r "/proc/$shell/cmdline" ]]; then
-    cmdline="$(tr '\0' ' ' < "/proc/$shell/cmdline"; printf x)"
-  else
-    cmdline="$(ps -ww -o args= -p "$shell"; printf x)"
-  fi
-  cmdline="${cmdline%x}"
-
+# Prints the model the session's entries record for the command line given,
+# or nothing when none matches or matches disagree. The session ID is joined
+# into a path, so only a plain ID is read; anything with a slash or dot could
+# climb out of the cache directory. Each read appends an x and strips it,
+# since command substitution would otherwise drop trailing newlines and an
+# exact match needs them.
+matching_model() {
+  local cmdline="$1" sid="${CLAUDE_CODE_SESSION_ID:-}"
+  [[ "$sid" =~ ^[A-Za-z0-9-]+$ ]] || return 0
   local entry content cmd quoted name found=""
   for entry in "${XDG_CACHE_HOME:-$HOME/.cache}/claude-commit-model/$sid"/*; do
     [[ -f "$entry" ]] || continue
@@ -122,6 +116,21 @@ session_model() {
     found="$name"
   done
   printf '%s' "$found"
+}
+
+# Prints the model recorded for the command this commit runs under, or
+# nothing. /proc keeps a multi-line command intact; ps may not, which then
+# matches nothing and leaves commitlint to refuse the commit.
+session_model() {
+  local shell cmdline
+  shell="$(claude_shell)"
+  [[ -n "$shell" ]] || return 0
+  if [[ -r "/proc/$shell/cmdline" ]]; then
+    cmdline="$(tr '\0' ' ' < "/proc/$shell/cmdline"; printf x)"
+  else
+    cmdline="$(ps -ww -o args= -p "$shell"; printf x)"
+  fi
+  matching_model "${cmdline%x}"
 }
 
 # --if-exists add, because git compares keys case-insensitively and would
