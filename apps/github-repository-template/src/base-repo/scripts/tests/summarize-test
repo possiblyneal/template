@@ -21,9 +21,11 @@ noisy() {
   cat <<'OUT'
 Some tool's own chatter, unindented and not a result line.
 lint               pass             python
+   Compiling libc v0.2.189
 audit              FAIL             2 violation(s)
                      apps/web/package.json has no root package.json
                      apps/api/go.mod has no root go.work
+    Checking log v0.4.34
 Compiled 41 files.
 build              not-applicable   python
 secret-scan        unavailable      gitleaks is not on PATH
@@ -45,6 +47,13 @@ if grep -qE '^lint +pass' <<< "$out" \
   pass
 else
   fail "wanted four state lines and no noise, got: $out"
+fi
+
+current="drops a tool's indented output, after a pass and after a FAIL's findings"
+if ! grep -q 'Compiling' <<< "$out" && ! grep -q 'Checking' <<< "$out"; then
+  pass
+else
+  fail "wanted no indented tool output, got: $out"
 fi
 
 current="keeps the findings recorded under a failed check"
