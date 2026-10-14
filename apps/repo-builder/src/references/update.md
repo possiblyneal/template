@@ -16,7 +16,7 @@ Rules from [`lifecycle.md`](lifecycle.md) that every update needs, stated here s
 
 Every flow ends in the [Final report](reporting.md#final-report).
 
-1. Require a clean destination clone and identify its origin/default branch. Do not stash or discard the user's work. A destination with no clone is cloned with `gh repo clone <owner>/<repo> <path>` under this repository's `tmp/`, since an SSH `git clone` can be denied.
+1. Require a clean destination clone and identify its origin/default branch. Do not stash or discard the user's work. A destination with no clone is cloned with `gh repo clone <owner>/<repo> tmp/update/<repo>` in this repository, since an SSH `git clone` can be denied. Create an empty `tmp/update/pytest.ini` first: pytest searches upward for its configuration, and a destination declaring none would otherwise run under this repository's `pyproject.toml` and fail on its xdist `addopts`.
 2. Run the read-only preflight before editing:
 
    ```bash
@@ -76,6 +76,6 @@ Every flow ends in the [Final report](reporting.md#final-report).
 
 ## Several destinations
 
-List the eligible destinations in one call first: `gh repo list <owner> --json nameWithOwner`, then per repository `gh api repos/<r>/contents/.repo-template.json` to read the recorded commit, keeping those whose commit is a strict ancestor of the target.
+List the eligible destinations in one call first: `gh repo list <owner> --no-archived --json nameWithOwner`, since an archived repository refuses the push, then per repository `gh api repos/<r>/contents/.repo-template.json` to read the recorded commit, keeping those whose commit is a strict ancestor of the target.
 
 An update over several repositories runs one subagent per destination, each running this flow and returning only the [Final report](reporting.md#final-report) block. A subagent cannot ask the user, so it stops at each remote gate and returns what it would do. The parent assembles the reports and owns every gate's confirmation.
