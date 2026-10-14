@@ -131,7 +131,7 @@ The specific operating parameters for the AI agent.
 
 `.pre-commit-config.yaml`: Local checks that run automatically before a commit.
 
-`.commitlintrc.yaml`: Commit message rules (Conventional Commits), plus a required `Generated-By:` trailer naming the model that wrote the commit. `scripts/attribute-commit` writes that trailer at `prepare-commit-msg` from `CLAUDE_COMMIT_MODEL`, the model ID an agent's user-level hook exports or, failing that, writes to a per-session file under `~/.cache/claude-commit-model/`, or by rewriting an agent's `Co-Authored-By` line; the rule is what makes a commit fail when the hook is not installed rather than land unattributed, and a commit written by hand adds the trailer itself or is refused.
+`.commitlintrc.yaml`: Commit message rules (Conventional Commits), plus a required `Generated-By:` trailer naming the model that wrote the commit. `scripts/attribute-commit` writes that trailer at `prepare-commit-msg` from `CLAUDE_COMMIT_MODEL`, the model ID an agent's user-level hook exports, or else from the entry that hook writes under `${XDG_CACHE_HOME:-~/.cache}/claude-commit-model/<session id>/` naming the exact command running, or by rewriting an agent's `Co-Authored-By` line; the rule is what makes a commit fail when the hook is not installed rather than land unattributed, and a commit written by hand adds the trailer itself or is refused.
 
 ### Additions by Occasion
 
