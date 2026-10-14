@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -10,6 +11,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from test_preflight import git, git_output
+from test_retrofit import COMMIT_IDENTITY, gh_calls, stub_gh
 
 MODULE_PATH = Path(__file__).parents[1] / "update.py"
 PAYLOAD = Path(__file__).parents[5] / "apps/github-repository-template/src/base-repo"
@@ -1011,3 +1013,282 @@ class PrBodyTests(unittest.TestCase):
                 self.assertIn(
                     f"{fixture.destination}{suffix}", result.stderr + result.stdout
                 )
+
+
+CHECK_STUB = '#!/bin/sh\nprintf "%s\\n" "$CHECK_OUTPUT"\nexit "${CHECK_STATUS:-0}"\n'
+SETTINGS_STUB = '#!/bin/sh\nprintf "%s\\n" "$SETTINGS_OUTPUT"\n'
+RUN_ENV = {
+    **COMMIT_IDENTITY,
+    "GIT_CONFIG_GLOBAL": os.devnull,
+    "CHECK_OUTPUT": CHECK_TABLE.rstrip(),
+    "SETTINGS_OUTPUT": "ruleset: ok",
+}
+
+
+def run_with(
+    *arguments: str, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["python3", str(MODULE_PATH), *arguments],
+        text=True,
+        capture_output=True,
+        check=False,
+        env={**os.environ, **(RUN_ENV if env is None else env)},
+    )
+
+
+def run_fixture(directory: str, **options: Any) -> Fixture:
+    """A destination a `run` can finish: PR template, stub check and settings."""
+    template = (PAYLOAD / ".github/PULL_REQUEST_TEMPLATE.md").read_text()
+    fixture = Fixture(
+        directory,
+        {"scripts/copy": OLD, ".github/PULL_REQUEST_TEMPLATE.md": template},
+        {"scripts/copy": NEW},
+        **options,
+    )
+    write(fixture.destination, "scripts/check", CHECK_STUB, executable=True)
+    write(fixture.destination, "scripts/repo-settings", SETTINGS_STUB, executable=True)
+    git("add", "-A", cwd=fixture.destination)
+    git("commit", "-q", "-m", "stubs", cwd=fixture.destination)
+    return fixture
+
+
+def run_command(
+    fixture: Fixture,
+    *destinations: Path,
+    env: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
+    result = run_with(
+        "run",
+        "--template-repo",
+        str(fixture.template),
+        "--target",
+        fixture.target,
+        "--destination",
+        *map(str, destinations or (fixture.destination,)),
+        "--generated-by",
+        "claude-test",
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    parsed = json.loads(result.stdout)
+    assert parsed["operation"] == "update-run"
+    return parsed["destinations"]
+
+
+class RunTests(unittest.TestCase):
+    """The mechanical steps over clones, one short result each."""
+
+    def test_nothing_left_ends_committed_on_the_branch_and_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = run_fixture(directory)
+            destination = fixture.destination
+
+            [entry] = run_command(fixture)
+
+            self.assertEqual(
+                entry,
+                {
+                    "destination": str(destination),
+                    "status": "ready",
+                    "detail": "",
+                    "drift": [],
+                },
+            )
+            branch = f"repo-builder/{fixture.target[:12]}"
+            self.assertEqual(
+                git_output("branch", "--show-current", cwd=destination), branch
+            )
+            self.assertEqual(
+                git_output("log", "-1", "--format=%s", cwd=destination),
+                f"chore(template): update to template {fixture.target[:12]}",
+            )
+            message = git_output("log", "-1", "--format=%B", cwd=destination)
+            self.assertIn(
+                f"Carries the template payload from {fixture.old_commit} "
+                f"to {fixture.target}.",
+                message,
+            )
+            self.assertIn("Generated-By: claude-test", message)
+            manifest = git_output("show", "HEAD:.repo-template.json", cwd=destination)
+            self.assertIn(f'"commit": "{fixture.target}"', manifest)
+            self.assertEqual((destination / "scripts/copy").read_text(), NEW)
+            self.assertEqual(git_output("status", "--short", cwd=destination), "")
+            body = Path(f"{destination}.pr-body.md").read_text()
+            self.assertIn("```\n" + CHECK_TABLE.rstrip() + "\n```", body)
+            for suffix in (".apply.json", ".proof.json", ".check.txt", ".settings.txt"):
+                self.assertTrue(Path(f"{destination}{suffix}").is_file(), suffix)
+
+    def test_paths_left_stop_the_destination_as_reconcile(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = run_fixture(directory)
+            destination = fixture.destination
+            write(destination, "scripts/copy", "edited\n")
+            git("commit", "-q", "-am", "destination edit", cwd=destination)
+
+            [entry] = run_command(fixture)
+
+            self.assertEqual(entry["status"], "reconcile")
+            self.assertEqual(entry["detail"], "scripts/copy")
+            self.assertEqual(
+                git_output("branch", "--show-current", cwd=destination), "main"
+            )
+            record = json.loads(Path(f"{destination}.apply.json").read_text())
+            self.assertEqual(record["operation"], "update-apply")
+            self.assertEqual(
+                [left["path"] for left in record["left"]], ["scripts/copy"]
+            )
+            self.assertFalse(Path(f"{destination}.proof.json").exists())
+            self.assertFalse(Path(f"{destination}.check.txt").exists())
+
+    def test_a_failed_check_restores_the_manifest_and_names_the_log(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = run_fixture(directory)
+            destination = fixture.destination
+
+            [entry] = run_command(fixture, env={**RUN_ENV, "CHECK_STATUS": "1"})
+
+            self.assertEqual(entry["status"], "check-failed")
+            self.assertEqual(entry["detail"], f"{destination}/tmp/check.log")
+            staged = git_output("show", ":.repo-template.json", cwd=destination)
+            self.assertIn(f'"commit": "{fixture.old_commit}"', staged)
+            self.assertIn(
+                f'"commit": "{fixture.old_commit}"',
+                (destination / ".repo-template.json").read_text(),
+            )
+            self.assertEqual(
+                git_output("branch", "--show-current", cwd=destination), "main"
+            )
+            self.assertEqual(
+                git_output("rev-list", "--count", "HEAD", cwd=destination), "2"
+            )
+            self.assertTrue(Path(f"{destination}.check.txt").is_file())
+
+    def test_settings_drift_is_reported_without_stopping(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = run_fixture(directory)
+            output = (
+                "ruleset: ok\n"
+                "optional missing: secret scanning\n"
+                "optional missing: rulesets"
+            )
+
+            [entry] = run_command(fixture, env={**RUN_ENV, "SETTINGS_OUTPUT": output})
+
+            self.assertEqual(entry["status"], "ready")
+            self.assertEqual(
+                entry["drift"],
+                ["optional missing: secret scanning", "optional missing: rulesets"],
+            )
+
+    def test_one_destination_stopping_does_not_stop_the_others(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = run_fixture(directory)
+            missing = Path(directory) / "missing"
+
+            entries = run_command(fixture, missing, fixture.destination)
+
+            self.assertEqual(
+                [entry["status"] for entry in entries], ["stopped", "ready"]
+            )
+            self.assertIn(str(missing), entries[0]["detail"])
+
+    def test_a_refused_commit_stops_with_the_output(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = run_fixture(directory)
+            hook = fixture.destination / ".git/hooks/commit-msg"
+            hook.write_text("#!/bin/sh\necho refused by test hook >&2\nexit 1\n")
+            hook.chmod(0o755)
+
+            [entry] = run_command(fixture)
+
+            self.assertEqual(entry["status"], "stopped")
+            self.assertIn("refused by test hook", entry["detail"])
+
+
+class PublishTests(unittest.TestCase):
+    """Pushing and opening the pull request, after the parent's remote gate."""
+
+    def ready(self, directory: str) -> tuple[Fixture, Path]:
+        fixture = run_fixture(directory)
+        run_command(fixture)
+        destination = fixture.destination
+        origin = Path(directory) / "origin.git"
+        git("init", "-q", "--bare", "-b", "main", str(origin))
+        git("remote", "set-url", "origin", str(origin), cwd=destination)
+        git("push", "-q", "origin", "main", cwd=destination)
+        git("remote", "set-head", "origin", "main", cwd=destination)
+        return fixture, origin
+
+    def publish(self, directory: str, *destinations: Path) -> list[dict[str, Any]]:
+        gh = Path(directory) / "gh"
+        gh.mkdir()
+        env = stub_gh(
+            str(gh),
+            [
+                {
+                    "args": ["pr", "create"],
+                    "stdout": "https://github.com/owner/destination/pull/7\n",
+                }
+            ],
+        )
+        result = run_with("publish", "--destination", *map(str, destinations), env=env)
+        assert result.returncode == 0, result.stderr
+        return json.loads(result.stdout)["destinations"]
+
+    def test_it_pushes_the_branch_and_opens_the_pull_request(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture, origin = self.ready(directory)
+            destination = fixture.destination
+
+            [entry] = self.publish(directory, destination)
+
+            branch = f"repo-builder/{fixture.target[:12]}"
+            self.assertEqual(entry["status"], "published")
+            self.assertEqual(
+                entry["detail"], "https://github.com/owner/destination/pull/7"
+            )
+            self.assertEqual(
+                git_output("rev-parse", branch, cwd=origin),
+                git_output("rev-parse", "HEAD", cwd=destination),
+            )
+            self.assertEqual(
+                gh_calls(str(Path(directory) / "gh")),
+                [
+                    [
+                        "pr",
+                        "create",
+                        "--base",
+                        "main",
+                        "--head",
+                        branch,
+                        "--title",
+                        f"chore(template): update to template {fixture.target[:12]}",
+                        "--body-file",
+                        f"{destination}.pr-body.md",
+                    ]
+                ],
+            )
+
+    def test_a_destination_off_a_repo_builder_branch_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture, origin = self.ready(directory)
+            git("switch", "-q", "main", cwd=fixture.destination)
+
+            [entry] = self.publish(directory, fixture.destination)
+
+            self.assertEqual(entry["status"], "refused")
+            self.assertIn("repo-builder/", entry["detail"])
+            self.assertEqual(git_output("branch", "--list", cwd=origin), "* main")
+
+    def test_a_body_with_an_open_slot_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture, origin = self.ready(directory)
+            body = Path(f"{fixture.destination}.pr-body.md")
+            body.write_text(body.read_text() + "[[FILL: decisions]]\n")
+
+            [entry] = self.publish(directory, fixture.destination)
+
+            self.assertEqual(entry["status"], "refused")
+            self.assertIn("[[FILL:", entry["detail"])
+            self.assertEqual(git_output("branch", "--list", cwd=origin), "* main")

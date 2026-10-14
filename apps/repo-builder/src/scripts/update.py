@@ -20,6 +20,7 @@ import tomllib
 from pathlib import Path
 
 import preflight
+import retrofit
 from preflight import PreflightError, git_output, run_git
 
 SCHEMA_VERSION = 1
@@ -30,6 +31,8 @@ DEPENDABOT_LIBRARY = "scripts/libs/dependabot.sh"
 CODEQL = ".github/workflows/codeql.yml"
 EXECUTABLE = "100755"
 SYMLINK = "120000"
+DRIFT = "optional missing:"
+SLOT = "[[FILL:"
 
 
 def blob_bytes(repository: Path, revision: str) -> bytes:
@@ -652,6 +655,168 @@ def render_pr_body(arguments: argparse.Namespace) -> dict[str, object]:
     return {"operation": "update-pr-body", "path": str(path), "slots": slots}
 
 
+def execute(cwd: Path, *command: str) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(
+            command, cwd=cwd, text=True, capture_output=True, check=False
+        )
+    except FileNotFoundError as error:
+        raise PreflightError(f"{command[0]} is required but was not found") from error
+
+
+def tail(text: str, lines: int = 3) -> str:
+    return "\n".join(text.strip().splitlines()[-lines:])
+
+
+def encode(result: dict[str, object]) -> str:
+    return json.dumps(
+        {"ok": True, "schema_version": SCHEMA_VERSION, **result},
+        indent=2,
+        sort_keys=True,
+    )
+
+
+def record_json(destination: Path, suffix: str, result: dict[str, object]) -> None:
+    Path(f"{destination}{suffix}").write_text(encode(result) + "\n", encoding="utf-8")
+
+
+def outcome(
+    status: str, detail: str = "", drift: list[str] | None = None
+) -> dict[str, object]:
+    return {"status": status, "detail": detail, "drift": drift or []}
+
+
+def run_destination(
+    arguments: argparse.Namespace, destination: Path, target: str
+) -> dict[str, object]:
+    """One destination's mechanical steps, stopping at the first that needs a hand."""
+    step = argparse.Namespace(
+        template_repo=arguments.template_repo, target=target, destination=destination
+    )
+    applied = apply_update(step)
+    record_json(destination, ".apply.json", applied)
+    left = applied["left"]
+    assert isinstance(left, list)
+    if left:
+        return outcome("reconcile", ", ".join(entry["path"] for entry in left))
+
+    if (destination / "package-lock.json").is_file():
+        installed = execute(destination, "npm", "ci")
+        if installed.returncode != 0:
+            return outcome("install-failed", tail(installed.stderr))
+
+    if (destination / ".pre-commit-config.yaml").is_file():
+        hooks = retrofit.install_hooks(
+            destination,
+            destination,
+            retrofit.hook_types(destination),
+            Path(retrofit.prior_hooks(destination)["path"]),
+        )
+        if not hooks.ready:
+            return outcome("stopped", "; ".join(hooks.findings))
+
+    record_json(destination, ".proof.json", prove_copies(step))
+    manifest = destination / MANIFEST
+    prior_text = manifest.read_text(encoding="utf-8")
+    advanced = advance_commit(step)
+
+    checked = execute(destination, str(destination / "scripts/check"))
+    Path(f"{destination}.check.txt").write_text(checked.stdout, encoding="utf-8")
+    if checked.returncode != 0:
+        manifest.write_text(prior_text, encoding="utf-8")
+        run_git(destination, "add", "--", MANIFEST)
+        return outcome("check-failed", f"{destination}/tmp/check.log")
+
+    settings = execute(destination, str(destination / "scripts/repo-settings"), "check")
+    Path(f"{destination}.settings.txt").write_text(settings.stdout, encoding="utf-8")
+    drift = [line.strip() for line in settings.stdout.splitlines() if DRIFT in line]
+
+    short = target[:12]
+    run_git(destination, "switch", "-c", f"repo-builder/{short}")
+    committed = execute(
+        destination,
+        "git",
+        "commit",
+        "-q",
+        "-m",
+        f"chore(template): update to template {short}",
+        "-m",
+        (
+            "Carries the template payload from "
+            f"{advanced['old_commit']} to {advanced['new_commit']}."
+        ),
+        "--trailer",
+        f"Generated-By: {arguments.generated_by}",
+    )
+    if committed.returncode != 0:
+        return outcome("stopped", tail(committed.stderr + committed.stdout), drift)
+
+    render_pr_body(step)
+    return outcome("ready", drift=drift)
+
+
+def run_update(arguments: argparse.Namespace) -> dict[str, object]:
+    """Run every destination, reporting one short entry each; a stop is local."""
+    arguments.template_repo = preflight.require_git_repository(
+        arguments.template_repo, "template repository"
+    )
+    target = preflight.resolve_commit(arguments.template_repo, arguments.target)
+    results = []
+    for given in arguments.destination:
+        destination = given.resolve()
+        try:
+            result = run_destination(arguments, destination, target)
+        except PreflightError as error:
+            result = outcome("stopped", str(error))
+        results.append({"destination": str(destination), **result})
+    return {"operation": "update-run", "destinations": results}
+
+
+def publish_destination(destination: Path) -> dict[str, str]:
+    branch = git_output(destination, "branch", "--show-current")
+    if not branch.startswith("repo-builder/"):
+        return {"status": "refused", "detail": "not on a repo-builder/ branch"}
+    body = Path(f"{destination}.pr-body.md")
+    if not body.is_file():
+        return {"status": "refused", "detail": f"missing {body}"}
+    if SLOT in body.read_text(encoding="utf-8"):
+        return {"status": "refused", "detail": f"{body} holds a {SLOT} slot"}
+    run_git(destination, "push", "-q", "-u", "origin", branch)
+    base = git_output(
+        destination, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"
+    ).removeprefix("origin/")
+    created = execute(
+        destination,
+        "gh",
+        "pr",
+        "create",
+        "--base",
+        base,
+        "--head",
+        branch,
+        "--title",
+        git_output(destination, "log", "-1", "--format=%s"),
+        "--body-file",
+        str(body),
+    )
+    if created.returncode != 0:
+        return {"status": "failed", "detail": tail(created.stderr)}
+    return {"status": "published", "detail": created.stdout.strip()}
+
+
+def publish(arguments: argparse.Namespace) -> dict[str, object]:
+    """Push each ready destination and open its pull request with the body file."""
+    results = []
+    for given in arguments.destination:
+        destination = given.resolve()
+        try:
+            result = publish_destination(destination)
+        except PreflightError as error:
+            result = {"status": "failed", "detail": str(error)}
+        results.append({"destination": str(destination), **result})
+    return {"operation": "update-publish", "destinations": results}
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -666,6 +831,17 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument("--target", required=True, help="template ref or commit")
         command.add_argument("--destination", type=Path, required=True)
         command.set_defaults(handler=handler)
+    several = subparsers.add_parser("run", help="run the mechanical steps over clones")
+    several.add_argument("--template-repo", type=Path, required=True)
+    several.add_argument("--target", required=True, help="template ref or commit")
+    several.add_argument("--destination", type=Path, nargs="+", required=True)
+    several.add_argument("--generated-by", required=True, help="model for the trailer")
+    several.set_defaults(handler=run_update)
+    pushing = subparsers.add_parser(
+        "publish", help="push each ready clone and open its pull request"
+    )
+    pushing.add_argument("--destination", type=Path, nargs="+", required=True)
+    pushing.set_defaults(handler=publish)
     return parser
 
 
@@ -675,13 +851,7 @@ def main() -> int:
         result = arguments.handler(arguments)
     except PreflightError as error:
         preflight.fail(str(error))
-    print(
-        json.dumps(
-            {"ok": True, "schema_version": SCHEMA_VERSION, **result},
-            indent=2,
-            sort_keys=True,
-        )
-    )
+    print(encode(result))
     return 0
 
 
