@@ -538,6 +538,120 @@ def advance_commit(arguments: argparse.Namespace) -> dict[str, object]:
     return {"operation": "update-advance", "old_commit": old, "new_commit": new}
 
 
+def read_record(destination: Path, suffix: str) -> str:
+    record = Path(f"{destination}{suffix}")
+    if not record.is_file():
+        raise PreflightError(f"missing record {record}")
+    return record.read_text(encoding="utf-8")
+
+
+def fence(text: str) -> list[str]:
+    return ["```", text.rstrip(), "```"]
+
+
+def render_pr_body(arguments: argparse.Namespace) -> dict[str, object]:
+    """Fill the destination's pull-request template from the run's records.
+
+    Headings are the template's `## ` lines in order. What the records settle
+    is written; a heading they do not cover, or a `left` that needs a hand
+    merge, becomes a `[[FILL: <name>]]` slot.
+    """
+    destination = arguments.destination
+    apply = json.loads(read_record(destination, ".apply.json"))
+    proof = json.loads(read_record(destination, ".proof.json"))
+    check = read_record(destination, ".check.txt")
+    settings = read_record(destination, ".settings.txt")
+    template_file = destination / ".github/PULL_REQUEST_TEMPLATE.md"
+    if not template_file.is_file():
+        raise PreflightError(f"missing {template_file}")
+    headings = [
+        line
+        for line in template_file.read_text(encoding="utf-8").splitlines()
+        if line.startswith("## ")
+    ]
+    template_repo = arguments.template_repo
+    recorded = str(apply["template"]["recorded_commit"])
+    target = str(apply["template"]["target_commit"])
+    subtree = str(apply["template"]["subtree"])
+    commits = git_output(
+        template_repo, "log", "--format=%h %s", f"{recorded}..{target}", "--", subtree
+    ).splitlines()
+    delta = [
+        line.removeprefix(f"{subtree}/")
+        for line in git_output(
+            template_repo, "diff", "--name-only", recorded, target, "--", subtree
+        ).splitlines()
+    ]
+    authored = proof["authored"]
+    dropped = (apply["dependabot"] or {}).get("dropped", [])
+    slots: list[str] = []
+
+    def slot(name: str) -> str:
+        slots.append(name)
+        return f"[[FILL: {name}]]"
+
+    sections = {
+        "## Intent": [
+            (
+                f"Carries the template payload from `{recorded}` to `{target}`, "
+                "recorded in `.repo-template.json`:"
+            ),
+            "",
+            *[f"- {commit}" for commit in commits],
+        ],
+        "## Read first": [
+            *[f"- `{path}`" for path in authored],
+            "",
+            (
+                "The other paths are byte-identical to the payload at the target "
+                "commit and safe to skim."
+            ),
+        ],
+        "## Decisions": [
+            slot("decisions")
+            if apply["left"]
+            else "None. Every delta path landed without a hand merge."
+        ],
+        "## Out of scope": ["None."],
+        "## Verified": [
+            *fence(check),
+            "",
+            *fence(settings),
+            "",
+            (
+                f"{proof['identical']}/{proof['total']} copied paths byte-identical "
+                f"to the payload; authored: {', '.join(authored)}"
+            ),
+        ],
+        "## Not verified": [
+            (
+                "- Code review skipped: the copied lines were reviewed in the "
+                "template repository and the copy proof stands in for it."
+            ),
+            "- CI on this pull request had not run when this was written.",
+        ],
+        "## Merge danger": [
+            "**Door:** two-way: a revert restores everything",
+            "",
+            "**Blast radius:**",
+            "",
+            *[f"- `{path}`" for path in delta],
+            *[f"- discarded: `{entry['path']}`" for entry in apply["discarded"]],
+            *[
+                f"- dependabot dropped: `{ecosystem}` in `{directory}`"
+                for ecosystem, directory in dropped
+            ],
+        ],
+    }
+    lines: list[str] = []
+    for heading in headings:
+        body = sections.get(heading) or [slot(heading[3:].lower())]
+        lines += [heading, "", *body, ""]
+    path = Path(f"{destination}.pr-body.md")
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return {"operation": "update-pr-body", "path": str(path), "slots": slots}
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -545,6 +659,7 @@ def build_parser() -> argparse.ArgumentParser:
         ("apply", apply_update, "land the paths that need no judgment, staged"),
         ("proof", prove_copies, "split the staged diff into copies and authored"),
         ("advance", advance_commit, "rewrite template.commit to the target"),
+        ("pr-body", render_pr_body, "render the pull-request body from the records"),
     ):
         command = subparsers.add_parser(name, help=help_text)
         command.add_argument("--template-repo", type=Path, required=True)

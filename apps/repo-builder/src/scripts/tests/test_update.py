@@ -914,3 +914,100 @@ class AdvanceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+CHECK_TABLE = "| lint | pass |\n| test | pass |\n"
+SETTINGS_OUTPUT = "ruleset: ok\noptional missing: secret scanning\n"
+
+
+def headings(text: str) -> list[str]:
+    return [line for line in text.splitlines() if line.startswith("## ")]
+
+
+class PrBodyTests(unittest.TestCase):
+    """The body is rendered from records the flow writes beside the clone."""
+
+    def sibling(self, fixture: Fixture, suffix: str) -> Path:
+        return Path(f"{fixture.destination}{suffix}")
+
+    def records(self, fixture: Fixture, *, skip: str = "") -> None:
+        """Write the four records the way the flow would."""
+        for name in ("apply", "proof"):
+            result = run(name, *fixture.arguments())
+            assert result.returncode == 0, result.stderr
+            self.sibling(fixture, f".{name}.json").write_text(result.stdout)
+        write(
+            fixture.destination,
+            ".github/PULL_REQUEST_TEMPLATE.md",
+            (PAYLOAD / ".github/PULL_REQUEST_TEMPLATE.md").read_text(),
+        )
+        self.sibling(fixture, ".check.txt").write_text(CHECK_TABLE)
+        self.sibling(fixture, ".settings.txt").write_text(SETTINGS_OUTPUT)
+        if skip:
+            self.sibling(fixture, skip).unlink()
+
+    def render(self, fixture: Fixture) -> tuple[dict[str, Any], str]:
+        result = fixture.command("pr-body")
+        body = Path(str(result["path"])).read_text()
+        return result, body
+
+    def test_the_body_follows_the_templates_headings_and_the_records(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                directory,
+                {"scripts/copy": OLD, "scripts/other": OLD},
+                {"scripts/copy": NEW, "scripts/other": NEW},
+            )
+            self.records(fixture)
+
+            result, body = self.render(fixture)
+
+            self.assertEqual(result["operation"], "update-pr-body")
+            self.assertEqual(result["path"], f"{fixture.destination}.pr-body.md")
+            self.assertEqual(result["slots"], [])
+            template = fixture.destination / ".github/PULL_REQUEST_TEMPLATE.md"
+            self.assertEqual(headings(body), headings(template.read_text()))
+            self.assertIn(f"`{fixture.old_commit}` to `{fixture.target}`", body)
+            self.assertIn(f"- {fixture.target[:7]}", body)
+            self.assertIn("```\n" + CHECK_TABLE.rstrip() + "\n```", body)
+            self.assertIn("```\n" + SETTINGS_OUTPUT.rstrip() + "\n```", body)
+            self.assertIn("2/3 copied paths byte-identical to the payload", body)
+            self.assertIn("authored: .repo-template.json", body)
+            self.assertIn("None. Every delta path landed without a hand merge.", body)
+            self.assertIn("**Door:** two-way: a revert restores everything", body)
+            self.assertIn("- `scripts/copy`", body)
+            self.assertIn("- `scripts/other`", body)
+
+    def test_a_non_empty_left_turns_decisions_into_a_slot(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                directory,
+                {"scripts/merged": OLD},
+                {"scripts/merged": NEW},
+                held={"scripts/merged": "destination edit\n"},
+            )
+            self.records(fixture)
+
+            result, body = self.render(fixture)
+
+            self.assertEqual(result["slots"], ["decisions"])
+            self.assertIn("[[FILL: decisions]]", body)
+            self.assertNotIn("None. Every delta path landed", body)
+
+    def test_a_missing_record_fails_naming_it(self) -> None:
+        for suffix in (".apply.json", ".proof.json", ".check.txt", ".settings.txt"):
+            with (
+                self.subTest(record=suffix),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                fixture = Fixture(
+                    directory, {"scripts/copy": OLD}, {"scripts/copy": NEW}
+                )
+                self.records(fixture, skip=suffix)
+
+                result = run("pr-body", *fixture.arguments())
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(
+                    f"{fixture.destination}{suffix}", result.stderr + result.stdout
+                )
