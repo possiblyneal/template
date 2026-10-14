@@ -188,6 +188,8 @@ class ApplyTests(unittest.TestCase):
             for path in (
                 "scripts/unmodified",
                 "scripts/modified",
+                "scripts/current",
+                "scripts/current-script",
                 "scripts/deleted",
                 "scripts/deleted-modified",
                 "scripts/legacy",
@@ -211,6 +213,8 @@ class ApplyTests(unittest.TestCase):
             {
                 "scripts/unmodified": NEW,
                 "scripts/modified": NEW,
+                "scripts/current": NEW,
+                "scripts/current-script": NEW,
                 "scripts/deleted": None,
                 "scripts/deleted-modified": None,
                 "scripts/mode": NEW,
@@ -231,6 +235,8 @@ class ApplyTests(unittest.TestCase):
             },
             held={
                 "scripts/modified": "destination edit\n",
+                "scripts/current": NEW,
+                "scripts/current-script": NEW,
                 "scripts/deleted-modified": "destination edit\n",
                 "scripts/absent": None,
                 "scripts/overridden": "destination edit\n",
@@ -239,7 +245,9 @@ class ApplyTests(unittest.TestCase):
                 ".github/workflows/ci.yml": "destination edit\n",
                 ".github/PULL_REQUEST_TEMPLATE.md": "destination edit\n",
             },
-            executable=frozenset({"scripts/mode", "scripts/added-script"}),
+            executable=frozenset(
+                {"scripts/mode", "scripts/added-script", "scripts/current-script"}
+            ),
             overrides=[
                 {"path": "scripts/overridden", "reason": "ours"},
                 {"path": "scripts/expired", "reason": "gone since"},
@@ -350,6 +358,23 @@ class ApplyTests(unittest.TestCase):
         )
         self.assertEqual(self.fixture.staged()[".github/dependabot.yml"], "M")
 
+    def test_a_path_the_destination_already_holds_at_the_target_is_landed_not_left(
+        self,
+    ) -> None:
+        self.assertNotIn("scripts/current", self.left())
+        self.assertEqual(self.read("scripts/current"), NEW)
+        removed = self.result["removed"]
+        assert isinstance(removed, list)
+        self.assertNotIn("scripts/current", [entry["path"] for entry in removed])
+
+    def test_an_already_current_path_travels_at_the_payload_mode(self) -> None:
+        self.assertTrue(self.fixture.mode("scripts/current-script"))
+        modes = git_output(
+            "ls-files", "-s", "scripts/current-script", cwd=self.fixture.destination
+        )
+        self.assertTrue(modes.startswith("100755"))
+        self.assertEqual(self.fixture.staged()["scripts/current-script"], "M")
+
     def test_the_payload_mode_travels_with_the_write(self) -> None:
         self.assertTrue(self.fixture.mode("scripts/mode"))
         self.assertTrue(self.fixture.mode("scripts/added-script"))
@@ -362,7 +387,13 @@ class ApplyTests(unittest.TestCase):
     def test_applied_is_counted_by_action(self) -> None:
         self.assertEqual(
             self.result["applied"],
-            {"already-absent": 1, "delete": 2, "move": 1, "write": 7},
+            {
+                "already-absent": 1,
+                "already-current": 2,
+                "delete": 2,
+                "move": 1,
+                "write": 7,
+            },
         )
 
     def test_every_removal_is_named_for_the_reference_grep(self) -> None:
@@ -1142,6 +1173,24 @@ class RunTests(unittest.TestCase):
             self.assertIn("```\n" + CHECK_TABLE.rstrip() + "\n```", body)
             for suffix in (".apply.json", ".proof.json", ".check.txt", ".settings.txt"):
                 self.assertTrue(Path(f"{destination}{suffix}").is_file(), suffix)
+
+    def test_a_destination_already_at_the_target_ends_ready_without_decisions(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = run_fixture(directory)
+            destination = fixture.destination
+            write(destination, "scripts/copy", NEW)
+            git("commit", "-q", "-am", "destination took the fix", cwd=destination)
+
+            [entry] = run_command(fixture)
+
+            self.assertEqual(entry["status"], "ready")
+            proof = json.loads(Path(f"{destination}.proof.json").read_text())
+            self.assertEqual(proof["authored"], [".repo-template.json"])
+            body = Path(f"{destination}.pr-body.md").read_text()
+            self.assertNotIn("[[FILL:", body)
+            self.assertIn("None. Every delta path landed without a hand merge.", body)
 
     def test_paths_left_stop_the_destination_as_reconcile(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
