@@ -26,7 +26,7 @@ Every flow ends in the [Final report](reporting.md#final-report).
      --destination <destination>
    ```
 
-   It validates the manifest, repository identities, clean worktree, subtrees, full commits, ancestry, and ownership, and marks each delta path `unmodified`, `modified`, or `absent` against the destination. A non-descendant target is a hard stop. Do not run `scripts/repo-settings check` here: the destination's copy predates the update and cannot know a rule the update carries. Step 5 runs it.
+   It validates the manifest, repository identities, clean worktree, subtrees, full commits, ancestry, and ownership, and marks each delta path `unmodified`, `modified`, `absent`, or `current` (a changed path whose destination file already equals the new payload version) against the destination. A non-descendant target is a hard stop. Do not run `scripts/repo-settings check` here: the destination's copy predates the update and cannot know a rule the update carries. Step 5 runs it.
 3. Land what needs no judgment:
 
    ```bash
@@ -36,7 +36,7 @@ Every flow ends in the [Final report](reporting.md#final-report).
      --destination <destination> | tee <destination>.apply.json
    ```
 
-   Records sit beside the clone, named by appending to the destination path, so none enters the diff or the copy proof; write `<destination>` with no trailing slash and never as `.`, or the record lands inside the clone. It stages at the payload's mode every unmodified path, absent add, expired override, deletion the destination already made, and every `.github/` path in the delta. It skips overridden paths, and returns the rest under `left` with a `reason`. Read `left`, `dependabot`, `unmatched_overrides`, `overridden`, and `refused_overrides` (each `{path, reason}`); `applied` is counts by action, so read no file it applied. `removed` names each path the payload deleted or moved away from, `already-absent` included since a reference to it is stale either way (`old_path` the name a move left), and `discarded` each `.github/` path it overwrote, deleted, or moved over destination edits or a refused override: carry those into the loss report the automation-directory rule asks for. It also writes `dependabot.yml` itself when the delta holds it, deriving the ecosystem entries from the destination's tracked manifests, and returns `dependabot` (null otherwise): `watched` the `[ecosystem, directory]` pairs parsed from the written file, and `dropped` every pair the destination's old file watched that the new one does not.
+   Records sit beside the clone, named by appending to the destination path, so none enters the diff or the copy proof; write `<destination>` with no trailing slash and never as `.`, or the record lands inside the clone. It stages at the payload's mode every unmodified path, every `current` path (counted under `already-current`, not `write`, and never in `removed`), absent add, expired override, deletion the destination already made, and every `.github/` path in the delta. It skips overridden paths, and returns the rest under `left` with a `reason`. Read `left`, `dependabot`, `unmatched_overrides`, `overridden`, and `refused_overrides` (each `{path, reason}`); `applied` is counts by action, so read no file it applied. `removed` names each path the payload deleted or moved away from, `already-absent` included since a reference to it is stale either way (`old_path` the name a move left), and `discarded` each `.github/` path it overwrote, deleted, or moved over destination edits or a refused override: carry those into the loss report the automation-directory rule asks for. It also writes `dependabot.yml` itself when the delta holds it, deriving the ecosystem entries from the destination's tracked manifests, and returns `dependabot` (null otherwise): `watched` the `[ecosystem, directory]` pairs parsed from the written file, and `dropped` every pair the destination's old file watched that the new one does not.
    Overridden paths ([`### Overridden paths`](lifecycle.md#overridden-paths)): a delta path in `generation.overrides` takes none of the four rules and is reported as overridden with its reason. An entry whose path the destination no longer holds is expired: the payload lands and the entry is dropped in this pull request. Preflight marks both (`override_expired`, `unmatched_overrides`). Never an entry on a product path or on `.gitignore`; an entry on a `.github/` path is not honored, so `update.py apply` lands the payload, returns the entry under `refused_overrides`, and it is dropped in this pull request.
 4. Read the recorded generation decisions (`generation.overrides`, `superseded`, `features`), then reconcile only the `left` paths, reading the three versions (old payload at the recorded commit, destination, new payload at the target) for `modified` and the new payload's alone for `absent`:
    - template changed, destination matches old: apply the new template version;
@@ -73,15 +73,23 @@ Every flow ends in the [Final report](reporting.md#final-report).
 8. Create a feature branch from the current remote default branch. Commit only the bounded lifecycle diff. Render the body from the four records with `update.py pr-body` (the same three arguments), which writes `<destination>.pr-body.md` with the destination template's headings and lists any unfilled `[[FILL: <name>]]` slots under `slots`; fill them, then present the remote gate, push, and open the PR with `--body-file <destination>.pr-body.md`. Do not merge.
 
    Settings drift from step 5 is its own gate line: each setting with its current value, its proposed value, and the exact `gh api` command, never folded into the push line. Drift the user declines is reported as declined, not carried forward or re-raised next update. An update that changes the four workflows also offers the runner variable ([`## The runner variable is set only where it is safe and answerable`](lifecycle.md#the-runner-variable-is-set-only-where-it-is-safe-and-answerable)), on its own line and not as drift: `gh variable set RUNNER --body self-hosted -R <owner>/<repository>`, only on a private repository whose `dev-<repository>` runner reads `online`; otherwise say which condition failed and offer nothing.
-9. Verify PR base/head, changed paths, the recorded target commit, check results, and preserved product paths. Re-read any patched setting rather than trusting a 200, and where `RUNNER` was set read `runner_name` off the jobs. When the PR's branch falls behind the default branch, update it with `gh api -X PUT repos/<owner>/<repo>/pulls/<n>/update-branch`; `gh pr update-branch` does not exist.
+9. Verify PR base/head, changed paths, the recorded target commit, check results, and preserved product paths. Re-read any patched setting rather than trusting a 200, and where `RUNNER` was set read `runner_name` off the jobs. `update.py verify --destination <destination> [<destination> ...]` does the PR read for a published destination: it waits on `gh pr checks`, then records base, head, changed-file count, the head's `template.commit` and a count by check conclusion in `<destination>.verify.json`; a destination with no `published` record is `not-published`. When the PR's branch falls behind the default branch, update it with `gh api -X PUT repos/<owner>/<repo>/pulls/<n>/update-branch`; `gh pr update-branch` does not exist.
 
 ## Several destinations
 
-List the eligible destinations in one call first: `gh repo list <owner> --no-archived --json nameWithOwner`, since an archived repository refuses the push, then per repository `gh api repos/<r>/contents/.repo-template.json` to read the recorded commit, keeping those whose commit is a strict ancestor of the target.
+List and clone the eligible destinations in one call first: it lists `<owner>`'s non-archived repositories (an archived one refuses the push), reads each recorded commit, and gives a verdict of `current`, `eligible` (a strict ancestor of the target) or `not-ancestor`; a repository without a record (a 404) is omitted, and any other read failure stops the listing. With `--clone` it writes the empty `tmp/update/pytest.ini` of step 1 and clones each `eligible` one to `tmp/update/<repo>`, skipping a directory that exists, and adds `cloned` to its entry:
+
+```bash
+python3 <template-repo>/apps/repo-builder/src/scripts/update.py eligible \
+  --owner <owner> \
+  --template-repo <template-repo> \
+  --target <ref-or-commit> \
+  --clone tmp/update
+```
 
 Then run the mechanical steps over all of them with scripts, not a subagent each:
 
-1. Clone each with `gh repo clone <owner>/<repo> tmp/update/<repo>`, after the empty `tmp/update/pytest.ini` of step 1.
+1. Pass each `cloned` path as a `--destination`.
 2. Run them in one call; it applies, installs dependencies and hooks, proves, advances, checks, reads the settings, branches `repo-builder/<first 12 of target>`, commits with the `Generated-By` trailer and renders the body, for each destination in turn, writing the records beside each clone:
 
    ```bash
@@ -92,7 +100,7 @@ Then run the mechanical steps over all of them with scripts, not a subagent each
      --generated-by <model>
    ```
 
-   Each entry is `{destination, status, detail, drift, settings_unavailable}`, `drift` the settings check's `FAIL` rows and `settings_unavailable` its `unavailable` rows or why it could not run, `status` one of `ready`, `reconcile` (`detail` the paths left), `install-failed`, `check-failed` (`detail` the `scripts/check` log) or `stopped` (`detail` the error). One destination's stop does not stop the rest.
+   The output is `{ok, operation, schema_version, destinations: [...]}`, each entry `{destination, status, detail, drift, settings_unavailable}`, `drift` the settings check's `FAIL` rows and `settings_unavailable` its `unavailable` rows or why it could not run, `status` one of `ready`, `reconcile` (`detail` the paths left), `install-failed`, `check-failed` (`detail` the `scripts/check` log) or `stopped` (`detail` the error). One destination's stop does not stop the rest.
 3. Present the remote gate: a push and pull request per `ready` destination, and each `drift` line as its own settings gate with its `gh api` command, as step 8 describes. Then publish the confirmed ones, which pushes each branch and opens its pull request with `<destination>.pr-body.md`, refusing one off a `repo-builder/` branch, with nothing ahead of the origin default branch, or with a `[[FILL:` slot left:
 
    ```bash
@@ -100,4 +108,23 @@ Then run the mechanical steps over all of them with scripts, not a subagent each
      --destination <destination> [<destination> ...]
    ```
 
-Spawn one subagent per destination only for a `reconcile`, `install-failed`, `check-failed` or `stopped` status. It continues that destination's flow from its records (from step 4 for `reconcile`, whose apply is already done) and returns only the [Final report](reporting.md#final-report) block. A subagent cannot ask the user, so it stops at each remote gate and returns what it would do. The parent owns every gate's confirmation. For each `ready` destination the parent writes the Final report itself from the `run` entry and the records beside the clone.
+   Each result lands in `<destination>.publish.json`, whose `detail` is the pull request URL when `published`. A rerun keeps a `published` record and does not push that destination again.
+4. Verify the published pull requests, which waits for their checks and reads each back (step 9 of the single flow, for the rest of its list):
+
+   ```bash
+   python3 <template-repo>/apps/repo-builder/src/scripts/update.py verify \
+     --destination <destination> [<destination> ...]
+   ```
+
+   Each entry is `{destination, status, pull_request, base, head, files, template_commit, checks}`, `status` `verified` or `not-published` (`detail` why).
+
+5. Render the Final report from the six records beside each clone (`.apply.json`, `.proof.json`, `.check.txt`, `.settings.txt`, `.publish.json`, `.verify.json`); a missing one fails naming it. It writes `report.md` in the first destination's parent directory and returns `{operation, path, slots}`, each slot a line the records cannot settle:
+
+   ```bash
+   python3 <template-repo>/apps/repo-builder/src/scripts/update.py report \
+     --template-repo <template-repo> \
+     --target <ref-or-commit> \
+     --destination <destination> [<destination> ...]
+   ```
+
+Spawn one subagent per destination only for a `reconcile`, `install-failed`, `check-failed` or `stopped` status. It continues that destination's flow from its records (from step 4 for `reconcile`, whose apply is already done) and returns only the [Final report](reporting.md#final-report) block. A subagent cannot ask the user, so it stops at each remote gate and returns what it would do. The parent owns every gate's confirmation. The parent's Final report is the `report` output of step 5, with each `[[FILL: <name>]]` slot it lists decided.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import shutil
@@ -7,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -176,7 +178,7 @@ class Fixture:
 class ApplyTests(unittest.TestCase):
     """Each state a delta path can arrive in, decided once by a single run."""
 
-    result: ClassVar[dict[str, object]]
+    result: ClassVar[dict[str, Any]]
     fixture: ClassVar[Fixture]
     directory: ClassVar[tempfile.TemporaryDirectory[str]]
 
@@ -188,6 +190,8 @@ class ApplyTests(unittest.TestCase):
             for path in (
                 "scripts/unmodified",
                 "scripts/modified",
+                "scripts/current",
+                "scripts/current-script",
                 "scripts/deleted",
                 "scripts/deleted-modified",
                 "scripts/legacy",
@@ -211,6 +215,8 @@ class ApplyTests(unittest.TestCase):
             {
                 "scripts/unmodified": NEW,
                 "scripts/modified": NEW,
+                "scripts/current": NEW,
+                "scripts/current-script": NEW,
                 "scripts/deleted": None,
                 "scripts/deleted-modified": None,
                 "scripts/mode": NEW,
@@ -231,6 +237,8 @@ class ApplyTests(unittest.TestCase):
             },
             held={
                 "scripts/modified": "destination edit\n",
+                "scripts/current": NEW,
+                "scripts/current-script": NEW,
                 "scripts/deleted-modified": "destination edit\n",
                 "scripts/absent": None,
                 "scripts/overridden": "destination edit\n",
@@ -239,7 +247,9 @@ class ApplyTests(unittest.TestCase):
                 ".github/workflows/ci.yml": "destination edit\n",
                 ".github/PULL_REQUEST_TEMPLATE.md": "destination edit\n",
             },
-            executable=frozenset({"scripts/mode", "scripts/added-script"}),
+            executable=frozenset(
+                {"scripts/mode", "scripts/added-script", "scripts/current-script"}
+            ),
             overrides=[
                 {"path": "scripts/overridden", "reason": "ours"},
                 {"path": "scripts/expired", "reason": "gone since"},
@@ -350,6 +360,23 @@ class ApplyTests(unittest.TestCase):
         )
         self.assertEqual(self.fixture.staged()[".github/dependabot.yml"], "M")
 
+    def test_a_path_the_destination_already_holds_at_the_target_is_landed_not_left(
+        self,
+    ) -> None:
+        self.assertNotIn("scripts/current", self.left())
+        self.assertEqual(self.read("scripts/current"), NEW)
+        removed = self.result["removed"]
+        assert isinstance(removed, list)
+        self.assertNotIn("scripts/current", [entry["path"] for entry in removed])
+
+    def test_an_already_current_path_travels_at_the_payload_mode(self) -> None:
+        self.assertTrue(self.fixture.mode("scripts/current-script"))
+        modes = git_output(
+            "ls-files", "-s", "scripts/current-script", cwd=self.fixture.destination
+        )
+        self.assertTrue(modes.startswith("100755"))
+        self.assertEqual(self.fixture.staged()["scripts/current-script"], "M")
+
     def test_the_payload_mode_travels_with_the_write(self) -> None:
         self.assertTrue(self.fixture.mode("scripts/mode"))
         self.assertTrue(self.fixture.mode("scripts/added-script"))
@@ -362,7 +389,25 @@ class ApplyTests(unittest.TestCase):
     def test_applied_is_counted_by_action(self) -> None:
         self.assertEqual(
             self.result["applied"],
-            {"already-absent": 1, "delete": 2, "move": 1, "write": 7},
+            {
+                "already-absent": 1,
+                "already-current": 2,
+                "delete": 2,
+                "move": 1,
+                "write": 7,
+            },
+        )
+
+    def test_applied_paths_are_listed_by_action_beside_the_counts(self) -> None:
+        paths = self.result["applied_paths"]
+        self.assertEqual(
+            paths["already-current"], ["scripts/current", "scripts/current-script"]
+        )
+        self.assertEqual(paths["move"], ["scripts/renamed"])
+        self.assertIn("scripts/added", paths["write"])
+        self.assertEqual(
+            {action: len(listed) for action, listed in paths.items()},
+            self.result["applied"],
         )
 
     def test_every_removal_is_named_for_the_reference_grep(self) -> None:
@@ -1143,6 +1188,24 @@ class RunTests(unittest.TestCase):
             for suffix in (".apply.json", ".proof.json", ".check.txt", ".settings.txt"):
                 self.assertTrue(Path(f"{destination}{suffix}").is_file(), suffix)
 
+    def test_a_destination_already_at_the_target_ends_ready_without_decisions(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = run_fixture(directory)
+            destination = fixture.destination
+            write(destination, "scripts/copy", NEW)
+            git("commit", "-q", "-am", "destination took the fix", cwd=destination)
+
+            [entry] = run_command(fixture)
+
+            self.assertEqual(entry["status"], "ready")
+            proof = json.loads(Path(f"{destination}.proof.json").read_text())
+            self.assertEqual(proof["authored"], [".repo-template.json"])
+            body = Path(f"{destination}.pr-body.md").read_text()
+            self.assertNotIn("[[FILL:", body)
+            self.assertIn("None. Every delta path landed without a hand merge.", body)
+
     def test_paths_left_stop_the_destination_as_reconcile(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = run_fixture(directory)
@@ -1216,6 +1279,21 @@ class RunTests(unittest.TestCase):
             self.assertEqual(entry["drift"], [])
             [reason] = entry["settings_unavailable"]
             self.assertIn("scripts/repo-settings", reason)
+            record = Path(f"{fixture.destination}.settings.txt").read_text()
+            self.assertTrue(record.startswith("settings unavailable "))
+
+    def test_a_failed_settings_check_without_rows_is_recorded_as_a_row(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = run_fixture(directory)
+
+            [entry] = run_command(
+                fixture,
+                env={**RUN_ENV, "SETTINGS_OUTPUT": "no token", "SETTINGS_STATUS": "1"},
+            )
+
+            self.assertEqual(entry["settings_unavailable"], ["no token"])
+            record = Path(f"{fixture.destination}.settings.txt").read_text()
+            self.assertIn("settings unavailable no token\n", record)
 
     def test_a_check_that_cannot_run_restores_the_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1353,6 +1431,532 @@ class PublishTests(unittest.TestCase):
             self.assertEqual(entry["status"], "refused")
             self.assertIn("[[FILL:", entry["detail"])
             self.assertEqual(git_output("branch", "--list", cwd=origin), "* main")
+
+    def test_it_records_each_result_beside_the_clone(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture, _ = self.ready(directory)
+            git("switch", "-q", "main", cwd=fixture.destination)
+
+            self.publish(directory, fixture.destination)
+
+            record = json.loads(Path(f"{fixture.destination}.publish.json").read_text())
+            self.assertEqual(record["status"], "refused")
+            self.assertIn("repo-builder/", record["detail"])
+
+    def test_a_published_record_is_kept_on_a_second_run(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture, _ = self.ready(directory)
+            record = Path(f"{fixture.destination}.publish.json")
+            published = {
+                "destination": str(fixture.destination),
+                "status": "published",
+                "detail": "https://github.com/owner/destination/pull/7",
+            }
+            record.write_text(json.dumps(published))
+
+            [entry] = self.publish(directory, fixture.destination)
+
+            self.assertEqual(entry, published)
+            self.assertEqual(json.loads(record.read_text()), published)
+            self.assertEqual(gh_calls(str(Path(directory) / "gh")), [])
+
+
+class VerifyTests(unittest.TestCase):
+    """Reading the checks and the pull request back after publish."""
+
+    ready = PublishTests.ready
+    publish = PublishTests.publish
+    URL = "https://github.com/owner/destination/pull/7"
+
+    def verify(
+        self, directory: str, view: dict[str, Any], *destinations: Path
+    ) -> list[dict[str, Any]]:
+        gh = Path(directory) / "gh-verify"
+        gh.mkdir()
+        env = stub_gh(
+            str(gh),
+            [
+                {"args": ["pr", "checks"], "status": 1, "stdout": "ignored\n"},
+                {"args": ["pr", "view"], "stdout": json.dumps(view)},
+            ],
+        )
+        result = run_with("verify", "--destination", *map(str, destinations), env=env)
+        assert result.returncode == 0, result.stderr
+        self.calls = gh_calls(str(gh))
+        return json.loads(result.stdout)["destinations"]
+
+    def test_it_reads_the_checks_and_the_template_commit_back(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture, _ = self.ready(directory)
+            destination = fixture.destination
+            self.publish(directory, destination)
+            head = git_output("rev-parse", "HEAD", cwd=destination)
+            view = {
+                "number": 7,
+                "url": self.URL,
+                "baseRefName": "main",
+                "headRefName": f"repo-builder/{fixture.target[:12]}",
+                "headRefOid": head,
+                "changedFiles": 2,
+                "statusCheckRollup": [
+                    {"conclusion": "SUCCESS", "status": "COMPLETED"},
+                    {"conclusion": "SUCCESS", "status": "COMPLETED"},
+                    {"conclusion": "FAILURE", "status": "COMPLETED"},
+                    {"conclusion": "", "status": "IN_PROGRESS"},
+                    {"__typename": "StatusContext", "state": "PENDING"},
+                ],
+            }
+
+            [entry] = self.verify(directory, view, destination)
+
+            expected = {
+                "destination": str(destination),
+                "status": "verified",
+                "pull_request": self.URL,
+                "base": "main",
+                "head": f"repo-builder/{fixture.target[:12]}",
+                "files": 2,
+                "template_commit": fixture.target,
+                "checks": {
+                    "SUCCESS": 2,
+                    "FAILURE": 1,
+                    "IN_PROGRESS": 1,
+                    "PENDING": 1,
+                },
+            }
+            self.assertEqual(entry, expected)
+            record = json.loads(Path(f"{destination}.verify.json").read_text())
+            self.assertEqual(
+                {k: v for k, v in record.items() if k in expected}, expected
+            )
+            self.assertEqual(
+                [call[:3] for call in self.calls],
+                [["pr", "checks", self.URL], ["pr", "view", self.URL]],
+            )
+            self.assertIn("--watch", self.calls[0])
+
+    def test_an_unpublished_destination_is_reported_and_the_rest_still_run(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture, _ = self.ready(directory)
+            destination = fixture.destination
+            Path(f"{destination}.publish.json").write_text(
+                json.dumps({"status": "refused", "detail": "nothing ahead"})
+            )
+            other = Path(directory) / "never-published"
+
+            entries = self.verify(directory, {}, other, destination)
+
+            self.assertEqual(
+                [(e["destination"], e["status"]) for e in entries],
+                [(str(other), "not-published"), (str(destination), "not-published")],
+            )
+            self.assertIn("nothing ahead", entries[1]["detail"])
+            self.assertEqual(self.calls, [])
+
+
+class ReportTests(unittest.TestCase):
+    """The several-destinations Final report, rendered from six records each."""
+
+    URL = "https://github.com/owner/{}/pull/7"
+    ROWS = (
+        "rulesets           pass             an active branch ruleset\n"
+        "secret-scanning    FAIL             disabled\n"
+        "code-scanning      unavailable      needs administration\n"
+    )
+
+    def setUp(self) -> None:
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.fixture = Fixture(
+            self.directory.name, {"scripts/a": OLD}, {"scripts/a": NEW}
+        )
+        self.names = ("alpha", "beta")
+
+    def destination(self, name: str) -> Path:
+        return Path(self.directory.name) / "clones" / name
+
+    def records(self, name: str, **changes: Any) -> None:
+        """Write the six records one clone leaves, `changes` overriding a record."""
+        destination = self.destination(name)
+        destination.parent.mkdir(exist_ok=True)
+        apply = {
+            "template": {
+                "recorded_commit": self.fixture.old_commit,
+                "target_commit": self.fixture.target,
+                "subtree": SUBTREE,
+            },
+            "destination": {"repository": f"owner/{name}"},
+            "applied_paths": {
+                "write": ["scripts/shared", f"scripts/only-{name}"],
+                "already-current": ["scripts/current"] if name == "beta" else [],
+            },
+            "removed": [{"path": "scripts/old", "action": "delete"}],
+            "left": [],
+            "overridden": [],
+        }
+        records: dict[str, Any] = {
+            "apply": apply,
+            "proof": {
+                "identical": 4,
+                "total": 5,
+                "authored": [".repo-template.json"],
+            },
+            "check": CHECK_TABLE,
+            "settings": PASS_ROW + "\n",
+            "publish": {"status": "published", "detail": self.URL.format(name)},
+            "verify": {
+                "status": "verified",
+                "pull_request": self.URL.format(name),
+                "files": 3,
+                "template_commit": self.fixture.target,
+                "checks": {"SUCCESS": 3},
+            },
+        } | changes
+        suffixes = {
+            "apply": ".apply.json",
+            "proof": ".proof.json",
+            "check": ".check.txt",
+            "settings": ".settings.txt",
+            "publish": ".publish.json",
+            "verify": ".verify.json",
+        }
+        for key, suffix in suffixes.items():
+            content = records[key]
+            Path(f"{destination}{suffix}").write_text(
+                content if isinstance(content, str) else json.dumps(content)
+            )
+
+    def report(self) -> tuple[dict[str, Any], str]:
+        result = run(
+            "report",
+            "--template-repo",
+            str(self.fixture.template),
+            "--target",
+            self.fixture.target,
+            "--destination",
+            *[str(self.destination(name)) for name in self.names],
+        )
+        assert result.returncode == 0, result.stderr
+        written = json.loads(result.stdout)
+        return written, Path(written["path"]).read_text()
+
+    def test_it_renders_a_row_per_destination_and_the_shared_sections(self) -> None:
+        for name in self.names:
+            self.records(name)
+
+        written, report = self.report()
+
+        self.assertEqual(written["operation"], "update-report")
+        self.assertEqual(
+            written["path"], str(self.destination("alpha").parent / "report.md")
+        )
+        self.assertEqual(written["slots"], [])
+        for line in (
+            "- Status: finished",
+            "- Operation: update",
+            f"- Template: `{self.fixture.old_commit}` -> `{self.fixture.target}`",
+            "- Destinations: 2",
+            "| owner/alpha | https://github.com/owner/alpha/pull/7 | 3 | pass | SUCCESS 3 |",
+            "| owner/beta | https://github.com/owner/beta/pull/7 | 3 | pass | SUCCESS 3 |",
+            (
+                "- Applied: `scripts/shared` (all); `scripts/only-alpha` (owner/alpha); "
+                "`scripts/only-beta` (owner/beta)"
+            ),
+            "- Already current: `scripts/current` (owner/beta)",
+            "- Preserved/Merged/Conflicted: none",
+            "- Renamed/deleted: delete `scripts/old` (all)",
+            "- Overridden: none",
+            "- Authored surface: `.repo-template.json` (all)",
+            "- Drift: none found",
+            "- `scripts/check`: pass on 2/2 destinations",
+            "- Copied paths byte-identical to their source: 8/10",
+            "- Template commit on each head equals the target: 2/2",
+            "- Code review: skipped, as Reviewing the pull request directs",
+            (
+                "- Left for the operator: "
+                f"{self.destination('alpha')}: carries an open pull request"
+            ),
+            "Review and merge the 2 pull requests.",
+        ):
+            self.assertIn(line, report.splitlines())
+
+    def test_a_missing_record_fails_naming_it(self) -> None:
+        for name in self.names:
+            self.records(name)
+        missing = Path(f"{self.destination('beta')}.verify.json")
+        missing.unlink()
+
+        result = run(
+            "report",
+            "--template-repo",
+            str(self.fixture.template),
+            "--target",
+            self.fixture.target,
+            "--destination",
+            *[str(self.destination(name)) for name in self.names],
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(f"missing record {missing}", result.stderr)
+
+    def test_a_failing_destination_is_shown_and_leaves_slots(self) -> None:
+        self.records("alpha")
+        self.records(
+            "beta",
+            check="| lint | FAIL |\n| test | pass |\n",
+            settings=self.ROWS,
+            verify={
+                "status": "verified",
+                "pull_request": self.URL.format("beta"),
+                "files": 5,
+                "template_commit": self.fixture.old_commit,
+                "checks": {"SUCCESS": 2, "FAILURE": 1},
+            },
+        )
+
+        written, report = self.report()
+
+        lines = report.splitlines()
+        self.assertEqual(written["slots"], ["status", "pending-action"])
+        self.assertIn("- Status: [[FILL: status]]", lines)
+        self.assertIn(
+            "| owner/beta | https://github.com/owner/beta/pull/7 | 5 | FAIL "
+            "| FAILURE 1, SUCCESS 2 |",
+            lines,
+        )
+        self.assertIn(
+            "- Drift: owner/beta: secret-scanning    FAIL             disabled", lines
+        )
+        self.assertIn(
+            "- Unavailable: owner/beta: code-scanning      unavailable      "
+            "needs administration",
+            lines,
+        )
+        self.assertIn("- `scripts/check`: pass on 1/2 destinations", lines)
+        self.assertIn("- Template commit on each head equals the target: 1/2", lines)
+        self.assertIn("[[FILL: pending-action]]", lines)
+
+    def test_an_unpublished_destination_leaves_a_cleanup_slot(self) -> None:
+        self.records("alpha")
+        self.records(
+            "beta",
+            publish={"status": "refused", "detail": "nothing ahead"},
+            verify={"status": "not-published", "detail": "nothing ahead"},
+        )
+
+        written, report = self.report()
+
+        self.assertEqual(
+            written["slots"], ["cleanup owner/beta", "status", "pending-action"]
+        )
+        lines = report.splitlines()
+        self.assertIn("- [[FILL: cleanup owner/beta]]", lines)
+        self.assertNotIn(
+            f"- Left for the operator: {self.destination('beta')}: "
+            "carries an open pull request",
+            lines,
+        )
+
+    def test_a_pull_request_with_no_checks_is_not_finished(self) -> None:
+        self.records("alpha")
+        self.records(
+            "beta",
+            verify={
+                "status": "verified",
+                "pull_request": self.URL.format("beta"),
+                "files": 3,
+                "template_commit": self.fixture.target,
+                "checks": {},
+            },
+        )
+
+        written, _ = self.report()
+
+        self.assertEqual(written["slots"], ["status", "pending-action"])
+
+    def test_a_left_path_makes_the_hand_reconciled_lines_a_slot(self) -> None:
+        self.records("alpha")
+        self.records(
+            "beta",
+            apply={
+                "template": {
+                    "recorded_commit": self.fixture.old_commit,
+                    "target_commit": self.fixture.target,
+                    "subtree": SUBTREE,
+                },
+                "destination": {"repository": "owner/beta"},
+                "applied_paths": {},
+                "removed": [
+                    {"path": "scripts/new", "action": "move", "old_path": "scripts/was"}
+                ],
+                "left": [{"path": "scripts/x", "reason": "modified"}],
+                "overridden": [{"path": "scripts/kept", "reason": "ours"}],
+            },
+        )
+
+        written, report = self.report()
+
+        lines = report.splitlines()
+        self.assertEqual(written["slots"], ["preserved-merged-conflicted"])
+        self.assertIn(
+            "- Preserved/Merged/Conflicted: [[FILL: preserved-merged-conflicted]]",
+            lines,
+        )
+        self.assertIn(
+            "- Renamed/deleted: delete `scripts/old` (owner/alpha); "
+            "move `scripts/was` -> `scripts/new` (owner/beta)",
+            lines,
+        )
+        self.assertIn("- Overridden: `scripts/kept`: ours (owner/beta)", lines)
+
+
+class EligibleTests(unittest.TestCase):
+    """Listing the owner's repositories and judging each recorded commit."""
+
+    def stubbed(
+        self, directory: str, commits: Mapping[str, str | None]
+    ) -> tuple[dict[str, str], str]:
+        """A host listing `commits`, a repository's recorded commit or no record."""
+        responses: list[dict[str, Any]] = [
+            {
+                "args": ["repo", "list", "owner"],
+                "stdout": json.dumps(
+                    [{"nameWithOwner": f"owner/{name}"} for name in commits]
+                ),
+            },
+            {"args": ["repo", "clone"]},
+        ]
+        for name, commit in commits.items():
+            args = ["api", f"repos/owner/{name}/contents/.repo-template.json"]
+            if commit is None:
+                responses.append(
+                    {"args": args, "status": 1, "stderr": "Not Found (HTTP 404)"}
+                )
+                continue
+            record = json.dumps({"template": {"commit": commit}}).encode()
+            content = base64.encodebytes(record).decode()
+            responses.append({"args": args, "stdout": json.dumps({"content": content})})
+        gh = Path(directory) / "gh"
+        gh.mkdir()
+        return stub_gh(str(gh), responses), str(gh)
+
+    def eligible(
+        self, fixture: Fixture, env: dict[str, str], *extra: str
+    ) -> subprocess.CompletedProcess[str]:
+        return run_with(
+            "eligible",
+            "--owner",
+            "owner",
+            "--template-repo",
+            str(fixture.template),
+            "--target",
+            fixture.target,
+            *extra,
+            env=env,
+        )
+
+    def sibling(self, fixture: Fixture) -> str:
+        git("switch", "-q", "-c", "side", fixture.old_commit, cwd=fixture.template)
+        write(fixture.template, "side.txt", "side\n")
+        git("add", "-A", cwd=fixture.template)
+        git("commit", "-q", "-m", "side", cwd=fixture.template)
+        side = git_output("rev-parse", "HEAD", cwd=fixture.template)
+        git("switch", "-q", "main", cwd=fixture.template)
+        return side
+
+    def test_each_recorded_commit_gets_a_verdict_and_a_missing_record_is_omitted(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(directory, {"a": OLD}, {"a": NEW})
+            commits = {
+                "behind": fixture.old_commit,
+                "same": fixture.target,
+                "side": self.sibling(fixture),
+                "unknown": "0123456789abcdef0123456789abcdef01234567",
+                "bare": None,
+            }
+            env, _ = self.stubbed(directory, commits)
+
+            result = self.eligible(fixture, env)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            output = json.loads(result.stdout)
+            self.assertEqual(output["operation"], "update-eligible")
+            self.assertEqual(
+                output["repositories"],
+                [
+                    {
+                        "repository": "owner/behind",
+                        "commit": fixture.old_commit,
+                        "verdict": "eligible",
+                    },
+                    {
+                        "repository": "owner/same",
+                        "commit": fixture.target,
+                        "verdict": "current",
+                    },
+                    {
+                        "repository": "owner/side",
+                        "commit": commits["side"],
+                        "verdict": "not-ancestor",
+                    },
+                    {
+                        "repository": "owner/unknown",
+                        "commit": commits["unknown"],
+                        "verdict": "not-ancestor",
+                    },
+                ],
+            )
+
+    def test_clone_fetches_only_eligible_repositories_after_an_empty_pytest_ini(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(directory, {"a": OLD}, {"a": NEW})
+            commits = {
+                "behind": fixture.old_commit,
+                "have": fixture.old_commit,
+                "same": fixture.target,
+            }
+            env, gh = self.stubbed(directory, commits)
+            clones = Path(directory) / "update"
+            (clones / "have").mkdir(parents=True)
+
+            result = self.eligible(fixture, env, "--clone", str(clones))
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((clones / "pytest.ini").read_text(), "")
+            by_name = {
+                entry["repository"]: entry
+                for entry in json.loads(result.stdout)["repositories"]
+            }
+            self.assertEqual(by_name["owner/behind"]["cloned"], str(clones / "behind"))
+            self.assertNotIn("cloned", by_name["owner/have"])
+            self.assertNotIn("cloned", by_name["owner/same"])
+            self.assertEqual(
+                [call for call in gh_calls(gh) if call[:2] == ["repo", "clone"]],
+                [["repo", "clone", "owner/behind", str(clones / "behind")]],
+            )
+
+    def test_a_record_that_cannot_be_read_fails_rather_than_omitting(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(directory, {"a": OLD}, {"a": NEW})
+            env, _ = self.stubbed(directory, {"limited": fixture.old_commit})
+            stubbed = json.loads(env["GH_STUB_RESPONSES"])
+            stubbed[-1] = {
+                "args": stubbed[-1]["args"],
+                "status": 1,
+                "stderr": "API rate limit exceeded (HTTP 403)",
+            }
+            env["GH_STUB_RESPONSES"] = json.dumps(stubbed)
+
+            result = self.eligible(fixture, env)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("rate limit", result.stderr)
 
 
 if __name__ == "__main__":
