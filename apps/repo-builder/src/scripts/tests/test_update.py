@@ -1279,6 +1279,21 @@ class RunTests(unittest.TestCase):
             self.assertEqual(entry["drift"], [])
             [reason] = entry["settings_unavailable"]
             self.assertIn("scripts/repo-settings", reason)
+            record = Path(f"{fixture.destination}.settings.txt").read_text()
+            self.assertTrue(record.startswith("settings unavailable "))
+
+    def test_a_failed_settings_check_without_rows_is_recorded_as_a_row(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = run_fixture(directory)
+
+            [entry] = run_command(
+                fixture,
+                env={**RUN_ENV, "SETTINGS_OUTPUT": "no token", "SETTINGS_STATUS": "1"},
+            )
+
+            self.assertEqual(entry["settings_unavailable"], ["no token"])
+            record = Path(f"{fixture.destination}.settings.txt").read_text()
+            self.assertIn("settings unavailable no token\n", record)
 
     def test_a_check_that_cannot_run_restores_the_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1428,6 +1443,23 @@ class PublishTests(unittest.TestCase):
             self.assertEqual(record["status"], "refused")
             self.assertIn("repo-builder/", record["detail"])
 
+    def test_a_published_record_is_kept_on_a_second_run(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture, _ = self.ready(directory)
+            record = Path(f"{fixture.destination}.publish.json")
+            published = {
+                "destination": str(fixture.destination),
+                "status": "published",
+                "detail": "https://github.com/owner/destination/pull/7",
+            }
+            record.write_text(json.dumps(published))
+
+            [entry] = self.publish(directory, fixture.destination)
+
+            self.assertEqual(entry, published)
+            self.assertEqual(json.loads(record.read_text()), published)
+            self.assertEqual(gh_calls(str(Path(directory) / "gh")), [])
+
 
 class VerifyTests(unittest.TestCase):
     """Reading the checks and the pull request back after publish."""
@@ -1465,12 +1497,13 @@ class VerifyTests(unittest.TestCase):
                 "baseRefName": "main",
                 "headRefName": f"repo-builder/{fixture.target[:12]}",
                 "headRefOid": head,
-                "files": [{"path": "a"}, {"path": "b"}],
+                "changedFiles": 2,
                 "statusCheckRollup": [
                     {"conclusion": "SUCCESS", "status": "COMPLETED"},
                     {"conclusion": "SUCCESS", "status": "COMPLETED"},
                     {"conclusion": "FAILURE", "status": "COMPLETED"},
                     {"conclusion": "", "status": "IN_PROGRESS"},
+                    {"__typename": "StatusContext", "state": "PENDING"},
                 ],
             }
 
@@ -1484,7 +1517,12 @@ class VerifyTests(unittest.TestCase):
                 "head": f"repo-builder/{fixture.target[:12]}",
                 "files": 2,
                 "template_commit": fixture.target,
-                "checks": {"SUCCESS": 2, "FAILURE": 1, "IN_PROGRESS": 1},
+                "checks": {
+                    "SUCCESS": 2,
+                    "FAILURE": 1,
+                    "IN_PROGRESS": 1,
+                    "PENDING": 1,
+                },
             }
             self.assertEqual(entry, expected)
             record = json.loads(Path(f"{destination}.verify.json").read_text())
@@ -1700,6 +1738,44 @@ class ReportTests(unittest.TestCase):
         self.assertIn("- Template commit on each head equals the target: 1/2", lines)
         self.assertIn("[[FILL: pending-action]]", lines)
 
+    def test_an_unpublished_destination_leaves_a_cleanup_slot(self) -> None:
+        self.records("alpha")
+        self.records(
+            "beta",
+            publish={"status": "refused", "detail": "nothing ahead"},
+            verify={"status": "not-published", "detail": "nothing ahead"},
+        )
+
+        written, report = self.report()
+
+        self.assertEqual(
+            written["slots"], ["cleanup owner/beta", "status", "pending-action"]
+        )
+        lines = report.splitlines()
+        self.assertIn("- [[FILL: cleanup owner/beta]]", lines)
+        self.assertNotIn(
+            f"- Left for the operator: {self.destination('beta')}: "
+            "carries an open pull request",
+            lines,
+        )
+
+    def test_a_pull_request_with_no_checks_is_not_finished(self) -> None:
+        self.records("alpha")
+        self.records(
+            "beta",
+            verify={
+                "status": "verified",
+                "pull_request": self.URL.format("beta"),
+                "files": 3,
+                "template_commit": self.fixture.target,
+                "checks": {},
+            },
+        )
+
+        written, _ = self.report()
+
+        self.assertEqual(written["slots"], ["status", "pending-action"])
+
     def test_a_left_path_makes_the_hand_reconciled_lines_a_slot(self) -> None:
         self.records("alpha")
         self.records(
@@ -1755,7 +1831,9 @@ class EligibleTests(unittest.TestCase):
         for name, commit in commits.items():
             args = ["api", f"repos/owner/{name}/contents/.repo-template.json"]
             if commit is None:
-                responses.append({"args": args, "status": 1, "stderr": "Not Found"})
+                responses.append(
+                    {"args": args, "status": 1, "stderr": "Not Found (HTTP 404)"}
+                )
                 continue
             record = json.dumps({"template": {"commit": commit}}).encode()
             content = base64.encodebytes(record).decode()
@@ -1862,6 +1940,23 @@ class EligibleTests(unittest.TestCase):
                 [call for call in gh_calls(gh) if call[:2] == ["repo", "clone"]],
                 [["repo", "clone", "owner/behind", str(clones / "behind")]],
             )
+
+    def test_a_record_that_cannot_be_read_fails_rather_than_omitting(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(directory, {"a": OLD}, {"a": NEW})
+            env, _ = self.stubbed(directory, {"limited": fixture.old_commit})
+            stubbed = json.loads(env["GH_STUB_RESPONSES"])
+            stubbed[-1] = {
+                "args": stubbed[-1]["args"],
+                "status": 1,
+                "stderr": "API rate limit exceeded (HTTP 403)",
+            }
+            env["GH_STUB_RESPONSES"] = json.dumps(stubbed)
+
+            result = self.eligible(fixture, env)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("rate limit", result.stderr)
 
 
 if __name__ == "__main__":

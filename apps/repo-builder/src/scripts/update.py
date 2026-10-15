@@ -711,7 +711,8 @@ def read_settings(destination: Path) -> tuple[list[str], list[str]]:
 
     A `not-applicable` row is a setting the plan does not offer, which is
     neither. A non-zero exit with no row to show for it is unavailable too.
-    The record holds the reason when the check could not run at all.
+    Either reason is written to the record as a `settings unavailable` row,
+    so `report` reads every unavailable reason from the rows alone.
     """
     record = Path(f"{destination}.settings.txt")
     try:
@@ -719,15 +720,25 @@ def read_settings(destination: Path) -> tuple[list[str], list[str]]:
             destination, str(destination / "scripts/repo-settings"), "check"
         )
     except PreflightError as error:
-        record.write_text(f"{error}\n", encoding="utf-8")
-        return [], [str(error)]
-    record.write_text(settings.stdout, encoding="utf-8")
+        reason = str(error)
+        record.write_text(
+            f"settings unavailable {one_line(reason)}\n", encoding="utf-8"
+        )
+        return [], [reason]
     rows = [line.strip() for line in settings.stdout.splitlines()]
     drift = [row for row in rows if row.split()[1:2] == ["FAIL"]]
     unavailable = [row for row in rows if row.split()[1:2] == ["unavailable"]]
+    output = settings.stdout
     if settings.returncode != 0 and not drift and not unavailable:
-        unavailable.append(tail(settings.stderr + settings.stdout))
+        reason = tail(settings.stderr + settings.stdout)
+        unavailable.append(reason)
+        output += f"settings unavailable {one_line(reason)}\n"
+    record.write_text(output, encoding="utf-8")
     return drift, unavailable
+
+
+def one_line(text: str) -> str:
+    return " ".join(text.split())
 
 
 def run_destination(
@@ -858,10 +869,19 @@ def publish_destination(destination: Path) -> dict[str, str]:
 
 
 def publish(arguments: argparse.Namespace) -> dict[str, object]:
-    """Push each ready destination and open its pull request with the body file."""
-    results = []
+    """Push each ready destination and open its pull request with the body file.
+
+    A destination whose record already says `published` keeps that record.
+    """
+    results: list[dict[str, object]] = []
     for given in arguments.destination:
         destination = given.resolve()
+        record = Path(f"{destination}.publish.json")
+        if record.is_file():
+            kept = json.loads(record.read_text(encoding="utf-8"))
+            if kept.get("status") == "published":
+                results.append(kept)
+                continue
         try:
             result = publish_destination(destination)
         except PreflightError as error:
@@ -875,8 +895,10 @@ def publish(arguments: argparse.Namespace) -> dict[str, object]:
 def recorded_commit(repository: str) -> str | None:
     """The commit a repository's `.repo-template.json` records; None without a record."""
     found = execute(Path.cwd(), "gh", "api", f"repos/{repository}/contents/{MANIFEST}")
-    if found.returncode != 0:
+    if found.returncode != 0 and "HTTP 404" in found.stderr:
         return None
+    if found.returncode != 0:
+        raise PreflightError(f"gh api {repository}: {tail(found.stderr)}")
     try:
         record = json.loads(base64.b64decode(json.loads(found.stdout)["content"]))
         return str(record["template"]["commit"])
@@ -958,7 +980,7 @@ def verify_destination(destination: Path) -> dict[str, object]:
         "view",
         url,
         "--json",
-        "number,url,baseRefName,headRefName,headRefOid,files,statusCheckRollup",
+        "number,url,baseRefName,headRefName,headRefOid,changedFiles,statusCheckRollup",
     )
     if viewed.returncode != 0:
         raise PreflightError(f"gh pr view failed: {tail(viewed.stderr)}")
@@ -968,14 +990,20 @@ def verify_destination(destination: Path) -> dict[str, object]:
     )
     checks: dict[str, int] = {}
     for check in view["statusCheckRollup"]:
-        key = check.get("conclusion") or check.get("status")
+        # A commit status carries `state` where a check run carries the other two.
+        key = (
+            check.get("conclusion")
+            or check.get("status")
+            or check.get("state")
+            or "UNKNOWN"
+        )
         checks[key] = checks.get(key, 0) + 1
     return {
         "status": "verified",
         "pull_request": url,
         "base": view["baseRefName"],
         "head": view["headRefName"],
-        "files": len(view["files"]),
+        "files": view["changedFiles"],
         "template_commit": manifest["template"]["commit"],
         "checks": checks,
     }
@@ -1035,6 +1063,7 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
     authored: dict[str, list[str]] = {}
     drift: list[str] = []
     unavailable: list[str] = []
+    cleanup: list[str] = []
     checks_passed = identical = total = on_target = 0
     finished = True
     left = False
@@ -1057,6 +1086,7 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
             finished
             and verified["status"] == "verified"
             and published["status"] == "published"
+            and bool(conclusions)
             and all(settled(key) for key in conclusions)
         )
         on_target += verified.get("template_commit") == target
@@ -1064,6 +1094,11 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
         rows.append(
             f"| {name} | {published['detail']} | {verified.get('files', '-')} "
             f"| {'pass' if passed else 'FAIL'} | {ci or 'none'} |"
+        )
+        cleanup.append(
+            f"- Left for the operator: {destination}: carries an open pull request"
+            if published["status"] == "published"
+            else f"- {slot(f'cleanup {name}')}"
         )
         identical += proof["identical"]
         total += proof["total"]
@@ -1125,10 +1160,7 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
         "- Code review: skipped, as Reviewing the pull request directs",
         "",
         "### Cleanup",
-        *[
-            f"- Left for the operator: {destination}: carries an open pull request"
-            for destination in destinations
-        ],
+        *cleanup,
         "",
         "### Pending action",
         (

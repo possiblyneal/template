@@ -77,7 +77,7 @@ Every flow ends in the [Final report](reporting.md#final-report).
 
 ## Several destinations
 
-List and clone the eligible destinations in one call first: it lists `<owner>`'s non-archived repositories (an archived one refuses the push), reads each recorded commit, and gives a verdict of `current`, `eligible` (a strict ancestor of the target) or `not-ancestor`; a repository without a record is omitted. With `--clone` it writes the empty `tmp/update/pytest.ini` of step 1 and clones each `eligible` one to `tmp/update/<repo>`, skipping a directory that exists, and adds `cloned` to its entry:
+List and clone the eligible destinations in one call first: it lists `<owner>`'s non-archived repositories (an archived one refuses the push), reads each recorded commit, and gives a verdict of `current`, `eligible` (a strict ancestor of the target) or `not-ancestor`; a repository without a record (a 404) is omitted, and any other read failure stops the listing. With `--clone` it writes the empty `tmp/update/pytest.ini` of step 1 and clones each `eligible` one to `tmp/update/<repo>`, skipping a directory that exists, and adds `cloned` to its entry:
 
 ```bash
 python3 <template-repo>/apps/repo-builder/src/scripts/update.py eligible \
@@ -108,7 +108,7 @@ Then run the mechanical steps over all of them with scripts, not a subagent each
      --destination <destination> [<destination> ...]
    ```
 
-   Each result lands in `<destination>.publish.json`, whose `detail` is the pull request URL when `published`.
+   Each result lands in `<destination>.publish.json`, whose `detail` is the pull request URL when `published`. A rerun keeps a `published` record and does not push that destination again.
 4. Verify the published pull requests, which waits for their checks and reads each back (step 9 of the single flow, for the rest of its list):
 
    ```bash
