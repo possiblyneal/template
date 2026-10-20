@@ -57,7 +57,7 @@ Every flow ends in the [Final report](reporting.md#final-report).
    <destination>/scripts/repo-settings check
    ```
 
-   If the checks fail, keep the recorded commit unchanged and report the candidate diff. Record every `optional missing:` line as drift and patch nothing; a setting that is off, one not offered for the plan, and one unreadable for want of admin or network are three findings and only the first is drift. Report the check `unavailable` when it could not run, and `not checked` where the checks failed first.
+   If the checks fail, keep the recorded commit unchanged and report the candidate diff. Record every `optional missing:` line, and a `delete-branches FAIL`, as drift and patch nothing; a setting that is off, one not offered for the plan, and one unreadable for want of admin or network are three findings and only the first is drift. Report the check `unavailable` when it could not run, and `not checked` where the checks failed first.
 6. Prove the copies, before step 7 advances the recorded commit:
 
    ```bash
@@ -71,7 +71,7 @@ Every flow ends in the [Final report](reporting.md#final-report).
 7. After successful checks, run `update.py advance` with the same three arguments to set `template.commit` to the exact target, then rerun the checks the change affects.
 8. Create a feature branch from the current remote default branch. Commit only the bounded lifecycle diff, present the remote gate, push, and open a PR. Do not merge.
 
-   Settings drift from step 5 is its own gate line: each setting with its current value, its proposed value, and the exact `gh api` command, never folded into the push line. Drift the user declines is reported as declined, not carried forward or re-raised next update. An update that changes the four workflows also offers the runner variable ([`## The runner variable is set only where it is safe and answerable`](lifecycle.md#the-runner-variable-is-set-only-where-it-is-safe-and-answerable)), on its own line and not as drift: `gh variable set RUNNER --body self-hosted -R <owner>/<repository>`, only on a private repository whose `dev-<repository>` runner reads `online`; otherwise say which condition failed and offer nothing.
+   Settings drift from step 5 is its own gate line: each setting with its current value, its proposed value, and the exact `gh api` command, never folded into the push line. Drift the user declines is reported as declined, not carried forward or re-raised next update, except head branch deletion: every repository requires it, so it is offered again while it stays off. An update that changes the four workflows also offers the runner variable ([`## The runner variable is set only where it is safe and answerable`](lifecycle.md#the-runner-variable-is-set-only-where-it-is-safe-and-answerable)), on its own line and not as drift: `gh variable set RUNNER --body self-hosted -R <owner>/<repository>`, only on a private repository whose `dev-<repository>` runner reads `online`; otherwise say which condition failed and offer nothing.
 9. Verify PR base/head, changed paths, the recorded target commit, check results, and preserved product paths. Re-read any patched setting rather than trusting a 200, and where `RUNNER` was set read `runner_name` off the jobs. When the PR's branch falls behind the default branch, update it with `gh api -X PUT repos/<owner>/<repo>/pulls/<n>/update-branch`; `gh pr update-branch` does not exist.
 
 ## Several destinations

@@ -25,7 +25,7 @@ python3 apps/repo-builder/src/scripts/retrofit.py hosted apply \
 
 Five writes, in this order, the last conditional.
 
-**1. Merge settings, in one call.** `allow_merge_commit`, `allow_squash_merge`, `allow_rebase_merge` and `delete_branch_on_merge` go in a single `PATCH`, since a half-applied merge policy is worse than none. State the four current values from `merge_settings` before overwriting them. All four `null` means the wrong field spelling (see [Step 5 — Configure the repository settings](generate.md#step-5--configure-the-repository-settings)), not every merge method disabled. Declinable; record a refusal and its reason in `generation.features`.
+**1. Merge settings, in one call.** `allow_merge_commit`, `allow_squash_merge`, `allow_rebase_merge` and `delete_branch_on_merge` go in a single `PATCH`, since a half-applied merge policy is worse than none. State the four current values from `merge_settings` before overwriting them. All four `null` means the wrong field spelling (see [Step 5 — Configure the repository settings](generate.md#step-5--configure-the-repository-settings)), not every merge method disabled. Declinable; record a refusal and its reason in `generation.features`. `delete_branch_on_merge` is required in every repository, so a refusal leaves `scripts/repo-settings check` failing on `delete-branches` until it is on.
 
 **2. The default-branch rename.** **Declining is a hard stop**: the payload's workflows pin the branch name, so CI would never fire on the old one.
 
