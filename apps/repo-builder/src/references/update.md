@@ -57,7 +57,7 @@ Every flow ends in the [Final report](reporting.md#final-report).
    <destination>/scripts/repo-settings check
    ```
 
-   If the checks fail, keep the recorded commit unchanged and report the candidate diff. Record every `optional missing:` line, and a `delete-branches FAIL`, as drift and patch nothing; a setting that is off, one not offered for the plan, and one unreadable for want of admin or network are three findings and only the first is drift. Report the check `unavailable` when it could not run, and `not checked` where the checks failed first.
+   If the destination's checks fail, keep the recorded commit unchanged and report the candidate diff. The settings check's exit status is not one of them: a `delete-branches FAIL` exits non-zero and is drift, not a failed check, so it never holds back step 7. Record every `optional missing:` line, and a `delete-branches FAIL`, as drift and patch nothing; a setting that is off, one not offered for the plan, and one unreadable for want of admin or network are three findings and only the first is drift. Report the check `unavailable` when it could not run, and `not checked` where the checks failed first.
 6. Prove the copies, before step 7 advances the recorded commit:
 
    ```bash

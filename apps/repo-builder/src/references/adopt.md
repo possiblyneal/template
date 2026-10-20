@@ -26,7 +26,7 @@ Read [`lifecycle.md`](lifecycle.md) first — the manifest, ownership, check rep
    <destination>/scripts/repo-settings check
    ```
 
-   Adopt reconciles nothing, so this is the destination's own copy at whatever version the last generate or update left — it reports the rules that copy knows, which can be behind the template's current ones. Say so when reporting: an adopt that finds no drift has established less than an update that finds none. Record every `optional missing:` line, and a `delete-branches FAIL`, as drift and patch nothing here; step 7 asks.
+   Adopt reconciles nothing, so this is the destination's own copy at whatever version the last generate or update left — it reports the rules that copy knows, which can be behind the template's current ones. Say so when reporting: an adopt that finds no drift has established less than an update that finds none. Record every `optional missing:` line, and a `delete-branches FAIL`, as drift and patch nothing here; step 7 asks. A `delete-branches FAIL` exits the check non-zero, and that alone does not stop the adopt.
 7. Create a feature branch from the current remote default branch. Commit only the adopted addon paths, present the remote gate, push, and open a PR. Never merge.
 
    Drift step 6 recorded is its own line on that gate and its own authorization, the same as on an update: current value, proposed value, exact `gh api` command, never folded into the push line. Adopting an addon is not consent to change how the repository merges. Drift the user declines is reported as declined and left alone.
