@@ -117,7 +117,7 @@ The specific operating parameters for the AI agent.
 
 `docs/LESSONS.md`: Repository-specific knowledge that prevents recurring mistakes.
 
-`docs/plans/`: Plans written in plan mode, tracked so they land in the diff with the code they describe.
+`docs/plans/`: Convention (not a shipped directory) for plans written in plan mode, tracked so they land in the diff with the code they describe. Plan mode creates it on its first plan.
 
 ### Root Configuration Files
 
