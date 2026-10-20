@@ -31,14 +31,18 @@ fi
 output="$("$@" 2>&1)"
 status=$?
 
-# A state line, then any indented lines that follow it. awk rather than grep so
-# a finding stays attached to the check that recorded it. Exit 1 from awk means
-# the table held nothing that failed.
+# A state line, then the findings under a FAIL: lines indented exactly 21
+# spaces, the column libs/result.sh prints them at. awk rather than grep so a
+# finding stays attached to the check that recorded it. Any other indented line
+# is a tool's own output -- cargo indents its progress -- and is dropped, after
+# a pass or after a FAIL's findings alike. Exit 1 from awk means the table held
+# nothing that failed.
 awk '
   /^[A-Za-z0-9_-]+ +(pass|not-applicable|unavailable|FAIL|would-run)( |$)/ {
-    print; under = 1; if ($2 == "FAIL" || $2 == "unavailable") failed = 1; next
+    print; under = ($2 == "FAIL"); if ($2 == "FAIL" || $2 == "unavailable") failed = 1; next
   }
-  /^[[:space:]]/ { if (under) print; next }
+  # 21 literal spaces: an awk older than 2019 reads {21} as text, not a count.
+  /^                     [^ ]/ { if (under) print; next }
   { under = 0 }
   END { exit failed ? 0 : 1 }
 ' <<< "$output"

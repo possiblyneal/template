@@ -10,6 +10,7 @@ helpers by import. What `apply` leaves is what the flow reconciles by hand.
 from __future__ import annotations
 
 import argparse
+import base64
 import fnmatch
 import json
 import os
@@ -20,6 +21,7 @@ import tomllib
 from pathlib import Path
 
 import preflight
+import retrofit
 from preflight import PreflightError, git_output, run_git
 
 SCHEMA_VERSION = 1
@@ -30,6 +32,7 @@ DEPENDABOT_LIBRARY = "scripts/libs/dependabot.sh"
 CODEQL = ".github/workflows/codeql.yml"
 EXECUTABLE = "100755"
 SYMLINK = "120000"
+SLOT = "[[FILL:"
 
 
 def blob_bytes(repository: Path, revision: str) -> bytes:
@@ -295,6 +298,8 @@ def apply_one(
         write_payload(destination, template_repo, target, subtree, path)
         return {"path": path, "action": "move", "old_path": old_path}
     write_payload(destination, template_repo, target, subtree, path)
+    if change.get("destination_state") == "current":
+        return {"path": path, "action": "already-current"}
     return {"path": path, "action": "write"}
 
 
@@ -318,7 +323,7 @@ def left_reason(
     if change.get("override_expired"):
         return None
     state = change["destination_state"]
-    if state == "unmodified":
+    if state in ("unmodified", "current"):
         return None
     if state == "absent" and str(change["status"])[0] in "AD":
         return None
@@ -350,7 +355,7 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
         library = dependabot_library(template_repo, target, subtree)
         baseline = (library, watched_pairs(library, destination / DEPENDABOT))
 
-    applied: dict[str, int] = {}
+    applied: dict[str, list[str]] = {}
     removed: list[dict[str, str]] = []
     discarded: list[dict[str, str]] = []
     left: list[dict[str, str]] = []
@@ -387,8 +392,8 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
             )
             continue
         landed = apply_one(change, destination, template_repo, target, subtree)
-        applied[landed["action"]] = applied.get(landed["action"], 0) + 1
-        if landed["action"] != "write":
+        applied.setdefault(landed["action"], []).append(landed["path"])
+        if landed["action"] not in ("write", "already-current"):
             removed.append(landed)
         lost = landed.get("old_path", landed["path"])
         if lost.startswith(AUTOMATION_PREFIX) and (
@@ -409,7 +414,8 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
         "operation": "update-apply",
         "template": template,
         "destination": result["destination"],
-        "applied": dict(sorted(applied.items())),
+        "applied": {action: len(paths) for action, paths in sorted(applied.items())},
+        "applied_paths": dict(sorted(applied.items())),
         "removed": removed,
         "discarded": discarded,
         "left": left,
@@ -538,6 +544,637 @@ def advance_commit(arguments: argparse.Namespace) -> dict[str, object]:
     return {"operation": "update-advance", "old_commit": old, "new_commit": new}
 
 
+def read_record(destination: Path, suffix: str) -> str:
+    record = Path(f"{destination}{suffix}")
+    if not record.is_file():
+        raise PreflightError(f"missing record {record}")
+    return record.read_text(encoding="utf-8")
+
+
+def fence(text: str) -> list[str]:
+    return ["```", text.rstrip(), "```"]
+
+
+def render_pr_body(arguments: argparse.Namespace) -> dict[str, object]:
+    """Fill the destination's pull-request template from the run's records.
+
+    Headings are the template's `## ` lines in order. What the records settle
+    is written; a heading they do not cover, or a `left` that needs a hand
+    merge, becomes a `[[FILL: <name>]]` slot.
+    """
+    destination = arguments.destination.resolve()
+    apply = json.loads(read_record(destination, ".apply.json"))
+    proof = json.loads(read_record(destination, ".proof.json"))
+    check = read_record(destination, ".check.txt")
+    settings = read_record(destination, ".settings.txt")
+    template_file = destination / ".github/PULL_REQUEST_TEMPLATE.md"
+    if not template_file.is_file():
+        raise PreflightError(f"missing {template_file}")
+    headings = [
+        line
+        for line in template_file.read_text(encoding="utf-8").splitlines()
+        if line.startswith("## ")
+    ]
+    template_repo = arguments.template_repo
+    recorded = str(apply["template"]["recorded_commit"])
+    target = str(apply["template"]["target_commit"])
+    subtree = str(apply["template"]["subtree"])
+    commits = git_output(
+        template_repo, "log", "--format=%h %s", f"{recorded}..{target}", "--", subtree
+    ).splitlines()
+    overridden = {entry["path"] for entry in apply["overridden"]}
+    delta = [
+        path
+        for line in git_output(
+            template_repo,
+            "diff",
+            "--name-only",
+            "--no-renames",
+            recorded,
+            target,
+            "--",
+            subtree,
+        ).splitlines()
+        if (path := line.removeprefix(f"{subtree}/")) not in overridden
+    ]
+    authored = proof["authored"]
+    dropped = (apply["dependabot"] or {}).get("dropped", [])
+    slots: list[str] = []
+
+    def slot(name: str) -> str:
+        slots.append(name)
+        return f"[[FILL: {name}]]"
+
+    sections = {
+        "## Intent": [
+            (
+                f"Carries the template payload from `{recorded}` to `{target}`, "
+                "recorded in `.repo-template.json`:"
+            ),
+            "",
+            *[f"- {commit}" for commit in commits],
+        ],
+        "## Read first": [
+            *[f"- `{path}`" for path in authored],
+            "",
+            (
+                "The other paths are byte-identical to the payload at the target "
+                "commit and safe to skim."
+            ),
+        ],
+        "## Decisions": [
+            slot("decisions")
+            if apply["left"]
+            else "None. Every delta path landed without a hand merge."
+        ],
+        "## Out of scope": ["None."],
+        "## Verified": [
+            *fence(check),
+            "",
+            *fence(settings),
+            "",
+            (
+                f"{proof['identical']}/{proof['total']} copied paths byte-identical "
+                f"to the payload; authored: {', '.join(authored)}"
+            ),
+        ],
+        "## Not verified": [
+            (
+                "- Code review skipped: the copied lines were reviewed in the "
+                "template repository and the copy proof stands in for it."
+            ),
+            "- CI on this pull request had not run when this was written.",
+        ],
+        "## Merge danger": [
+            "**Door:** two-way: a revert restores everything",
+            "",
+            "**Blast radius:**",
+            "",
+            *[f"- `{path}`" for path in delta],
+            *[f"- discarded: `{entry['path']}`" for entry in apply["discarded"]],
+            *[
+                f"- dependabot dropped: `{ecosystem}` in `{directory}`"
+                for ecosystem, directory in dropped
+            ],
+        ],
+    }
+    lines: list[str] = []
+    for heading in headings:
+        body = sections.get(heading) or [slot(heading[3:].lower())]
+        lines += [heading, "", *body, ""]
+    path = Path(f"{destination}.pr-body.md")
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return {"operation": "update-pr-body", "path": str(path), "slots": slots}
+
+
+def execute(cwd: Path, *command: str) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(
+            command, cwd=cwd, text=True, capture_output=True, check=False
+        )
+    except OSError as error:
+        raise PreflightError(f"{command[0]} cannot run: {error.strerror}") from error
+
+
+def tail(text: str, lines: int = 3) -> str:
+    return "\n".join(text.strip().splitlines()[-lines:])
+
+
+def encode(result: dict[str, object]) -> str:
+    return json.dumps(
+        {"ok": True, "schema_version": SCHEMA_VERSION, **result},
+        indent=2,
+        sort_keys=True,
+    )
+
+
+def record_json(destination: Path, suffix: str, result: dict[str, object]) -> None:
+    Path(f"{destination}{suffix}").write_text(encode(result) + "\n", encoding="utf-8")
+
+
+def outcome(
+    status: str,
+    detail: str = "",
+    drift: list[str] | None = None,
+    unavailable: list[str] | None = None,
+) -> dict[str, object]:
+    return {
+        "status": status,
+        "detail": detail,
+        "drift": drift or [],
+        "settings_unavailable": unavailable or [],
+    }
+
+
+def read_settings(destination: Path) -> tuple[list[str], list[str]]:
+    """Drift (a setting that is off) and what could not be read, from the result rows.
+
+    A `not-applicable` row is a setting the plan does not offer, which is
+    neither. A non-zero exit with no row to show for it is unavailable too.
+    Either reason is written to the record as a `settings unavailable` row,
+    so `report` reads every unavailable reason from the rows alone.
+    """
+    record = Path(f"{destination}.settings.txt")
+    try:
+        settings = execute(
+            destination, str(destination / "scripts/repo-settings"), "check"
+        )
+    except PreflightError as error:
+        reason = str(error)
+        record.write_text(
+            f"settings unavailable {one_line(reason)}\n", encoding="utf-8"
+        )
+        return [], [reason]
+    rows = [line.strip() for line in settings.stdout.splitlines()]
+    drift = [row for row in rows if row.split()[1:2] == ["FAIL"]]
+    unavailable = [row for row in rows if row.split()[1:2] == ["unavailable"]]
+    output = settings.stdout
+    if settings.returncode != 0 and not drift and not unavailable:
+        reason = tail(settings.stderr + settings.stdout)
+        unavailable.append(reason)
+        output += f"settings unavailable {one_line(reason)}\n"
+    record.write_text(output, encoding="utf-8")
+    return drift, unavailable
+
+
+def one_line(text: str) -> str:
+    return " ".join(text.split())
+
+
+def run_destination(
+    arguments: argparse.Namespace, destination: Path, target: str
+) -> dict[str, object]:
+    """One destination's mechanical steps, stopping at the first that needs a hand."""
+    step = argparse.Namespace(
+        template_repo=arguments.template_repo, target=target, destination=destination
+    )
+    applied = apply_update(step)
+    record_json(destination, ".apply.json", applied)
+    left = applied["left"]
+    assert isinstance(left, list)
+    if left:
+        return outcome("reconcile", ", ".join(entry["path"] for entry in left))
+
+    if (destination / "package-lock.json").is_file():
+        installed = execute(destination, "npm", "ci")
+        if installed.returncode != 0:
+            return outcome("install-failed", tail(installed.stderr))
+
+    if (destination / ".pre-commit-config.yaml").is_file():
+        hooks = retrofit.install_hooks(
+            destination,
+            destination,
+            retrofit.hook_types(destination),
+            Path(retrofit.prior_hooks(destination)["path"]),
+        )
+        if not hooks.ready:
+            return outcome("stopped", "; ".join(hooks.findings))
+
+    record_json(destination, ".proof.json", prove_copies(step))
+    manifest = destination / MANIFEST
+    prior_text = manifest.read_text(encoding="utf-8")
+    advanced = advance_commit(step)
+
+    def restore() -> None:
+        manifest.write_text(prior_text, encoding="utf-8")
+        run_git(destination, "add", "--", MANIFEST)
+
+    try:
+        checked = execute(destination, str(destination / "scripts/check"))
+    except PreflightError:
+        restore()
+        raise
+    Path(f"{destination}.check.txt").write_text(checked.stdout, encoding="utf-8")
+    if checked.returncode != 0:
+        restore()
+        return outcome("check-failed", f"{destination}/tmp/check.log")
+
+    drift, unavailable = read_settings(destination)
+
+    short = target[:12]
+    run_git(destination, "switch", "-c", f"repo-builder/{short}")
+    committed = execute(
+        destination,
+        "git",
+        "commit",
+        "-q",
+        "-m",
+        f"chore(template): update to template {short}",
+        "-m",
+        (
+            "Carries the template payload from\n"
+            f"{advanced['old_commit']}\nto {advanced['new_commit']}."
+        ),
+        "--trailer",
+        f"Generated-By: {arguments.generated_by}",
+    )
+    if committed.returncode != 0:
+        return outcome(
+            "stopped", tail(committed.stderr + committed.stdout), drift, unavailable
+        )
+
+    render_pr_body(step)
+    return outcome("ready", drift=drift, unavailable=unavailable)
+
+
+def run_update(arguments: argparse.Namespace) -> dict[str, object]:
+    """Run every destination, reporting one short entry each; a stop is local."""
+    arguments.template_repo = preflight.require_git_repository(
+        arguments.template_repo, "template repository"
+    )
+    target = preflight.resolve_commit(arguments.template_repo, arguments.target)
+    results = []
+    for given in arguments.destination:
+        destination = given.resolve()
+        try:
+            result = run_destination(arguments, destination, target)
+        except PreflightError as error:
+            result = outcome("stopped", str(error))
+        results.append({"destination": str(destination), **result})
+    return {"operation": "update-run", "destinations": results}
+
+
+def publish_destination(destination: Path) -> dict[str, str]:
+    branch = git_output(destination, "branch", "--show-current")
+    if not branch.startswith("repo-builder/"):
+        return {"status": "refused", "detail": "not on a repo-builder/ branch"}
+    body = Path(f"{destination}.pr-body.md")
+    if not body.is_file():
+        return {"status": "refused", "detail": f"missing {body}"}
+    if SLOT in body.read_text(encoding="utf-8"):
+        return {"status": "refused", "detail": f"{body} holds a {SLOT} slot"}
+    base = git_output(
+        destination, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"
+    ).removeprefix("origin/")
+    if git_output(destination, "rev-list", "--count", f"origin/{base}..HEAD") == "0":
+        return {"status": "refused", "detail": f"nothing ahead of origin/{base}"}
+    run_git(destination, "push", "-q", "-u", "origin", branch)
+    created = execute(
+        destination,
+        "gh",
+        "pr",
+        "create",
+        "--base",
+        base,
+        "--head",
+        branch,
+        "--title",
+        git_output(destination, "log", "-1", "--format=%s"),
+        "--body-file",
+        str(body),
+    )
+    if created.returncode != 0:
+        return {"status": "failed", "detail": tail(created.stderr)}
+    return {"status": "published", "detail": created.stdout.strip()}
+
+
+def publish(arguments: argparse.Namespace) -> dict[str, object]:
+    """Push each ready destination and open its pull request with the body file.
+
+    A destination whose record already says `published` keeps that record.
+    """
+    results: list[dict[str, object]] = []
+    for given in arguments.destination:
+        destination = given.resolve()
+        record = Path(f"{destination}.publish.json")
+        if record.is_file():
+            kept = json.loads(record.read_text(encoding="utf-8"))
+            if kept.get("status") == "published":
+                results.append(kept)
+                continue
+        try:
+            result = publish_destination(destination)
+        except PreflightError as error:
+            result = {"status": "failed", "detail": str(error)}
+        entry: dict[str, object] = {"destination": str(destination), **result}
+        record_json(destination, ".publish.json", entry)
+        results.append(entry)
+    return {"operation": "update-publish", "destinations": results}
+
+
+def recorded_commit(repository: str) -> str | None:
+    """The commit a repository's `.repo-template.json` records; None without a record."""
+    found = execute(Path.cwd(), "gh", "api", f"repos/{repository}/contents/{MANIFEST}")
+    if found.returncode != 0 and "HTTP 404" in found.stderr:
+        return None
+    if found.returncode != 0:
+        raise PreflightError(f"gh api {repository}: {tail(found.stderr)}")
+    try:
+        record = json.loads(base64.b64decode(json.loads(found.stdout)["content"]))
+        return str(record["template"]["commit"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def list_eligible(arguments: argparse.Namespace) -> dict[str, object]:
+    """Judge each non-archived repository's recorded commit against the target."""
+    target = preflight.resolve_commit(arguments.template_repo, arguments.target)
+    listed = execute(
+        Path.cwd(),
+        "gh",
+        "repo",
+        "list",
+        arguments.owner,
+        "--no-archived",
+        "--limit",
+        "1000",
+        "--json",
+        "nameWithOwner",
+    )
+    if listed.returncode != 0:
+        raise PreflightError(f"gh repo list failed: {tail(listed.stderr)}")
+    if arguments.clone:
+        arguments.clone.mkdir(parents=True, exist_ok=True)
+        (arguments.clone / "pytest.ini").write_text("", encoding="utf-8")
+    repositories = []
+    for entry in json.loads(listed.stdout):
+        name = str(entry["nameWithOwner"])
+        commit = recorded_commit(name)
+        if commit is None:
+            continue
+        behind = run_git(
+            arguments.template_repo,
+            "merge-base",
+            "--is-ancestor",
+            commit,
+            target,
+            check=False,
+        )
+        verdict = (
+            "current"
+            if commit == target
+            else "eligible"
+            if behind.returncode == 0
+            else "not-ancestor"
+        )
+        result: dict[str, object] = {
+            "repository": name,
+            "commit": commit,
+            "verdict": verdict,
+        }
+        clone = arguments.clone / name.split("/")[-1] if arguments.clone else None
+        if verdict == "eligible" and clone and not clone.exists():
+            cloned = execute(Path.cwd(), "gh", "repo", "clone", name, str(clone))
+            if cloned.returncode != 0:
+                raise PreflightError(f"gh repo clone {name}: {tail(cloned.stderr)}")
+            result["cloned"] = str(clone)
+        repositories.append(result)
+    return {"operation": "update-eligible", "repositories": repositories}
+
+
+def verify_destination(destination: Path) -> dict[str, object]:
+    record = Path(f"{destination}.publish.json")
+    published = (
+        json.loads(record.read_text(encoding="utf-8")) if record.is_file() else {}
+    )
+    if published.get("status") != "published":
+        detail = published.get("detail") or f"missing {record}"
+        return {"status": "not-published", "detail": detail}
+    url = published["detail"]
+    # A failing check exits non-zero; its conclusions, read below, are the result.
+    execute(destination, "gh", "pr", "checks", url, "--watch")
+    viewed = execute(
+        destination,
+        "gh",
+        "pr",
+        "view",
+        url,
+        "--json",
+        "number,url,baseRefName,headRefName,headRefOid,changedFiles,statusCheckRollup",
+    )
+    if viewed.returncode != 0:
+        raise PreflightError(f"gh pr view failed: {tail(viewed.stderr)}")
+    view = json.loads(viewed.stdout)
+    manifest = json.loads(
+        git_output(destination, "show", f"{view['headRefOid']}:.repo-template.json")
+    )
+    checks: dict[str, int] = {}
+    for check in view["statusCheckRollup"]:
+        # A commit status carries `state` where a check run carries the other two.
+        key = (
+            check.get("conclusion")
+            or check.get("status")
+            or check.get("state")
+            or "UNKNOWN"
+        )
+        checks[key] = checks.get(key, 0) + 1
+    return {
+        "status": "verified",
+        "pull_request": url,
+        "base": view["baseRefName"],
+        "head": view["headRefName"],
+        "files": view["changedFiles"],
+        "template_commit": manifest["template"]["commit"],
+        "checks": checks,
+    }
+
+
+def verify(arguments: argparse.Namespace) -> dict[str, object]:
+    """Read each published pull request's checks and recorded template commit."""
+    results = []
+    for given in arguments.destination:
+        destination = given.resolve()
+        try:
+            result = verify_destination(destination)
+        except (PreflightError, OSError, ValueError, KeyError) as error:
+            result = {"status": "failed", "detail": str(error)}
+        entry = {"destination": str(destination), **result}
+        record_json(destination, ".verify.json", entry)
+        results.append(entry)
+    return {"operation": "update-verify", "destinations": results}
+
+
+def settled(conclusion: str) -> bool:
+    return conclusion.lower() in ("success", "skipped", "neutral")
+
+
+def aggregate(found: dict[str, list[str]], total: int) -> str:
+    """Each label with the destinations it applies to, `all` when every one does."""
+    return (
+        "; ".join(
+            f"{label} ({'all' if len(names) == total else ', '.join(names)})"
+            for label, names in found.items()
+        )
+        or "none"
+    )
+
+
+def render_report(arguments: argparse.Namespace) -> dict[str, object]:
+    """Render the several-destinations Final report from each clone's records.
+
+    Reconciliation, File list and Verification are aggregated across the
+    destinations by path. What the records cannot settle is a
+    `[[FILL: <name>]]` slot, listed under `slots`; a missing record fails.
+    """
+    destinations = [given.resolve() for given in arguments.destination]
+    target = preflight.resolve_commit(arguments.template_repo, arguments.target)
+    slots: list[str] = []
+
+    def slot(name: str) -> str:
+        slots.append(name)
+        return f"[[FILL: {name}]]"
+
+    rows: list[str] = []
+    olds: list[str] = []
+    applied: dict[str, list[str]] = {}
+    current: dict[str, list[str]] = {}
+    removed: dict[str, list[str]] = {}
+    overridden: dict[str, list[str]] = {}
+    authored: dict[str, list[str]] = {}
+    drift: list[str] = []
+    unavailable: list[str] = []
+    cleanup: list[str] = []
+    checks_passed = identical = total = on_target = 0
+    finished = True
+    left = False
+    for destination in destinations:
+        apply = json.loads(read_record(destination, ".apply.json"))
+        proof = json.loads(read_record(destination, ".proof.json"))
+        check = read_record(destination, ".check.txt")
+        settings = read_record(destination, ".settings.txt")
+        published = json.loads(read_record(destination, ".publish.json"))
+        verified = json.loads(read_record(destination, ".verify.json"))
+        name = str(apply["destination"]["repository"])
+        olds.append(str(apply["template"]["recorded_commit"]))
+        left = left or bool(apply["left"])
+        passed = "FAIL" not in {
+            word for line in check.splitlines() for word in line.split()
+        }
+        checks_passed += passed
+        conclusions = verified.get("checks", {})
+        finished = (
+            finished
+            and verified["status"] == "verified"
+            and published["status"] == "published"
+            and bool(conclusions)
+            and all(settled(key) for key in conclusions)
+        )
+        on_target += verified.get("template_commit") == target
+        ci = ", ".join(f"{key} {count}" for key, count in sorted(conclusions.items()))
+        rows.append(
+            f"| {name} | {published['detail']} | {verified.get('files', '-')} "
+            f"| {'pass' if passed else 'FAIL'} | {ci or 'none'} |"
+        )
+        cleanup.append(
+            f"- Left for the operator: {destination}: carries an open pull request"
+            if published["status"] == "published"
+            else f"- {slot(f'cleanup {name}')}"
+        )
+        identical += proof["identical"]
+        total += proof["total"]
+        paths = apply["applied_paths"]
+        for path in paths.get("write", []):
+            applied.setdefault(f"`{path}`", []).append(name)
+        for path in paths.get("already-current", []):
+            current.setdefault(f"`{path}`", []).append(name)
+        for entry in apply["removed"]:
+            label = (
+                f"move `{entry['old_path']}` -> `{entry['path']}`"
+                if entry["action"] == "move"
+                else f"{entry['action']} `{entry['path']}`"
+            )
+            removed.setdefault(label, []).append(name)
+        for entry in apply["overridden"]:
+            label = f"`{entry['path']}`: {entry['reason']}"
+            overridden.setdefault(label, []).append(name)
+        for path in proof["authored"]:
+            authored.setdefault(f"`{path}`", []).append(name)
+        found = [line.strip() for line in settings.splitlines()]
+        drift += [f"{name}: {row}" for row in found if row.split()[1:2] == ["FAIL"]]
+        unavailable += [
+            f"{name}: {row}" for row in found if row.split()[1:2] == ["unavailable"]
+        ]
+    count = len(destinations)
+    lines = [
+        "## Repo Builder Result",
+        "",
+        f"- Status: {'finished' if finished else slot('status')}",
+        "- Operation: update",
+        f"- Template: `{', '.join(dict.fromkeys(olds))}` -> `{target}`",
+        f"- Destinations: {count}",
+        "",
+        "| Repository | Pull request | Files | `scripts/check` | CI checks |",
+        "| --- | --- | --- | --- | --- |",
+        *rows,
+        "",
+        "### Reconciliation",
+        f"- Applied: {aggregate(applied, count)}",
+        f"- Already current: {aggregate(current, count)}",
+        "- Preserved/Merged/Conflicted: "
+        + (slot("preserved-merged-conflicted") if left else "none"),
+        f"- Renamed/deleted: {aggregate(removed, count)}",
+        f"- Overridden: {aggregate(overridden, count)}",
+        "",
+        "### File list",
+        f"- Authored surface: {aggregate(authored, count)}",
+        "",
+        "### Repository settings",
+        *[f"- Drift: {row}" for row in drift],
+        *[f"- Unavailable: {row}" for row in unavailable],
+        *(["- Drift: none found"] if not drift and not unavailable else []),
+        "",
+        "### Verification",
+        f"- `scripts/check`: pass on {checks_passed}/{count} destinations",
+        f"- Copied paths byte-identical to their source: {identical}/{total}",
+        f"- Template commit on each head equals the target: {on_target}/{count}",
+        "- Code review: skipped, as Reviewing the pull request directs",
+        "",
+        "### Cleanup",
+        *cleanup,
+        "",
+        "### Pending action",
+        (
+            f"Review and merge the {count} pull requests."
+            if finished
+            else slot("pending-action")
+        ),
+        "",
+    ]
+    path = destinations[0].parent / "report.md"
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return {"operation": "update-report", "path": str(path), "slots": slots}
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -545,12 +1182,44 @@ def build_parser() -> argparse.ArgumentParser:
         ("apply", apply_update, "land the paths that need no judgment, staged"),
         ("proof", prove_copies, "split the staged diff into copies and authored"),
         ("advance", advance_commit, "rewrite template.commit to the target"),
+        ("pr-body", render_pr_body, "render the pull-request body from the records"),
     ):
         command = subparsers.add_parser(name, help=help_text)
         command.add_argument("--template-repo", type=Path, required=True)
         command.add_argument("--target", required=True, help="template ref or commit")
         command.add_argument("--destination", type=Path, required=True)
         command.set_defaults(handler=handler)
+    several = subparsers.add_parser("run", help="run the mechanical steps over clones")
+    several.add_argument("--template-repo", type=Path, required=True)
+    several.add_argument("--target", required=True, help="template ref or commit")
+    several.add_argument("--destination", type=Path, nargs="+", required=True)
+    several.add_argument("--generated-by", required=True, help="model for the trailer")
+    several.set_defaults(handler=run_update)
+    pushing = subparsers.add_parser(
+        "publish", help="push each ready clone and open its pull request"
+    )
+    pushing.add_argument("--destination", type=Path, nargs="+", required=True)
+    pushing.set_defaults(handler=publish)
+    listing = subparsers.add_parser(
+        "eligible", help="list an owner's repositories behind the target"
+    )
+    listing.add_argument("--owner", required=True)
+    listing.add_argument("--template-repo", type=Path, required=True)
+    listing.add_argument("--target", required=True, help="template ref or commit")
+    listing.add_argument("--clone", type=Path, help="clone each eligible one here")
+    listing.set_defaults(handler=list_eligible)
+    reading = subparsers.add_parser(
+        "verify", help="read each published pull request's checks back"
+    )
+    reading.add_argument("--destination", type=Path, nargs="+", required=True)
+    reading.set_defaults(handler=verify)
+    reporting = subparsers.add_parser(
+        "report", help="render the several-destinations Final report"
+    )
+    reporting.add_argument("--template-repo", type=Path, required=True)
+    reporting.add_argument("--target", required=True, help="template ref or commit")
+    reporting.add_argument("--destination", type=Path, nargs="+", required=True)
+    reporting.set_defaults(handler=render_report)
     return parser
 
 
@@ -560,13 +1229,7 @@ def main() -> int:
         result = arguments.handler(arguments)
     except PreflightError as error:
         preflight.fail(str(error))
-    print(
-        json.dumps(
-            {"ok": True, "schema_version": SCHEMA_VERSION, **result},
-            indent=2,
-            sort_keys=True,
-        )
-    )
+    print(encode(result))
     return 0
 
 

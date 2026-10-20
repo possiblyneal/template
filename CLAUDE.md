@@ -57,7 +57,7 @@ The only non-shell code here is the Python under `apps/repo-builder/`, declared 
 - These prompt for approval: `git reset --hard`, `git clean`, `git rebase`, `rm`, `git rm`, and the `gh` commands that merge pull requests, cut releases, or delete the repository. So does creating or editing any dotfile or dot-folder, anything under the payload's `src/`, and anything directly in the root. Only the payload rule lives in this repository's `.claude/settings.json`; the rest come from the operator's global `~/.claude/settings.json`. It names `apps/github-repository-template/src/**`, not every `src/`, because the payload-or-root question means nothing for `apps/repo-builder/src/`.
 - Work reaches `main` through a pull request under `.github/PULL_REQUEST_TEMPLATE.md`; a ruleset enforces it (Repository settings below).
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/#specification): `type(optional scope): subject`, a blank line, then the body. commitlint enforces it at `commit-msg`, with rules in `.commitlintrc.yaml`. The subject is lowercase after the type, with no trailing period. A body is expected: it is the only surviving record of why.
-- Every commit carries a `Generated-By: <model>` trailer, required by `trailer-exists` in `.commitlintrc.yaml`. `scripts/attribute-commit` writes it at `prepare-commit-msg`: it inserts `Generated-By: <model ID>` from `CLAUDE_COMMIT_MODEL`, which the operator's user-level `commit-model` hook exports into an agent's git commands, and rewrites a stray `Co-Authored-By: <model> <noreply@anthropic.com>`, since a tool is not a co-author; a human's `Co-Authored-By:` stays. It inserts nothing without the variable or during a rebase or cherry-pick, so those commits and any written by hand add their own line or are refused at `commit-msg`.
+- Every commit carries a `Generated-By: <model>` trailer, required by `trailer-exists` in `.commitlintrc.yaml`. `scripts/attribute-commit` writes it at `prepare-commit-msg`: it inserts `Generated-By: <model ID>` from `CLAUDE_COMMIT_MODEL`, which the operator's user-level `commit-model` hook exports into an agent's git commands, or else from the entries that hook writes under `${XDG_CACHE_HOME:-~/.cache}/claude-commit-model/<session id>/`, one per command, taking the model only when the entries for the exact command running agree, so parallel agents in one session cannot cross-attribute; and it rewrites a stray `Co-Authored-By: <model> <noreply@anthropic.com>`, since a tool is not a co-author; a human's `Co-Authored-By:` stays. It inserts nothing without either source or during a rebase or cherry-pick, so those commits and any written by hand add their own line or are refused at `commit-msg`.
 - GitHub's generated merge subjects are on commitlint's default ignore list and need no CI check.
 - A changed `CHANGELOG.md` is structurally checked at `pre-push`, and in CI over the pull-request range; that validates an entry, not whether one was owed. This repository keeps none: `CHANGELOG.md` is an addon at `apps/github-repository-template/src/repository-addons/CHANGELOG.md`, the only changelog the check fires on here.
 - The commit type signals a changelog entry without deciding it: `feat`, `fix`, and anything with `!` or a `BREAKING CHANGE:` footer usually owe one; `docs`, `style`, `test`, `ci`, and `chore` usually do not. Notability is judged per pull request.
@@ -83,7 +83,7 @@ Where a new file goes. `scripts/structure` enforces every placement rule here as
 - `gradle/` — the Gradle wrapper, which Gradle writes and locates by that name
 - `tmp/` — gitignored scratch space
 
-Root *files* are permitted by name: the eight the template ships, `.repo-template.json`, `.structure-allow`, `GLOSSARY.md`, `GLOSSARY-MAP.md`, every addition by occasion, and the root workspace manifests and lockfiles of five of the six languages (Swift has none; see the orphan-manifest rule). `.gitkeep` is permitted anywhere. Anything else needs an entry in `.structure-allow`.
+Root *files* are permitted by name: the eight the template ships, `.repo-template.json`, `.gitmodules`, `.structure-allow`, `GLOSSARY.md`, `GLOSSARY-MAP.md`, every addition by occasion, and the root workspace manifests and lockfiles of five of the six languages (Swift has none; see the orphan-manifest rule). `.gitkeep` is permitted anywhere. Anything else needs an entry in `.structure-allow`.
 
 **`apps/` holds the smallest deployable units**, possibly just one.
 
@@ -144,7 +144,7 @@ The engineering skills (`/wayfinder`, `/triage`, `/ship`) carry the GitHub Issue
 ## Child Index
 
 - `apps/github-repository-template/CLAUDE.md` — the template payload and the reference docs explaining it
-- `apps/repo-builder/CLAUDE.md` — the `/repo-builder` skill, and how it is linked into a clone
+- `apps/repo-builder/CLAUDE.md` — the `/repo-builder` skill, and the tracked link that exposes it
 - `scripts/CLAUDE.md` — the language-capabilities interface, and what adding a language or check requires
 - `docs/CLAUDE.md` — ADRs, specs, plans, research records, and lessons
 

@@ -17,7 +17,7 @@
 #
 # The check name is padded to 18 columns and the state to 16, so a state is
 # matched with `^<check> +<state>`; each finding sits on its own line under a
-# FAIL, indented 21 spaces, so a finding is any line starting with whitespace.
+# FAIL, indented exactly 21 spaces; any other indented line is not a finding.
 # A state is one of pass, not-applicable, unavailable, or FAIL and nothing
 # else: a check that did not run is not a check that passed, so unavailable
 # fails the tally the same as FAIL does. One more word is accepted in the

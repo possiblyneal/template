@@ -515,6 +515,7 @@ def mark_destination_state(
     template_repo: Path,
     recorded: str,
     subtree: str,
+    target: str,
 ) -> None:
     """Say whether the destination still holds the payload's old version.
 
@@ -530,6 +531,12 @@ def mark_destination_state(
     version is under that name too. A path the payload adds has no old blob,
     which is why a destination file found there reads `modified`: it is
     content the payload did not ship, and deciding a collision needs the read.
+
+    A destination file that already equals the payload's new blob at the
+    target reads `current`, checked before `modified`: nothing is left to
+    reconcile, and `apply` lands it as it would any write. Deletions and
+    renames never read `current`; a rename's destination name is not the new
+    path, so equality there proves nothing.
 
     A path the record already settled is skipped: step 4 gives it none of the
     four rules, so computing a state for it is two git calls nothing reads.
@@ -558,6 +565,18 @@ def mark_destination_state(
         state = (
             "unmodified" if old_blob and old_blob == destination_blob else "modified"
         )
+        if state == "modified" and not str(change["status"]).startswith(("D", "R")):
+            new = run_git(
+                template_repo,
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                f"{target}:{prefix}/{path}",
+                check=False,
+            )
+            if new.returncode == 0 and new.stdout.strip() == destination_blob:
+                change["destination_state"] = "current"
+                continue
         # A rename carries a second destination path the rules weigh. An
         # untouched old name reads `unmodified` on its own, and step 3 takes
         # that as leave to apply the move without a read -- over whatever the
@@ -823,7 +842,9 @@ def update_preflight(arguments: argparse.Namespace) -> dict[str, object]:
     changes = parse_name_status(diff, subtree, rules)
     destination_paths = set(listed_paths(destination))
     mark_overridden(changes, provenance.overrides, destination_paths)
-    mark_destination_state(changes, destination, template_repo, recorded, subtree)
+    mark_destination_state(
+        changes, destination, template_repo, recorded, subtree, target
+    )
     return {
         "operation": "update",
         "template": {
