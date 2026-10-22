@@ -49,7 +49,7 @@ That guard reaches `.github/` and nothing else, so `.pre-commit-config.yaml` —
 
 ## Work Guidance
 
-Editing under `src/` prompts for approval, per `.claude/settings.json`. Treat that prompt as the question: is this a payload change or a root change?
+Before editing under `src/`, ask whether this is a payload change or a root change; nothing prompts for it.
 
 A payload change ships to repositories that cannot be inspected from here, so prefer changes that fail loudly in a generated repository over changes that silently do nothing. The payload's scripts distinguish `pass`, `not-applicable`, `unavailable`, and `FAIL` for exactly that reason.
 
