@@ -1,7 +1,7 @@
 ---
 name: repo-builder
 description: Build or update a repository from this template's base-repo payload. Use only when the user explicitly invokes /repo-builder to generate a GitHub repository or semantically carry template changes between full template commits into an existing generated repository, ending in a pull request. Do not use for ordinary repository edits, generic Git/GitHub operations, or unrelated project scaffolding.
-compatibility: Requires Python 3, Git, and gh for authorized GitHub repository and pull-request operations.
+compatibility: Requires Python 3, Git, and gh for authorized GitHub repository and pull-request operations, and Orca for registering a generated or retrofitted repository with its icon.
 ---
 
 # Repo Builder

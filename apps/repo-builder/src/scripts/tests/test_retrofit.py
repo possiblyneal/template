@@ -2568,6 +2568,41 @@ class ReportTests(unittest.TestCase):
             self.assertEqual(filled, len(slots))
             self.assertIn("default-branch: check-suite result", slots)
 
+    def test_renders_the_orca_registration_and_icon(self) -> None:
+        kept = {
+            "ok": True,
+            "status": "kept",
+            "registered": "already",
+            "repository": "/home/op/ledger",
+            "icon": {"type": "emoji", "emoji": "📒"},
+        }
+        unavailable = {"ok": False, "status": "unavailable", "error": "no runtime"}
+        failed = {
+            "ok": False,
+            "status": "failed",
+            "registered": "added",
+            "repository": "/home/op/ledger",
+            "error": "runtime answered ok but stored None",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            for record, line in (
+                (kept, "- Orca: /home/op/ledger already registered, icon 📒 kept"),
+                (unavailable, "- Orca: icon unset (unavailable: no runtime)"),
+                (
+                    failed,
+                    (
+                        "- Orca: /home/op/ledger registered, icon unset "
+                        "(failed: runtime answered ok but stored None)"
+                    ),
+                ),
+                (None, "- Orca: unknown (orca icon did not run)"),
+            ):
+                inputs = {"orca": record} if record else {}
+                lines, _ = render_report(
+                    self, directory, SUMMARY_PASS, proofs=PROOFS, **inputs
+                )
+                self.assertIn(line, lines)
+
     def test_names_a_destination_whose_origin_is_a_path(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             lines, _ = render_report(
