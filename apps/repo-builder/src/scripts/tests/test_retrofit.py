@@ -2577,10 +2577,24 @@ class ReportTests(unittest.TestCase):
             "icon": {"type": "emoji", "emoji": "📒"},
         }
         unavailable = {"ok": False, "status": "unavailable", "error": "no runtime"}
+        failed = {
+            "ok": False,
+            "status": "failed",
+            "registered": "added",
+            "repository": "/home/op/ledger",
+            "error": "runtime answered ok but stored None",
+        }
         with tempfile.TemporaryDirectory() as directory:
             for record, line in (
                 (kept, "- Orca: /home/op/ledger already registered, icon 📒 kept"),
                 (unavailable, "- Orca: icon unset (unavailable: no runtime)"),
+                (
+                    failed,
+                    (
+                        "- Orca: /home/op/ledger registered, icon unset "
+                        "(failed: runtime answered ok but stored None)"
+                    ),
+                ),
                 (None, "- Orca: unknown (orca icon did not run)"),
             ):
                 inputs = {"orca": record} if record else {}

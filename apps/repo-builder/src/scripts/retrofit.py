@@ -2590,10 +2590,13 @@ def orca_line(orca: dict) -> str:
     """The clone's registration and icon, as `orca_icon.py` recorded them."""
     if not orca:
         return unknown("orca icon")
+    registered = (
+        "registered" if orca.get("registered") == "added" else "already registered"
+    )
+    clone = f"{orca['repository']} {registered}, " if "registered" in orca else ""
     if not orca["ok"]:
-        return f"icon unset ({orca['status']}: {orca['error']})"
-    registered = "registered" if orca["registered"] == "added" else "already registered"
-    return f"{orca['repository']} {registered}, icon {orca['icon']['emoji']} {orca['status']}"
+        return f"{clone}icon unset ({orca['status']}: {orca['error']})"
+    return f"{clone}icon {orca['icon']['emoji']} {orca['status']}"
 
 
 def merged_paths(proofs: dict) -> list[str]:

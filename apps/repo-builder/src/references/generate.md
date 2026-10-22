@@ -270,8 +270,8 @@ Copy this into the first session opened in a clone of the new repository:
 Work <owner/repository> in <the clone step 13 registered in Orca | a fresh clone>. Install the
 hooks there: `pre-commit install`, or, if that refuses because a `core.hooksPath` is already
 set on this machine, `pre-commit init-templatedir` into a directory of its own with
-`core.hooksPath` pointed at it. Nothing else installs them, and without them commits land unattributed and unchecked. Then read the
-root `CLAUDE.md` before touching anything.
+`core.hooksPath` pointed at it. Nothing else installs them, and without them commits land
+unattributed and unchecked. Then read the root `CLAUDE.md` before touching anything.
 
 The plan of record is <the issue tracker: generation.features.issue_tracker, or GitHub Issues>, not this
 message. Open tickets: <count>. First with no open blocker: <#n — title>. Start there.

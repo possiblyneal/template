@@ -72,7 +72,7 @@ Two flows add lines to this shape rather than filling it as given, and each keep
 - Pull request: <URL or "not created">
 - Template: <old full commit, or "not previously generated"> -> <target full commit>
 - Destination: <owner/repository>
-- Orca (generate, retrofit): <clone path> registered | already registered, icon <emoji> set | kept | icon unset (<reason>) | not reached (<reason>)
+- Orca (generate, retrofit): <clone path> <registered | already registered>, icon <emoji> <set | kept> | icon unset (<reason>) | not reached (<reason>)
 
 ### Reconciliation
 - Applied: <paths or none>

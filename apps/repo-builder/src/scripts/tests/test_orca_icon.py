@@ -134,10 +134,41 @@ class SetIconTests(unittest.TestCase):
         self.assertEqual(result["icon"], existing)
         self.assertEqual(runtime.methods(), ["repo.show"])
 
-    def test_an_icon_the_runtime_dropped_is_a_failure(self) -> None:
-        self.runtime(repo_show=found(None), repo_update=found(None))
-        with self.assertRaisesRegex(ValueError, "stored None"):
-            orca_icon.set_icon(Path("/work/podcast"), "🎙️")
+    def test_an_icon_the_runtime_dropped_fails_after_registering(self) -> None:
+        self.runtime(repo_show=not_found, repo_add=found(None), repo_update=found(None))
+        result = orca_icon.set_icon(Path("/work/podcast"), "🎙️")
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["registered"], "added")
+        self.assertIn("stored None", result["error"])
+
+    def test_a_runtime_lost_after_registering_keeps_the_registration(self) -> None:
+        self.runtime(repo_show=not_found, repo_add=found(None))
+        unreachable = orca_icon.OrcaUnavailable("gone")
+        with unittest.mock.patch.object(
+            orca_icon, "update_icon", side_effect=unreachable
+        ):
+            result = orca_icon.set_icon(Path("/work/podcast"), "🎙️")
+        self.assertEqual(result["status"], "unavailable")
+        self.assertEqual(result["registered"], "added")
+
+    def test_a_malformed_update_answer_is_a_failure(self) -> None:
+        self.runtime(
+            repo_show=found(None),
+            repo_update=lambda request: {"id": request["id"], "ok": True},
+        )
+        result = orca_icon.set_icon(Path("/work/podcast"), "🎙️")
+        self.assertEqual(result["status"], "failed")
+
+    def test_a_symlinked_clone_is_named_as_given(self) -> None:
+        real = self.user_data / "real"
+        real.mkdir()
+        (self.user_data / "link").symlink_to(real)
+        runtime = self.runtime(repo_show=found(None), repo_update=stored)
+        orca_icon.set_icon(self.user_data / "link" / ".." / "link", "🎙️")
+        self.assertEqual(
+            runtime.requests[0]["params"], {"repo": f"path:{self.user_data / 'link'}"}
+        )
 
     def test_a_refused_add_is_a_failure(self) -> None:
         self.runtime(
@@ -150,6 +181,11 @@ class SetIconTests(unittest.TestCase):
     def test_an_overlong_emoji_is_refused_before_sending(self) -> None:
         with self.assertRaises(ValueError):
             orca_icon.set_icon(Path("/work/podcast"), "🎙️" * 9)
+
+    def test_length_is_counted_in_utf16_units_as_orca_counts_it(self) -> None:
+        # 11 code points, 19 UTF-16 units: Orca drops it, so the script refuses it.
+        with self.assertRaisesRegex(ValueError, "UTF-16"):
+            orca_icon.set_icon(Path("/work/podcast"), "👩🏽‍👩🏽‍👧🏽‍👦🏽")
 
     def test_no_runtime_is_unavailable(self) -> None:
         with self.assertRaises(orca_icon.OrcaUnavailable):

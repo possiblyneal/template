@@ -99,26 +99,13 @@ def register(repository: Path) -> tuple[str, dict[str, Any]]:
     return "added", response["result"]["repo"]
 
 
-def set_icon(repository: Path, emoji: str) -> dict[str, object]:
-    """Register the clone and give it `emoji`, unless it already has an emoji.
+def utf16_length(text: str) -> int:
+    """Length as Orca's validator counts it: UTF-16 code units, not code points."""
+    return len(text.encode("utf-16-le")) // 2
 
-    An emoji already there was chosen by someone, so it stays. Any other icon,
-    such as the owner avatar Orca fills in for a GitHub remote, is replaced.
-    """
-    emoji = emoji.strip()
-    if not emoji or len(emoji) > EMOJI_MAX_LENGTH:
-        raise ValueError(
-            f"emoji must be 1-{EMOJI_MAX_LENGTH} characters, got {emoji!r}"
-        )
-    repository = repository.resolve()
-    registered, repo = register(repository)
-    result: dict[str, object] = {
-        "repository": str(repository),
-        "registered": registered,
-    }
-    existing = repo.get("repoIcon")
-    if isinstance(existing, dict) and existing.get("type") == "emoji":
-        return {**result, "status": "kept", "icon": existing}
+
+def update_icon(repository: Path, emoji: str) -> dict[str, Any]:
+    """Store `emoji` as the clone's icon, failing unless the runtime kept it."""
     response = call(
         "repo.update",
         {
@@ -131,7 +118,36 @@ def set_icon(repository: Path, emoji: str) -> dict[str, object]:
     icon = response["result"]["repo"].get("repoIcon")
     if icon != {"type": "emoji", "emoji": emoji}:
         raise ValueError(f"runtime answered ok but stored {icon!r}")
-    return {**result, "status": "set", "icon": icon}
+    return icon
+
+
+def set_icon(repository: Path, emoji: str) -> dict[str, Any]:
+    """Register the clone and give it `emoji`, unless it already has an emoji.
+
+    An emoji already there was chosen by someone, so it stays. Any other icon,
+    such as the owner avatar Orca fills in for a GitHub remote, is replaced.
+    A failure after registering returns rather than raises, so the result still
+    says the clone was registered.
+    """
+    emoji = emoji.strip()
+    if not emoji or utf16_length(emoji) > EMOJI_MAX_LENGTH:
+        raise ValueError(
+            f"emoji must be 1-{EMOJI_MAX_LENGTH} UTF-16 units, got {emoji!r}"
+        )
+    # Orca normalizes `path:` selectors without following symlinks.
+    repository = Path(os.path.abspath(repository))
+    registered, repo = register(repository)
+    result = {"repository": str(repository), "registered": registered}
+    existing = repo.get("repoIcon")
+    if isinstance(existing, dict) and existing.get("type") == "emoji":
+        return {**result, "ok": True, "status": "kept", "icon": existing}
+    try:
+        icon = update_icon(repository, emoji)
+    except OrcaUnavailable as error:
+        return {**result, "ok": False, "status": "unavailable", "error": str(error)}
+    except (ValueError, KeyError, TypeError, AttributeError) as error:
+        return {**result, "ok": False, "status": "failed", "error": str(error)}
+    return {**result, "ok": True, "status": "set", "icon": icon}
 
 
 def main() -> int:
@@ -151,16 +167,14 @@ def main() -> int:
     )
     if record:
         record.unlink(missing_ok=True)
-    status = 0
     result: dict[str, Any]
     try:
-        result = {
-            "ok": True,
-            **set_icon(arguments.repository, arguments.emoji),
-        }
+        result = set_icon(arguments.repository, arguments.emoji)
+        status = 0 if result["ok"] else 3 if result["status"] == "unavailable" else 2
     except OrcaUnavailable as error:
         result, status = {"ok": False, "status": "unavailable", "error": str(error)}, 3
-    except ValueError as error:
+    # An answer of an unexpected shape is a refusal too, so the record is written.
+    except (ValueError, KeyError, TypeError, AttributeError) as error:
         result, status = {"ok": False, "status": "failed", "error": str(error)}, 2
     output = json.dumps(result, indent=2, sort_keys=True, ensure_ascii=False)
     if record:
