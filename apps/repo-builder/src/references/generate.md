@@ -16,7 +16,8 @@ Read [`lifecycle.md`](lifecycle.md) first — the manifest, ownership, check rep
 - **Step 10 — Verify the file list**
 - **Step 11 — Publish the candidate**
 - **Step 12 — Verify the published repository**
-- **Step 13 — The first prompt**
+- **Step 13 — Register the repository in Orca**
+- **Step 14 — The first prompt**
 
 A generate runs them in order and reads them in order. A reader needing one step alone — `SKILL.md`, `lifecycle.md`, `wayfinding.md` and `reporting.md` each cite one — reads it with `sed -n '/^### Step 12 /,/^### /p'` rather than opening the whole file. The headings are addresses so that a citation does not cost 30 KB to follow.
 
@@ -247,7 +248,17 @@ Step 6 is where a destination's own `docs/agents/` files become departures. The 
 
 Ownership still governs what a later update may touch, and a hand-merged file is managed content whose destination edits are real intent. Classify deliberately: marking a whole tree product to protect it also freezes it.
 
-### Step 13 — The first prompt
+### Step 13 — Register the repository in Orca
+
+Give the operator a clone of the new repository registered in Orca, with an icon that says what the repository is. Run it once step 12's verification is read, and after the bootstrap merge where there is one, so the clone checks out content rather than the empty root commit. It is local, so it takes no [remote action gate](lifecycle.md#remote-action-gates); a generate that stopped before step 12, at the wayfinding handoff or with no repository created, registers nothing and reports the step not reached.
+
+1. Clone with `gh repo clone <owner>/<name> ~/code/<name>`. A generate into a destination that already had content registers the operator's clone it worked in and clones nothing. Where `~/code/<name>` already exists, reuse it only when its `origin` is this repository; anything else there is not this flow's to overwrite, so leave it and report the step not reached with the path as the reason.
+2. Choose one emoji for what the repository *is*: the subject the user described at step 2 and the deployables step 7 derived, never the template, the language, or the tooling. Prefer a concrete object the name or purpose evokes (🎙️ for a podcast app, 🩺 for a medical research tool) over a generic one; 📁, 💻 and 📦 say nothing Orca's default icon does not.
+3. Register and set it with `python3 apps/repo-builder/src/scripts/orca_icon.py --repository <clone> --emoji <emoji>`. The script adds the clone where Orca does not know it, keeps an emoji icon someone already chose (`status: kept`), and otherwise replaces whatever icon is there, the owner avatar Orca fills in for a GitHub remote included. The orca CLI has no icon flag, so the script sends the runtime's own `repo.update` request and checks that the icon it stored is the one sent. Exit 3 means Orca's runtime is not reachable: report the icon unset with that reason and the command under Pending action, without stopping the flow. Exit 2 is a refusal, reported with the runtime's error.
+
+The clone is the result, not scratch, so step 3's sweep never reaches it. Report it on the **Orca** line of [Final report](reporting.md#final-report).
+
+### Step 14 — The first prompt
 
 The first prompt is written for a reader this session never speaks to: whoever opens the first working session in a fresh clone of the new repository. Everything this session knows about that repository's initial state dies with it otherwise — which checks are red on purpose, what the tracker holds, what a clone still has to install — and the next session rediscovers each one as a defect. Emit it as a fenced block so it can be copied whole, fill every placeholder from what actually happened rather than from this shape, and drop a line whose condition did not arise rather than shipping it empty. An update and an adopt write none: the destination already has working sessions. On a generate stopped at the wayfinding handoff the resume belongs to the operator of this session, not to a new one, so Pending action carries it and this section is still omitted.
 
@@ -256,10 +267,10 @@ It is the report's last section, **First prompt**, added after **Pending action*
 Copy this into the first session opened in a clone of the new repository:
 
 ```text
-Work <owner/repository>. Clone it and install the hooks: `pre-commit install`, or, if that
-refuses because a `core.hooksPath` is already set on this machine, `pre-commit
-init-templatedir` into a directory of its own with `core.hooksPath` pointed at it. Nothing
-else installs them, and without them commits land unattributed and unchecked. Then read the
+Work <owner/repository> in <the clone step 13 registered in Orca | a fresh clone>. Install the
+hooks there: `pre-commit install`, or, if that refuses because a `core.hooksPath` is already
+set on this machine, `pre-commit init-templatedir` into a directory of its own with
+`core.hooksPath` pointed at it. Nothing else installs them, and without them commits land unattributed and unchecked. Then read the
 root `CLAUDE.md` before touching anything.
 
 The plan of record is <the issue tracker: generation.features.issue_tracker, or GitHub Issues>, not this

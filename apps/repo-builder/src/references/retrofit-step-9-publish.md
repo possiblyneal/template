@@ -43,4 +43,6 @@ python3 apps/repo-builder/src/scripts/retrofit.py sync --clone <clone> \
 
 It refuses before the merge has landed, fast-forwards the default branch only where the clone is clean with it checked out, and then deletes each `emptied` directory the pulled tree leaves with nothing tracked, residue and all, recording what each held under `removed` as its `summary` entries and each already absent under `gone`. A directory holding a file the proofs record's residue did not name stays, since that file arrived after the plan was read. Anything that kept it from pulling or deleting is a finding the report names under Left for the operator, and the residue stays with it.
 
+**Register the operator's clone in Orca with an icon for what the repository is**, whether or not the merge was taken, under [Step 13 — Register the repository in Orca](generate.md#step-13--register-the-repository-in-orca): choose the emoji from what the destination's README and units say it does, and run the script against `<clone>` with `--records <records>`, which writes `<records>.orca.json` for the report. An emoji icon the clone already carries is kept. Neither exit 2 nor exit 3 stops the flow.
+
 Then run step 2's sweep and render the report under [Report additions](retrofit-report.md#report-additions).

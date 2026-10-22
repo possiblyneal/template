@@ -2582,7 +2582,18 @@ def header(report: Report, arguments: argparse.Namespace, proofs: dict) -> None:
         f"- Pull request: {arguments.pull_request or 'not created'}",
         f"- Template: not previously generated -> {proofs['template']['commit']}",
         f"- Destination: {arguments.repository}",
+        f"- Orca: {orca_line(load(arguments.records, 'orca'))}",
     )
+
+
+def orca_line(orca: dict) -> str:
+    """The clone's registration and icon, as `orca_icon.py` recorded them."""
+    if not orca:
+        return unknown("orca icon")
+    if not orca["ok"]:
+        return f"icon unset ({orca['status']}: {orca['error']})"
+    registered = "registered" if orca["registered"] == "added" else "already registered"
+    return f"{orca['repository']} {registered}, icon {orca['icon']['emoji']} {orca['status']}"
 
 
 def merged_paths(proofs: dict) -> list[str]:

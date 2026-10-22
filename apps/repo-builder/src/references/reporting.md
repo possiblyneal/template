@@ -62,7 +62,7 @@ A several-destinations update renders this shape with `update.py report`, which 
 
 Use this stable shape. On a generate into an empty destination the Reconciliation lines are empty or trivially everything, and File list carries the weight; a generate into a destination that already has content fills them like any other flow, Superseded included, since it is the only section reporting a file the payload ships and the candidate lacks, which no check can fail on. On an adopt the Template line shows the recorded commit on both sides because the pin does not move, and the Addon adoption block carries the weight. On a generate stopped at the wayfinding handoff there are no Application boundaries to report — that absence is the result; the Wayfinding line names the trigger and the map, Repository settings still reports the repository that exists, and Pending action carries the resume.
 
-Two flows add lines to this shape rather than filling it as given, and each keeps them in its own file so that the flows that do not use them never read them: [Step 13 — The first prompt](generate.md#step-13--the-first-prompt) for a generate's handover block, and [Report additions](retrofit-report.md#report-additions) for a retrofit's unit map, its moves, and its two hosted-write sections.
+Two flows add lines to this shape rather than filling it as given, and each keeps them in its own file so that the flows that do not use them never read them: [Step 14 — The first prompt](generate.md#step-14--the-first-prompt) for a generate's handover block, and [Report additions](retrofit-report.md#report-additions) for a retrofit's unit map, its moves, and its two hosted-write sections.
 
 ````md
 ## Repo Builder Result
@@ -72,6 +72,7 @@ Two flows add lines to this shape rather than filling it as given, and each keep
 - Pull request: <URL or "not created">
 - Template: <old full commit, or "not previously generated"> -> <target full commit>
 - Destination: <owner/repository>
+- Orca (generate, retrofit): <clone path> registered | already registered, icon <emoji> set | kept | icon unset (<reason>) | not reached (<reason>)
 
 ### Reconciliation
 - Applied: <paths or none>
