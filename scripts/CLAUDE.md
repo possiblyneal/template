@@ -29,7 +29,7 @@ Each script's header comment says what it does and why it is shaped that way, an
 
 ## Work Guidance
 
-Adding a language: add it to `DETECT_LANGUAGES`, add its `has_<lang>` detector, add a `_capability_<check>_<lang>` function for each capability it can answer (one with no honest adapter is left absent, not stubbed), add a `_codeql_entry` row, add its toolchain to `.github/actions/setup-toolchains/action.yml`, and add its column to the table `tests/capabilities-test` holds against `language_capabilities probe`, naming which cells are deliberately `absent`. That suite is the only thing that notices a dropped language, which otherwise produces a shorter green run.
+Adding a language: add it to `DETECT_LANGUAGES`, add its `has_<lang>` detector, add a `_capability_<check>_<lang>` function for each capability it can answer (one with no honest adapter is left absent, not stubbed), add a `_codeql_entry` row, add its toolchain to `.github/actions/setup-toolchains/action.yml`, and add its column to the table `tests/capabilities-test` holds against `language_capabilities probe`, naming which cells are deliberately `absent`. That suite is the only thing that notices a dropped language, which otherwise produces a shorter green run. Also add its root workspace manifests and lockfiles to `scripts/structure`'s `root_files`, its nested/root pair to `detect_orphan_manifests`'s `pairs`, and its manifest to `libs/dependabot.sh`'s `dependabot_ecosystem_of`; a language missing from any of the three is rejected at the root, escapes the orphan search, or goes unwatched by Dependabot.
 
 Adding a check: add it to `DETECT_CAPABILITIES` and write an adapter per language, or declare it not-applicable in `_capability_is_not_applicable`.
 
