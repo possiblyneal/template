@@ -223,6 +223,48 @@ else
   fail "scripts/ci did not fail naming the orphaned manifest"
 fi
 
+# The orphan search is the capability-command policy's, shared by every script
+# that runs the capabilities across the repository, so each is held to it. A
+# script that skipped it would run green over the package nothing sees.
+fixture "scripts/integration refuses an orphaned manifest"
+mkdir -p "$work/apps/web"
+printf '{"name":"w","version":"1.0.0"}\n' > "$work/apps/web/package.json"
+out="$(cd "$work" && CI_DRY_RUN=1 scripts/integration 2>&1 </dev/null)"
+status=$?
+if (( status != 0 )) && grep -q "apps/web/package.json" <<<"$out"; then
+  pass
+else
+  fail "scripts/integration did not fail naming the orphaned manifest"
+fi
+
+fixture "scripts/fix refuses an orphaned manifest"
+mkdir -p "$work/apps/web"
+printf '{"name":"w","version":"1.0.0"}\n' > "$work/apps/web/package.json"
+out="$(cd "$work" && CI_DRY_RUN=1 scripts/fix 2>&1 </dev/null)"
+status=$?
+if (( status != 0 )) && grep -q "apps/web/package.json" <<<"$out"; then
+  pass
+else
+  fail "scripts/fix did not fail naming the orphaned manifest"
+fi
+
+# A dry run reports what would run and rewrites nothing, for fix as for the gate.
+fixture "scripts/fix honours the dry run"
+printf '[project]\nname = "p"\nversion = "0.1.0"\n' > "$work/pyproject.toml"
+stub uv <<'STUB'
+#!/usr/bin/env bash
+if [[ "$*" == *--version* ]]; then exit 0; fi
+printf '%s\n' "$*" >> "${MARKER:?}"
+STUB
+out="$(cd "$work" && CI_DRY_RUN=1 MARKER="$work/uv-args" scripts/fix 2>&1 </dev/null)"
+if [[ ! -e "$work/uv-args" ]] \
+  && grep -qE '^lint-fix +would-run +python$' <<<"$out" \
+  && grep -qE '^format-write +would-run +python$' <<<"$out"; then
+  pass
+else
+  fail "scripts/fix under the dry run ran a tool or printed no would-run rows: $out"
+fi
+
 # A root manifest makes nested ones ordinary workspace members.
 fixture "nested manifest under a root"
 mkdir -p "$work/apps/web"
