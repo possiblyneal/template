@@ -1189,7 +1189,8 @@ language_capabilities() {
 # `capability_command <verb> <capability...>`; the verb finishes the sentence
 # "nothing to <verb> yet". It exits rather than returns on the early-out paths
 # because its callers are top-level scripts whose last act it is; on the real
-# run it returns tally's status, so a caller can act on it.
+# run it returns tally's status, so a caller can act on it. A usage error
+# from the run is passed on by hand: a caller's `if` switches off set -e here.
 #
 # Not for scripts/security (its no-manifest case is a not-applicable audit row
 # and then the secret scan), nor scripts/run and scripts/package, which act
@@ -1208,10 +1209,10 @@ capability_command() {
   fi
 
   if [[ -n "${CI_DRY_RUN:-}" ]]; then
-    language_capabilities run --dry-run "$@"
+    language_capabilities run --dry-run "$@" || exit
     exit 0
   fi
 
-  language_capabilities run "$@"
+  language_capabilities run "$@" || return
   tally
 }
