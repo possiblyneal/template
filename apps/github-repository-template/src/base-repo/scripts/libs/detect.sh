@@ -330,8 +330,8 @@ detect_orphan_manifests() {
 }
 
 # The orphans as a check: each one recorded as a finding, then the detection
-# verdict. Every command that runs the capabilities calls this first, since an
-# orphan is a package none of them can see.
+# verdict. A command that runs the capabilities across the repository gets this
+# through capability_command; an orphan is a package none of them can see.
 judge_orphan_manifests() {
   local orphan
   while IFS= read -r orphan; do
@@ -1178,4 +1178,40 @@ language_capabilities() {
       ;;
     *) echo "Unknown language capabilities command: $command" >&2; return 2 ;;
   esac
+}
+
+# The policy every repository-wide capability command shares, so scripts/ci,
+# scripts/integration and scripts/fix cannot drift from each other: the orphan
+# search first, since a capability run would go green over a package it cannot
+# see; then the early-out when no manifest exists yet; then CI_DRY_RUN, which
+# reports what would run and runs nothing.
+#
+# `capability_command <verb> <capability...>`; the verb finishes the sentence
+# "nothing to <verb> yet". It exits rather than returns on the early-out paths
+# because its callers are top-level scripts whose last act it is; on the real
+# run it returns tally's status, so a caller can act on it.
+#
+# Not for scripts/security (its no-manifest case is a not-applicable audit row
+# and then the secret scan), nor scripts/run and scripts/package, which act
+# inside one unit, where an orphan search is the wrong scope.
+capability_command() {
+  local verb="$1"
+  shift
+
+  judge_orphan_manifests
+  tally || exit 1
+
+  if ! has_any_manifest; then
+    echo "No project manifest found, so there is nothing to $verb yet."
+    echo "Every check becomes required as soon as a manifest is added."
+    exit 0
+  fi
+
+  if [[ -n "${CI_DRY_RUN:-}" ]]; then
+    language_capabilities run --dry-run "$@"
+    exit 0
+  fi
+
+  language_capabilities run "$@"
+  tally
 }
