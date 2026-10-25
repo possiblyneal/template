@@ -280,4 +280,4 @@ repos:
     hooks:
       - id: commitlint
         stages: [commit-msg]
-        additional_dependencies: ["@commitlint/config-conventional@21.2.3"]
+        additional_dependencies: ["@commitlint/config-conventional@21.2.4"]
