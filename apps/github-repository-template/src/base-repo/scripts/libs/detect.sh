@@ -401,7 +401,9 @@ _capability_test_python() {
     ignore+=(--ignore="$dir")
   done < <(integration_dirs)
 
-  uv_run pytest --ignore-glob='*/vendor/*' ${ignore[@]+"${ignore[@]}"} || status=$?
+  # A relative --ignore-glob is anchored at the working directory, so
+  # '*/vendor/*' alone misses the root's vendor/.
+  uv_run pytest --ignore-glob='vendor/*' --ignore-glob='*/vendor/*' ${ignore[@]+"${ignore[@]}"} || status=$?
   if (( status == 5 )); then
     echo "pytest collected no tests."
     return 0

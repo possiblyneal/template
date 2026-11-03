@@ -13,7 +13,7 @@ status: proposed
 
 ## Decision
 
-`config/`, `examples/`, and `vendor/` are scoped folders, permitted at the root, a unit, or a domain. `examples/` and `vendor/` are opaque: the depth rules stop at them as they stop at the first `src/`, and `vendor/` is excluded from lint, format, type check, test, and pre-commit. A folder whose name a toolchain fixes beside a manifest, such as `gradle/` beside `gradlew` or `public/` beside `package.json`, is permitted only beside that file, from `toolchain_folders` in `scripts/structure`. Nothing else is added.
+`config/`, `examples/`, and `vendor/` are scoped folders, permitted at the root, a unit, or a domain. `examples/` and `vendor/` are opaque: the depth rules stop at them as they stop at the first `src/`, and `vendor/` is excluded from lint, format, type check, test, and every pre-commit fixer and lint, while the secret and large-file hooks still read it. A folder whose name a toolchain fixes beside a manifest, such as `gradle/` beside `gradlew` or `public/` beside `package.json`, is permitted only beside that file, from `toolchain_folders` in `scripts/structure`. Nothing else is added.
 
 ## Context
 

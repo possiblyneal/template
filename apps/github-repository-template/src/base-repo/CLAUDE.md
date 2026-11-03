@@ -22,7 +22,7 @@ Use these instead of per-language tools. `check` and `fix` run for every languag
 - `apps/<unit>/` is one unit: the smallest piece delivered on its own. Its code goes in `apps/<unit>/src/`. Nothing sits directly in `apps/`.
 - Split a unit into domains only for distinct business areas: `apps/<unit>/<domain>/src/`. A unit has `src/` or domains, never both. Domains do not nest.
 - A root, unit, or domain may hold its own `libs/`, `tests/`, `scripts/`, `tools/`, `assets/`, `config/`, `docs/`, `deploy/`, `examples/`, or `vendor/`, scoped to it. Outside `examples/` and `vendor/`, these never contain `src/`.
-- `examples/` holds runnable programs that show how the code is used and assert nothing. `vendor/` holds third-party code kept verbatim; no lint, formatter, test run, or pre-commit hook touches it. A copy you patch is a fork you own, and goes in `libs/`.
+- `examples/` holds runnable programs that show how the code is used and assert nothing. `vendor/` holds third-party code kept verbatim; no lint, formatter, or test run touches it, and of the pre-commit hooks only the secret, key, large-file, and merge-conflict checks read it. A copy you patch is a fork you own, and goes in `libs/`.
 - A toolchain folder is permitted only beside the file whose toolchain fixes its name, at the root, a unit, or a domain: `gradle/` beside `gradlew`, `public/` beside `package.json`. A new one is added to the template's table, never as a per-repository permission.
 - `tools/` holds one directory per program, never loose files.
 - `deploy/` holds only `quadlet/`, `containerfile/`, `compose/`, `systemd/`, and `env/`.
@@ -33,7 +33,7 @@ Use these instead of per-language tools. `check` and `fix` run for every languag
 
 These are conventions `scripts/structure` does not check:
 
-- Root-level `libs/`, `tests/`, `scripts/`, `tools/`, `deploy/`, and `assets/` hold only what spans several units.
+- Root-level `libs/`, `tests/`, `scripts/`, `tools/`, `deploy/`, `assets/`, `config/`, `examples/`, and `vendor/` hold only what spans several units.
 - Settings a program reads go in `config/`, with per-environment values in `deploy/env/`. Other files it reads go in `assets/`. Files it writes while running go in `apps/<unit>/state/`, which is gitignored.
 - `tests/integration/` is the integration tier, run by `scripts/integration` and left out of the gate.
 

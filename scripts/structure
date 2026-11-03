@@ -257,8 +257,11 @@ declare -A toolchain_dirs=()
 for path in "${tracked[@]}"; do
   name="${path##*/}" dir=""
   [[ "$path" == */* ]] && dir="${path%/*}"
-  # The scope holders: the root, a unit, a domain.
+  # The scope holders: the root, a unit, a domain. A folder under a unit is a
+  # domain only when it is neither src/ nor a scoped folder.
   [[ -z "$dir" || "$dir" =~ ^apps/[^/]+(/[^/]+)?$ ]] || continue
+  [[ "$dir" =~ ^apps/[^/]+/([^/]+)$ ]] &&
+    in_list "${BASH_REMATCH[1]}" src "${scoped_folders[@]}" && continue
   for entry in "${toolchain_folders[@]}"; do
     [[ "$name" == "${entry%%:*}" ]] || continue
     toolchain_dirs["${dir:+$dir/}${entry#*:}"]=1
@@ -267,9 +270,9 @@ done
 
 # .structure-allow records the permission the rules say a non-standard path
 # needs. A bare path allows exactly that file. A path ending in / names a
-# prefix the walk stops descending into, which is how a vendored dependency or
-# a tracked test fixture keeps its own shape without the rules growing an
-# "unless it is a fixture" clause that would hollow them out.
+# prefix the walk stops descending into, which is how a tracked test fixture
+# keeps its own shape without the rules growing an "unless it is a fixture"
+# clause that would hollow them out.
 allow_paths=()
 allow_prefixes=()
 if [[ -f "$allow_file" ]]; then

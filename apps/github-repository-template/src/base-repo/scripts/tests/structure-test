@@ -333,6 +333,15 @@ write apps/shop/storefront/src/index.ts
 write apps/shop/storefront/public/logo.svg
 assert_passes
 
+# A scoped folder is not a scope holder, so a manifest inside one earns no
+# toolchain folder, which would otherwise hide a src/ beneath it.
+fixture "a manifest inside a scoped folder earns no toolchain folder"
+declare_unit shop
+write apps/shop/src/main.ts
+write apps/shop/tests/package.json '{}'
+write apps/shop/tests/public/src/x.ts
+assert_fails src-placement
+
 fixture "gradle at the root needs gradlew beside it"
 write gradle/wrapper/gradle-wrapper.properties
 assert_fails root-folders

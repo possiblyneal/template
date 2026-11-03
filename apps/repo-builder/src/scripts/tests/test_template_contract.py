@@ -7,8 +7,9 @@ enforce, or is never told one it does, and learns it by failing the commit.
 
 Only the enumerations are checked: the root folders, the root files, the
 scoped folders, the toolchain folders, the deploy technologies, the unit
-declaration's vocabulary and example, and that every command named exists. Whether a sentence describes its
-rule well is not decidable here; whether its list matches the code is.
+declaration's vocabulary and example, and that every command named exists.
+Whether a sentence describes its rule well is not decidable here; whether its
+list matches the code is.
 """
 
 import json
