@@ -39,6 +39,13 @@ default_install_hook_types: [pre-commit, prepare-commit-msg, commit-msg, pre-pus
 # message that does not exist at pre-commit time.
 default_stages: [pre-commit]
 
+# vendor/ holds third-party code kept verbatim, at any scope. A fixer here
+# rewriting its whitespace would make the next re-vendor a diff to review, and
+# a lint over it judges code this repository does not own. The hooks that
+# audit the whole tree run always_run without filenames, so this cannot hide a
+# vendor/ placed where the layout forbids one.
+exclude: (^|/)vendor/
+
 repos:
   # Catches a secret while it is still only in the working tree, which is the
   # one point where the fix is editing a file rather than rotating a credential.

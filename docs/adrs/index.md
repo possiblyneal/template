@@ -11,3 +11,4 @@
 | [0005](0005-stage-a-retrofit-locally-and-write-the-host-last.md) | Stage a Retrofit Locally and Write to the Host Last | accepted |
 | [0006](0006-let-a-quadlet-unit-run-a-registry-image.md) | Let a Quadlet Unit Run a Registry Image It Does Not Build | accepted |
 | [0007](0007-carry-agent-skill-defaults-in-the-skills.md) | Carry the GitHub Tracker and Label Defaults in the Skills, and Record Departures in the Manifest | accepted |
+| [0008](0008-name-opaque-and-toolchain-folders.md) | Name the Folders a Repository Needs Beyond Its Code, and Let Tools Fix the Rest by Table | proposed |

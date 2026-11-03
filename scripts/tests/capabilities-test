@@ -681,7 +681,7 @@ shift 1 # run
 printf '%s\n' "$*" >> "${MARKER:?}"
 STUB
 (cd "$work" && MARKER="$work/uv-args" scripts/fix > /dev/null 2>&1 </dev/null)
-if [[ "$(cat "$work/uv-args" 2>/dev/null)" == $'ruff check --fix .\nruff format .' ]]; then
+if [[ "$(cat "$work/uv-args" 2>/dev/null)" == $'ruff check --fix --extend-exclude vendor .\nruff format --extend-exclude vendor .' ]]; then
   pass
 else
   fail "scripts/fix ran $(tr '\n' '; ' < "$work/uv-args" 2>/dev/null) rather than the lint fix then the formatter"

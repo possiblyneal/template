@@ -67,7 +67,7 @@ The only non-shell code here is the Python under `apps/repo-builder/`, declared 
 
 Where a new file goes. `scripts/structure` enforces every placement rule here as code, checks a unit declaration's values, and reports the three content rules `not-applicable`. The orphan-manifest rule at the end is `libs/detect.sh`'s, since it needs a language.
 
-**Root holds only these, and everything at root is repo-wide.** Root `libs/`, `tests/`, `scripts/`, `tools/`, `deploy/`, and `assets/` hold only what spans apps or operates on the whole repository; anything scoped to one app belongs under that app.
+**Root holds only these, and everything at root is repo-wide.** Root `libs/`, `tests/`, `scripts/`, `tools/`, `deploy/`, `assets/`, `config/`, `examples/`, and `vendor/` hold only what spans apps or operates on the whole repository; anything scoped to one app belongs under that app.
 
 - `.claude/` — agent configuration for this repository
 - `.devcontainer/` — the dev container, an addition by occasion
@@ -80,8 +80,11 @@ Where a new file goes. `scripts/structure` enforces every placement rule here as
 - `tools/` — helpers built before they run, one directory per program with its own manifest. The split from `scripts/` is by artifact, not caller: a CI script is the first thing run locally to reproduce a failure
 - `deploy/` — one folder per technology: `quadlet/`, `containerfile/`, `compose/`, `systemd/`, `env/`, and no loose files
 - `assets/` — static non-code files shared across apps
-- `gradle/` — the Gradle wrapper, which Gradle writes and locates by that name
+- `config/` — settings a program reads, its defaults; per-environment values go in `deploy/env/`
+- `examples/` — runnable programs that show how the code is used and assert nothing
+- `vendor/` — third-party code kept verbatim; a copy you patch is a fork you own, in `libs/`
 - `tmp/` — gitignored scratch space
+- a toolchain folder, such as `gradle/` beside `gradlew`; see below
 
 Root *files* are permitted by name: the eight the template ships, `.repo-template.json`, `.gitmodules`, `.structure-allow`, `GLOSSARY.md`, `GLOSSARY-MAP.md`, every addition by occasion, and the root workspace manifests and lockfiles of five of the six languages (Swift has none; see the orphan-manifest rule). `.gitkeep` is permitted anywhere. Anything else needs an entry in `.structure-allow`.
 
@@ -90,7 +93,7 @@ Root *files* are permitted by name: the eight the template ships, `.repo-templat
 - A unit is one folder under `apps/`: the smallest piece delivered on its own, whether deployed, installed, published, or copied. A file directly in `apps/` belongs to no unit.
 - Split a unit into domains only for distinct business areas that benefit from isolation. Each domain is a folder under its unit with its own `src/`, which is what tells a domain from a misspelled scoped folder: the unit level cannot be an allowlist, since a domain name is yours to choose. So a folder under a unit without one is a finding. Below a domain only `src/`, scoped folders, and the domain's own files are allowed. Domains do not nest.
 - `src/` sits under the unit, or under each domain when there are domains. Never both, and never `apps/src/`.
-- A unit or domain may hold its own `libs/`, `tests/`, `scripts/`, `docs/`, `tools/`, `deploy/`, or `assets/`, scoped to it. A unit, never a domain, may hold a gitignored `state/` at its root; see the rule on files a program writes.
+- A unit or domain may hold its own `libs/`, `tests/`, `scripts/`, `docs/`, `tools/`, `deploy/`, `assets/`, `config/`, `examples/`, or `vendor/`, scoped to it. A unit, never a domain, may hold a gitignored `state/` at its root; see the rule on files a program writes.
 
 **Every unit declares how it runs and what it ships** in a `.unit.json` at the unit's root, never a domain's. Neither fact is on disk: a Go module with one `main` package could be a CLI, a TUI, or a service. `docs/adrs/0001-declare-unit-delivery-as-two-facts.md` has the reasoning; read it before changing the shape.
 
@@ -108,17 +111,21 @@ Reading the file needs `jq`, which `scripts/doctor` requires. Without it the aud
 
 **`tests/integration/` is the integration tier**, at any scope holder. It needs no placement rule, since `tests/` may nest its own kind; the name matters only to the capabilities: `scripts/integration` runs it and the gate does not. pytest and `go test ./...` discover by walking the tree, so their exclusion is wired; the other four languages declare their test set (an npm script, a Gradle source set, a SwiftPM or Cargo test target), and that declaration leaves the tier out.
 
-**Scoped folders nest freely but never hold a `src/`.** `libs/`, `tests/`, `scripts/`, `tools/`, `assets/`, `docs/`, and `deploy/` may nest another kind (`scripts/tests/libs/`) or their own (`tests/` under `tests/`). Choose the folder whose scope matches the file's.
+**Scoped folders nest freely but never hold a `src/`.** `libs/`, `tests/`, `scripts/`, `tools/`, `assets/`, `config/`, `docs/`, and `deploy/` may nest another kind (`scripts/tests/libs/`) or their own (`tests/` under `tests/`). Choose the folder whose scope matches the file's.
+
+**`examples/` and `vendor/` are opaque.** Each is a scoped folder whose contents are another program's shape, an example's own `src/` included, so every depth rule stops at it. Nothing lints, formats, tests, or runs a pre-commit hook over `vendor/`: `libs/detect.sh` excludes it from ruff, ty, pytest, and gofmt, the other runners build only what their manifests declare, and both `.pre-commit-config.yaml` copies exclude it. A `.structure-allow` prefix is left for tracked fixtures.
+
+**A toolchain folder sits beside the file that fixes its name.** `scripts/structure`'s `toolchain_folders` pairs a file with the folder its tool requires beside it and cannot be told to move: `gradle/` beside `gradlew`, `public/` beside `package.json`. The folder is permitted only in that file's directory, at a scope holder, and is opaque. A framework needing another gets an entry in the template's table, so every repository carries the same table rather than its own `.structure-allow` line; a name a config line can relocate is relocated into the layout instead.
 
 **`apps/` is not a scope holder.** The scope holders are the root, a unit, and a domain, so the segment directly under `apps/` is always a unit name: `apps/docs/` and `apps/tests/` are ordinary units. The rules resume at the unit: `apps/docs/docs/notes.yaml` still needs permission, and `apps/api/docs/src/` is still a `src/` under a scope holder.
 
-**Every rule that reads depth stops at the first `src/`.** Below it the language decides, whether a Go package named `docs/`, a Python `scripts/` module, or a vendored tree. So `apps/api/src/internal/docs/swagger.json` is fine, `apps/api/docs/swagger.json` is not, and a `src/` inside a `src/` is the source tree's own business.
+**Every rule that reads depth stops at the first `src/`**, and at an opaque or toolchain folder. Below a `src/` the language decides, whether a Go package named `docs/`, a Python `scripts/` module, or a vendored tree. So `apps/api/src/internal/docs/swagger.json` is fine, `apps/api/docs/swagger.json` is not, and a `src/` inside a `src/` is the source tree's own business.
 
-**No file a program writes is tracked.** What a program only reads is an asset, in the `assets/` at its scope. What it writes while running, such as a save file, a session, or its own cache, goes in its unit's `state/`, gitignored as `/apps/*/state/`, so a run, a test included, leaves git as it found it. The pattern is anchored to the unit root so a source package named `state/` below `src/` stays tracked; a re-clone or `git clean -x` loses it. A file the operator edits by hand is an asset, and so is a record the program wrote once and will not write again, such as a finished season: its snapshot is tracked under `assets/` and read when `state/` holds no working copy, so a fresh clone starts from it. No script checks this rule: it is about what a program does with a file, not where the file sits.
+**No file a program writes is tracked.** What a program only reads is an asset, in the `assets/` at its scope, or a setting, in its `config/`. What it writes while running, such as a save file, a session, or its own cache, goes in its unit's `state/`, gitignored as `/apps/*/state/`, so a run, a test included, leaves git as it found it. The pattern is anchored to the unit root so a source package named `state/` below `src/` stays tracked; a re-clone or `git clean -x` loses it. A file the operator edits by hand is a setting when it changes how the program behaves and an asset otherwise, and so is a record the program wrote once and will not write again, such as a finished season: its snapshot is tracked under `assets/` and read when `state/` holds no working copy, so a fresh clone starts from it. No script checks this rule: it is about what a program does with a file, not where the file sits.
 
 **`docs/` takes Markdown freely at every scope**; anything else needs permission. `.gitkeep` is exempt everywhere.
 
-**`.structure-allow` records permission.** A bare path allows one file. A path ending in `/` is a prefix the audit stops descending into, for a vendored dependency or tracked fixture whose shape is not this repository's to decide. The one place it still looks inside is a domain's own `src/`, without which a prefix entry would make the domain rule stricter.
+**`.structure-allow` records permission.** A bare path allows one file. A path ending in `/` is a prefix the audit stops descending into, for a tracked fixture whose shape is not this repository's to decide. The one place it still looks inside is a domain's own `src/`, without which a prefix entry would make the domain rule stricter.
 
 Three rules are about content, and no script can settle them: whether `libs/` holds what several apps share, whether `tests/` spans them, and whether a file sits at its own scope. `scripts/structure` reports them `not-applicable` rather than guessing from paths.
 
