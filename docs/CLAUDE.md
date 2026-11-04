@@ -11,6 +11,7 @@ Durable knowledge about this repository: why decisions were made, what contracts
 - `plans/` — plans written in plan mode, pointed here by `plansDirectory` in `.claude/settings.json`
 - `research/` — findings from the `research` skill, one Markdown file per question, each citing the primary sources it read, and naming the probe environment where the finding came from one. A record of what was found rather than a decision, so a decision it supports belongs in an ADR or a ticket answer; kept because re-running the probes costs more than reading the file
 - `LESSONS.md` — repository-specific knowledge that prevents recurring mistakes
+- `language-ranking.md` — the ranked list of languages to keep if limited to N, with why each earns its place
 - `TODO.md` — backlogged informal tasks for this repository, not for a project generated from it
 
 Specs for a single unit belong to that unit, under `apps/<name>/docs/specs/`, and change in the same commit as the code they describe.
