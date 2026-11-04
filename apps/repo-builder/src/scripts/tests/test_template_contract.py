@@ -6,9 +6,10 @@ one changes without the other, the agent is told a rule the gate does not
 enforce, or is never told one it does, and learns it by failing the commit.
 
 Only the enumerations are checked: the root folders, the root files, the
-scoped folders, the deploy technologies, the unit declaration's vocabulary and
-example, and that every command named exists. Whether a sentence describes its
-rule well is not decidable here; whether its list matches the code is.
+scoped folders, the toolchain folders, the deploy technologies, the unit
+declaration's vocabulary and example, and that every command named exists.
+Whether a sentence describes its rule well is not decidable here; whether its
+list matches the code is.
 """
 
 import json
@@ -87,6 +88,13 @@ class TemplateContractTest(unittest.TestCase):
         spans = contract_spans("- A root, unit, or domain may hold its own")
         named = {span.rstrip("/") for span in spans if span != "src/"}
         self.assertEqual(named, bash_array("scoped_folders"))
+
+    def test_toolchain_folders_match_the_audit(self):
+        spans = contract_spans("- A toolchain folder is permitted only beside")
+        folders, files = spans[0::2], spans[1::2]
+        self.assertEqual(len(folders), len(files), "a toolchain folder names no file")
+        named = {f"{file}:{folder.rstrip('/')}" for folder, file in zip(folders, files)}
+        self.assertEqual(named, bash_array("toolchain_folders"))
 
     def test_deploy_folders_match_the_audit(self):
         spans = contract_spans("- `deploy/` holds only")[1:]

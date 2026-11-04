@@ -4,11 +4,11 @@ Part of [Retrofit](retrofit.md). Turn the destination's tree into the template's
 
 **The complete plan is presented before a single file moves**: every path, its destination, and its instrument, in one list. The operator disposes per path. A rejection with no correction stops the retrofit, as a rejected unit map does, since a partial layout is the one state no later run can reason about.
 
-**Every root scoped folder the unit map claims moves to its unit.** Root `libs/`, `tests/`, `scripts/`, `tools/`, `deploy/`, and `assets/` mean repository-wide. `scripts/structure` reports the scope rule `not-applicable`, so only the unit map decides this move.
+**Every root scoped folder the unit map claims moves to its unit.** Root `libs/`, `tests/`, `scripts/`, `tools/`, `deploy/`, `assets/`, `config/`, `examples/`, and `vendor/` mean repository-wide. `scripts/structure` reports the scope rule `not-applicable`, so only the unit map decides this move.
 
 **Data splits by whether the program writes it.**
 
-- Read-only data, including a file the operator edits by hand, moves to the owning `assets/`.
+- Read-only settings, including a file the operator edits by hand to change how the program behaves, move to the owning `config/`; per-environment values move to `deploy/env/`. Other read-only data moves to the owning `assets/`.
 - A written file moves to `apps/<unit>/state/` (excluded by the payload's `.gitignore` as `/apps/*/state/`): rewrite the path the program resolves and remove the tracked copy.
 - A written file that also holds a record the program will not write again, such as a finished season, may keep that record as a read-only snapshot under `assets/` for the program to fall back to. That fallback is new code: the plan proposes it, and the flow writes it only once the operator confirms.
 - A harness backup follows the file it backs up.

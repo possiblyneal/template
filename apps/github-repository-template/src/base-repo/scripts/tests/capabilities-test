@@ -681,7 +681,7 @@ shift 1 # run
 printf '%s\n' "$*" >> "${MARKER:?}"
 STUB
 (cd "$work" && MARKER="$work/uv-args" scripts/fix > /dev/null 2>&1 </dev/null)
-if [[ "$(cat "$work/uv-args" 2>/dev/null)" == $'ruff check --fix .\nruff format .' ]]; then
+if [[ "$(cat "$work/uv-args" 2>/dev/null)" == $'ruff check --fix --extend-exclude vendor .\nruff format --extend-exclude vendor .' ]]; then
   pass
 else
   fail "scripts/fix ran $(tr '\n' '; ' < "$work/uv-args" 2>/dev/null) rather than the lint fix then the formatter"
@@ -750,6 +750,24 @@ if grep -q -- '--ignore=./apps/api/tests/integration' "$work/pytest-args" 2>/dev
   pass
 else
   fail "the gate's pytest run does not ignore the tier: $(cat "$work/pytest-args" 2>/dev/null)"
+fi
+
+# pytest anchors a relative --ignore-glob at its working directory, so
+# '*/vendor/*' needs a segment before vendor/ and misses the root's own; the
+# root takes its own glob.
+fixture "the gate's pytest run leaves vendor/ out at every depth"
+printf '[project]\nname = "p"\nversion = "0.1.0"\n' > "$work/pyproject.toml"
+stub uv <<'STUB'
+#!/usr/bin/env bash
+if [[ "$*" == *--version* ]]; then exit 0; fi
+shift 2 # run pytest
+printf '%s\n' "$*" >> "${MARKER:?}"
+STUB
+MARKER="$work/pytest-args" ci_real > /dev/null 2>&1
+if grep -qF -- "--ignore-glob=vendor/* --ignore-glob=*/vendor/*" "$work/pytest-args" 2>/dev/null; then
+  pass
+else
+  fail "the gate's pytest run does not ignore vendor/: $(cat "$work/pytest-args" 2>/dev/null)"
 fi
 
 # And the other side of it: the tier's own run names those directories on the
