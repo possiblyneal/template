@@ -33,6 +33,12 @@ CODEQL = ".github/workflows/codeql.yml"
 EXECUTABLE = "100755"
 SYMLINK = "120000"
 SLOT = "[[FILL:"
+# The folders under a unit that are not domains, from scripts/structure:
+# src/, every scoped folder, and every toolchain folder.
+NOT_DOMAINS = frozenset(
+    {"src", "assets", "config", "deploy", "docs", "examples", "libs", "scripts"}
+    | {"tests", "tools", "vendor", "gradle", "public"}
+)
 
 
 def blob_bytes(repository: Path, revision: str) -> bytes:
@@ -96,6 +102,26 @@ def remove(destination: Path, path: str) -> None:
         run_git(destination, "rm", "-q", "-f", "--", path)
     else:
         (destination / path).unlink(missing_ok=True)
+
+
+def stale_placeholders(destination: Path) -> list[str]:
+    """Each tracked unit or domain `src/.gitkeep` beside another tracked file.
+
+    The payload ships `apps/app-name/src/.gitkeep` so an empty source tree
+    exists in git; once the tree holds source, the file holds nothing open.
+    """
+    tracked = preflight.nul_fields(destination, "ls-files", "-z", "--", "apps/")
+    stale = []
+    for path in tracked:
+        parts = path.split("/")
+        if len(parts) not in (4, 5) or parts[-2:] != ["src", ".gitkeep"]:
+            continue
+        if len(parts) == 5 and parts[2] in NOT_DOMAINS:
+            continue
+        tree = path.removesuffix(".gitkeep")
+        if any(other.startswith(tree) and other != path for other in tracked):
+            stale.append(path)
+    return stale
 
 
 def dependabot_library(template_repo: Path, target: str, subtree: str) -> str:
@@ -410,6 +436,9 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
             "watched": [list(pair) for pair in watched],
             "dropped": [list(pair) for pair in sorted(set(old_pairs) - set(watched))],
         }
+    pruned = stale_placeholders(destination)
+    for path in pruned:
+        remove(destination, path)
     return {
         "operation": "update-apply",
         "template": template,
@@ -420,6 +449,7 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
         "discarded": discarded,
         "left": left,
         "dependabot": dependabot,
+        "pruned": pruned,
         "overridden": overridden,
         "refused_overrides": refused_overrides,
         "unmatched_overrides": [
@@ -652,6 +682,7 @@ def render_pr_body(arguments: argparse.Namespace) -> dict[str, object]:
             "",
             *[f"- `{path}`" for path in delta],
             *[f"- discarded: `{entry['path']}`" for entry in apply["discarded"]],
+            *[f"- pruned: `{path}`" for path in apply["pruned"]],
             *[
                 f"- dependabot dropped: `{ecosystem}` in `{directory}`"
                 for ecosystem, directory in dropped
@@ -1114,6 +1145,8 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
                 else f"{entry['action']} `{entry['path']}`"
             )
             removed.setdefault(label, []).append(name)
+        for path in apply["pruned"]:
+            removed.setdefault(f"prune `{path}`", []).append(name)
         for entry in apply["overridden"]:
             label = f"`{entry['path']}`: {entry['reason']}"
             overridden.setdefault(label, []).append(name)

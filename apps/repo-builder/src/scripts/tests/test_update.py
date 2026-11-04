@@ -14,6 +14,7 @@ from typing import Any, ClassVar
 
 from test_preflight import git, git_output
 from test_retrofit import COMMIT_IDENTITY, gh_calls, stub_gh
+from test_template_contract import bash_array
 
 MODULE_PATH = Path(__file__).parents[1] / "update.py"
 PAYLOAD = Path(__file__).parents[5] / "apps/github-repository-template/src/base-repo"
@@ -635,6 +636,55 @@ class DependabotDerivationTests(unittest.TestCase):
 
 
 class ApplyEdgeTests(unittest.TestCase):
+    def test_a_source_tree_placeholder_is_pruned_once_the_tree_holds_files(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                directory,
+                {"scripts/tool": OLD},
+                {"scripts/tool": NEW},
+                held={
+                    "apps/web/src/.gitkeep": "",
+                    "apps/web/src/pkg/main.py": OLD,
+                    "apps/shop/billing/src/.gitkeep": "",
+                    "apps/shop/billing/src/lib.py": OLD,
+                    "apps/empty/src/.gitkeep": "",
+                    "apps/web/src/pkg/.gitkeep": "",
+                    "apps/web/src/src/.gitkeep": "",
+                    "apps/web/src/src/mod.py": OLD,
+                    "apps/web/vendor/src/.gitkeep": "",
+                    "apps/web/vendor/src/lib.c": OLD,
+                },
+            )
+
+            result = fixture.command("apply")
+
+            self.assertEqual(
+                result["pruned"],
+                ["apps/shop/billing/src/.gitkeep", "apps/web/src/.gitkeep"],
+            )
+            staged = fixture.staged()
+            self.assertEqual(staged["apps/web/src/.gitkeep"], "D")
+            self.assertEqual(staged["apps/shop/billing/src/.gitkeep"], "D")
+            self.assertTrue((fixture.destination / "apps/empty/src/.gitkeep").exists())
+            self.assertTrue(
+                (fixture.destination / "apps/web/src/pkg/.gitkeep").exists()
+            )
+            self.assertTrue(
+                (fixture.destination / "apps/web/src/src/.gitkeep").exists()
+            )
+            self.assertTrue(
+                (fixture.destination / "apps/web/vendor/src/.gitkeep").exists()
+            )
+
+    def test_the_folders_that_are_not_domains_match_the_audit(self) -> None:
+        toolchain = {entry.split(":")[1] for entry in bash_array("toolchain_folders")}
+        self.assertEqual(
+            load_module().NOT_DOMAINS,
+            {"src"} | bash_array("scoped_folders") | toolchain,
+        )
+
     def test_codeql_is_left_where_the_destination_omitted_it_by_choice(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = Fixture(
@@ -1060,6 +1110,21 @@ class PrBodyTests(unittest.TestCase):
             self.assertIn("- `scripts/old-name`", radius)
             self.assertIn("- `scripts/new-name`", radius)
             self.assertNotIn("scripts/kept", radius)
+
+    def test_the_blast_radius_names_a_pruned_placeholder(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                directory,
+                {"scripts/copy": OLD},
+                {"scripts/copy": NEW},
+                held={"apps/web/src/.gitkeep": "", "apps/web/src/main.py": OLD},
+            )
+            self.records(fixture)
+
+            _, body = self.render(fixture)
+
+            radius = body[body.index("**Blast radius:**") :]
+            self.assertIn("- pruned: `apps/web/src/.gitkeep`", radius)
 
     def test_a_missing_record_fails_naming_it(self) -> None:
         for suffix in (".apply.json", ".proof.json", ".check.txt", ".settings.txt"):
@@ -1593,6 +1658,7 @@ class ReportTests(unittest.TestCase):
                 "already-current": ["scripts/current"] if name == "beta" else [],
             },
             "removed": [{"path": "scripts/old", "action": "delete"}],
+            "pruned": ["apps/web/src/.gitkeep"],
             "left": [],
             "overridden": [],
         }
@@ -1666,7 +1732,10 @@ class ReportTests(unittest.TestCase):
             ),
             "- Already current: `scripts/current` (owner/beta)",
             "- Preserved/Merged/Conflicted: none",
-            "- Renamed/deleted: delete `scripts/old` (all)",
+            (
+                "- Renamed/deleted: delete `scripts/old` (all); "
+                "prune `apps/web/src/.gitkeep` (all)"
+            ),
             "- Overridden: none",
             "- Authored surface: `.repo-template.json` (all)",
             "- Drift: none found",
@@ -1791,6 +1860,7 @@ class ReportTests(unittest.TestCase):
                 "removed": [
                     {"path": "scripts/new", "action": "move", "old_path": "scripts/was"}
                 ],
+                "pruned": [],
                 "left": [{"path": "scripts/x", "reason": "modified"}],
                 "overridden": [{"path": "scripts/kept", "reason": "ours"}],
             },
@@ -1806,6 +1876,7 @@ class ReportTests(unittest.TestCase):
         )
         self.assertIn(
             "- Renamed/deleted: delete `scripts/old` (owner/alpha); "
+            "prune `apps/web/src/.gitkeep` (owner/alpha); "
             "move `scripts/was` -> `scripts/new` (owner/beta)",
             lines,
         )
