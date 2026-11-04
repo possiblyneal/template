@@ -14,6 +14,7 @@ from typing import Any, ClassVar
 
 from test_preflight import git, git_output
 from test_retrofit import COMMIT_IDENTITY, gh_calls, stub_gh
+from test_template_contract import bash_array
 
 MODULE_PATH = Path(__file__).parents[1] / "update.py"
 PAYLOAD = Path(__file__).parents[5] / "apps/github-repository-template/src/base-repo"
@@ -650,6 +651,10 @@ class ApplyEdgeTests(unittest.TestCase):
                     "apps/shop/billing/src/lib.py": OLD,
                     "apps/empty/src/.gitkeep": "",
                     "apps/web/src/pkg/.gitkeep": "",
+                    "apps/web/src/src/.gitkeep": "",
+                    "apps/web/src/src/mod.py": OLD,
+                    "apps/web/vendor/src/.gitkeep": "",
+                    "apps/web/vendor/src/lib.c": OLD,
                 },
             )
 
@@ -666,6 +671,19 @@ class ApplyEdgeTests(unittest.TestCase):
             self.assertTrue(
                 (fixture.destination / "apps/web/src/pkg/.gitkeep").exists()
             )
+            self.assertTrue(
+                (fixture.destination / "apps/web/src/src/.gitkeep").exists()
+            )
+            self.assertTrue(
+                (fixture.destination / "apps/web/vendor/src/.gitkeep").exists()
+            )
+
+    def test_the_folders_that_are_not_domains_match_the_audit(self) -> None:
+        toolchain = {entry.split(":")[1] for entry in bash_array("toolchain_folders")}
+        self.assertEqual(
+            load_module().NOT_DOMAINS,
+            {"src"} | bash_array("scoped_folders") | toolchain,
+        )
 
     def test_codeql_is_left_where_the_destination_omitted_it_by_choice(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

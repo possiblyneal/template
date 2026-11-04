@@ -33,6 +33,12 @@ CODEQL = ".github/workflows/codeql.yml"
 EXECUTABLE = "100755"
 SYMLINK = "120000"
 SLOT = "[[FILL:"
+# The folders under a unit that are not domains, from scripts/structure:
+# src/, every scoped folder, and every toolchain folder.
+NOT_DOMAINS = frozenset(
+    {"src", "assets", "config", "deploy", "docs", "examples", "libs", "scripts"}
+    | {"tests", "tools", "vendor", "gradle", "public"}
+)
 
 
 def blob_bytes(repository: Path, revision: str) -> bytes:
@@ -109,6 +115,8 @@ def stale_placeholders(destination: Path) -> list[str]:
     for path in tracked:
         parts = path.split("/")
         if len(parts) not in (4, 5) or parts[-2:] != ["src", ".gitkeep"]:
+            continue
+        if len(parts) == 5 and parts[2] in NOT_DOMAINS:
             continue
         tree = path.removesuffix(".gitkeep")
         if any(other.startswith(tree) and other != path for other in tracked):
