@@ -93,7 +93,7 @@ Ownership answers whether a path participates in template updates:
 - `product`: preserve automatically. If a new template path collides with product content, report the collision and stop.
 - unmatched: product-owned by default.
 
-The longest matching path wins; equal patterns are invalid. The old-to-new template delta bounds update scope. Do not edit an unrelated destination path merely because a broad ownership rule matches it. An expired override is the one write outside that bound, settled under [Overridden paths](#overridden-paths).
+The longest matching path wins; equal patterns are invalid. The old-to-new template delta bounds update scope. Do not edit an unrelated destination path merely because a broad ownership rule matches it. Two writes fall outside that bound: an expired override, settled under [Overridden paths](#overridden-paths), and a unit or domain `src/.gitkeep` whose `src/` now tracks other files, which `update.py apply` deletes and reports as `pruned`, since it only held an empty tree open.
 
 A root file matches no directory pattern, so `CLAUDE.md`, `.pre-commit-config.yaml`, `.commitlintrc.yaml`, `.gitattributes`, and `.gitignore` fall through to product unless named individually, and a payload fix to them would land nowhere while the update reports success. Every root file the payload adds needs a line. Every path the template ships needs an ownership rule that reaches it; verify with `classify_path` rather than assuming a directory pattern covers a root file. In this repository `test_reference_assertions.py` checks every payload path against both this repository's manifest and the example above.
 
