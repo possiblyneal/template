@@ -4,7 +4,7 @@ If you could keep only N languages for all projects, keep the first N rows. Each
 
 | # | Language | Why it's the next pick |
 |---|---|---|
-| 1 | TypeScript | The only language that runs in the browser and also handles servers, CLIs and agent tooling. It reaches ML through APIs (ComfyUI, LLM endpoints). |
+| 1 | TypeScript | The only language that targets the browser natively (as JavaScript) and also handles servers, CLIs and agent tooling. It reaches ML through APIs (ComfyUI, LLM endpoints). |
 | 2 | Python | Its ML, inference, data and science libraries can't be replaced, the largest gap TypeScript leaves. |
 | 3 | Go | Single static binaries, cheap long-running services, fast compiles, and a small language AI writes reliably. Takes over backends and CLIs from TypeScript. |
 | 4 | Rust | For when Go measurably falls short: no garbage collector, predictable latency, WASM, systems code. |
@@ -17,7 +17,7 @@ If you could keep only N languages for all projects, keep the first N rows. Each
 | 11 | C# | Unity games, Windows desktop apps, and .NET shops. |
 | 12 | R | Statistics and bioinformatics; many medical and research methods are published only as R packages. |
 | 13 | Nix | Declarative, exactly rebuildable machine and environment configuration (NixOS). |
-| 14 | Zig | A modern C replacement, and a cross-compiler that builds C, Go and Rust for any target. |
+| 14 | Zig | A modern C replacement, and a drop-in C/C++ cross-compiler, also used as the cross-linker for cgo and Rust builds. |
 | 15 | PHP | Extending self-hosted software: WordPress, Nextcloud apps, MediaWiki. |
 | 16 | Verilog / SystemVerilog | Hardware design: FPGAs and custom chips. |
 | 17 | Assembly | Bootloaders, reverse engineering, security CTFs, and reading compiler output. |

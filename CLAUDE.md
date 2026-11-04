@@ -153,6 +153,6 @@ The engineering skills (`/wayfinder`, `/triage`, `/ship`) carry the GitHub Issue
 - `apps/github-repository-template/CLAUDE.md` — the template payload and the reference docs explaining it
 - `apps/repo-builder/CLAUDE.md` — the `/repo-builder` skill, and the tracked link that exposes it
 - `scripts/CLAUDE.md` — the language-capabilities interface, and what adding a language or check requires
-- `docs/CLAUDE.md` — ADRs, specs, plans, research records, and lessons
+- `docs/CLAUDE.md` — ADRs, specs, plans, research records, lessons, and the language ranking
 
 Read the nearest `CLAUDE.md` above every path you touch before editing, and update the owning file after meaningful changes.
