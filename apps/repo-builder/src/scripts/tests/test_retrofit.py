@@ -243,11 +243,11 @@ class ProofsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fixture = retrofit_fixture(directory)
             destination = Path(fixture["destination"])
-            lessons = destination / "docs/LESSONS.md"
-            lessons.parent.mkdir(parents=True, exist_ok=True)
-            lessons.write_text("# Our own lessons\n")
+            template = destination / "docs/adrs/0000-template.md"
+            template.parent.mkdir(parents=True, exist_ok=True)
+            template.write_text("# Our own ADR template\n")
             git("add", "-A", cwd=destination)
-            git("commit", "-q", "-m", "docs: lessons", cwd=destination)
+            git("commit", "-q", "-m", "docs: adr template", cwd=destination)
             fixture = {
                 **fixture,
                 "base": git_output("rev-parse", "HEAD", cwd=destination),
@@ -255,8 +255,10 @@ class ProofsTests(unittest.TestCase):
             self._overlay(fixture)
             report = json.loads(self._proofs(fixture).stdout)
 
-            self.assertEqual(report["replaced"], ["docs/LESSONS.md"])
-            self.assertIn("docs/LESSONS.md", report["copy"]["identical_paths"])
+            self.assertEqual(report["replaced"], ["docs/adrs/0000-template.md"])
+            self.assertIn(
+                "docs/adrs/0000-template.md", report["copy"]["identical_paths"]
+            )
 
     def test_lists_every_byte_identical_copy_by_path(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

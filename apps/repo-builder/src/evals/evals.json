@@ -9,7 +9,7 @@
       "expectations": [
         "The candidate records the exact full template commit, repository, and base-repo subtree in .repo-template.json.",
         "apps/billing-api exists, apps/app-name does not remain, and the root CLAUDE.md keeps its indexing instruction for the destination to answer.",
-        "docs/adrs/0000-template.md remains available as an ADR template and docs/LESSONS.md arrives as shipped, with no frontmatter or placeholders.",
+        "docs/adrs/0000-template.md remains available as an ADR template.",
         "The GitHub defaults hold: generation.features in .repo-template.json records no issue_tracker, prs_are_requests, or triage_labels departure, and no docs/agents/ files are written.",
         "The report records that the application boundaries were supplied in the invocation rather than derived, so no wayfinding session was opened and no language ADR was written.",
         "The report identifies an empty root commit on main followed by a generated-content branch and pull request.",

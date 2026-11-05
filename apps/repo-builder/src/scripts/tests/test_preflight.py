@@ -265,7 +265,7 @@ class PreflightUnitTests(unittest.TestCase):
             "generation": {
                 "overrides": [
                     {
-                        "path": "docs/LESSONS.md",
+                        "path": "docs/adrs/0000-template.md",
                         "reason": "kept as is",
                     }
                 ]
@@ -274,7 +274,7 @@ class PreflightUnitTests(unittest.TestCase):
 
         self.assertEqual(
             preflight.validate_overrides(manifest),
-            {"docs/LESSONS.md": "kept as is"},
+            {"docs/adrs/0000-template.md": "kept as is"},
         )
 
     def test_a_malformed_override_names_the_offending_entry(self) -> None:
@@ -825,13 +825,15 @@ class RetrofitTests(unittest.TestCase):
         destination = Path(directory) / "legacy-service"
         (destination / "scripts").mkdir(parents=True)
         (destination / "data").mkdir()
-        (destination / "docs").mkdir()
+        (destination / "docs" / "adrs").mkdir(parents=True)
         (destination / "CLAUDE.md").write_text("the destination's own contract\n")
         (destination / "README.md").write_text("legacy service\n")
-        (destination / ".gitignore").write_text("docs/LESSONS.md\n")
+        (destination / ".gitignore").write_text("docs/adrs/0000-template.md\n")
         (destination / "scripts" / "check").write_text("#!/bin/sh\nexit 0\n")
         (destination / "data" / "notes.txt").write_text("kept deliberately\n")
-        (destination / "docs" / "LESSONS.md").write_text("ignored, still present\n")
+        (destination / "docs" / "adrs" / "0000-template.md").write_text(
+            "ignored, still present\n"
+        )
 
         git("init", "-q", "--initial-branch=master", str(destination))
         git("remote", "add", "origin", self.NAMED, cwd=destination)
@@ -870,7 +872,7 @@ class RetrofitTests(unittest.TestCase):
                 report["collisions"],
                 [
                     {"path": "CLAUDE.md", "tracked": True},
-                    {"path": "docs/LESSONS.md", "tracked": False},
+                    {"path": "docs/adrs/0000-template.md", "tracked": False},
                     {"path": "scripts/check", "tracked": False},
                 ],
             )
@@ -889,7 +891,6 @@ class RetrofitTests(unittest.TestCase):
                 report["payload_paths"],
                 [
                     "CLAUDE.md",
-                    "docs/LESSONS.md",
                     "docs/adrs/0000-template.md",
                     "scripts/check",
                     "scripts/legacy",
@@ -916,7 +917,7 @@ class RetrofitTests(unittest.TestCase):
             )
             self.assertTrue(colliding)
             self.assertNotIn("CLAUDE.md", report["absent_paths"])
-            self.assertIn("docs/adrs/0000-template.md", report["absent_paths"])
+            self.assertIn("scripts/legacy", report["absent_paths"])
 
     def test_retrofit_absent_paths_is_the_whole_payload_when_nothing_collides(
         self,
@@ -929,7 +930,11 @@ class RetrofitTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fixture = self._fixture(directory)
             destination = Path(fixture["destination"])
-            for colliding in ("CLAUDE.md", "docs/LESSONS.md", "scripts/check"):
+            for colliding in (
+                "CLAUDE.md",
+                "docs/adrs/0000-template.md",
+                "scripts/check",
+            ):
                 (destination / colliding).unlink()
             git("rm", "-q", "--cached", "CLAUDE.md", cwd=destination)
             git("commit", "-q", "-m", "chore: drop the colliding path", cwd=destination)
@@ -977,7 +982,7 @@ class RetrofitTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             report = json.loads(result.stdout)
             self.assertEqual(report["untracked"], ["data/", "scripts/"])
-            self.assertNotIn("docs/LESSONS.md", report["untracked"])
+            self.assertNotIn("docs/adrs/0000-template.md", report["untracked"])
 
     def test_retrofit_reports_a_foreign_default_branch_as_a_rename(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -241,14 +241,6 @@ def generation(root: Path, fixture: dict[str, object]) -> list[Check]:
             "root CLAUDE.md drops the placeholder app and keeps the indexing instruction",
         ),
         (
-            "lessons shipped as is",
-            contains_none(
-                candidate / "docs/LESSONS.md",
-                ("<actor>", "<ISO 8601", "<Replace", "<Add repository", "generated:"),
-            ),
-            "lessons carries no frontmatter or placeholders",
-        ),
-        (
             "ADR template retained",
             (candidate / "docs/adrs/0000-template.md").is_file()
             and "type: Template"
