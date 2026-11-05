@@ -123,8 +123,6 @@ Toolchain folders: `scripts/structure`'s `toolchain_folders` pairs a file with t
 
 `docs/specs/`: Convention (not a shipped directory) for specs of contracts spanning multiple apps. The default tracker, GitHub Issues, holds specs as issues instead, so a repository keeping them as files creates this directory itself.
 
-`docs/LESSONS.md`: Repository-specific knowledge that prevents recurring mistakes.
-
 `docs/plans/`: Convention (not a shipped directory) for plans written in plan mode, tracked so they land in the diff with the code they describe. Plan mode creates it on its first plan.
 
 ### Root Configuration Files

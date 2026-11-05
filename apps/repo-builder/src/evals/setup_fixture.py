@@ -127,16 +127,6 @@ Copy this file to create an ADR. Replace the placeholders in the copy.
     )
     write(
         repo,
-        "base-repo/docs/LESSONS.md",
-        """# Lessons learned
-
-Add only durable, repeatable, non-obvious constraints.
-
-## Lessons
-""",
-    )
-    write(
-        repo,
         "base-repo/scripts/check",
         """#!/usr/bin/env bash
 set -euo pipefail
