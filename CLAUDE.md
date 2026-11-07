@@ -146,7 +146,7 @@ Secret scanning, push protection, code scanning, and rulesets are free on a publ
 
 ## Agent skills
 
-The engineering skills (`/wayfinder`, `/triage`, `/ship`) carry the GitHub Issues, `gh`, and seven-role label defaults. A repository that differs records a departure in `.repo-template.json` `generation.features`; this repository records none. See `docs/adrs/0007-carry-agent-skill-defaults-in-the-skills.md`.
+The engineering skills (`/wayfinder`, `/triage`, `/ship`) carry the GitHub Issues, `gh`, and sixteen-role label defaults: five triage states and eleven categories, one per Conventional Commit type. A repository that differs records a departure in `.repo-template.json` `generation.features`; this repository records none. See `docs/adrs/0007-carry-agent-skill-defaults-in-the-skills.md` and `docs/adrs/0009-name-ticket-categories-after-commit-types.md`.
 
 ## Child Index
 

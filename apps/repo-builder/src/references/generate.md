@@ -124,7 +124,7 @@ That rewind is local, and it removes the probe only where the push was rejected.
 
 ### Step 6 — Configure the repository for the engineering skills
 
-The engineering skills carry their own defaults, so nothing is collected and no file is written for them: GitHub Issues reached with `gh`, the seven triage roles unrenamed (`bug`, `enhancement`, `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`), and pull requests not a request surface. A repository that differs records a departure under `generation.features`, each key optional and an absent one meaning the default:
+The engineering skills carry their own defaults, so nothing is collected and no file is written for them: GitHub Issues reached with `gh`, the sixteen triage roles unrenamed (`bug`, `enhancement`, `documentation`, `perf`, `refactor`, `style`, `test`, `build`, `ci`, `chore`, `revert`, `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`), and pull requests not a request surface. A repository that differs records a departure under `generation.features`, each key optional and an absent one meaning the default:
 
 ```json
 "features": {
@@ -140,7 +140,8 @@ The one write a record cannot do for itself is creating the labels, on the repos
 
 ```bash
 existing=$(gh label list --limit 1000 --json name --jq '.[].name')
-for label in bug enhancement needs-triage needs-info ready-for-agent ready-for-human wontfix \
+for label in bug enhancement documentation perf refactor style test build ci chore revert \
+             needs-triage needs-info ready-for-agent ready-for-human wontfix \
              wayfinder:map wayfinder:research wayfinder:prototype wayfinder:grilling wayfinder:task; do
   present=$(grep -ixF -- "$label" <<< "$existing" | head -n 1 || true)
   if [[ -z "$present" ]]; then
@@ -153,7 +154,7 @@ done
 
 Run the loop only where the tracker is the host. A `generation.features.issue_tracker` departure naming a tracker that is not GitHub Issues takes no label creation at all: the labels belong to whatever that names, and creating GitHub labels for a repository tracked elsewhere writes a vocabulary nothing reads. Report the step as `none created` with that as the reason.
 
-Twelve labels: the seven roles, `wayfinder:map`, and the four `wayfinder:<type>` labels (`research`, `prototype`, `grilling`, `task`). Each role's label is the default string unless `generation.features.triage_labels` maps that role to another, in which case the mapped string is the one created, so the loop above takes the mapped strings in the role positions. Create them without descriptions rather than restating the skills' here, where the two would drift. The map label alone is not enough: a map's tickets each carry a type label, so a repository given only `wayfinder:map` runs the wayfinding skill exactly as far as its first map and then fails on the first ticket create. Create only what is missing. GitHub ships `bug`, `enhancement`, and `wontfix` on a new repository with their own descriptions and colors, and a destination that already has content may carry more; overwriting those is a change nobody asked for.
+Twenty-one labels: the sixteen roles, `wayfinder:map`, and the four `wayfinder:<type>` labels (`research`, `prototype`, `grilling`, `task`). Each role's label is the default string unless `generation.features.triage_labels` maps that role to another, in which case the mapped string is the one created, so the loop above takes the mapped strings in the role positions. Create them without descriptions rather than restating the skills' here, where the two would drift. The map label alone is not enough: a map's tickets each carry a type label, so a repository given only `wayfinder:map` runs the wayfinding skill exactly as far as its first map and then fails on the first ticket create. Create only what is missing. GitHub ships `bug`, `enhancement`, `documentation`, and `wontfix` on a new repository with their own descriptions and colors, and a destination that already has content may carry more; overwriting those is a change nobody asked for.
 
 The guard matches case-insensitively because the host does. A destination carrying `Bug` passes a `grep -qxF` guard as absent, the create then fails on a name GitHub considers taken, and under `set -e` the step aborts with every later role silently uncreated. A case variant is therefore a rename to the spelling in force, not a skip: a label is one object with a stable id, so the rename carries the id and every issue already wearing it keeps the label under the new name. It is never forced, which is what leaves the host's own description and color intact; only the name changes. The alternative, recording the destination's spelling as a `triage_labels` departure, is the right answer where the destination means its spelling as its vocabulary, and a rename is the right answer where the case variant is an accident; ask which when a destination's own docs do not settle it.
 
