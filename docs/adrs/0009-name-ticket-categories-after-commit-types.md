@@ -27,4 +27,5 @@ The two categories, `bug` and `enhancement`, left no honest label for a performa
 
 - An agent turning a ticket into a commit maps three labels to their types; `/triage`'s Roles list holds that mapping once.
 - `style` and `revert` will rarely be applied. An unused label costs a line in the label list.
-- Repo-builder creates eight labels the host does not ship and renames none.
+- Repo-builder creates eight category labels it did not create before, none of which the host ships, and renames none of GitHub's defaults.
+- The new names are generic, so a destination with content is more likely to carry a case variant, such as `CI` or `Build`, that means a component rather than a commit type. The case-insensitive guard renames such a label in place; the existing rule in `apps/repo-builder/src/references/generate.md` step 6 to ask which spelling is in force when the destination's docs do not settle it, and retrofit step 8's per-label approval line, are what stop that rename from going through unnoticed.
