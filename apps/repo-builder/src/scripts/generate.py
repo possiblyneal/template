@@ -25,9 +25,16 @@ from preflight import (
     require_git_repository,
     require_subtree,
     resolve_commit,
+    run_git,
     tree_paths,
 )
-from retrofit import record_path
+from retrofit import (
+    WriteLog,
+    load_required,
+    record_path,
+    write_labels,
+    write_log_path,
+)
 
 SCHEMA_VERSION = 1
 # GitHub's own alphabet for a repository name, which also keeps the candidate
@@ -94,6 +101,137 @@ def materialize(arguments: argparse.Namespace) -> dict[str, object]:
     }
 
 
+def materialized_candidate(records: Path) -> tuple[Path, dict]:
+    materialized = load_required(records, "materialize")
+    candidate = require_git_repository(Path(materialized["candidate"]), "candidate")
+    return candidate, materialized
+
+
+ROOT_MESSAGE = "chore: initialize empty repository"
+
+
+def bootstrap(arguments: argparse.Namespace) -> dict[str, object]:
+    """Push one parentless, empty-tree commit to the remote's default branch.
+
+    `commit-tree` builds it without checking the branch out, which the
+    candidate's `no-commit-to-branch` hook would refuse. A default branch
+    already on the remote is refused rather than replaced: it is a bootstrap
+    that already ran, or someone else's history. One already in the candidate
+    is pushed when it is an empty root, which is a push that failed before,
+    and refused otherwise.
+    """
+    candidate, materialized = materialized_candidate(arguments.records)
+    branch = arguments.default_branch or materialized["default_branch"]
+    ref = f"refs/heads/{branch}"
+    git_output(candidate, "check-ref-format", ref)
+    remote = run_git(candidate, "remote", "get-url", "origin", check=False)
+    if remote.returncode != 0:
+        raise PreflightError(f"the candidate has no origin remote: {candidate}")
+    if git_output(candidate, "ls-remote", "--heads", "origin", ref):
+        raise PreflightError(f"{branch} already exists on origin")
+    tree = git_output(candidate, "hash-object", "-w", "-t", "tree", "/dev/null")
+    root = run_git(candidate, "rev-parse", "--verify", "-q", ref, check=False).stdout
+    root = root.strip()
+    if root:
+        # A parentless commit lists only itself.
+        listed = git_output(candidate, "rev-list", "--parents", "-n", "1", root)
+        held = git_output(candidate, "rev-parse", f"{root}^{{tree}}")
+        if listed != root or held != tree:
+            raise PreflightError(f"{branch} already exists in the candidate")
+    else:
+        root = git_output(candidate, "commit-tree", tree, "-m", ROOT_MESSAGE)
+        # An empty old value makes the write refuse a branch created meanwhile.
+        git_output(candidate, "update-ref", ref, root, "")
+    git_output(candidate, "push", "-q", "origin", f"{ref}:{ref}")
+    return {
+        "operation": "bootstrap",
+        "repository": arguments.repository,
+        "candidate": str(candidate),
+        "remote": remote.stdout.strip(),
+        "default_branch": branch,
+        "root": root,
+    }
+
+
+# The engineering skills' defaults: the sixteen roles, which a
+# `generation.features.triage_labels` departure may respell, then the map
+# label and the four ticket types a map's tickets carry.
+TRIAGE_ROLES = (
+    "bug",
+    "enhancement",
+    "documentation",
+    "perf",
+    "refactor",
+    "style",
+    "test",
+    "build",
+    "ci",
+    "chore",
+    "revert",
+    "needs-triage",
+    "needs-info",
+    "ready-for-agent",
+    "ready-for-human",
+    "wontfix",
+)
+WAYFINDER_LABELS = (
+    "wayfinder:map",
+    "wayfinder:research",
+    "wayfinder:prototype",
+    "wayfinder:grilling",
+    "wayfinder:task",
+)
+
+
+def triage_departure(candidate: Path) -> dict[str, str]:
+    """Step 6's recorded respellings, or none where nothing was recorded."""
+    manifest = candidate / ".repo-template.json"
+    if not manifest.is_file():
+        return {}
+    document = json.loads(manifest.read_text())
+    mapping = document.get("generation", {}).get("features", {}).get("triage_labels")
+    if mapping is None:
+        return {}
+    if not isinstance(mapping, dict) or not all(
+        role in TRIAGE_ROLES and isinstance(label, str) and label
+        for role, label in mapping.items()
+    ):
+        raise PreflightError(
+            "generation.features.triage_labels must map triage roles to label names"
+        )
+    return mapping
+
+
+def labels(arguments: argparse.Namespace) -> dict[str, object]:
+    """Create each missing label through retrofit's writer.
+
+    A case variant is renamed to the default spelling, except where a
+    `triage_labels` departure is in force: then the destination's spellings
+    are the vocabulary, and nothing is renamed.
+    """
+    candidate, _ = materialized_candidate(arguments.records)
+    departure = triage_departure(candidate)
+    names = [departure.get(role, role) for role in TRIAGE_ROLES]
+    names += WAYFINDER_LABELS
+    log = WriteLog(write_log_path(arguments.records))
+    outcome = write_labels(arguments.repository, names, not departure, log)
+    if outcome.refused:
+        refused = outcome.refused[0]
+        raise PreflightError(
+            f"label {refused['label']} refused ({refused['outcome']}): "
+            f"{refused['reason']}; created before it: {outcome.created or 'none'}"
+        )
+    return {
+        "operation": "labels",
+        "repository": arguments.repository,
+        "labels": names,
+        "created": outcome.created,
+        "renamed": outcome.renamed,
+        "existing": [item["label"] for item in outcome.skipped],
+        "kept": [item for item in outcome.skipped if item["reason"] != "exists"],
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -124,6 +262,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     materialized.add_argument("--default-branch", default="main")
     materialized.set_defaults(handler=materialize, record="materialize")
+
+    bootstrapped = subparsers.add_parser(
+        "bootstrap",
+        parents=[recorded],
+        help="push the empty root commit to the candidate's origin",
+    )
+    bootstrapped.add_argument("--repository", required=True, help="owner/name")
+    bootstrapped.add_argument(
+        "--default-branch", help="default: the branch materialize initialized"
+    )
+    bootstrapped.set_defaults(handler=bootstrap, record="bootstrap")
+
+    labelled = subparsers.add_parser(
+        "labels",
+        parents=[recorded],
+        help="create the triage roles and wayfinder labels that are missing",
+    )
+    labelled.add_argument("--repository", required=True, help="owner/name")
+    labelled.set_defaults(handler=labels, record="labels")
     return parser
 
 

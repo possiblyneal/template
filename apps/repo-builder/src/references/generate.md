@@ -78,16 +78,19 @@ The candidate stands while the flow can still be resumed from it, and comes down
 
 Create the destination repository, at the [remote action gate](lifecycle.md#remote-action-gates). Present the gate first, and every line of it that applies: the repository name and visibility, the empty root commit, the settings step 5 applies, the ruleset probe step 5 pushes to prove those settings bind, the triage labels step 6 creates, and the map step 7 writes. The payload records the tracker, so both are decided here rather than left open: they are GitHub Issues on this repository. There is no diff and no check result to show yet, which is why this gate is separate from the one at step 11 — that one authorizes publishing content that has been reviewed, and this one authorizes an empty repository so that everything after it has somewhere to live.
 
-Create it without auto-initialization, set it as the candidate's remote, and push one empty root commit to the default branch, so the full generated payload is reviewable as a pull-request diff at step 11 rather than arriving as an initial commit nobody reads.
+Create it without auto-initialization, set it as the candidate's remote, and push one empty root commit to the default branch, so the full generated payload is reviewable as a pull-request diff at step 11 rather than arriving as an initial commit nobody reads. Creation stays a command of its own, since visibility and the description are the gate's answers:
 
 ```bash
-empty_tree=$(git hash-object -t tree /dev/null)
-empty_commit=$(git commit-tree "$empty_tree" -m "chore: initialize empty repository")
-git update-ref refs/heads/<default-branch> "$empty_commit"
-git push origin <default-branch>
+gh repo create <owner/name> --<visibility> --description "<description>"
+git -C tmp/<repository-name> remote add origin "https://github.com/<owner/name>.git"
+python3 apps/repo-builder/src/scripts/generate.py bootstrap \
+  --records tmp/<repository-name>.<first 12 of the commit> \
+  --repository <owner/name>
 ```
 
-Build the commit with `commit-tree` rather than by checking the default branch out and committing on it. The candidate's own `no-commit-to-branch` hook refuses such a commit and its `protect-branch` pre-push hook refuses the push, both correctly — neither can distinguish this one-time structural bootstrap from an ordinary disallowed one. Neither hook is installed this early, since step 9 is what installs them, but do not lean on that ordering: a resumed generate reaches this step with them already in place, and the push then needs `--no-verify`, because `protect-branch` blocks by destination ref rather than by commit content and so cannot recognize its one exception. Get explicit confirmation for that specific bypass before running it — it defeats the only branch protection this plan has, and every other push and commit in this lifecycle goes through hooks normally.
+`bootstrap` reads the candidate and its default branch from `<records>.materialize.json` (`--default-branch` overrides the branch), builds a parentless commit on the empty tree with `commit-tree`, points the default branch at it, pushes it to `origin`, and writes `<records>.bootstrap.json` with the commit under `root`. It refuses, changing nothing, a candidate with no `origin`, a default branch already on `origin` (a bootstrap that already ran, or someone else's history), and a candidate default branch that is anything but an empty root. A candidate default branch that is an empty root is a push that failed, so rerunning pushes that same commit.
+
+It uses `commit-tree` rather than checking the default branch out and committing on it, because the candidate's own `no-commit-to-branch` hook refuses such a commit and its `protect-branch` pre-push hook refuses the push, both correctly — neither can distinguish this one-time structural bootstrap from an ordinary disallowed one. Neither hook is installed this early, since step 9 is what installs them, but do not lean on that ordering: a resumed generate reaches this step with them already in place, and the push then needs `--no-verify`, because `protect-branch` blocks by destination ref rather than by commit content and so cannot recognize its one exception. `bootstrap` never passes it, so there its push fails on the hook and leaves the root on the candidate's default branch; get explicit confirmation for that specific bypass before running `git push --no-verify origin <default-branch>` by hand — it defeats the only branch protection this plan has, and every other push and commit in this lifecycle goes through hooks normally.
 
 The repository existing this early is deliberate, and step 7 is the reason. `/wayfinder` infers the repository from `git remote -v` and charts its map on the tracker `generation.features.issue_tracker` names, GitHub Issues where nothing is recorded. Run it against a candidate with no remote and the map — the whole product of an escalated generate — ends up somewhere the repository does not track its work. The same held when step 6 chose the tracker by asking; defaults the skills carry remove the question without removing the ordering it forced. The cost is that a generate abandoned after this point leaves an empty repository behind; say so at the gate.
 
@@ -159,26 +162,20 @@ Record a departure the invocation names. Step 7's `/wayfinder` reads this record
 The one write a record cannot do for itself is creating the labels, on the repository step 4 created. This is the write that gate authorized, and nothing else in the lifecycle performs it.
 
 ```bash
-existing=$(gh label list --limit 1000 --json name --jq '.[].name')
-for label in bug enhancement documentation perf refactor style test build ci chore revert \
-             needs-triage needs-info ready-for-agent ready-for-human wontfix \
-             wayfinder:map wayfinder:research wayfinder:prototype wayfinder:grilling wayfinder:task; do
-  present=$(grep -ixF -- "$label" <<< "$existing" | head -n 1 || true)
-  if [[ -z "$present" ]]; then
-    gh label create "$label"
-  elif [[ "$present" != "$label" ]]; then
-    gh label edit "$present" --name "$label"
-  fi
-done
+python3 apps/repo-builder/src/scripts/generate.py labels \
+  --records tmp/<repository-name>.<first 12 of the commit> \
+  --repository <owner/name>
 ```
 
-Run the loop only where the tracker is the host. A `generation.features.issue_tracker` departure naming a tracker that is not GitHub Issues takes no label creation at all: the labels belong to whatever that names, and creating GitHub labels for a repository tracked elsewhere writes a vocabulary nothing reads. Report the step as `none created` with that as the reason.
+It sends its writes through `retrofit.py`'s `write_labels`, logs each in `<records>.writes.json`, and writes `<records>.labels.json` with the `labels` it ensured and which were `created`, `renamed` (`from`, `to`), `existing`, and `kept` (a case variant left as it is). A refused write stops it naming the label and what was created before it, and leaves no record; rerunning skips what landed.
 
-Twenty-one labels: the sixteen roles, `wayfinder:map`, and the four `wayfinder:<type>` labels (`research`, `prototype`, `grilling`, `task`). Each role's label is the default string unless `generation.features.triage_labels` maps that role to another, in which case the mapped string is the one created, so the loop above takes the mapped strings in the role positions. Create them without descriptions rather than restating the skills' here, where the two would drift. The map label alone is not enough: a map's tickets each carry a type label, so a repository given only `wayfinder:map` runs the wayfinding skill exactly as far as its first map and then fails on the first ticket create. Create only what is missing. GitHub ships `bug`, `enhancement`, `documentation`, and `wontfix` on a new repository with their own descriptions and colors, and a destination that already has content may carry more; overwriting those is a change nobody asked for.
+Run it only where the tracker is the host. A `generation.features.issue_tracker` departure naming a tracker that is not GitHub Issues takes no label creation at all: the labels belong to whatever that names, and creating GitHub labels for a repository tracked elsewhere writes a vocabulary nothing reads. Report the step as `none created` with that as the reason.
 
-The guard matches case-insensitively because the host does. A destination carrying `Bug` passes a `grep -qxF` guard as absent, the create then fails on a name GitHub considers taken, and under `set -e` the step aborts with every later role silently uncreated. A case variant is therefore a rename to the spelling in force, not a skip: a label is one object with a stable id, so the rename carries the id and every issue already wearing it keeps the label under the new name. It is never forced, which is what leaves the host's own description and color intact; only the name changes. The alternative, recording the destination's spelling as a `triage_labels` departure, is the right answer where the destination means its spelling as its vocabulary, and a rename is the right answer where the case variant is an accident; ask which when a destination's own docs do not settle it.
+Twenty-one labels: the sixteen roles, `wayfinder:map`, and the four `wayfinder:<type>` labels (`research`, `prototype`, `grilling`, `task`). Each role's label is the default string unless `generation.features.triage_labels` in the candidate's `.repo-template.json` maps that role to another, in which case the command creates the mapped string in its place. They are created without descriptions rather than restating the skills' here, where the two would drift. The map label alone is not enough: a map's tickets each carry a type label, so a repository given only `wayfinder:map` runs the wayfinding skill exactly as far as its first map and then fails on the first ticket create. Only what is missing is created. GitHub ships `bug`, `enhancement`, `documentation`, and `wontfix` on a new repository with their own descriptions and colors, and a destination that already has content may carry more; overwriting those is a change nobody asked for.
 
-The rename is the default vocabulary deciding, so it happens only where no `triage_labels` departure is in force. Where the destination records one, or carries `docs/agents/triage-labels.md` of its own that [becomes one](generate-into-content.md#into-a-repository-that-already-has-content), its spellings are the correct ones: create what the record names and rename nothing.
+The match is case-insensitive because the host's is. A destination carrying `Bug` would pass a case-sensitive guard as absent, and the create would then fail on a name GitHub considers taken. A case variant is therefore a rename to the spelling in force, not a skip: a label is one object with a stable id, so the rename carries the id and every issue already wearing it keeps the label under the new name. It is never forced, which is what leaves the host's own description and color intact; only the name changes. The alternative, recording the destination's spelling as a `triage_labels` departure, is the right answer where the destination means its spelling as its vocabulary, and a rename is the right answer where the case variant is an accident; ask which when a destination's own docs do not settle it.
+
+The rename is the default vocabulary deciding, so it happens only where no `triage_labels` departure is in force. Where the destination records one, or carries `docs/agents/triage-labels.md` of its own that [becomes one](generate-into-content.md#into-a-repository-that-already-has-content), its spellings are the correct ones: the command creates what the record names and renames nothing, so record that departure before running it.
 
 The rename has a named cost, and it is not reversible by the step that caused it. Label *search* is case-sensitive even though label *creation* uniqueness is not, so a saved search, a workflow filter, or a skill pinned to `Bug` silently stops matching once the label is `bug`: no error anywhere, just an empty result. Report every rename in the final report with both spellings, so the destination's owner can repoint whatever was pinned to the old string.
 
