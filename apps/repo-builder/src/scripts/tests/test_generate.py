@@ -885,6 +885,24 @@ class ManifestTests(unittest.TestCase):
                 {"issue_tracker": "Linear, team BIL", "codeql": "omitted-by-choice"},
             )
 
+    def test_a_role_label_joins_the_roles_step_6_respelled(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._fixture(directory)
+            path = Path(fixture["candidate"]) / ".repo-template.json"
+            path.write_text(
+                json.dumps(
+                    {"generation": {"features": {"triage_labels": {"bug": "defect"}}}}
+                )
+            )
+
+            result = self._manifest(fixture, "--feature", "triage_labels.feat=feature")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                json.loads(path.read_text())["generation"]["features"],
+                {"triage_labels": {"bug": "defect", "feat": "feature"}},
+            )
+
     def test_a_feature_value_the_flows_do_not_read_is_refused_unwritten(self) -> None:
         for feature in ("codeql=dropped", "prs_are_requests=yes", "codeql", "=x"):
             with (
@@ -1063,9 +1081,33 @@ class SettingsTests(unittest.TestCase):
         git("remote", "add", "origin", str(origin), cwd=candidate)
         git("push", "-q", "origin", "main", cwd=candidate)
         Path(f"{self._records(directory)}.materialize.json").write_text(
-            json.dumps({"ok": True, "candidate": str(candidate)})
+            json.dumps(
+                {
+                    "ok": True,
+                    "candidate": str(candidate),
+                    "commit": self._template(directory, RULESET.read_text()),
+                    "subtree": "src/base-repo",
+                }
+            )
         )
         return candidate, origin, root
+
+    @staticmethod
+    def _template(directory: str, ruleset: str) -> str:
+        """A template whose commit holds `ruleset` beside the payload, returning it.
+
+        The working tree is then changed, so a settings run that read the
+        checkout rather than the commit would send the wrong body.
+        """
+        template = Path(directory) / "template"
+        (template / "src" / "base-repo").mkdir(parents=True)
+        (template / "src" / "base-repo" / "README.md").write_text("payload\n")
+        (template / "src" / "ruleset.json").write_text(ruleset)
+        git("init", "-q", "-b", "main", cwd=template)
+        git("add", "-A", cwd=template)
+        git("commit", "-q", "-m", "chore: template", cwd=template)
+        (template / "src" / "ruleset.json").write_text("{}")
+        return git_output("rev-parse", "HEAD", cwd=template)
 
     @staticmethod
     def _records(directory: str) -> Path:
@@ -1083,6 +1125,8 @@ class SettingsTests(unittest.TestCase):
                 str(self._records(directory)),
                 "--repository",
                 "acme/billing-service",
+                "--template-repo",
+                str(Path(directory) / "template"),
             ],
             cwd=directory,
             # The isolated config keeps a global core.hooksPath from replacing
@@ -1143,6 +1187,30 @@ class SettingsTests(unittest.TestCase):
             self.assertEqual(git_output("rev-parse", "main", cwd=candidate), root)
             self.assertTrue((candidate / "CLAUDE.md").exists())
             self.assertEqual(json.loads(result.stdout), record)
+
+    def test_a_rerun_probes_the_ruleset_an_earlier_run_created(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            _, origin, root = self._candidate(directory, refuses=True)
+            Path(f"{self._records(directory)}.writes.json").write_text(
+                json.dumps(
+                    [
+                        {
+                            "write": "ruleset",
+                            "before": None,
+                            "after": {"id": 42},
+                            "reverse_command": [],
+                        }
+                    ]
+                )
+            )
+
+            result = self._settings(directory, settings_responses())
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            record = self._record(directory)
+            self.assertEqual(record["writes"]["ruleset"], "logged")
+            self.assertEqual(record["probe"]["outcome"], "refused")
+            self.assertEqual(git_output("rev-parse", "main", cwd=origin), root)
 
     def test_a_plan_refusal_is_not_offered_and_nothing_is_probed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

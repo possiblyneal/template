@@ -2444,17 +2444,17 @@ class Report:
     """Rendered lines, with every judgement not yet decided left as a marked slot."""
 
     def __init__(
-        self, decisions: Mapping[str, str], known: Mapping[str, Slot] = SLOTS
+        self, decisions: Mapping[str, str], slot_table: Mapping[str, Slot] = SLOTS
     ) -> None:
         self.lines: list[str] = []
         self.slots: list[str] = []
         self.decisions = decisions
         # Each flow's own judgement keys; generate.py passes its own.
-        self.known = known
+        self.slot_table = slot_table
 
     def fill(self, key: str, derived: str | None = None) -> str:
         """What a record settles, else the decided value, else the marked slot."""
-        slot = self.known[key]
+        slot = self.slot_table[key]
         value = derived or self.decisions.get(key) or slot.default
         if value is not None:
             return value

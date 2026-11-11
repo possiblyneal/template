@@ -127,6 +127,7 @@ def materialize(arguments: argparse.Namespace) -> dict[str, object]:
     return {
         "candidate": str(candidate),
         "commit": commit,
+        "subtree": subtree,
         "default_branch": arguments.default_branch,
         "head": git_output(candidate, "symbolic-ref", "HEAD"),
         "payload_paths": len(payload),
@@ -464,10 +465,13 @@ def manifest(arguments: argparse.Namespace) -> dict[str, object]:
     if arguments.application:
         generation["applications"] = arguments.application
     recorded = generation.get("features", {})
-    generation["features"] = {
-        **(recorded if isinstance(recorded, dict) else {}),
-        **features,
-    }
+    recorded = recorded if isinstance(recorded, dict) else {}
+    merged = {**recorded, **features}
+    # One role's label never replaces the roles step 6 already respelled.
+    earlier, later = recorded.get("triage_labels"), features.get("triage_labels")
+    if isinstance(earlier, dict) and isinstance(later, dict):
+        merged["triage_labels"] = {**earlier, **later}
+    generation["features"] = merged
     document = {
         "schema_version": SCHEMA_VERSION,
         "template": {
@@ -517,22 +521,35 @@ def manifest(arguments: argparse.Namespace) -> dict[str, object]:
 # any other way stays pending and leaves the default branch never mergeable.
 # An analyze leg is one context per language and release.yml never runs on a
 # pull request, so neither is required.
-RULESET = (
-    Path(__file__).resolve().parents[3]
-    / "github-repository-template"
-    / "src"
-    / "ruleset.json"
-)
 # The writes a plan or visibility can withhold. The host refuses them with 403
 # or 422 then, which is a measurement rather than a failure.
 PLAN_GATED = ("push-protection", "ruleset")
 
 
-def ruleset_contexts() -> list[str]:
-    body = json.loads(RULESET.read_text())
+def ruleset_body(
+    records: Path, materialized: dict[str, object], template: Path
+) -> Path:
+    """Write the ruleset body as it stands beside the payload at the source commit.
+
+    Read at the commit, as `ownership_rules` is, so the required contexts are
+    the job names of the workflows being generated rather than of whatever the
+    template checkout holds now.
+    """
+    commit = str(materialized["commit"])
+    location = sibling_of_subtree(str(materialized["subtree"]), "ruleset.json")
+    shown = run_git(template, "show", f"{commit}:{location}", check=False)
+    if shown.returncode != 0:
+        raise PreflightError(f"ruleset body does not exist at {commit}: {location}")
+    body = record_path(records, "ruleset.json")
+    body.write_text(shown.stdout)
+    return body
+
+
+def ruleset_contexts(body: Path) -> list[str]:
+    document = json.loads(body.read_text())
     return [
         check["context"]
-        for rule in body["rules"]
+        for rule in document["rules"]
         if rule["type"] == "required_status_checks"
         for check in rule["parameters"]["required_status_checks"]
     ]
@@ -586,12 +603,16 @@ def settings(arguments: argparse.Namespace) -> dict[str, object]:
     sent, and one an earlier run logged is not repeated. A 403 or 422 on a
     plan-gated write is `not offered`, never a disabled setting; on any other
     write it keeps retrofit's reading, since those are offered on every plan.
-    The probe runs only after a 201: on a refused ruleset an unprotected branch
-    would take the probe commit with nothing proved.
+    The probe runs after a 201, and again on a rerun that finds the ruleset
+    logged: on a refused ruleset an unprotected branch would take the probe
+    commit with nothing proved.
     """
     repository = arguments.repository
     repository_name(repository)
-    candidate = Path(load_required(arguments.records, "materialize")["candidate"])
+    materialized = load_required(arguments.records, "materialize")
+    candidate = Path(str(materialized["candidate"]))
+    template = require_git_repository(arguments.template_repo, "template repository")
+    body = ruleset_body(arguments.records, materialized, template)
     log = WriteLog(write_log_path(arguments.records))
     writes = {
         "merge-settings": lambda: write_merge_settings(repository, log),
@@ -602,7 +623,7 @@ def settings(arguments: argparse.Namespace) -> dict[str, object]:
             "security-updates", f"repos/{repository}/automated-security-fixes", log
         ),
         "push-protection": lambda: write_push_protection(repository, log),
-        "ruleset": lambda: write_ruleset(repository, RULESET, None, log),
+        "ruleset": lambda: write_ruleset(repository, body, None, log),
     }
     outcomes: dict[str, Outcome] = {}
     reasons: dict[str, str] = {}
@@ -616,9 +637,12 @@ def settings(arguments: argparse.Namespace) -> dict[str, object]:
             plan_limited = name in PLAN_GATED and refusal.status in ("403", "422")
             outcomes[name] = Outcome.NOT_OFFERED if plan_limited else refusal.outcome
             reasons[name] = str(refusal)
+    # A ruleset an earlier run created is probed again: that run's record is
+    # gone, so nothing shows its probe was refused, and a rerun is what follows
+    # a probe that failed.
     probed = (
         probe(candidate, arguments.default_branch)
-        if outcomes["ruleset"] == Outcome.DONE
+        if outcomes["ruleset"] in (Outcome.DONE, Outcome.LOGGED)
         else None
     )
     return {
@@ -627,7 +651,7 @@ def settings(arguments: argparse.Namespace) -> dict[str, object]:
         "default_branch": arguments.default_branch,
         "writes": outcomes,
         "reasons": reasons,
-        "required_contexts": ruleset_contexts(),
+        "required_contexts": ruleset_contexts(body),
         "probe": probed,
         "write_log": {"path": str(log.path), "entries": log.entries},
     }
@@ -1128,15 +1152,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     manifested.set_defaults(handler=manifest, record="manifest")
 
-    configured = subparsers.add_parser(
-        "settings",
-        parents=[recorded],
-        help="apply step 5's settings and ruleset, then probe the ruleset",
-    )
-    configured.add_argument("--repository", required=True, help="owner/name")
-    configured.add_argument("--default-branch", default="main")
-    configured.set_defaults(handler=settings, record="settings")
-
     def template_argument(command: argparse.ArgumentParser) -> None:
         command.add_argument(
             "--template-repo",
@@ -1144,6 +1159,16 @@ def build_parser() -> argparse.ArgumentParser:
             default=Path("."),
             help="the template checkout (default: the working directory)",
         )
+
+    configured = subparsers.add_parser(
+        "settings",
+        parents=[recorded],
+        help="apply step 5's settings and ruleset, then probe the ruleset",
+    )
+    configured.add_argument("--repository", required=True, help="owner/name")
+    configured.add_argument("--default-branch", default="main")
+    template_argument(configured)
+    configured.set_defaults(handler=settings, record="settings")
 
     body = subparsers.add_parser(
         "pr-body",
