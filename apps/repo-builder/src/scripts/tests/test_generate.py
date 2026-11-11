@@ -1067,10 +1067,6 @@ class SettingsTests(unittest.TestCase):
         """
         origin = Path(directory) / "origin.git"
         git("init", "-q", "--bare", "-b", "main", str(origin))
-        if refuses:
-            hook = origin / "hooks" / "pre-receive"
-            hook.write_text(GH013_HOOK)
-            hook.chmod(0o755)
         candidate = Path(directory) / "tmp" / "billing-service"
         candidate.mkdir(parents=True)
         git("init", "-q", "-b", "main", cwd=candidate)
@@ -1080,6 +1076,12 @@ class SettingsTests(unittest.TestCase):
         git("update-ref", "refs/heads/main", root, cwd=candidate)
         git("remote", "add", "origin", str(origin), cwd=candidate)
         git("push", "-q", "origin", "main", cwd=candidate)
+        # Installed after step 4's push, which the ruleset did not yet exist to
+        # refuse; a machine without a global core.hooksPath runs it.
+        if refuses:
+            hook = origin / "hooks" / "pre-receive"
+            hook.write_text(GH013_HOOK)
+            hook.chmod(0o755)
         Path(f"{self._records(directory)}.materialize.json").write_text(
             json.dumps(
                 {
