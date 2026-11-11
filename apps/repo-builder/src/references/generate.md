@@ -203,21 +203,38 @@ Personalize the candidate:
 
 ### Step 9 — Run the candidate's checks
 
-Install the candidate's pre-commit hooks by the shared recipe at [Working hooks in a candidate](lifecycle.md#working-hooks-in-a-candidate), which names generate's scope and verifies the install by its outcome. Then stage the candidate and run its documented checks as [Running the destination's checks](lifecycle.md#running-the-destinations-checks) directs. Git is already initialized and its remote already set, from steps 3 and 4. Staging matters twice over here: step 10 reads the tracked paths this stage produces.
+Install the candidate's pre-commit hooks with one command, the recipe of [Working hooks in a candidate](lifecycle.md#working-hooks-in-a-candidate) run by retrofit's own installer:
 
-What makes that outcome check worth the line here is what a missed install costs on this flow specifically: the candidate ships with no hooks, no secret scan, and no branch protection, and every later check still passes anyway, because each of them is a command this step runs directly rather than a hook git fires. `scripts/doctor` is what distinguishes the two: it reports `pre-commit pass` only when every hook type the config asks for is present in the directory git will actually consult. A `FAIL` naming missing hooks here is this step's failure, not the candidate's, and [Running the destination's checks](lifecycle.md#running-the-destinations-checks) carries the remedy. Do not publish a candidate whose hooks did not install.
+```bash
+python3 apps/repo-builder/src/scripts/generate.py hooks \
+  --records tmp/<repository-name>.<first 12 of the commit> \
+  --tree tmp/<repository-name>
+```
+
+It reads the types from the candidate's `pre_commit_hook_types`, writes the shims into the candidate's `.git/hooks`, pins `core.hooksPath` there at local scope, chains any hook a global `core.hooksPath` was running, and writes `<records>.hooks.json`: `hook_types`, `hooks_path`, `prior_hooks`, `moved_aside`, `chained` and `findings`. It exits 1 unless every configured type resolves in the directory git will consult, and records `not-applicable` for a payload with no `.pre-commit-config.yaml`. Do not publish a candidate whose hooks did not install.
+
+Then stage the candidate and run its documented checks as [Running the destination's checks](lifecycle.md#running-the-destinations-checks) directs. Git is already initialized and its remote already set, from steps 3 and 4. Staging matters twice over here: step 10 reads the tracked paths this stage produces.
 
 ### Step 10 — Verify the file list
 
-Verify the file list, not only the content. Compare the payload's tracked paths at the source commit against the candidate's, and account for every difference as intended or as a defect. A file the payload ships and the candidate lacks is invisible to every check, because a check reads content and absence has no runner. Compare against the working tree as well as the index: a path the destination ignores is present and untracked rather than missing, and `.env` and the `.claude/` tree are what the payload ships that way. Use `git ls-files` for the tracked comparison and `git ls-files -o -i --exclude-standard` for the untracked one; the flags are the whole point, since an ignored path appears in neither the plain form nor `-o --exclude-standard`, and the two disagree about those paths in the direction that reads as missing. Do not build either list with the file-discovery tools — `.env` matches a `permissions.deny` rule, so Glob and Grep omit it and a listing built from them reports it missing when it is there.
+Account for every path with one command, after step 9's stage:
 
-**An ignored payload path that appears in the tracked comparison is a defect**, and both totals read it as correct, so check the direction: `git ls-files | git check-ignore --no-index --stdin` names them, and the flag is required (`docs/adrs/0010-run-generates-fixed-steps-as-commands.md`). `git rm --cached <path>` is the remedy, `git rm -r --cached <dir>` where a whole tree went in.
+```bash
+python3 apps/repo-builder/src/scripts/generate.py filelist \
+  --records tmp/<repository-name>.<first 12 of the commit> \
+  --tree tmp/<repository-name> \
+  --commit <commit>
+```
 
-Report it alongside the account rather than only fixing it, because the cause is upstream of this step. Into an empty destination the candidate carries the payload's own `.gitignore` from the first commit, so no plain add can produce this and the path was force-added. Into one with content, and in a retrofit, it has a second cause with no `-f` anywhere, which [`generate-into-content.md`](generate-into-content.md) names.
+It compares the payload's tracked paths at the source commit with the candidate's, the first application standing where `apps/app-name/` stood, and writes `<records>.filelist.json`:
 
-The candidate also carries paths the payload does not ship, and each is an intended addition rather than a stray: `.repo-template.json` and the ADR at `docs/adrs/NNNN-<slug>.md` from step 8, `docs/adrs/index.md` regenerated from that ADR by the payload's own `adr-index` hook, and every `apps/<name>/` past the first from step 8. None of them is ignored, so they appear in the tracked comparison as candidate-only paths — the same shape a stray file has, which is why the account names them rather than counting them. `docs/adrs/index.md` is the one no step decides to write: the hook is `always_run`, so step 9's checks regenerate it from whatever ADRs step 8 wrote and fail until it is staged. It appears because a hook produced it, not because a step chose it. A repository whose `generation.features.issue_tracker` names local markdown rather than a host carries its `/wayfinder` map under `.scratch/` too, and that also ships: tracking issues as files in the repository is what that departure records.
+- `missing` — payload paths the candidate neither tracks nor holds ignored on disk.
+- `additions` and `strays` — candidate-only paths. An addition is `.repo-template.json`, an ADR at `docs/adrs/NNNN-<slug>.md`, `docs/adrs/index.md`, every `apps/<name>/` past the first, and `.scratch/` where `generation.features.issue_tracker` is recorded; anything else is a stray.
+- `ignored_present` — payload paths the candidate ignores and holds on disk, such as `.env` and the `.claude/` tree.
+- `ignored_tracked` — tracked paths the candidate's ignore rules exclude, each a defect. `git rm --cached <path>` is the remedy, `git rm -r --cached <dir>` where a whole tree went in. Report it alongside the account rather than only fixing it: into an empty destination the path was force-added, and into one with content [`generate-into-content.md`](generate-into-content.md) names a second cause.
+- `copy` — the copy proof of [Reviewing the pull request](reporting.md#reviewing-the-pull-request), from `update.py`: `identical`, `total` and the `authored` surface, the ignored paths proved against disk inside the one count.
 
-Then prove the copied files are copies as [Reviewing the pull request](reporting.md#reviewing-the-pull-request) directs, and read the authored surface it leaves. Do this here rather than after step 11, and read it closely: a bootstrap generate merges its own pull request at step 12, so this is the only reading that personalized surface gets.
+It exits 1 on a missing path, a stray, or an ignored-but-tracked path. Then read the `authored` surface line by line. Do this here rather than after step 11, and read it closely: a bootstrap generate merges its own pull request at step 12, so this is the only reading that personalized surface gets.
 
 ### Step 11 — Publish the candidate
 
