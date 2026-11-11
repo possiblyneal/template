@@ -197,7 +197,11 @@ python3 apps/repo-builder/src/scripts/generate.py hooks \
 
 It reads the types from the candidate's `pre_commit_hook_types`, writes the shims into the candidate's `.git/hooks`, pins `core.hooksPath` there at local scope, chains any hook a global `core.hooksPath` was running, and writes `<records>.hooks.json`: `hook_types`, `hooks_path`, `prior_hooks`, `moved_aside`, `chained` and `findings`. It exits 1 unless every configured type resolves in the directory git will consult, and records `not-applicable` for a payload with no `.pre-commit-config.yaml`. Do not publish a candidate whose hooks did not install.
 
-Then stage the candidate and run its documented checks as [Running the destination's checks](lifecycle.md#running-the-destinations-checks) directs. Git is already initialized and its remote already set, from steps 3 and 4. Staging matters twice over here: step 10 reads the tracked paths this stage produces.
+Then stage the candidate and run its documented checks as [Running the destination's checks](lifecycle.md#running-the-destinations-checks) directs. Git is already initialized and its remote already set, from steps 3 and 4. Staging matters twice over here: step 10 reads the tracked paths this stage produces. Save the gate's Result table where steps 11 and 14 render it from, the latest run overwriting it:
+
+```bash
+(cd tmp/<repository-name> && scripts/check) > tmp/<repository-name>.<first 12 of the commit>.check.txt
+```
 
 ### Step 10 — Verify the file list
 
@@ -222,7 +226,17 @@ It exits 1 on a missing path, a stray, or an ignored-but-tracked path. Then read
 
 ### Step 11 — Publish the candidate
 
-Publish the candidate, at the [remote action gate](lifecycle.md#remote-action-gates). Present the local diff, the file-list reconciliation, the check results, the settings state, and the exact pending commands. Then branch from the empty base, add the entire candidate and manifest, commit, push, and open a PR. Supply an explicit PR body, written to a file beside the candidate under this repository's `tmp/` (`tmp/<repository-name>.pr-body.md`, never inside the candidate, where it would enter the diff) and passed with `gh pr create --body-file <file>`; the operator's hooks refuse `--body-file -`. The reason is that this flow already holds the content the body needs — the diff, the reconciliation, the check results — and not that the base lacks a template to render: that is true of a bootstrap generate alone, and reading it as the general reason gets the rule wrong for every flow whose base does carry one. The host renders `PULL_REQUEST_TEMPLATE.md` from the base branch, and an explicit body suppresses it entirely, so fill the body against that template's own sections wherever the base has one.
+Publish the candidate, at the [remote action gate](lifecycle.md#remote-action-gates). Present the local diff, the file-list reconciliation, the check results, the settings state, and the exact pending commands. Then branch from the empty base, add the entire candidate and manifest, and commit. Render the body and publish:
+
+```bash
+python3 apps/repo-builder/src/scripts/generate.py pr-body \
+  --records tmp/<repository-name>.<first 12 of the commit> \
+  --tree tmp/<repository-name>
+python3 apps/repo-builder/src/scripts/generate.py publish \
+  --records tmp/<repository-name>.<first 12 of the commit>
+```
+
+`pr-body` writes `<records>.pr-body.md`, beside the candidate rather than inside it, where it would enter the diff: one section per `## ` heading of the candidate's `.github/PULL_REQUEST_TEMPLATE.md`, filled from the materialize, manifest, settings, hooks and filelist records and `<records>.check.txt`, and reports `path` and `slots`. A missing record fails naming it. Each slot is a `[[FILL: <name>: <what goes here>]]` line no record settles, Decisions' boundaries among them; replace every one by hand. The body is explicit because this flow already holds what it needs, not because the base lacks a template: the host renders `PULL_REQUEST_TEMPLATE.md` from the base branch, and an explicit body suppresses it, so the renderer fills that template's own sections. `publish` refuses a body still holding a `[[FILL:` slot and a candidate on its default branch, then pushes the branch and runs `gh pr create --body-file`, recording the URL as `pull_request` in `<records>.publish.json`.
 
 ### Step 12 — Verify the published repository
 
@@ -263,13 +277,25 @@ Give the operator a clone of the new repository registered in Orca, with an icon
 
    The record names the clone as the generating session's, so the operator's user-level hooks let that session edit, `rm` and `sed -i` in it as in its own checkout rather than prompting on every write. A reused clone and the operator's own are never recorded, a resumed generate included: either may hold work this session did not write, so every write there still asks.
 2. Choose one emoji for what the repository *is*: the subject the user described at step 2 and the deployables step 7 derived, never the template, the language, or the tooling. Prefer a concrete object the name or purpose evokes (🎙️ for a podcast app, 🩺 for a medical research tool) over a generic one; 📁, 💻 and 📦 say nothing Orca's default icon does not.
-3. Register and set it with `python3 apps/repo-builder/src/scripts/orca_icon.py --repository <clone> --emoji <emoji>`. The script adds the clone where Orca does not know it, keeps an emoji icon someone already chose (`status: kept`), and otherwise replaces whatever icon is there, the owner avatar Orca fills in for a GitHub remote included. The orca CLI has no icon flag, so the script sends the runtime's own `repo.update` request and checks that the icon it stored is the one sent. Exit 3 means Orca's runtime is not reachable: report the icon unset with that reason and the command under Pending action, without stopping the flow. Exit 2 is a refusal, reported with the runtime's error.
+3. Register and set it with `python3 apps/repo-builder/src/scripts/orca_icon.py --repository <clone> --emoji <emoji> --records <records>`, which writes the result to `<records>.orca.json` for step 14's report. The script adds the clone where Orca does not know it, keeps an emoji icon someone already chose (`status: kept`), and otherwise replaces whatever icon is there, the owner avatar Orca fills in for a GitHub remote included. The orca CLI has no icon flag, so the script sends the runtime's own `repo.update` request and checks that the icon it stored is the one sent. Exit 3 means Orca's runtime is not reachable: report the icon unset with that reason and the command under Pending action, without stopping the flow. Exit 2 is a refusal, reported with the runtime's error.
 
 The clone is the result, not scratch, so step 3's sweep never reaches it. Report it on the **Orca** line of [Final report](reporting.md#final-report).
 
 ### Step 14 — The first prompt
 
 The first prompt is written for a reader this session never speaks to: whoever opens the first working session in a fresh clone of the new repository. Everything this session knows about that repository's initial state dies with it otherwise — which checks are red on purpose, what the tracker holds, what a clone still has to install — and the next session rediscovers each one as a defect. Emit it as a fenced block so it can be copied whole, fill every placeholder from what actually happened rather than from this shape, and drop a line whose condition did not arise rather than shipping it empty. An update and an adopt write none: the destination already has working sessions. On a generate stopped at the wayfinding handoff the resume belongs to the operator of this session, not to a new one, so Pending action carries it and this section is still omitted.
+
+Render the whole report, this section included, from the records once step 12's sweep has run:
+
+```bash
+python3 apps/repo-builder/src/scripts/generate.py report \
+  --records tmp/<repository-name>.<first 12 of the commit> \
+  --repository <owner>/<name> \
+  --visibility <public | private | internal> \
+  [--stopped "<what remains>"]
+```
+
+It requires the materialize, bootstrap, settings, manifest, hooks, filelist and orca records, the labels record unless `generation.features.issue_tracker` is recorded, and `<records>.check.txt`; a missing one fails naming it. It writes `<records>.report.md` in [Final report](reporting.md#final-report)'s shape without the sections and lines an empty destination never has (Reconciliation, Drift, Merge settings overwritten, Resumption), reads the Pull request line from `<records>.publish.json`, and reports `path` and `slots`. Each slot is a `[[FILL: <name>: <what goes here>]]` line no record settles: the boundaries, the addons, the default branch's run after the merge, and in this section the tickets and the first manifest's tools; replace every one before showing the report. `--stopped` renders the status as stopped, makes Pending action a slot, and omits this section.
 
 It is the report's last section, **First prompt**, added after **Pending action** at the same heading level as the shape's own sections, and its first line is the instruction to the reader:
 

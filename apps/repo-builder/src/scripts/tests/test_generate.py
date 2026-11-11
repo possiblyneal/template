@@ -1185,5 +1185,249 @@ class SettingsTests(unittest.TestCase):
             self.assertIn(landed, json.loads(result.stderr)["error"])
 
 
+SUMMARY_PASS = "lint               pass             ruff\ntest               pass             pytest\n"
+AUTHORED = [".repo-template.json", "CLAUDE.md", "apps/billing-api/.unit.json"]
+# One record per step that writes one, as a finished generate leaves them.
+RECORDS: dict[str, dict[str, object]] = {
+    "materialize": {
+        "ok": True,
+        "default_branch": "main",
+        "head": "refs/heads/main",
+        "payload_paths": 40,
+    },
+    "bootstrap": {"ok": True, "default_branch": "main", "root": "a" * 40},
+    "settings": {
+        "ok": True,
+        "writes": {
+            "merge-settings": "done",
+            "dependabot-alerts": "done",
+            "security-updates": "done",
+            "push-protection": "not offered",
+            "ruleset": "done",
+        },
+        "reasons": {"push-protection": "Upgrade to GitHub Pro (HTTP 403)"},
+        "required_contexts": ["CI", "Security", "Code scanning enabled"],
+        "probe": {"commit": "b" * 40, "outcome": "refused", "detail": "GH013"},
+    },
+    "labels": {
+        "ok": True,
+        "created": ["perf", "wayfinder:map"],
+        "renamed": [{"from": "Bug", "to": "bug"}],
+        "existing": ["bug"],
+        "kept": [],
+    },
+    "manifest": {"ok": True, "features": {}, "applications": ["billing-api"]},
+    "hooks": {
+        "ok": True,
+        "outcome": "installed",
+        "hook_types": ["pre-commit", "commit-msg"],
+        "hooks_path": "/x/tmp/billing-service/.git/hooks",
+        "prior_hooks": {"path": "/x/hooks", "scope": "global"},
+        "moved_aside": [],
+        "chained": [],
+        "findings": [],
+    },
+    "filelist": {
+        "ok": True,
+        "payload_paths": 40,
+        "tracked_paths": 40,
+        "missing": [],
+        "additions": [
+            ".repo-template.json",
+            "docs/adrs/0001-write-billing-api-in-python.md",
+            "docs/adrs/index.md",
+        ],
+        "strays": [],
+        "ignored_present": [".env"],
+        "ignored_tracked": [],
+        "copy": {"identical": 38, "total": 41, "authored": AUTHORED},
+    },
+    "orca": {
+        "ok": True,
+        "repository": "/home/operator/code/billing-service",
+        "registered": "added",
+        "status": "set",
+        "icon": {"type": "emoji", "emoji": "\U0001f4b3"},
+    },
+    "publish": {
+        "ok": True,
+        "pull_request": "https://github.com/acme/billing-service/pull/1",
+    },
+}
+PR_TEMPLATE = PAYLOAD / ".github" / "PULL_REQUEST_TEMPLATE.md"
+
+
+class RenderTests(unittest.TestCase):
+    """Steps 11 and 14: the body and the report, rendered from the records."""
+
+    def _records(self, directory: str, *, without: str = "") -> tuple[dict, str]:
+        """A finished generate's records, against a template whose payload has
+        one workflow a pull request triggers and one it never does."""
+        fixture = generation_fixture(directory)
+        template = Path(fixture["template_repo"])
+        workflows = template / fixture["subtree"] / ".github" / "workflows"
+        workflows.mkdir(parents=True)
+        (workflows / "ci.yml").write_text("on:\n  pull_request:\n")
+        (workflows / "release.yml").write_text("on:\n  push:\n    tags: ['v*']\n")
+        git("add", "-A", cwd=template)
+        git("commit", "-q", "-m", "chore: workflows", cwd=template)
+        commit = git_output("rev-parse", "HEAD", cwd=template)
+        records = str(template / "tmp" / f"billing-service.{commit[:12]}")
+        Path(records).parent.mkdir(exist_ok=True)
+        candidate = template / "tmp" / "billing-service"
+        documents = json.loads(json.dumps(RECORDS))
+        documents["materialize"] |= {"candidate": str(candidate), "commit": commit}
+        documents["filelist"]["template"] = {
+            "subtree": fixture["subtree"],
+            "commit": commit,
+        }
+        for name, document in documents.items():
+            if name != without:
+                Path(f"{records}.{name}.json").write_text(json.dumps(document))
+        if without != "check":
+            Path(f"{records}.check.txt").write_text(SUMMARY_PASS)
+        return fixture, records
+
+    def test_a_full_record_set_leaves_slots_only_for_judgement(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture, records = self._records(directory)
+
+            result = run_generate(
+                "report",
+                "--records",
+                records,
+                "--repository",
+                "acme/billing-service",
+                "--visibility",
+                "private",
+                cwd=fixture["template_repo"],
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            output = json.loads(result.stdout)
+            report = Path(output["path"]).read_text()
+            self.assertEqual(output["path"], f"{records}.report.md")
+            self.assertEqual(
+                sorted(slot.split(":")[0] for slot in output["slots"]),
+                ["addons", "boundaries", "default-branch", "first-manifest", "tickets"],
+            )
+            self.assertEqual(report.count("[[FILL:"), len(output["slots"]))
+            commit = json.loads(Path(f"{records}.materialize.json").read_text())[
+                "commit"
+            ]
+            for line in (
+                "- Status: finished",
+                "- Operation: generate",
+                "- Pull request: https://github.com/acme/billing-service/pull/1",
+                f"- Template: not previously generated -> {commit}",
+                "- Destination: acme/billing-service",
+                (
+                    "- Orca: /home/operator/code/billing-service registered, "
+                    "icon \U0001f4b3 set"
+                ),
+                "- ADRs written: docs/adrs/0001-write-billing-api-in-python.md",
+                "- Authored surface: " + ", ".join(AUTHORED),
+                "- Push protection: unavailable (Upgrade to GitHub Pro (HTTP 403))",
+                (
+                    "- Branch ruleset: enabled; probe refused with GH013; requires "
+                    "CI, Security, Code scanning enabled"
+                ),
+                (
+                    "- Issue tracker: GitHub Issues via gh (the default); labels: "
+                    "created (perf, wayfinder:map); renamed to the spelling in force "
+                    "(Bug -> bug; label search is case-sensitive, so anything pinned "
+                    "to the old string stops matching); already present (bug)"
+                ),
+                "- `scripts/check`: pass",
+                (
+                    "- Copied paths byte-identical to their source: 38/41; the rest are "
+                    "the authored surface, under File list"
+                ),
+                (
+                    "- Workflows the pull-request event never ran: "
+                    ".github/workflows/release.yml"
+                ),
+                "### Pending action",
+                "Work acme/billing-service in /home/operator/code/billing-service.",
+            ):
+                self.assertIn(line, report)
+            self.assertIn("skipped CodeQL detect and analyze legs", report)
+            for dropped in ("### Reconciliation", "Drift", "### Resumption"):
+                self.assertNotIn(dropped, report)
+
+    def test_a_missing_record_fails_naming_it(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture, records = self._records(directory, without="hooks")
+
+            result = run_generate(
+                "report",
+                "--records",
+                records,
+                "--repository",
+                "acme/billing-service",
+                "--visibility",
+                "public",
+                cwd=fixture["template_repo"],
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn(f"{records}.hooks.json", json.loads(result.stderr)["error"])
+            self.assertFalse(Path(f"{records}.report.md").exists())
+
+    def test_the_body_has_one_section_per_template_heading(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture, records = self._records(directory)
+            tree = Path(directory) / "candidate"
+            (tree / ".github").mkdir(parents=True)
+            shutil.copy(PR_TEMPLATE, tree / ".github" / "PULL_REQUEST_TEMPLATE.md")
+
+            result = run_generate(
+                "pr-body",
+                "--records",
+                records,
+                "--tree",
+                str(tree),
+                cwd=fixture["template_repo"],
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            output = json.loads(result.stdout)
+            self.assertEqual(output["path"], f"{records}.pr-body.md")
+            body = Path(output["path"]).read_text()
+            headings = [
+                line
+                for line in PR_TEMPLATE.read_text().splitlines()
+                if line.startswith("## ")
+            ]
+            self.assertEqual(
+                [line for line in body.splitlines() if line.startswith("## ")],
+                headings,
+            )
+            self.assertEqual(
+                [slot.split(":")[0] for slot in output["slots"]], ["boundaries"]
+            )
+            self.assertIn("- `CLAUDE.md`", body)
+            self.assertIn(SUMMARY_PASS.splitlines()[0], body)
+
+    def test_a_body_still_holding_a_slot_is_refused_at_publish(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            _, records = materialized_candidate(directory)
+            Path(f"{records}.pr-body.md").write_text(
+                "## Decisions\n\n[[FILL: boundaries: one line per deployable]]\n"
+            )
+
+            result = run_generate(
+                "publish",
+                "--records",
+                records,
+                cwd=directory,
+                env=stub_gh(directory, []),
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("[[FILL:", json.loads(result.stderr)["error"])
+            self.assertEqual(gh_calls(directory), [])
+
+
 if __name__ == "__main__":
     unittest.main()

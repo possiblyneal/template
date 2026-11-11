@@ -34,14 +34,27 @@ from preflight import (
     validate_manifest,
 )
 from retrofit import (
+    HOSTED_WRITES,
+    PULL_REQUEST_TRIGGER,
     Outcome,
     Refusal,
+    Report,
+    Slot,
     WriteLog,
+    command_result,
+    failing,
     hook_types,
     install_hooks,
+    joined,
+    load,
     load_required,
+    orca_line,
     prior_hooks,
+    read_summary,
     record_path,
+    required_record,
+    run_tool,
+    setting_line,
     write_labels,
     write_log_path,
     write_merge_settings,
@@ -49,7 +62,7 @@ from retrofit import (
     write_ruleset,
     write_toggle,
 )
-from update import copy_proof
+from update import SLOT, copy_proof
 
 SCHEMA_VERSION = 1
 # GitHub's own alphabet for a repository name, which also keeps the candidate
@@ -620,6 +633,411 @@ def settings(arguments: argparse.Namespace) -> dict[str, object]:
     }
 
 
+def publish(arguments: argparse.Namespace) -> dict[str, object]:
+    """Push the candidate's branch and open its pull request with the rendered body.
+
+    A body still holding a slot is refused before anything leaves the machine,
+    since the host would publish the marker as the reviewer's text.
+    """
+    body = required_record(arguments.records, "pr-body.md")
+    if SLOT in body.read_text(encoding="utf-8"):
+        raise PreflightError(f"{body} still holds a {SLOT} slot; fill it first")
+    candidate, materialized = materialized_candidate(arguments.records)
+    base = materialized["default_branch"]
+    branch = git_output(candidate, "branch", "--show-current")
+    if branch in ("", base):
+        raise PreflightError(
+            f"the candidate is on {branch or 'no branch'}; publish from a branch off {base}"
+        )
+    pushed = run_git(candidate, "push", "-q", "-u", "origin", branch, check=False)
+    if pushed.returncode != 0:
+        raise PreflightError(f"push of {branch} refused: {pushed.stderr.strip()}")
+    created = run_tool(
+        candidate,
+        "gh",
+        "pr",
+        "create",
+        "--base",
+        base,
+        "--head",
+        branch,
+        "--title",
+        git_output(candidate, "log", "-1", "--format=%s"),
+        "--body-file",
+        str(body),
+    )
+    if created.returncode != 0:
+        raise PreflightError(f"gh pr create failed: {created.stderr.strip()}")
+    return {
+        "operation": "publish",
+        "branch": branch,
+        "pull_request": created.stdout.strip(),
+    }
+
+
+# The judgements no record settles, left as `[[FILL: ...]]` slots for the
+# session to write by hand before the body is published or the report shown.
+SLOTS = {
+    "boundaries": Slot(
+        "one line per deployable, `<name>: choke point <constraint> -> <language>, "
+        "<how it was selected>`, then the Wayfinding line"
+    ),
+    "addons": Slot(
+        "each addon taken and its slots filled or OUTSTANDING, then those offered "
+        "and not taken on one line"
+    ),
+    "default-branch": Slot(
+        "the check-suite result of the default branch's run after the bootstrap merge"
+    ),
+    "pending-action": Slot("the exact decision or authorization needed"),
+    "tickets": Slot("the open ticket count, then the first with no open blocker"),
+    "first-manifest": Slot(
+        "the declarations the selected language owes, from lifecycle.md "
+        '"Tools the first manifest must declare", or none, <language> declares no tools'
+    ),
+}
+ROOT_MANIFEST_STATE = (
+    'the absent root manifest, which scripts/check reports as "No project manifest '
+    "found, so there is nothing to check yet. Every check becomes required as soon "
+    'as a manifest is added."'
+)
+
+
+def tracker_of(manifested: dict) -> str | None:
+    tracker = manifested.get("features", {}).get("issue_tracker")
+    return str(tracker) if tracker else None
+
+
+def labels_line(labelled: dict, tracker: str | None) -> str:
+    if tracker:
+        return f"none created (the tracker is {tracker}, not GitHub Issues)"
+    kept = {item["label"]: item["reason"] for item in labelled["kept"]}
+    parts = []
+    if labelled["created"]:
+        parts.append(f"created ({', '.join(labelled['created'])})")
+    if labelled["renamed"]:
+        renames = ", ".join(
+            f"{item['from']} -> {item['to']}" for item in labelled["renamed"]
+        )
+        parts.append(
+            f"renamed to the spelling in force ({renames}; label search is "
+            "case-sensitive, so anything pinned to the old string stops matching)"
+        )
+    if labelled["existing"]:
+        present = [
+            f"{name} ({kept[name]})" if name in kept else name
+            for name in labelled["existing"]
+        ]
+        parts.append(f"already present ({', '.join(present)})")
+    return "; ".join(parts)
+
+
+def settings_lines(configured: dict) -> list[str]:
+    """One line per write `settings` sent, the ruleset's carrying its probe."""
+    writes, reasons = configured["writes"], configured["reasons"]
+    lines = []
+    for write in HOSTED_WRITES:
+        if write.setting is None or write.name not in writes:
+            continue
+        outcome = writes[write.name]
+        line = setting_line(write.setting, outcome, reasons.get(write.name), True, None)
+        if write.name == "ruleset" and outcome in (Outcome.DONE, Outcome.LOGGED):
+            line += (
+                "; probe refused with GH013"
+                if configured["probe"]
+                else "; not probed (written by an earlier run)"
+            )
+            line += f"; requires {', '.join(configured['required_contexts'])}"
+        lines.append(line)
+    return lines
+
+
+def hooks_line(hooked: dict) -> str:
+    if hooked["outcome"] == "not-applicable":
+        return (
+            "- Hooks: none installed, because the candidate carries no "
+            "`.pre-commit-config.yaml` to read hook types from"
+        )
+    if hooked["outcome"] != "installed":
+        return (
+            f"- Hooks: NOT installed into {hooked['hooks_path']}: "
+            f"{joined(hooked['findings'])}"
+        )
+    prior = hooked["prior_hooks"]
+    chained = [
+        f"{item['hook']} {item['disposition']}"
+        + (f" as {item['as']}" if item.get("as") else "")
+        for item in hooked["chained"]
+    ]
+    return (
+        f"- Hooks: installed at local scope into {hooked['hooks_path']}; prior "
+        f"hooks: {prior['path']} ({prior['scope']}), chained: {joined(chained)}"
+    )
+
+
+def copy_line(listed: dict) -> str:
+    copy = listed["copy"]
+    return (
+        f"- Copied paths byte-identical to their source: {copy['identical']}/"
+        f"{copy['total']}; the rest are the authored surface, under File list"
+    )
+
+
+def unrun_workflows(template: Path, listed: dict) -> list[str]:
+    """Payload workflows no `pull_request` trigger reaches, at the source commit.
+
+    Read from the template rather than the candidate, which is swept by the
+    time the report renders.
+    """
+    commit, subtree = listed["template"]["commit"], listed["template"]["subtree"]
+    folder = f"{subtree}/.github/workflows"
+    names = nul_fields(template, "ls-tree", "-z", "--name-only", f"{commit}:{folder}")
+    return [
+        f".github/workflows/{name}"
+        for name in sorted(names)
+        if name.endswith((".yml", ".yaml"))
+        and not PULL_REQUEST_TRIGGER.search(
+            git_output(template, "show", f"{commit}:{folder}/{name}")
+        )
+    ]
+
+
+def render_report(arguments: argparse.Namespace) -> dict[str, object]:
+    """Render a generate's final report from the records its steps wrote.
+
+    The shape is reporting.md's Final report less what an empty destination
+    never has: Reconciliation, the drift and merge-settings-overwritten lines,
+    and Resumption. Step 14's handover follows Pending action. Every count,
+    setting and outcome is read from a record; only judgement is a slot.
+    """
+    prefix = arguments.records
+    materialized = load_required(prefix, "materialize")
+    # Read for its presence: the empty root it pushed is what the merge lands on.
+    load_required(prefix, "bootstrap")
+    configured = load_required(prefix, "settings")
+    manifested = load_required(prefix, "manifest")
+    tracker = tracker_of(manifested)
+    labelled = {} if tracker else load_required(prefix, "labels")
+    hooked = load_required(prefix, "hooks")
+    listed = load_required(prefix, "filelist")
+    orca = load_required(prefix, "orca")
+    rows = read_summary(required_record(prefix, "check.txt"))
+    template = require_git_repository(arguments.template_repo, "template repository")
+    published = load(prefix, "publish")
+    stopped = arguments.stopped
+
+    report = Report({}, SLOTS)
+    fill = report.fill
+    report.add(
+        "## Repo Builder Result",
+        "",
+        f"- Status: stopped ({stopped})" if stopped else "- Status: finished",
+        "- Operation: generate",
+        f"- Pull request: {published.get('pull_request') or 'not created'}",
+        f"- Template: not previously generated -> {materialized['commit']}",
+        f"- Destination: {arguments.repository}",
+        f"- Orca: {orca_line(orca)}",
+    )
+    report.section("### Application boundaries")
+    adrs = [path for path in listed["additions"] if ADR.match(path)]
+    report.add(fill("boundaries"), f"- ADRs written: {joined(adrs)}")
+
+    report.section("### File list")
+    report.add(
+        f"- Payload paths: {listed['payload_paths']}, the first application in "
+        f"apps/app-name/'s place; tracked: {listed['tracked_paths']}; missing: "
+        f"{joined(listed['missing'])}; strays: {joined(listed['strays'])}; held "
+        f"ignored on disk: {joined(listed['ignored_present'])}; ignored but "
+        f"tracked: {joined(listed['ignored_tracked'])}; additions: "
+        f"{joined(listed['additions'])}",
+        f"- Authored surface: {joined(listed['copy']['authored'])}",
+    )
+    report.section("### Addon adoption")
+    report.add(fill("addons"))
+
+    report.section("### Repository settings")
+    default = "GitHub Issues via gh (the default)"
+    recorded = tracker and f"{tracker}, recorded in generation.features.issue_tracker"
+    report.add(
+        *settings_lines(configured),
+        f"- Issue tracker: {recorded or default}; labels: "
+        f"{labels_line(labelled, tracker)}",
+    )
+
+    report.section("### Verification")
+    report.add(f"- `scripts/check`: {command_result(rows)}")
+    for row in failing(rows):
+        report.add(*(f"  - {row.check}: {finding}" for finding in row.findings))
+    report.add(
+        hooks_line(hooked),
+        copy_line(listed),
+        "- Workflows the pull-request event never ran: "
+        f"{joined(unrun_workflows(template, listed))}",
+        "- Code review: skipped, as reporting.md's Reviewing the pull request directs",
+        f"- Default branch after merge: {fill('default-branch')}",
+    )
+
+    report.section("### Cleanup")
+    candidate = Path(materialized["candidate"])
+    if not candidate.exists():
+        fate = f"removed from {candidate}"
+    elif stopped:
+        fate = f"left standing at {candidate}, because the flow stopped and resumes from it"
+    else:
+        fate = f"left standing at {candidate}, not swept"
+    report.add(
+        f"- Candidate: {fate}",
+        f"- Scratch outside the candidate: {prefix}.*: kept, because this report "
+        "is rendered from them",
+        f"- Left for the operator: {joined(hooked['findings'])}",
+    )
+    report.section("### Pending action")
+    report.add(fill("pending-action") if stopped else "none")
+    if not stopped:
+        handover(report, arguments, orca, tracker)
+
+    output = record_path(prefix, "report.md")
+    output.write_text("\n".join(report.lines) + "\n", encoding="utf-8")
+    return {"operation": "report", "path": str(output), "slots": report.slots}
+
+
+def handover(
+    report: Report, arguments: argparse.Namespace, orca: dict, tracker: str | None
+) -> None:
+    """Step 14's first prompt, for the session that opens the new clone."""
+    clone = orca.get("repository") if orca.get("registered") else None
+    expected = [ROOT_MANIFEST_STATE]
+    if arguments.visibility != "public":
+        expected.append(
+            f"the skipped CodeQL detect and analyze legs on a {arguments.visibility} "
+            'destination, per lifecycle.md "Code scanning lands everywhere and '
+            'decides at run time"'
+        )
+    report.section("### First prompt")
+    report.add(
+        "",
+        "Copy this into the first session opened in a clone of the new repository:",
+        "",
+        "```text",
+        f"Work {arguments.repository} in {clone or 'a fresh clone'}.",
+        "Install the hooks there: `pre-commit install`, or, if that refuses because "
+        "a `core.hooksPath` is already set on this machine, `pre-commit "
+        "init-templatedir` into a directory of its own with `core.hooksPath` pointed "
+        "at it. Nothing else installs them, and without them commits land "
+        "unattributed and unchecked. Then read the root `CLAUDE.md` before touching "
+        "anything.",
+        "",
+        f"The plan of record is {tracker or 'GitHub Issues'}, not this message. "
+        f"{report.fill('tickets')}. Start there.",
+        "",
+        f"Expected initial state, not defects: {'; '.join(expected)}.",
+        "",
+        "The first root manifest owes the checks their tools: "
+        f"{report.fill('first-manifest')}. An undeclared tool reports `unavailable`, "
+        "which fails the run.",
+        "",
+        "Branch before you commit; a commit made on `main` is refused at the hook.",
+        "```",
+    )
+
+
+def render_pr_body(arguments: argparse.Namespace) -> dict[str, object]:
+    """Fill the candidate's pull-request template from the records.
+
+    Headings are the template's `## ` lines in order, which the host would
+    have rendered had the base carried one. What the records settle is
+    written; a heading they do not cover becomes a `[[FILL: <name>]]` slot.
+    """
+    prefix = arguments.records
+    materialized = load_required(prefix, "materialize")
+    manifested = load_required(prefix, "manifest")
+    configured = load_required(prefix, "settings")
+    hooked = load_required(prefix, "hooks")
+    listed = load_required(prefix, "filelist")
+    check = required_record(prefix, "check.txt").read_text(encoding="utf-8")
+    template_file = arguments.tree / ".github" / "PULL_REQUEST_TEMPLATE.md"
+    if not template_file.is_file():
+        raise PreflightError(f"missing {template_file}")
+    headings = [
+        line
+        for line in template_file.read_text(encoding="utf-8").splitlines()
+        if line.startswith("## ")
+    ]
+    template = require_git_repository(arguments.template_repo, "template repository")
+    copy = listed["copy"]
+    report = Report({}, SLOTS)
+    applications = manifested.get("applications") or []
+    sections = {
+        "## Intent": [
+            (
+                "Generates this repository from the repository template at "
+                f"{materialized['commit'][:12]}, recorded in `.repo-template.json`, onto "
+                f"the empty root commit, with the applications {joined(applications)}."
+            )
+        ],
+        "## Read first": [
+            *(f"- `{path}`" for path in copy["authored"]),
+            "",
+            (
+                f"The other {copy['identical']} copied paths are byte-identical to the "
+                "payload at that commit and safe to skim."
+            ),
+        ],
+        "## Decisions": [report.fill("boundaries")],
+        "## Out of scope": [
+            (
+                "- The root manifest: wayfinding selects a language, not a package "
+                "manager, version or layout, so the first real commit brings it."
+            )
+        ],
+        "## Verified": [
+            "`scripts/check` on the candidate:",
+            "",
+            "```",
+            check.rstrip(),
+            "```",
+            "",
+            copy_line(listed),
+            hooks_line(hooked),
+            *settings_lines(configured),
+        ],
+        "## Not verified": [
+            (
+                "- Code review skipped: the copied lines were reviewed in the template "
+                "repository and the copy proof stands in for it; the authored surface "
+                "is under Read first."
+            ),
+            (
+                "- Workflows with no `pull_request` trigger, which this pull request "
+                f"never ran: {joined(unrun_workflows(template, listed))}"
+            ),
+            "- The default branch's own run, which starts only once this merges.",
+        ],
+        "## Merge danger": [
+            (
+                "**Door:** two-way: a revert restores the tree; the settings, ruleset "
+                "and labels were written before this pull request and stay either way"
+            ),
+            "",
+            (
+                "**Blast radius:** a new repository whose default branch holds only the "
+                "empty root commit; nothing else reads it yet"
+            ),
+        ],
+    }
+    lines: list[str] = []
+    for heading in headings:
+        body = sections.get(heading)
+        if body is None:
+            name = heading[3:].lower()
+            report.slots.append(name)
+            body = [f"[[FILL: {name}]]"]
+        lines += [heading, "", *body, ""]
+    output = record_path(prefix, "pr-body.md")
+    output.write_text("\n".join(lines), encoding="utf-8")
+    return {"operation": "pr-body", "path": str(output), "slots": report.slots}
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -718,6 +1136,43 @@ def build_parser() -> argparse.ArgumentParser:
     configured.add_argument("--repository", required=True, help="owner/name")
     configured.add_argument("--default-branch", default="main")
     configured.set_defaults(handler=settings, record="settings")
+
+    def template_argument(command: argparse.ArgumentParser) -> None:
+        command.add_argument(
+            "--template-repo",
+            type=Path,
+            default=Path("."),
+            help="the template checkout (default: the working directory)",
+        )
+
+    body = subparsers.add_parser(
+        "pr-body",
+        parents=[recorded],
+        help="fill the candidate's pull-request template from the records",
+    )
+    body.add_argument("--tree", type=Path, required=True, help="the candidate")
+    template_argument(body)
+    body.set_defaults(handler=render_pr_body)
+
+    published = subparsers.add_parser(
+        "publish",
+        parents=[recorded],
+        help="push the candidate's branch and open its pull request",
+    )
+    published.set_defaults(handler=publish, record="publish")
+
+    rendered = subparsers.add_parser(
+        "report",
+        parents=[recorded],
+        help="render the final report and step 14's handover from the records",
+    )
+    rendered.add_argument("--repository", required=True, help="owner/name")
+    rendered.add_argument(
+        "--visibility", required=True, choices=["public", "private", "internal"]
+    )
+    rendered.add_argument("--stopped", help="what remains, on a stopped run")
+    template_argument(rendered)
+    rendered.set_defaults(handler=render_report)
     return parser
 
 
@@ -728,10 +1183,13 @@ def fail(message: str, status: int = 2) -> NoReturn:
 
 def main() -> int:
     arguments = build_parser().parse_args()
+    # A renderer writes Markdown, not a record of its own.
+    name = getattr(arguments, "record", None)
+    record = record_path(arguments.records, f"{name}.json") if name else None
     # A step that fails leaves no record, so a renderer never reads an earlier
     # run's result as this one's.
-    record = record_path(arguments.records, f"{arguments.record}.json")
-    record.unlink(missing_ok=True)
+    if record:
+        record.unlink(missing_ok=True)
     try:
         result = arguments.handler(arguments)
     except PreflightError as error:
@@ -739,7 +1197,8 @@ def main() -> int:
     # A step that ran and found defects sets `ok` false: recorded, exit 1.
     reported = {"ok": True, "schema_version": SCHEMA_VERSION, **result}
     output = json.dumps(reported, indent=2, sort_keys=True)
-    record.write_text(output + "\n")
+    if record:
+        record.write_text(output + "\n")
     print(output)
     return 0 if reported["ok"] else 1
 
