@@ -129,7 +129,7 @@ dev = [
 dev = [
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-xdist", specifier = ">=3" },
-    { name = "ruff", specifier = ">=0.14" },
+    { name = "ruff", specifier = ">=0.16" },
     { name = "ty", specifier = ">=0.0.1a21" },
 ]
 
