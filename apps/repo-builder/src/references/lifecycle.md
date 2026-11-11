@@ -1,8 +1,8 @@
 # Repo Builder Lifecycle Contract
 
-This file holds what is true regardless of operation: the manifest, ownership, how checks are run and reported, the remote gates, and failure behavior. Reviewing and reporting are in [`reporting.md`](reporting.md), read at the end of a flow. Read this file, then the one flow being performed; a retrofit and an update read no section of it whole, since [`retrofit.md`](retrofit.md) and [`update.md`](update.md) state the rules they need inline, each linking its section for the reasoning.
+This file holds what is true regardless of operation: the manifest, ownership, how checks are run and reported, the remote gates, and failure behavior. Reviewing and reporting are in [`reporting.md`](reporting.md), read at the end of a flow. An adopt reads this file, then its flow; a generate, a retrofit and an update read no section of it whole, since [`generate.md`](generate.md), [`retrofit.md`](retrofit.md) and [`update.md`](update.md) state the rules they need inline, each linking its section for the reasoning.
 
-- [`generate.md`](generate.md) — build a repository from the payload, including into a destination that already has content
+- [`generate.md`](generate.md) — build a repository from the payload, and [`generate-into-content.md`](generate-into-content.md) for a destination that already has content
 - [`update.md`](update.md) — carry a bounded template delta into a repository already generated from it
 - [`adopt.md`](adopt.md) — land a held-back repository addon whose condition has arrived
 
@@ -135,7 +135,7 @@ Bound: the overlay of an absent path, a collision disposed to the payload, the i
 `.gitignore` is managed, and a destination's own ignore rules are destination intent like any other edit to a managed file. Dropping one is not a cosmetic loss: every path it ignored becomes untracked at the next `git add -A`, so a cache, a build directory, or a secret file rides into a commit with no `-f` anywhere. So no flow drops a destination-only rule by replacing the file:
 
 - **Update** reconciles it under its [four rules](update.md) like any managed delta path. A rule only the destination added is destination change the template did not make, and survives; where the payload changed the file too, the two are combined.
-- **Generate into a repository that already has content** decides it as a collision under [rule 3](generate.md#into-a-repository-that-already-has-content), and rule 4 forbids resolving it by deleting the destination's rules.
+- **Generate into a repository that already has content** decides it as a collision under [rule 3](generate-into-content.md#into-a-repository-that-already-has-content), and rule 4 forbids resolving it by deleting the destination's rules.
 - **Retrofit** is the one flow that replaces it outright, under [Step 6 — Reconcile the destination's layout](retrofit-step-6-layout.md#step-6--reconcile-the-destinations-layout), because that is where a destination's layout is first brought onto the payload's and every uncovered rule is reported, stopped on where un-ignoring changes the check surface, and checked again for untracked files at the bar. Those checks are what make replacing safe there, and no other flow carries them.
 
 ## The automation directory is replaced, not reconciled
@@ -146,7 +146,7 @@ Bound: the overlay of an absent path, a collision disposed to the payload, the i
 
 The replacement is not declinable and has no `features` entry. A refusal is a refusal of the flow, not of one directory.
 
-**The carve-out is exactly that path prefix.** Rule 4 of [Into a repository that already has content](generate.md#into-a-repository-that-already-has-content), never delete destination content to resolve a collision, still binds everywhere else. A destination's own `docs/agents/` files are product the payload no longer ships, and step 6 reads them as departures.
+**The carve-out is exactly that path prefix.** Rule 4 of [Into a repository that already has content](generate-into-content.md#into-a-repository-that-already-has-content), never delete destination content to resolve a collision, still binds everywhere else. A destination's own `docs/agents/` files are product the payload no longer ships, and step 6 reads them as departures.
 
 A destination's own `PULL_REQUEST_TEMPLATE.md` and `ISSUE_TEMPLATE/` go too, since they are inside the prefix. Name them in the report as a loss. Where the destination had its own `.github/PULL_REQUEST_TEMPLATE/` directory, [addon adoption](addon-adoption.md) offers the payload's `release.md` and `hotfix.md` back afterwards; say so in the same report line.
 

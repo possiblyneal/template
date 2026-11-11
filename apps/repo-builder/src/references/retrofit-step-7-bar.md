@@ -31,7 +31,7 @@ The ownership array is the payload's default. **A destination path still matchin
 
 **The record carries no field naming the flow, no list of layout moves, no run or ship facts beside the unit names, and no destination-specific ownership entry**: an update could branch on any field it can read.
 
-**A destination's own `docs/agents/` files become departures here**, as generate's [Into a repository that already has content](generate.md#into-a-repository-that-already-has-content) reads them: keep the files, read each against the defaults, and record under `generation.features` a tracker that is not GitHub Issues via `gh` as `issue_tracker`, a role carrying another label string in `triage_labels`, and pull requests treated as requests as `prs_are_requests: true`. A file matching the defaults records nothing. The proofs record's `issue_tracker` and step 8's labels read what is recorded.
+**A destination's own `docs/agents/` files become departures here**, as generate's [Into a repository that already has content](generate-into-content.md#into-a-repository-that-already-has-content) reads them: keep the files, read each against the defaults, and record under `generation.features` a tracker that is not GitHub Issues via `gh` as `issue_tracker`, a role carrying another label string in `triage_labels`, and pull requests treated as requests as `prs_are_requests: true`. A file matching the defaults records nothing. The proofs record's `issue_tracker` and step 8's labels read what is recorded.
 
 ## The tool declaration and dependabot
 

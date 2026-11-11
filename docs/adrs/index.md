@@ -13,3 +13,4 @@
 | [0007](0007-carry-agent-skill-defaults-in-the-skills.md) | Carry the GitHub Tracker and Label Defaults in the Skills, and Record Departures in the Manifest | accepted |
 | [0008](0008-name-opaque-and-toolchain-folders.md) | Name the Folders a Repository Needs Beyond Its Code, and Let Tools Fix the Rest by Table | proposed |
 | [0009](0009-name-ticket-categories-after-commit-types.md) | Name Ticket Categories After Conventional Commit Types | accepted |
+| [0010](0010-run-generates-fixed-steps-as-commands.md) | Run Generate's Fixed Steps as Commands and Keep Their Reasoning Out of the Run | accepted |
