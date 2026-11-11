@@ -6,9 +6,10 @@ compatibility: Requires Python 3, Git, and gh for authorized GitHub repository a
 
 # Repo Builder
 
-Read `references/lifecycle.md` before acting; a retrofit and an update read no lifecycle section whole, since `references/retrofit.md` and `references/update.md` state the rules each needs inline, each with an anchor link to the section for the reasoning. It defines the manifest, ownership rules, how checks are run and reported, remote confirmation gates, and failure behavior, and it routes to the one flow being performed:
+`references/lifecycle.md` defines the manifest, ownership rules, how checks are run and reported, remote confirmation gates, and failure behavior. An adopt reads it before acting. A generate, a retrofit and an update read no lifecycle section whole, since `references/generate.md`, `references/retrofit.md` and `references/update.md` state the rules each needs inline, each with an anchor link to the section for the reasoning; open the flow's file instead. The flows:
 
-- `references/generate.md` — build a repository from the payload, including into a destination that already has content
+- `references/generate.md` — build a repository from the payload
+- `references/generate-into-content.md` — the extra rules for a generate whose destination already has content, read from `generate.md` step 1 only then
 - `references/update.md` — carry a bounded template delta into a repository already generated from it
 - `references/adopt.md` — land a held-back repository addon whose condition has arrived
 - `references/retrofit.md` — bring a repository that was never generated from the payload under it
@@ -29,7 +30,7 @@ Read `references/lifecycle.md` before acting; a retrofit and an update read no l
 - **Adopt:** The destination has `.repo-template.json` and the request is to add a held-back repository addon whose condition has arrived, not to carry a template delta. Read the addon from the recorded commit and do not advance the pin. Distinct from update: it adds a sibling file rather than reconciling a delta, and it moves no commit.
 - If the requested operation and destination state disagree, stop and explain the mismatch.
 
-A generate whose destination holds content is still a generate, but its collisions are decided by hand and it never resolves one by deleting. `references/generate.md` carries those rules; read them before writing to a non-empty destination. What separates it from the retrofit above is the record the destination is headed for: a generate writes the payload's own tree and its manifest as the repository's first template state, where a retrofit reconciles a tree somebody else laid out and writes the record at the end, around what it found.
+A generate whose destination holds content is still a generate, but its collisions are decided by hand and it never resolves one by deleting. `references/generate-into-content.md` carries those rules; read it before writing to a non-empty destination. What separates it from the retrofit above is the record the destination is headed for: a generate writes the payload's own tree and its manifest as the repository's first template state, where a retrofit reconciles a tree somebody else laid out and writes the record at the end, around what it found.
 
 A generate derives its application boundaries with the user at [Generate](references/generate.md) step 7, as `references/wayfinding.md` directs, including when to hand off to `/wayfinder` and stop.
 

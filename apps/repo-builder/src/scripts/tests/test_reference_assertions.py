@@ -12,9 +12,9 @@ decision record exists, a quoted heading exists, and every path the payload
 ships is reached by an ownership rule. Whether a sentence is *right* about a
 file it names is not decidable here; whether the file exists is.
 
-The fourth claim reads two ownership manifests rather than the references --
-this repository's `.repo-template.json` and the example in lifecycle.md -- and
-belongs here for the same reason as the rest: the rule the references state is
+The fourth claim reads two ownership lists rather than the references --
+this repository's `.repo-template.json` and the canonical list every generated
+repository starts with, `ownership.json` beside the payload -- and belongs here for the same reason as the rest: the rule the references state is
 that an unmatched path is product-owned, so a payload path no rule reaches
 sits outside every update with nothing anywhere saying so.
 
@@ -34,6 +34,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[5]
 PAYLOAD = REPOSITORY_ROOT / "apps/github-repository-template/src/base-repo"
 ADDONS = REPOSITORY_ROOT / "apps/github-repository-template/src/repository-addons"
 SKILL = REPOSITORY_ROOT / "apps/repo-builder/src"
+OWNERSHIP = REPOSITORY_ROOT / "apps/github-repository-template/src/ownership.json"
 
 # Prefixes whose meaning is unambiguous: a reference naming one of these is
 # naming a destination path, never a path in this repository. `scripts/` and
@@ -286,9 +287,9 @@ class ReferenceAssertions(unittest.TestCase):
         self.assertEqual(broken, [], f"links to headings that do not exist: {broken}")
 
     def test_inline_extracts_quote_their_source(self):
-        """Every code span in a `retrofit.md` or `update.md` bullet is in its source.
+        """Every code span in a generate, retrofit or update bullet is in its source.
 
-        Both flows state lifecycle rules inline so a flow never opens
+        The three flows state lifecycle rules inline so a flow never opens
         `lifecycle.md`, and #230 asked that any extract a script can check
         stays in step with the source. What is mechanical is that each
         backticked span in a bullet linking `lifecycle.md#<anchor>` occurs
@@ -297,6 +298,7 @@ class ReferenceAssertions(unittest.TestCase):
         """
         lifecycle = SKILL / "references/lifecycle.md"
         missing = [
+            *extract_mismatches(SKILL / "references/generate.md", lifecycle),
             *extract_mismatches(SKILL / "references/retrofit.md", lifecycle),
             *extract_mismatches(SKILL / "references/update.md", lifecycle),
         ]
@@ -314,8 +316,9 @@ class ReferenceAssertions(unittest.TestCase):
         because no directory pattern reaches one.
 
         Both lists are checked. This repository's own manifest governs this
-        repository, and lifecycle.md's is what a reader builds a destination's
-        from -- an illustration that misses a shipped path teaches the miss.
+        repository, and `ownership.json` is what `generate.py manifest` writes
+        into every destination's -- a canonical list that misses a shipped path
+        ships the miss everywhere.
         """
         shipped = subprocess.run(
             ["git", "-C", str(REPOSITORY_ROOT), "ls-files", "-z", "--", str(PAYLOAD)],
@@ -345,19 +348,15 @@ class ReferenceAssertions(unittest.TestCase):
     def _ownership_lists(self):
         """The two ownership lists, each as the set of its patterns.
 
-        lifecycle.md's is read out of the fenced manifest rather than by
-        importing preflight: this file is stdlib-only and runs standalone from
-        a pre-commit hook, the same reason the rest of it is.
+        Both are read as JSON rather than through preflight: this file is
+        stdlib-only and runs standalone from a pre-commit hook, the same reason
+        the rest of it is.
         """
         manifest = json.loads((REPOSITORY_ROOT / ".repo-template.json").read_text())
-        lifecycle = (SKILL / "references/lifecycle.md").read_text()
-        block = re.search(r"```json\n(\{.*?\n\})\n```", lifecycle, re.DOTALL)
-        if block is None:
-            raise AssertionError("lifecycle.md holds no fenced manifest example")
-        example = json.loads(block.group(1))
+        canonical = json.loads(OWNERSHIP.read_text())
         return {
             ".repo-template.json": [rule["path"] for rule in manifest["ownership"]],
-            "lifecycle.md": [rule["path"] for rule in example["ownership"]],
+            "ownership.json": [rule["path"] for rule in canonical["ownership"]],
         }
 
 

@@ -2443,18 +2443,23 @@ SLOTS = {
 class Report:
     """Rendered lines, with every judgement not yet decided left as a marked slot."""
 
-    def __init__(self, decisions: Mapping[str, str]) -> None:
+    def __init__(
+        self, decisions: Mapping[str, str], slot_table: Mapping[str, Slot] = SLOTS
+    ) -> None:
         self.lines: list[str] = []
         self.slots: list[str] = []
         self.decisions = decisions
+        # Each flow's own judgement keys; generate.py passes its own.
+        self.slot_table = slot_table
 
     def fill(self, key: str, derived: str | None = None) -> str:
         """What a record settles, else the decided value, else the marked slot."""
-        value = derived or self.decisions.get(key) or SLOTS[key].default
+        slot = self.slot_table[key]
+        value = derived or self.decisions.get(key) or slot.default
         if value is not None:
             return value
-        self.slots.append(f"{key}: {SLOTS[key].what}")
-        return f"[[FILL: {key}: {SLOTS[key].what}]]"
+        self.slots.append(f"{key}: {slot.what}")
+        return f"[[FILL: {key}: {slot.what}]]"
 
     def optional(self, key: str) -> str | None:
         """A slot on a line the flow drops by deciding it `none`."""

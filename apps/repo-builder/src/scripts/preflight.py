@@ -1209,7 +1209,12 @@ def build_parser() -> argparse.ArgumentParser:
     generate = subparsers.add_parser(
         "generate", help="validate a generation source and destination plan"
     )
-    generate.add_argument("--template-repo", type=Path, required=True)
+    generate.add_argument(
+        "--template-repo",
+        type=Path,
+        default=Path("."),
+        help="the template checkout (default: the working directory)",
+    )
     generate.add_argument("--target", required=True, help="template ref or commit")
     generate.add_argument("--subtree", required=True)
     generate.add_argument("--destination-repository", required=True, help="owner/name")

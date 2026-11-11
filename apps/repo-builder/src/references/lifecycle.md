@@ -1,8 +1,8 @@
 # Repo Builder Lifecycle Contract
 
-This file holds what is true regardless of operation: the manifest, ownership, how checks are run and reported, the remote gates, and failure behavior. Reviewing and reporting are in [`reporting.md`](reporting.md), read at the end of a flow. Read this file, then the one flow being performed; a retrofit and an update read no section of it whole, since [`retrofit.md`](retrofit.md) and [`update.md`](update.md) state the rules they need inline, each linking its section for the reasoning.
+This file holds what is true regardless of operation: the manifest, ownership, how checks are run and reported, the remote gates, and failure behavior. Reviewing and reporting are in [`reporting.md`](reporting.md), read at the end of a flow. An adopt reads this file, then its flow; a generate, a retrofit and an update read no section of it whole, since [`generate.md`](generate.md), [`retrofit.md`](retrofit.md) and [`update.md`](update.md) state the rules they need inline, each linking its section for the reasoning.
 
-- [`generate.md`](generate.md) — build a repository from the payload, including into a destination that already has content
+- [`generate.md`](generate.md) — build a repository from the payload, and [`generate-into-content.md`](generate-into-content.md) for a destination that already has content
 - [`update.md`](update.md) — carry a bounded template delta into a repository already generated from it
 - [`adopt.md`](adopt.md) — land a held-back repository addon whose condition has arrived
 
@@ -44,36 +44,11 @@ Every built repository tracks `.repo-template.json`:
       {"path": "scripts/lint.sh", "did": "eslint over src/", "by": "scripts/check", "retired": true}
     ]
   },
-  "ownership": [
-    {"path": ".repo-template.json", "mode": "managed"},
-    {"path": "CLAUDE.md", "mode": "managed"},
-    {"path": "scripts/**", "mode": "managed"},
-    {"path": ".github/**", "mode": "managed"},
-    {"path": ".claude/settings.json", "mode": "managed"},
-    {"path": ".pre-commit-config.yaml", "mode": "managed"},
-    {"path": ".commitlintrc.yaml", "mode": "managed"},
-    {"path": ".gitattributes", "mode": "managed"},
-    {"path": ".gitignore", "mode": "managed"},
-    {"path": ".worktreeinclude", "mode": "managed"},
-    {"path": ".mcp.json", "mode": "managed"},
-    {"path": "tmp/.gitkeep", "mode": "managed"},
-    {"path": ".env", "mode": "product"},
-    {"path": "apps/**", "mode": "product"},
-    {"path": "libs/**", "mode": "product"},
-    {"path": "tests/**", "mode": "product"},
-    {"path": "tools/**", "mode": "product"},
-    {"path": "docs/**", "mode": "product"},
-    {"path": ".claude/hooks/**", "mode": "product"},
-    {"path": ".claude/rules/**", "mode": "product"},
-    {"path": ".claude/skills/**", "mode": "product"},
-    {"path": ".claude/agents/**", "mode": "product"},
-    {"path": ".claude/output-styles/**", "mode": "product"},
-    {"path": ".claude/workflows/**", "mode": "product"}
-  ]
+  "ownership": ["<every rule in apps/github-repository-template/src/ownership.json>"]
 }
 ```
 
-The `ownership` array illustrates the shape; do not copy it. Build a manifest's list from the payload's actual top-level structure at the resolved source commit (e.g. `git ls-tree -r --name-only <commit> -- <subtree>`), since real paths drift from prose. The example is still kept complete: `test_every_shipped_path_is_reached_by_an_ownership_rule` in `scripts/tests/test_reference_assertions.py` fails the commit on a payload path no rule here reaches.
+The `ownership` array a destination starts with is the canonical list in `apps/github-repository-template/src/ownership.json`, read at the source commit, never another repository's array. `generate.py manifest` writes it and refuses a payload path no rule reaches; `test_every_shipped_path_is_reached_by_an_ownership_rule` in `scripts/tests/test_reference_assertions.py` fails the commit on one first.
 
 Use a full lowercase 40-character commit. `template.commit` is the last template version successfully applied to the candidate. Change it only after the candidate passes verification, and commit it with the update it describes.
 
@@ -95,7 +70,7 @@ Ownership answers whether a path participates in template updates:
 
 The longest matching path wins; equal patterns are invalid. The old-to-new template delta bounds update scope. Do not edit an unrelated destination path merely because a broad ownership rule matches it. Two writes fall outside that bound: an expired override, settled under [Overridden paths](#overridden-paths), and a unit or domain `src/.gitkeep` whose `src/` now tracks other files, which `update.py apply` deletes and reports as `pruned`, since it only held an empty tree open.
 
-A root file matches no directory pattern, so `CLAUDE.md`, `.pre-commit-config.yaml`, `.commitlintrc.yaml`, `.gitattributes`, and `.gitignore` fall through to product unless named individually, and a payload fix to them would land nowhere while the update reports success. Every root file the payload adds needs a line. Every path the template ships needs an ownership rule that reaches it; verify with `classify_path` rather than assuming a directory pattern covers a root file. In this repository `test_reference_assertions.py` checks every payload path against both this repository's manifest and the example above.
+A root file matches no directory pattern, so `CLAUDE.md`, `.pre-commit-config.yaml`, `.commitlintrc.yaml`, `.gitattributes`, and `.gitignore` fall through to product unless named individually, and a payload fix to them would land nowhere while the update reports success. Every root file the payload adds needs a line. Every path the template ships needs an ownership rule that reaches it; verify with `classify_path` rather than assuming a directory pattern covers a root file. In this repository `test_reference_assertions.py` checks every payload path against both this repository's manifest and the canonical list.
 
 Reaching a path is not managing it. `.env` is named and **product**: the payload ships an empty one so the file exists, and a destination's copy is the destination's. Naming it makes that a decision rather than the default an added payload path would inherit.
 
@@ -135,7 +110,7 @@ Bound: the overlay of an absent path, a collision disposed to the payload, the i
 `.gitignore` is managed, and a destination's own ignore rules are destination intent like any other edit to a managed file. Dropping one is not a cosmetic loss: every path it ignored becomes untracked at the next `git add -A`, so a cache, a build directory, or a secret file rides into a commit with no `-f` anywhere. So no flow drops a destination-only rule by replacing the file:
 
 - **Update** reconciles it under its [four rules](update.md) like any managed delta path. A rule only the destination added is destination change the template did not make, and survives; where the payload changed the file too, the two are combined.
-- **Generate into a repository that already has content** decides it as a collision under [rule 3](generate.md#into-a-repository-that-already-has-content), and rule 4 forbids resolving it by deleting the destination's rules.
+- **Generate into a repository that already has content** decides it as a collision under [rule 3](generate-into-content.md#into-a-repository-that-already-has-content), and rule 4 forbids resolving it by deleting the destination's rules.
 - **Retrofit** is the one flow that replaces it outright, under [Step 6 — Reconcile the destination's layout](retrofit-step-6-layout.md#step-6--reconcile-the-destinations-layout), because that is where a destination's layout is first brought onto the payload's and every uncovered rule is reported, stopped on where un-ignoring changes the check surface, and checked again for untracked files at the bar. Those checks are what make replacing safe there, and no other flow carries them.
 
 ## The automation directory is replaced, not reconciled
@@ -146,7 +121,7 @@ Bound: the overlay of an absent path, a collision disposed to the payload, the i
 
 The replacement is not declinable and has no `features` entry. A refusal is a refusal of the flow, not of one directory.
 
-**The carve-out is exactly that path prefix.** Rule 4 of [Into a repository that already has content](generate.md#into-a-repository-that-already-has-content), never delete destination content to resolve a collision, still binds everywhere else. A destination's own `docs/agents/` files are product the payload no longer ships, and step 6 reads them as departures.
+**The carve-out is exactly that path prefix.** Rule 4 of [Into a repository that already has content](generate-into-content.md#into-a-repository-that-already-has-content), never delete destination content to resolve a collision, still binds everywhere else. A destination's own `docs/agents/` files are product the payload no longer ships, and step 6 reads them as departures.
 
 A destination's own `PULL_REQUEST_TEMPLATE.md` and `ISSUE_TEMPLATE/` go too, since they are inside the prefix. Name them in the report as a loss. Where the destination had its own `.github/PULL_REQUEST_TEMPLATE/` directory, [addon adoption](addon-adoption.md) offers the payload's `release.md` and `hotfix.md` back afterwards; say so in the same report line.
 
@@ -396,7 +371,7 @@ Ask for confirmation unless the invocation already authorizes these exact action
 
 ## A written ruleset is proved satisfiable, not merely present
 
-A ruleset can exist, read back `active`, pass `scripts/repo-settings check`, reject the probe, and still never let anything merge. A required context nothing reports is the usual cause — see [Step 5 — Configure the repository settings](generate.md#step-5--configure-the-repository-settings) — and the pull request simply never becomes mergeable.
+A ruleset can exist, read back `active`, pass `scripts/repo-settings check`, reject the probe, and still never let anything merge. A required context nothing reports is the usual cause — see [A required status check is named by its check run](../../../../docs/adrs/0010-run-generates-fixed-steps-as-commands.md#a-required-status-check-is-named-by-its-check-run) — and the pull request simply never becomes mergeable.
 
 Once the pull request's required checks have reported, read:
 
