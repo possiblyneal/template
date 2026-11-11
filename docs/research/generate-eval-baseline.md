@@ -169,3 +169,69 @@ env -u CLAUDECODE claude -p "$prompt" \
 - **Grading.** Grade each expectation in `evals.json` by hand against the candidate at
   `$S/fixture-<id>/candidate`, the report at `$S/fixture-<id>/report.md`, and the transcript's Bash
   commands. Record one line per expectation with its evidence.
+
+## Rerun after the token-cost changes
+
+Resolves the eval acceptance of [#307](https://github.com/possiblyneal/template/issues/307), the
+spec's last ticket. It used the method above unchanged, with the same environment, model, flags
+and one sample per eval, all three in parallel.
+
+**Commit.** `9c3a641059c801c6e4ad4b1e994edca26d73fad2` on `refactor/generate-token-cost`. That is
+#307 on top of the run head `d4c817c`, which already carries the spec's other tickets.
+
+| Eval | Total tokens | Baseline | Change | Input | Cache write | Cache read | Output | Cost (USD) | Turns | Expectations passed |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 1,051,667 | 1,075,494 | −2.2% | 22 | 74,586 | 969,942 | 7,117 | 0.467 | 12 | 6/7 |
+| 5 | 1,034,265 | 1,189,043 | −13.0% | 22 | 73,944 | 951,098 | 9,201 | 0.483 | 13 | 6/7 |
+| 6 | 1,096,224 | 1,087,707 | +0.8% | 24 | 73,895 | 1,014,574 | 7,731 | 0.474 | 14 | 8/8 |
+
+**Median total tokens: 1,051,667** (eval 1), down from 1,087,707, a 3.3% drop. Taken alone, a drop
+that small is within the single-sample noise noted above. The other measures move much more.
+Cache writes fell by 37% to 39% in every run, from about 120,000 to about 74,000. Cost fell by 26% to
+28%. The summed total of the three runs fell by 5.1%, from 3,352,244 to 3,182,156. Cache reads
+did not fall, because each turn re-reads the whole context. They now dominate the total, so the
+total moves less than the context written. `modelUsage` again names only `claude-sonnet-5-5`.
+
+### Reference bytes read
+
+Sizes are at the commit above. No run read `lifecycle.md`, which took 54,878 bytes of every
+baseline run.
+
+| Eval | Read whole | Bytes | Partial prints (not summed) |
+| ---: | --- | ---: | --- |
+| 1 | `SKILL.md`, `generate.md` | 55,611 | `generate.py` lines 360–470; `grep -A` excerpts of `retrofit.py` and `preflight.py` |
+| 5 | `SKILL.md`, `generate.md`, `wayfinding.md`, `reporting.md` | 79,648 | `grep -A45` of `lifecycle.md`'s Manifest section; `grep -A60` of `generate.py` |
+| 6 | `SKILL.md`, `generate.md`, `wayfinding.md` | 64,098 | `reporting.md` lines 50–135 and a `grep`; `grep -A45` of `generate.py` |
+
+The baseline read 136,562 bytes per run. The per-file sizes now are `SKILL.md` 10,703,
+`generate.md` 44,908, `wayfinding.md` 8,487 and `reporting.md` 15,550. Eval 6 again loaded
+`/wayfinder` and read `~/.claude/skills/ship/tracker.md`, which is not counted.
+
+### Expectations
+
+No expectation that passed at the baseline fails here. The two baseline failures still fail.
+
+- **Eval 1 (6/7).** #1–#4, #6 and #7 pass on the same evidence as the baseline. #6 holds because
+  Pending action gives `bootstrap`'s empty root commit on `main`, then a branch from that base
+  and `pr-body` and `publish`. #7 holds because no Bash call runs a network command and there are
+  no permission denials. **#5 fails as before.** The report says wayfinding was not run because
+  the invocation named the deployable, but the run wrote
+  `docs/adrs/0001-billing-api-language.md` (`lang:python`, this time `status: proposed`).
+- **Eval 5 (6/7).** #1–#5 and #7 pass. Both apps hold `src/.gitkeep` and a payload `.unit.json`,
+  and the two ADRs are accepted and scoped with `lang:` tags. There is no manifest,
+  `applications` is `["recorder", "ingest-api"]`, and `features` is `{}`. The one permission
+  denial is a local command writing `/tmp/x`, which the operator's hook refuses; it is not a
+  network call. **#6 still fails**, more narrowly than before. Boundaries now say how the choke
+  points were established ("short form settled it; the invocation supplied the answers"), which
+  the baseline got wrong. They still never say what either deployable is for.
+- **Eval 6 (8/8).** The candidate came from `generate.py materialize` at the exact commit (the
+  record says `ok: true`, 6 payload paths), and `CLAUDE.md` matches the payload byte for byte.
+  `apps/` holds only `app-name`, and `docs/adrs/` only `0000-template.md`. `issue_tracker` records
+  the `.scratch/` tracker, and there is no `docs/agents/`. The map is
+  `.scratch/atlas-boundaries/spec.md` (`wayfinder:map`). It has four `**Status:** open` tickets,
+  and its Decisions so far is empty. The report gives Status stopped, "Pull request: not created",
+  the trigger and the map path, and says to re-invoke against the same candidate once no ticket is
+  open. There is no network command and no permission denial.
+
+None of the three runs reaches GitHub, so none produces the records that `report` and `pr-body`
+render from. Each run wrote its report by hand, and these evals do not exercise the renderers.
