@@ -501,6 +501,34 @@ class GenerateTests(unittest.TestCase):
             check=False,
         )
 
+    def test_generate_reads_the_working_directory_without_a_template_repo(
+        self,
+    ) -> None:
+        """The skill runs from the template checkout, so that is the default."""
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._generation_fixture(directory)
+            result = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "generate",
+                    "--target",
+                    fixture["target_commit"],
+                    "--subtree",
+                    fixture["subtree"],
+                    "--destination-repository",
+                    fixture["destination_repository"],
+                ],
+                cwd=fixture["template_repo"],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["template"]["commit"], fixture["target_commit"])
+
     def test_generate_accepts_a_commit_on_the_template_branch(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = self._generation_fixture(directory)

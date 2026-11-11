@@ -39,14 +39,13 @@ Resolve the requested source to an exact commit and run:
 
 ```bash
 python3 apps/repo-builder/src/scripts/preflight.py generate \
-  --template-repo <template-repo> \
   --target <ref-or-commit> \
   --subtree apps/github-repository-template/src/base-repo \
   --destination-repository <owner/name> \
   --default-branch main
 ```
 
-`--default-branch` is the destination's; `--template-branch` is this template's own and defaults to `main`. Pass it only where the source genuinely lives on another branch, and expect a refusal for a commit on none of them: the commit recorded here is the base every later update diffs from, so one off the template's branch generates a repository no update can ever reach.
+`--template-repo` defaults to the working directory, this checkout; pass a path only for another clone, never the origin URL. `--default-branch` is the destination's; `--template-branch` is this template's own and defaults to `main`. Pass it only where the source genuinely lives on another branch, and expect a refusal for a commit on none of them: the commit recorded here is the base every later update diffs from, so one off the template's branch generates a repository no update can ever reach.
 
 `generate` validates the source only. It takes the destination as a name, never inspects it, and so cannot tell an empty repository from one with content. Establish that yourself before materializing. Where the destination has content, read [`generate-into-content.md`](generate-into-content.md) now: its rules change steps 4 through 10.
 
@@ -58,7 +57,18 @@ The public-repository files are the repository addons, held back rather than shi
 
 ### Step 3 — Materialize the candidate
 
-Materialize the subtree from that exact commit into `tmp/<repository-name>/`, resolved against this repository rather than against the directory the session was invoked from. Do not substitute the current working tree, and do not pick a location outside the repository: `tmp/` is what this repository ships for the purpose, held out of the tree by `tmp/*` in `.gitignore` so a candidate cannot be committed here by accident, and inside the repository so writing a whole tree into it stays within the boundary an agent's file-access approvals are drawn on. Naming it also makes the resume real, since a stop leaves the candidate in place for the next session to re-enter at and a directory chosen freshly each time is one nobody finds again. Initialize Git in it with `git init -b <default-branch>` and leave the remote unset; step 4 creates the repository that remote points at. Pass `-b` rather than taking whatever `init.defaultBranch` happens to be: an unborn HEAD on `master` while step 4's `update-ref` writes `refs/heads/main` leaves HEAD pointing at neither, and step 5's probe then commits to the wrong branch, pushes nothing, and reports an unprotected branch as protected. A resumed generate re-running this step gets `warning: re-init: ignored --initial-branch` and exits zero, so the flag repairs nothing on that path; read `git symbolic-ref HEAD` rather than assuming it took, and point HEAD at the default branch before step 4's `update-ref` if it does not already.
+Materialize the subtree from that exact commit into `tmp/<repository-name>/` with one command, run from this repository:
+
+```bash
+python3 apps/repo-builder/src/scripts/generate.py materialize \
+  --records tmp/<repository-name>.<first 12 of the commit> \
+  --target <commit> \
+  --subtree apps/github-repository-template/src/base-repo \
+  --destination-repository <owner/name> \
+  --default-branch main
+```
+
+It archives the payload at the pinned commit, never the working tree, into `tmp/<repository-name>/` under this repository, runs `git init -b <default-branch>` there with no remote, and writes `<records>.materialize.json` with the candidate path, the commit, `head`, and the payload path count. `tmp/` is held out of the tree by `tmp/*` in `.gitignore`, so a candidate cannot be committed here, and sits inside the repository, so writing a whole tree stays within the agent's file-access approvals; a fixed path is also what lets a stopped generate resume from the candidate. Step 4 creates the repository the remote points at. `-b` matters because an unborn HEAD on `master` while step 4's `update-ref` writes `refs/heads/main` points at neither, and step 5's probe then commits to the wrong branch. It refuses a candidate directory that already holds files and changes nothing: a resumed generate keeps the candidate it has, so read `git symbolic-ref HEAD` there and point HEAD at the default branch before step 4's `update-ref` if it does not already.
 
 [The payload's mode travels with the payload's content](lifecycle.md#the-payloads-mode-travels-with-the-payloads-content) binds every flow that lands payload content, and generate is the one flow it costs nothing. `git archive` carries each mode out of the pinned tree and the candidate is fresh, so no destination file's bit is there to survive the write. That is why no step below reads a mode or cites the rule — the exemption is in how this flow writes, not in the rule's reach.
 
