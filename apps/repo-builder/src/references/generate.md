@@ -3,7 +3,7 @@
 Rules from [`lifecycle.md`](lifecycle.md) that a generate needs, stated here so the file is never opened whole; a rule only some generates need sits at the step that triggers it. Each links to its section for the reasoning; read that section only when the statement here is not enough. The reasoning behind the fixed steps is in `docs/adrs/0010-run-generates-fixed-steps-as-commands.md`, which a run need not read.
 
 - **Placeholders.** Quote every `<placeholder>` when substituting, and reject a repository or branch name outside `[A-Za-z0-9._/-]+` before it reaches a shell.
-- **Manifest** ([`## Manifest`](lifecycle.md#manifest)). The candidate tracks `.repo-template.json`. `template.commit` is the full lowercase 40-character source commit. Record generation choices that change rendered files or repository settings, and no timestamp, visibility, language or package manager, since the disk or the API answers them. `features` records every departure from the defaults, each key optional; `generation.applications` lists the deployable names wayfinding established and nothing else about them. Build the `ownership` list from the payload's actual structure at the source commit rather than copying the example.
+- **Manifest** ([`## Manifest`](lifecycle.md#manifest)). The candidate tracks `.repo-template.json`. `template.commit` is the full lowercase 40-character source commit. Record generation choices that change rendered files or repository settings, and no timestamp, visibility, language or package manager, since the disk or the API answers them. `features` records every departure from the defaults, each key optional; `generation.applications` lists the deployable names wayfinding established and nothing else about them. The `ownership` array is the canonical list in `apps/github-repository-template/src/ownership.json`, read at the source commit, never another repository's array; step 8's command writes it.
 - **Checks** ([`## Running the destination's checks`](lifecycle.md#running-the-destinations-checks)). Stage first, since `pre-commit run --all-files` reads the index and passes over unstaged work. Run `scripts/check`, which prints only the Result table and writes the whole run to `tmp/check.log`; on a failing exit read that log rather than re-running. Report passed, nothing to do, runner missing and never ran as four outcomes; skipped or unavailable is never a pass.
 - **Remote gates** ([`## Remote action gates`](lifecycle.md#remote-action-gates)). Repository creation, settings writes, pushes and pull-request creation are separate actions, confirmed immediately before unless the invocation authorized those exact actions against this exact repository. A generate reaches two gates: step 4 for the empty repository, its settings, the probe and the tracker writes, with no diff; step 11 for the content push and the pull request. Show only the lines a gate asks for, and perform no remote write it did not list. The only merge is the bootstrap pull request at step 12.
 - **Failure** ([`## Failure and recovery`](lifecycle.md#failure-and-recovery)). Stop before further remote actions when intent conflicts or verification fails. A failure at steps 5 to 10 leaves a real repository with no published content, its default branch the empty root commit, or the probe commit where step 5's probe was accepted: name the repository, say what it carries, and say whether resuming or deleting it is next. Keep `template.commit` at the previous version. The wayfinding handoff is a stop, not a failure: report `stopped` and keep the candidate. There is no rollback. Re-invoking the same command is the resume ([`### Resuming`](lifecycle.md#resuming)): re-observe live state and skip what is done; the resume record sits beside the candidate, never inside it.
@@ -197,9 +197,25 @@ Personalize the candidate:
 - leave each `.unit.json` at the shipped `run: none, ships: {kind: none}`. Wayfinding establishes boundaries, not lifecycle: whether a deployable runs until stopped and whether it ships a binary are facts the first real commit brings, the same reasoning that keeps a root manifest unrendered above. A unit missing the file entirely fails `scripts/structure` on the first commit, so the file ships declared and honest rather than absent or guessed;
 - write one ADR per deployable recording its choke point and language, as [Wayfinding](wayfinding.md) directs;
 - keep `docs/adrs/0000-template.md` as the reusable ADR template;
-- create `.repo-template.json`;
+- create `.repo-template.json` with the command below, which keeps the `generation.features` step 6 wrote and adds what it is given;
 - append the derived entries to `.github/dependabot.yml`, as [Dependabot entries follow the manifests present](lifecycle.md#dependabot-entries-follow-the-manifests-present) directs. Into an empty destination the derived set is empty and the payload's file lands unchanged, because step 7 renders no root manifest and the first real commit is what brings one. Into a destination that already had content it is whatever that content brought, derived here rather than in the replacement above so there is one place the file is written from destination evidence;
 - render feature choices honestly, and record no visibility: it is live-readable and every decision turning on it reads the API, as [Manifest](lifecycle.md#manifest) directs. `codeql.yml` lands whatever the destination's visibility, as [Code scanning lands everywhere and decides at run time](lifecycle.md#code-scanning-lands-everywhere-and-decides-at-run-time) directs, so `generation.features` takes no entry for it.
+
+Then write the manifest and the ADR index, run from this repository:
+
+```bash
+python3 apps/repo-builder/src/scripts/generate.py manifest \
+  --records tmp/<repository-name>.<first 12 of the commit> \
+  --repository <owner/name> \
+  --commit <commit> \
+  --subtree apps/github-repository-template/src/base-repo \
+  --default-branch main \
+  --application <name> \
+  --feature <key>=<value>
+(cd tmp/<repository-name> && scripts/adr-index && git add docs/adrs/index.md)
+```
+
+Repeat `--application` per deployable in wayfinding's order and `--feature` per departure; `triage_labels.<role>=<label>` sets one role's label, and `codeql` and `prs_are_requests` take only `omitted-by-choice` and `true`. It writes the canonical ownership list, validates the file as preflight does, refuses a payload path no rule reaches, stages the file, and writes `<records>.manifest.json`; a refusal leaves the file as it was. `scripts/adr-index` regenerates the index from the ADRs above and staging it is what lets step 9's first check run pass, since its `adr-index` hook fails on an unstaged rewrite.
 
 ### Step 9 — Run the candidate's checks
 

@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from test_preflight import git, git_output
+from test_preflight import git, git_output, preflight
 from test_retrofit import (
     COMMIT_IDENTITY,
     FORBIDDEN,
@@ -19,6 +19,10 @@ from test_retrofit import (
 )
 
 MODULE_PATH = Path(__file__).parents[1] / "generate.py"
+
+OWNERSHIP = (
+    MODULE_PATH.parents[3] / "github-repository-template" / "src" / "ownership.json"
+)
 SETUP = MODULE_PATH.parents[1] / "evals" / "setup_fixture.py"
 
 
@@ -63,7 +67,9 @@ def tree_entries(directory: Path) -> dict[str, tuple[str, str]]:
     return entries
 
 
-def payload_entries(template: str, commit: str, subtree: str) -> dict[str, tuple[str, str]]:
+def payload_entries(
+    template: str, commit: str, subtree: str
+) -> dict[str, tuple[str, str]]:
     listing = git_output("ls-tree", "-r", "-z", f"{commit}:{subtree}", cwd=template)
     entries: dict[str, tuple[str, str]] = {}
     for line in filter(None, listing.split("\0")):
@@ -104,7 +110,9 @@ class MaterializeTests(unittest.TestCase):
     @staticmethod
     def _records(fixture: dict[str, str]) -> str:
         template = Path(fixture["template_repo"])
-        return str(template / "tmp" / f"billing-service.{fixture['target_commit'][:12]}")
+        return str(
+            template / "tmp" / f"billing-service.{fixture['target_commit'][:12]}"
+        )
 
     def test_the_candidate_is_the_payload_on_an_unborn_default_branch(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -135,8 +143,9 @@ class MaterializeTests(unittest.TestCase):
                 git_output("symbolic-ref", "HEAD", cwd=candidate), "refs/heads/main"
             )
             self.assertEqual(
-                git("rev-parse", "--verify", "-q", "HEAD", cwd=candidate, check=False)
-                .returncode,
+                git(
+                    "rev-parse", "--verify", "-q", "HEAD", cwd=candidate, check=False
+                ).returncode,
                 1,
             )
             self.assertEqual(git_output("remote", cwd=candidate), "")
@@ -220,7 +229,9 @@ class BootstrapTests(unittest.TestCase):
 
     @staticmethod
     def _unborn(candidate: Path) -> bool:
-        verified = git("rev-parse", "--verify", "-q", "main", cwd=candidate, check=False)
+        verified = git(
+            "rev-parse", "--verify", "-q", "main", cwd=candidate, check=False
+        )
         return verified.returncode == 1
 
     def test_the_remote_default_branch_is_a_parentless_empty_root(self) -> None:
@@ -297,7 +308,9 @@ class BootstrapTests(unittest.TestCase):
             result = self._bootstrap(directory, records)
 
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(git_output("rev-parse", "refs/heads/main", cwd=origin), root)
+            self.assertEqual(
+                git_output("rev-parse", "refs/heads/main", cwd=origin), root
+            )
             self.assertEqual(json.loads(result.stdout)["root"], root)
 
     def test_a_candidate_branch_with_content_is_refused(self) -> None:
@@ -393,7 +406,10 @@ class LabelsTests(unittest.TestCase):
             missing = [name for name in DEFAULT_LABELS if name not in shipped]
             self.assertEqual(
                 sent(directory, "POST"),
-                [["api", "-X", "POST", LABELS, "-f", f"name={name}"] for name in missing],
+                [
+                    ["api", "-X", "POST", LABELS, "-f", f"name={name}"]
+                    for name in missing
+                ],
             )
             self.assertEqual(sent(directory, "PATCH"), [])
             record = json.loads(Path(f"{records}.labels.json").read_text())
@@ -478,9 +494,7 @@ class LabelsTests(unittest.TestCase):
 class FilelistTests(unittest.TestCase):
     """Step 10: every path accounted for, and the copies proved copies."""
 
-    def _candidate(
-        self, directory: str
-    ) -> tuple[dict[str, str], Path, dict[str, str]]:
+    def _candidate(self, directory: str) -> tuple[dict[str, str], Path, dict[str, str]]:
         """A candidate personalized as step 8 leaves it, staged as step 9 does.
 
         The payload gains an ignore file and the `.env` it ignores, as the real
@@ -637,9 +651,7 @@ class FilelistTests(unittest.TestCase):
 class HooksTests(unittest.TestCase):
     """Step 9: the candidate's hooks, installed by retrofit's recipe and resolved."""
 
-    def _candidate(
-        self, directory: str, payload: Path
-    ) -> tuple[Path, dict[str, str]]:
+    def _candidate(self, directory: str, payload: Path) -> tuple[Path, dict[str, str]]:
         """A fresh candidate holding `payload`, under an isolated global config."""
         config = Path(directory) / "gitconfig"
         config.write_text("")
@@ -679,13 +691,19 @@ class HooksTests(unittest.TestCase):
             self.assertEqual(record["hooks_path"], str(hooks))
             self.assertIn("pre-commit", record["hook_types"])
             for kind in record["hook_types"]:
-                self.assertIn("File generated by pre-commit", (hooks / kind).read_text())
+                self.assertIn(
+                    "File generated by pre-commit", (hooks / kind).read_text()
+                )
             self.assertEqual(
                 git_output("config", "--local", "core.hooksPath", cwd=candidate),
                 str(hooks),
             )
             resolved = git_output(
-                "rev-parse", "--path-format=absolute", "--git-path", "hooks", cwd=candidate
+                "rev-parse",
+                "--path-format=absolute",
+                "--git-path",
+                "hooks",
+                cwd=candidate,
             )
             self.assertEqual(resolved, str(hooks))
             saved = candidate.parent / "billing-service.0123456789ab.hooks.json"
@@ -703,8 +721,197 @@ class HooksTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             record = json.loads(result.stdout)
             self.assertEqual(record["outcome"], "not-applicable")
-            unset = git("config", "--local", "core.hooksPath", cwd=candidate, check=False)
+            unset = git(
+                "config", "--local", "core.hooksPath", cwd=candidate, check=False
+            )
             self.assertEqual(unset.returncode, 1)
+
+
+class ManifestTests(unittest.TestCase):
+    """Step 8: `.repo-template.json` from the canonical ownership list."""
+
+    def _fixture(self, directory: str) -> dict[str, str]:
+        """A materialized candidate whose template carries the real ownership list."""
+        fixture = generation_fixture(directory)
+        template = Path(fixture["template_repo"])
+        (template / "ownership.json").write_text(OWNERSHIP.read_text())
+        git("add", "-A", cwd=template)
+        git("commit", "-q", "-m", "chore: ownership", cwd=template)
+        fixture["target_commit"] = git_output("rev-parse", "HEAD", cwd=template)
+        fixture["records"] = str(
+            template / "tmp" / f"billing-service.{fixture['target_commit'][:12]}"
+        )
+        materialized = self._run(
+            fixture,
+            "materialize",
+            "--target",
+            fixture["target_commit"],
+            "--subtree",
+            fixture["subtree"],
+            "--destination-repository",
+            fixture["destination_repository"],
+            env=isolated_git_config(directory),
+        )
+        self.assertEqual(materialized.returncode, 0, materialized.stderr)
+        fixture["candidate"] = str(template / "tmp" / "billing-service")
+        return fixture
+
+    @staticmethod
+    def _run(
+        fixture: dict[str, str], *arguments: str, env: dict[str, str] | None = None
+    ) -> subprocess.CompletedProcess[str]:
+        command, *rest = arguments
+        return subprocess.run(
+            [
+                "python3",
+                str(MODULE_PATH),
+                command,
+                "--records",
+                fixture["records"],
+                *rest,
+            ],
+            cwd=fixture["template_repo"],
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    def _manifest(
+        self, fixture: dict[str, str], *extra: str
+    ) -> subprocess.CompletedProcess[str]:
+        return self._run(
+            fixture,
+            "manifest",
+            "--repository",
+            fixture["destination_repository"],
+            "--commit",
+            fixture["target_commit"],
+            "--subtree",
+            fixture["subtree"],
+            *extra,
+        )
+
+    def test_the_manifest_is_valid_staged_and_reaches_every_payload_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._fixture(directory)
+
+            result = self._manifest(
+                fixture,
+                "--application",
+                "billing-api",
+                "--application",
+                "billing-worker",
+                "--feature",
+                "codeql=omitted-by-choice",
+                "--feature",
+                "prs_are_requests=true",
+                "--feature",
+                "triage_labels.bug=defect",
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            candidate = Path(fixture["candidate"])
+            path = candidate / ".repo-template.json"
+            manifest, rules, _ = preflight.validate_manifest(path)
+            self.assertEqual(
+                manifest["template"],
+                {
+                    "repository": str(Path(fixture["template_repo"]).resolve()),
+                    "subtree": fixture["subtree"],
+                    "commit": fixture["target_commit"],
+                },
+            )
+            self.assertEqual(
+                manifest["destination"],
+                {"repository": "acme/billing-service", "default_branch": "main"},
+            )
+            self.assertEqual(
+                manifest["generation"],
+                {
+                    "applications": ["billing-api", "billing-worker"],
+                    "features": {
+                        "codeql": "omitted-by-choice",
+                        "prs_are_requests": True,
+                        "triage_labels": {"bug": "defect"},
+                    },
+                },
+            )
+            self.assertEqual(
+                manifest["ownership"], json.loads(OWNERSHIP.read_text())["ownership"]
+            )
+            payload = preflight.tree_paths(
+                Path(fixture["template_repo"]),
+                fixture["target_commit"],
+                fixture["subtree"],
+            )
+            unreached = [
+                payload_path
+                for payload_path in payload
+                if preflight.classify_path(payload_path, rules)[1] is None
+            ]
+            self.assertEqual(unreached, [])
+            self.assertEqual(
+                git_output("diff", "--cached", "--name-only", cwd=candidate),
+                ".repo-template.json",
+            )
+            record = json.loads(Path(f"{fixture['records']}.manifest.json").read_text())
+            self.assertEqual(record["manifest"], str(path))
+            self.assertTrue(record["staged"])
+            self.assertEqual(json.loads(result.stdout), record)
+
+    def test_what_step_6_recorded_is_kept(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._fixture(directory)
+            path = Path(fixture["candidate"]) / ".repo-template.json"
+            path.write_text(
+                json.dumps(
+                    {"generation": {"features": {"issue_tracker": "Linear, team BIL"}}}
+                )
+            )
+
+            result = self._manifest(fixture, "--feature", "codeql=omitted-by-choice")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                json.loads(path.read_text())["generation"]["features"],
+                {"issue_tracker": "Linear, team BIL", "codeql": "omitted-by-choice"},
+            )
+
+    def test_a_feature_value_the_flows_do_not_read_is_refused_unwritten(self) -> None:
+        for feature in ("codeql=dropped", "prs_are_requests=yes", "codeql", "=x"):
+            with (
+                self.subTest(feature=feature),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                fixture = self._fixture(directory)
+
+                result = self._manifest(fixture, "--feature", feature)
+
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("--feature", json.loads(result.stderr)["error"])
+                self.assertFalse(
+                    (Path(fixture["candidate"]) / ".repo-template.json").exists()
+                )
+                self.assertFalse(Path(f"{fixture['records']}.manifest.json").exists())
+
+    def test_a_payload_path_no_rule_reaches_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self._fixture(directory)
+            template = Path(fixture["template_repo"])
+            (template / fixture["subtree"] / "STRAY.md").write_text("stray\n")
+            # Only the stray: tmp/ now holds the candidate, a repository of its own.
+            git("add", f"{fixture['subtree']}/STRAY.md", cwd=template)
+            git("commit", "-q", "-m", "chore: stray", cwd=template)
+            fixture["target_commit"] = git_output("rev-parse", "HEAD", cwd=template)
+
+            result = self._manifest(fixture)
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("STRAY.md", json.loads(result.stderr)["error"])
+            self.assertFalse(
+                (Path(fixture["candidate"]) / ".repo-template.json").exists()
+            )
 
 
 if __name__ == "__main__":
