@@ -371,7 +371,7 @@ Ask for confirmation unless the invocation already authorizes these exact action
 
 ## A written ruleset is proved satisfiable, not merely present
 
-A ruleset can exist, read back `active`, pass `scripts/repo-settings check`, reject the probe, and still never let anything merge. A required context nothing reports is the usual cause — see [Step 5 — Configure the repository settings](generate.md#step-5--configure-the-repository-settings) — and the pull request simply never becomes mergeable.
+A ruleset can exist, read back `active`, pass `scripts/repo-settings check`, reject the probe, and still never let anything merge. A required context nothing reports is the usual cause — see [A required status check is named by its check run](../../../../docs/adrs/0010-run-generates-fixed-steps-as-commands.md#a-required-status-check-is-named-by-its-check-run) — and the pull request simply never becomes mergeable.
 
 Once the pull request's required checks have reported, read:
 

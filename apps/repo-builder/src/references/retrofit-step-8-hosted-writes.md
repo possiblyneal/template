@@ -25,7 +25,7 @@ python3 apps/repo-builder/src/scripts/retrofit.py hosted apply \
 
 Five writes, in this order, the last conditional.
 
-**1. Merge settings, in one call.** `allow_merge_commit`, `allow_squash_merge`, `allow_rebase_merge` and `delete_branch_on_merge` go in a single `PATCH`, since a half-applied merge policy is worse than none. State the four current values from `merge_settings` before overwriting them. All four `null` means the wrong field spelling (see [Step 5 — Configure the repository settings](generate.md#step-5--configure-the-repository-settings)), not every merge method disabled. Declinable; record a refusal and its reason in `generation.features`. `delete_branch_on_merge` is required in every repository, so a refusal leaves `scripts/repo-settings check` failing on `delete-branches` until it is on.
+**1. Merge settings, in one call.** `allow_merge_commit`, `allow_squash_merge`, `allow_rebase_merge` and `delete_branch_on_merge` go in a single `PATCH`, since a half-applied merge policy is worse than none. State the four current values from `merge_settings` before overwriting them. All four `null` means the wrong field spelling (see [REST and GraphQL name the merge settings differently](../../../../docs/adrs/0010-run-generates-fixed-steps-as-commands.md#rest-and-graphql-name-the-merge-settings-differently)), not every merge method disabled. Declinable; record a refusal and its reason in `generation.features`. `delete_branch_on_merge` is required in every repository, so a refusal leaves `scripts/repo-settings check` failing on `delete-branches` until it is on.
 
 **2. The default-branch rename.** **Declining is a hard stop**: the payload's workflows pin the branch name, so CI would never fire on the old one.
 
@@ -48,7 +48,7 @@ git remote set-head origin -a
 
 **4. Security settings and the branch ruleset** — dependency alerts, security updates, push protection, and the ruleset generate creates. Declinable and recorded. Push protection refused on a private destination on a free plan is reported, not failed.
 
-Name required checks by check run, not job id: `CI`, not `ci`; [Step 5 — Configure the repository settings](generate.md#step-5--configure-the-repository-settings) has the full set. A misspelled context writes without error and silently blocks every pull request; step 9's `mergeable`/`mergeStateStatus` pair catches it.
+Name required checks by check run, not job id: `CI`, not `ci`; `apps/github-repository-template/src/ruleset.json` holds the required set, and [A required status check is named by its check run](../../../../docs/adrs/0010-run-generates-fixed-steps-as-commands.md#a-required-status-check-is-named-by-its-check-run) has why each name is what it is. A misspelled context writes without error and silently blocks every pull request; step 9's `mergeable`/`mergeStateStatus` pair catches it.
 
 An existing ruleset requires contexts from workflows that [the automation directory](lifecycle.md#the-automation-directory-is-replaced-not-reconciled) replaced. Read its required contexts before writing, name at the gate every one the payload's workflows do not report, and repair it in place to the contexts that now exist.
 

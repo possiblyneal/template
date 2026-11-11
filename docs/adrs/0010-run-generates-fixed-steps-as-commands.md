@@ -26,8 +26,8 @@ five choices:
    content live in `references/generate-into-content.md`, read only when the
    destination is not empty.
 3. The reasoning behind a fixed step is not on the path a run reads. It is
-   recorded below until the step's command carries it as a docstring. Each
-   step keeps its instruction and a link here. Judgement text stays inline:
+   recorded below, and the step's command docstring says what the command
+   does. Each step keeps its instruction and a link here. Judgement text stays inline:
    `CODEOWNERS`, the explicit pull-request body, and when to stop.
 4. The ruleset probe is kept, unlike a retrofit's step 8.
 5. A bootstrap generate merges its own pull request.
@@ -48,7 +48,7 @@ The probe stays because a generate's ruleset is new and nothing else proves
 it binds: creation returns 201 whether or not it does. A retrofit skips it
 because its destination is shared and already in use, where a direct push to
 the default branch is not a throwaway. A generate's default branch is still
-the empty root commit, so the probe costs nothing but the rewind.
+the empty root commit, so a refused probe leaves nothing behind.
 
 The bootstrap merge stays because the destination's default branch is the
 empty root commit, so no worktree can be checked out against it to review
@@ -102,12 +102,17 @@ under the same name it reports when it runs, rather than never reporting. The
 analyze leg reports its name unexpanded when skipped, which is a second reason
 it does not belong in a rule.
 
-### The probe is empty and rewound with `update-ref`
+### The probe is built with `commit-tree` on the remote tip
 
 The materialized payload is sitting untracked in the candidate's own worktree,
-and a `git reset --hard` against an empty base takes the working tree with the
-probe. An empty commit rewound with `update-ref` leaves the working tree
-alone.
+so `commit --allow-empty` would carry whatever is staged, and a
+`git reset --hard` rewind against an empty base takes the working tree with
+it. An empty commit built with `commit-tree` on the remote tip and pushed by
+name moves no local ref, so there is nothing to rewind. This departs from the
+`commit --allow-empty` and `update-ref` rewind the ticket first named, for
+that reason. An accepted push leaves the commit on the remote default branch;
+removing it is a force-push, a gate's decision, so the command stops and
+names the commit.
 
 ### `check-ignore --no-index` reads the direction the totals miss
 
