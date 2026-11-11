@@ -766,11 +766,7 @@ def settings_lines(configured: dict) -> list[str]:
         outcome = writes[write.name]
         line = setting_line(write.setting, outcome, reasons.get(write.name), True, None)
         if write.name == "ruleset" and outcome in (Outcome.DONE, Outcome.LOGGED):
-            line += (
-                "; probe refused with GH013"
-                if configured["probe"]
-                else "; not probed (written by an earlier run)"
-            )
+            line += "; probe refused with GH013"
             line += f"; requires {', '.join(configured['required_contexts'])}"
         lines.append(line)
     return lines

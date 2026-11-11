@@ -27,8 +27,9 @@ five choices:
    destination is not empty.
 3. The reasoning behind a fixed step is not on the path a run reads. It is
    recorded below, and the step's command docstring says what the command
-   does. Each step keeps its instruction and a link here. Judgement text stays inline:
-   `CODEOWNERS`, the explicit pull-request body, and when to stop.
+   does. Each step keeps its instruction and a link here. Judgement text
+   stays inline: `CODEOWNERS`, the explicit pull-request body, and when to
+   stop.
 4. The ruleset probe is kept, unlike a retrofit's step 8.
 5. A bootstrap generate merges its own pull request.
 
