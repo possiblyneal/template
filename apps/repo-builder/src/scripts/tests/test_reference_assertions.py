@@ -286,9 +286,9 @@ class ReferenceAssertions(unittest.TestCase):
         self.assertEqual(broken, [], f"links to headings that do not exist: {broken}")
 
     def test_inline_extracts_quote_their_source(self):
-        """Every code span in a `retrofit.md` or `update.md` bullet is in its source.
+        """Every code span in a generate, retrofit or update bullet is in its source.
 
-        Both flows state lifecycle rules inline so a flow never opens
+        The three flows state lifecycle rules inline so a flow never opens
         `lifecycle.md`, and #230 asked that any extract a script can check
         stays in step with the source. What is mechanical is that each
         backticked span in a bullet linking `lifecycle.md#<anchor>` occurs
@@ -297,6 +297,7 @@ class ReferenceAssertions(unittest.TestCase):
         """
         lifecycle = SKILL / "references/lifecycle.md"
         missing = [
+            *extract_mismatches(SKILL / "references/generate.md", lifecycle),
             *extract_mismatches(SKILL / "references/retrofit.md", lifecycle),
             *extract_mismatches(SKILL / "references/update.md", lifecycle),
         ]
