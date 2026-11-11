@@ -511,12 +511,31 @@ def prove_copies(arguments: argparse.Namespace) -> dict[str, object]:
     template = manifest["template"]
     assert isinstance(template, dict)
     subtree = str(template["subtree"])
-    staged = preflight.nul_fields(
-        destination, "diff", "--cached", "--name-only", "--diff-filter=d", "-z"
-    )
     recorded = preflight.resolve_commit(template_repo, str(template["commit"]))
     ignored = ignored_payload_paths(
         destination, template_repo, recorded, target, subtree
+    )
+    return {
+        "operation": "update-proof",
+        "template": {"subtree": subtree, "target_commit": target},
+        **copy_proof(destination, template_repo, target, subtree, ignored),
+    }
+
+
+def copy_proof(
+    destination: Path,
+    template_repo: Path,
+    target: str,
+    subtree: str,
+    ignored: list[str],
+) -> dict[str, object]:
+    """Split the staged paths, plus `ignored` proved against disk, into copies.
+
+    `ignored` is the caller's: which ignored payload paths a flow wrote differs
+    by flow, and the index never lists them.
+    """
+    staged = preflight.nul_fields(
+        destination, "diff", "--cached", "--name-only", "--diff-filter=d", "-z"
     )
     paths = sorted({*staged, *ignored, MANIFEST})
     authored: list[str] = []
@@ -538,8 +557,6 @@ def prove_copies(arguments: argparse.Namespace) -> dict[str, object]:
         if path == MANIFEST or source.returncode != 0 or source.stdout.strip() != held:
             authored.append(path)
     return {
-        "operation": "update-proof",
-        "template": {"subtree": subtree, "target_commit": target},
         "identical": len(paths) - len(authored),
         "total": len(paths),
         "authored": authored,
