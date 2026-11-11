@@ -44,36 +44,11 @@ Every built repository tracks `.repo-template.json`:
       {"path": "scripts/lint.sh", "did": "eslint over src/", "by": "scripts/check", "retired": true}
     ]
   },
-  "ownership": [
-    {"path": ".repo-template.json", "mode": "managed"},
-    {"path": "CLAUDE.md", "mode": "managed"},
-    {"path": "scripts/**", "mode": "managed"},
-    {"path": ".github/**", "mode": "managed"},
-    {"path": ".claude/settings.json", "mode": "managed"},
-    {"path": ".pre-commit-config.yaml", "mode": "managed"},
-    {"path": ".commitlintrc.yaml", "mode": "managed"},
-    {"path": ".gitattributes", "mode": "managed"},
-    {"path": ".gitignore", "mode": "managed"},
-    {"path": ".worktreeinclude", "mode": "managed"},
-    {"path": ".mcp.json", "mode": "managed"},
-    {"path": "tmp/.gitkeep", "mode": "managed"},
-    {"path": ".env", "mode": "product"},
-    {"path": "apps/**", "mode": "product"},
-    {"path": "libs/**", "mode": "product"},
-    {"path": "tests/**", "mode": "product"},
-    {"path": "tools/**", "mode": "product"},
-    {"path": "docs/**", "mode": "product"},
-    {"path": ".claude/hooks/**", "mode": "product"},
-    {"path": ".claude/rules/**", "mode": "product"},
-    {"path": ".claude/skills/**", "mode": "product"},
-    {"path": ".claude/agents/**", "mode": "product"},
-    {"path": ".claude/output-styles/**", "mode": "product"},
-    {"path": ".claude/workflows/**", "mode": "product"}
-  ]
+  "ownership": ["<every rule in apps/github-repository-template/src/ownership.json>"]
 }
 ```
 
-The `ownership` array illustrates the shape; do not copy it. Build a manifest's list from the payload's actual top-level structure at the resolved source commit (e.g. `git ls-tree -r --name-only <commit> -- <subtree>`), since real paths drift from prose. The example is still kept complete: `test_every_shipped_path_is_reached_by_an_ownership_rule` in `scripts/tests/test_reference_assertions.py` fails the commit on a payload path no rule here reaches.
+The `ownership` array a destination starts with is the canonical list in `apps/github-repository-template/src/ownership.json`, read at the source commit, never another repository's array. `generate.py manifest` writes it and refuses a payload path no rule reaches; `test_every_shipped_path_is_reached_by_an_ownership_rule` in `scripts/tests/test_reference_assertions.py` fails the commit on one first.
 
 Use a full lowercase 40-character commit. `template.commit` is the last template version successfully applied to the candidate. Change it only after the candidate passes verification, and commit it with the update it describes.
 
@@ -95,7 +70,7 @@ Ownership answers whether a path participates in template updates:
 
 The longest matching path wins; equal patterns are invalid. The old-to-new template delta bounds update scope. Do not edit an unrelated destination path merely because a broad ownership rule matches it. Two writes fall outside that bound: an expired override, settled under [Overridden paths](#overridden-paths), and a unit or domain `src/.gitkeep` whose `src/` now tracks other files, which `update.py apply` deletes and reports as `pruned`, since it only held an empty tree open.
 
-A root file matches no directory pattern, so `CLAUDE.md`, `.pre-commit-config.yaml`, `.commitlintrc.yaml`, `.gitattributes`, and `.gitignore` fall through to product unless named individually, and a payload fix to them would land nowhere while the update reports success. Every root file the payload adds needs a line. Every path the template ships needs an ownership rule that reaches it; verify with `classify_path` rather than assuming a directory pattern covers a root file. In this repository `test_reference_assertions.py` checks every payload path against both this repository's manifest and the example above.
+A root file matches no directory pattern, so `CLAUDE.md`, `.pre-commit-config.yaml`, `.commitlintrc.yaml`, `.gitattributes`, and `.gitignore` fall through to product unless named individually, and a payload fix to them would land nowhere while the update reports success. Every root file the payload adds needs a line. Every path the template ships needs an ownership rule that reaches it; verify with `classify_path` rather than assuming a directory pattern covers a root file. In this repository `test_reference_assertions.py` checks every payload path against both this repository's manifest and the canonical list.
 
 Reaching a path is not managing it. `.env` is named and **product**: the payload ships an empty one so the file exists, and a destination's copy is the destination's. Naming it makes that a decision rather than the default an added payload path would inherit.
 
