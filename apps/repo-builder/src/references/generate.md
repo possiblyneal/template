@@ -95,52 +95,20 @@ An invocation that forbids contacting GitHub does not skip this step, it stops a
 
 ### Step 5 — Configure the repository settings
 
-Configure supported settings after the default branch exists: Dependabot alerts/security updates, push protection where available, the merge commit as the only merge method, automatic head branch deletion, and a branch ruleset appropriate to the repository. Confirm plan/visibility limitations instead of treating API success as proof a feature is active.
-
-Adopting `CODEOWNERS` changes what "appropriate" means here. It is the only addon finished by a repository setting rather than by an edit: without a rule requiring code owner review, the file requests a reviewer and nothing waits for the answer. Enabling it is not the safe default it looks like, for the reason its manifest entry gives — ask.
-
-All four merge settings are applied unconditionally here, not collected as preferences in step 2, leaving the merge commit as the only method. Each is offered on every plan, so none needs a plan/visibility check first. `scripts/repo-settings` carries the reason for each.
+Apply every setting the step 4 gate listed with one command, run from this repository:
 
 ```bash
-gh api -X PATCH repos/<owner>/<name> \
-  -f allow_merge_commit=true \
-  -f allow_squash_merge=false \
-  -f allow_rebase_merge=false \
-  -f delete_branch_on_merge=true
+python3 apps/repo-builder/src/scripts/generate.py settings \
+  --records tmp/<repository-name>.<first 12 of the commit> \
+  --repository <owner/name> \
+  --default-branch main
 ```
 
-One call, not four: sent separately, the writes can be refused. The underscored field names are REST's; `gh repo view --json` names the same four `mergeCommitAllowed`, `squashMergeAllowed`, `rebaseMergeAllowed`, `deleteBranchOnMerge`, and either route answers `null` for the other's names, which reads as all four off. Name the endpoint and its field set together wherever either is written down. `docs/adrs/0010-run-generates-fixed-steps-as-commands.md` has both reasons.
+In order, it sends the four merge settings as one PATCH, turns on Dependabot alerts and security updates, turns on push protection, and creates the `main` ruleset from `apps/github-repository-template/src/ruleset.json`, which requires `CI`, `Security` and `Code scanning enabled`. It writes `<records>.settings.json` with each write's outcome, the required contexts, and the probe, and logs every write's reverse in `<records>.writes.json`. A 403 or 422 on push protection or the ruleset is recorded `not offered`, which the report states as `not offered for the plan`, never as disabled. Only where the ruleset was created does it probe: an empty commit pushed straight to the default branch, which must be refused with `GH013`. An accepted probe push exits non-zero naming the commit, which stays on the remote default branch: that is a failed verification, so stop under [Failure and recovery](lifecycle.md#failure-and-recovery) and leave removing it, a force-push, to a decision at a gate. A probe refused without `GH013`, such as by a hook a resumed generate already installed, also exits non-zero; do not skip the probe to get past it. The command's docstrings and `docs/adrs/0010-run-generates-fixed-steps-as-commands.md` carry the reasons.
 
-Read the result back with the repository's own `scripts/repo-settings check` rather than hand-rolling `gh api` calls. It already separates the two ways a setting reads as absent: `security_and_analysis` is missing both for a non-admin and for a plan that does not offer the feature, and it checks `.permissions.admin` to tell those apart. A hand-rolled check that misses this reports a plan limitation as a disabled setting.
+Adopting `CODEOWNERS` changes what the ruleset should require. It is the only addon finished by a repository setting rather than by an edit: without a rule requiring code owner review, the file requests a reviewer and nothing waits for the answer. Enabling it is not the safe default it looks like, for the reason its manifest entry gives — ask, and where the answer is yes, set `require_code_owner_review` on the ruleset the command created.
 
-Its output is the evidence for the settings section of the report, and `not offered for the plan` is a distinct outcome from disabled — do not collapse them.
-
-**A required status check is named by its check run, not by its workflow job id**: the job's `name:`, which the payload sets on every job. The contexts the runs report:
-
-| Workflow | Contexts its runs report |
-| --- | --- |
-| `ci.yml` | `CI` |
-| `security.yml` | `Security` |
-| `codeql.yml` | `Code scanning enabled`, `Detect languages`, and `Analyze <language>` once per detected language. On a destination that is not public the first passes and the other two are skipped |
-| `release.yml` | `Release` |
-
-Require only contexts every pull request reports: `CI`, `Security` and `Code scanning enabled`. Never require an analyze leg, which is one context per language, or `Release`, which does not run on a pull request. A misspelled context such as `ci` stays pending forever and leaves the default branch never mergeable while every other check passes; `docs/adrs/0010-run-generates-fixed-steps-as-commands.md` has why.
-
-Ruleset creation can also be refused outright, and that is a different outcome from a ruleset that does not bind. A repository on a plan that does not offer rulesets returns 403, so there is no 201 to be suspicious of and the refusal is itself the measurement: record `not offered for the plan` and do not probe. Pushing anyway learns nothing the 403 has not already said, and an unprotected branch does not reject it — the probe commit lands on top of step 4's empty root and becomes the default-branch tip, with nothing verified and a commit that only a force-push removes. Probe only where creation returned 201.
-
-A ruleset that was accepted is not a ruleset that binds. Creation returns 201 either way, so prove enforcement rather than inferring it: put a throwaway commit on the default branch, push it directly, and require the `GH013` rejection. An unprotected branch accepts that push, which is the finding.
-
-```bash
-git commit --allow-empty -m "chore: ruleset probe"
-git push origin <default-branch>
-git update-ref refs/heads/<default-branch> origin/<default-branch>
-```
-
-The probe is a commit on the default branch and a direct push to it, which is exactly what `no-commit-to-branch` and `protect-branch` exist to refuse. Step 4's note above applies to it unchanged, including the explicit confirmation that bypass needs: a resumed generate reaches this step with both hooks installed. Do not resolve a refusal by skipping the probe, which reports an unverified ruleset as verified.
-
-Make the probe empty and rewind it with `update-ref`, never `git reset --hard`, which takes the untracked payload with it (`docs/adrs/0010-run-generates-fixed-steps-as-commands.md`).
-
-That rewind is local, and it removes the probe only where the push was rejected. Where the push was accepted, `origin/<default-branch>` is the probe commit, so the rewind syncs to it rather than undoing it and the commit stays on the remote default branch. That is the finding, and it is a failed verification: stop under [Failure and recovery](lifecycle.md#failure-and-recovery), name the repository and say it carries the probe commit, and leave removing it to a decision at a gate. Removing it means force-pushing the default branch, which is not an operation to perform on the way past.
+Read the result back with the candidate's own `scripts/repo-settings check` rather than hand-rolling `gh api` calls. It separates the two ways a setting reads as absent, a non-admin and a plan that does not offer the feature, and its output is the evidence for the settings section of the report.
 
 ### Step 6 — Configure the repository for the engineering skills
 
