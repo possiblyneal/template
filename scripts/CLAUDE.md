@@ -12,7 +12,7 @@ Each script's header comment says what it does and why it is shaped that way, an
 
 - Run by a person: `doctor`, `check`, `fix`, `clean`, `run`, `integration`, `package`, `summarize`, `repo-settings check`
 - Called by `.github/`: `ci`, `security`, `release`, `detect`, `changelog-check`, `system-packages`, `script-tests`
-- Called by pre-commit: `adr-index`, `structure`, `github-parity`, `attribute-commit` (`prepare-commit-msg`), `changelog-check` and `protect-branch` (`pre-push`), `worktree-cleanup` (`post-checkout`, `post-merge`, and SessionStart with `--report`)
+- Called by pre-commit: `adr-index`, `structure`, `payload-parity`, `attribute-commit` (`prepare-commit-msg`), `changelog-check` and `protect-branch` (`pre-push`), `worktree-cleanup` (`post-checkout`, `post-merge`, and SessionStart with `--report`)
 - Sourced: `libs/detect.sh`, `libs/result.sh`, `libs/unit.sh`, `libs/precommit.sh`, `libs/dependabot.sh`, `libs/quadlet.sh`, `tests/libs/harness.sh`
 
 ## Local Contracts
@@ -35,11 +35,11 @@ Adding a check: add it to `DETECT_CAPABILITIES` and write an adapter per languag
 
 Adding a suite: name it `tests/<name>-test`, report through `tests/libs/harness.sh`, assert through the public surface, and say what it covers in its header. It runs concurrently beside every other suite, so it keeps to its own scratch repositories, or owns outright any path it writes in this one.
 
-Changes here almost always belong in `apps/github-repository-template/src/base-repo/scripts/` too. Decide explicitly; a fix in one tree only is how the two drift.
+Every change here belongs in `apps/github-repository-template/src/base-repo/scripts/` too; `payload-parity` fails until the two trees match. This file is the one root-only path.
 
 ## Verification
 
-`scripts/check` runs every suite through `script-tests` before the checks they guard, then `structure` and `github-parity` before `ci`. `ci.yml` runs them the same way before toolchain setup, with `pre-commit` installed first so `adr-index-test` and `commitlint-test` do not skip their hook-wiring cases. shellcheck runs via pre-commit with `-x`.
+`scripts/check` runs every suite through `script-tests` before the checks they guard, then `structure` and `payload-parity` before `ci`. `ci.yml` runs them the same way before toolchain setup, with `pre-commit` installed first so `adr-index-test` and `commitlint-test` do not skip their hook-wiring cases. shellcheck runs via pre-commit with `-x`, skipping the payload's `scripts/`, which `payload-parity` holds identical to this tree.
 
 ## Child Index
 

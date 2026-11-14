@@ -192,7 +192,7 @@ def code_scanning_check(candidate: Path, generation_record: dict[str, object]) -
     present = (candidate / ".github/workflows/codeql.yml").is_file()
     features = generation_record.get("features", {})
     features = features if isinstance(features, dict) else {}
-    # The value is matched, not just the key: `scripts/github-parity` excuses a
+    # The value is matched, not just the key: `scripts/payload-parity` excuses a
     # payload-only workflow on `.value == "omitted-by-choice"` exactly, so a
     # record carrying any other value is not the record that excuses it.
     recorded_omission = features.get("codeql") == "omitted-by-choice"
