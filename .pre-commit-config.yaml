@@ -113,18 +113,19 @@ repos:
 
   - repo: local
     hooks:
-      # .github/ can exist twice: a repository that ships a template payload
-      # holds its own configuration and the copy generated repositories are cut
-      # from. Dependabot's github-actions ecosystem reaches the root one only,
-      # so a merged bump leaves the payload pinned to the old SHA through a
-      # pull request that looks routine. This refuses the divergence rather
-      # than repairing it, which turns each root bump into a complete one, and
-      # reports not-applicable where there is no payload.
+      # .github/ and scripts/ can each exist twice: a repository that ships a
+      # template payload holds its own copy and the one generated repositories
+      # are cut from. Dependabot's github-actions ecosystem reaches the root
+      # .github/ only, so a merged bump leaves the payload pinned to the old
+      # SHA through a pull request that looks routine; and the shellcheck hook
+      # below skips the payload's scripts/, which is sound only while it
+      # matches the root's. This refuses a divergence rather than repairing it,
+      # which turns each root bump into a complete one, and reports
+      # not-applicable where there is no payload.
       #
       # always_run with no files filter, for the same reason as adr-index
       # above: a path filter reads the staged paths, which exclude deletions,
-      # and deleting a workflow from one tree is exactly the divergence to
-      # catch.
+      # and deleting a file from one tree is exactly the divergence to catch.
       - id: payload-parity
         name: check the root and payload .github/ and scripts/ trees agree
         entry: scripts/payload-parity
@@ -223,6 +224,10 @@ repos:
   # The template payload's scripts/ is skipped: scripts/payload-parity holds it
   # byte-identical to the root's, so analyzing it again reports the same
   # findings at twice the cost. A repository with no payload matches nothing.
+  # Parity is read from the index, so the guarantee holds at commit: an
+  # unstaged edit to a payload script alone goes unanalyzed by scripts/check,
+  # and payload-parity refuses its commit until the root copy, which is
+  # analyzed, matches.
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.11.0.1
     hooks:
