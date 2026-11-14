@@ -148,9 +148,9 @@ So no flow branches on visibility here and none records it; a generation-time de
 
 A destination that wants no scanning deletes `codeql.yml` itself and records `"codeql": "omitted-by-choice"` under `generation.features`, which tells a later flow the file was omitted rather than lost.
 
-The value is exactly `omitted-by-choice` with no reason: `scripts/github-parity` selects on `.value == "omitted-by-choice"`, so a reason in the value silently un-excuses the omission. Put the reason in the report.
+The value is exactly `omitted-by-choice` with no reason: `scripts/payload-parity` selects on `.value == "omitted-by-choice"`, so a reason in the value silently un-excuses the omission. Put the reason in the report.
 
-`scripts/github-parity` reads the record only in this repository, the one place it compares against a payload. In a generated repository it reports `not-applicable`.
+`scripts/payload-parity` reads the record only in this repository, the one place it compares against a payload. In a generated repository it reports `not-applicable`.
 
 ## Dependabot entries follow the manifests present
 
@@ -180,7 +180,7 @@ So every flow that writes the file **derives the language entries from the manif
 
 **Read the manifests from the tracked files, with `git ls-files`.** Not from `has_<lang>` in `scripts/libs/detect.sh`, which answers only whether a *root* manifest exists, and not from a working-tree search pruned by `DETECT_PRUNE_DIRS` (`.git node_modules .build target .venv venv vendor tmp`), which does not prune `.claude/worktrees/` and here returns two `pyproject.toml` not in the repository. Dependabot reads the pushed tree, so the tracked set is the right answer. Exclude the payload under `apps/github-repository-template/src/base-repo/`: an entry derived from it would name a path no destination has.
 
-**A destination that tracks a copy of the payload earns a second `pre-commit` directory.** `template.subtree` names where a payload sits. Where the destination tracks a `.pre-commit-config.yaml` at that path inside itself, the `pre-commit` entry names that directory alongside `/`, and its group takes `group-by: dependency-name`. Add the key only with the second directory; a destination without one keeps the payload's group. The key is required: without it Dependabot splits the group by directory and opens one pull request per copy; a bump reaching one copy and not the other leaves later generated repositories on the older hook revision (`scripts/github-parity` compares only the two `.github/` trees). Derive it from the tracked path, not a `generation` flag, so it is rebuilt each run and disappears when the payload copy does.
+**A destination that tracks a copy of the payload earns a second `pre-commit` directory.** `template.subtree` names where a payload sits. Where the destination tracks a `.pre-commit-config.yaml` at that path inside itself, the `pre-commit` entry names that directory alongside `/`, and its group takes `group-by: dependency-name`. Add the key only with the second directory; a destination without one keeps the payload's group. The key is required: without it Dependabot splits the group by directory and opens one pull request per copy; a bump reaching one copy and not the other leaves later generated repositories on the older hook revision (`scripts/payload-parity` compares only the `.github/` and `scripts/` trees). Derive it from the tracked path, not a `generation` flag, so it is rebuilt each run and disappears when the payload copy does.
 
 That is not an exception to the exclusion above: the exclusion stops *language* entries from payload manifests; this names the directory of a file the destination itself pins and is failed by.
 

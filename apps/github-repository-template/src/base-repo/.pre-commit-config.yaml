@@ -86,9 +86,9 @@ repos:
       # above: a path filter reads the staged paths, which exclude deletions,
       # and deleting a workflow from one tree is exactly the divergence to
       # catch.
-      - id: github-parity
-        name: check the two .github/ trees agree
-        entry: scripts/github-parity
+      - id: payload-parity
+        name: check the root and payload .github/ and scripts/ trees agree
+        entry: scripts/payload-parity
         language: script
         always_run: true
         pass_filenames: false
@@ -171,12 +171,23 @@ repos:
   # -x follows `source` into the detection library, so it is analyzed with
   # its caller rather than reported as unreadable. Without it every script that
   # sources the detection library fails on SC1091.
+  #
+  # require_serial: false overrides the upstream hook's true, so pre-commit
+  # splits the files across CPUs. -x re-analyzes the detection library for
+  # every script that sources it, which made one serial process the slowest
+  # step of scripts/check. Each file is still analyzed with what it sources,
+  # whichever partition it lands in, so the findings are the same.
+  #
+  # The template payload's scripts/ is skipped: scripts/payload-parity holds it
+  # byte-identical to the root's, so analyzing it again reports the same
+  # findings at twice the cost. A repository with no payload matches nothing.
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.11.0.1
     hooks:
       - id: shellcheck
         args: [-x]
-        exclude: (^|/)vendor/
+        require_serial: false
+        exclude: (^|/)vendor/|^apps/github-repository-template/src/base-repo/scripts/
 
   # Workflow errors otherwise surface as a failed run after the push, since
   # nothing validates workflow syntax, action inputs, or shell snippets locally.
