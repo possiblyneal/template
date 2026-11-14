@@ -410,20 +410,23 @@ _capability_test_python() {
   fi
   return "$status"
 }
-# Run inside a module by go_each, so the import paths it filters are that
-# module's. A module whose every package is under the tier is not an error: the
-# tier has a runner of its own and this one has nothing left to do.
+# Run inside a module by go_each, so the packages it filters are that module's.
+# A module whose every package is under the tier is not an error: the tier has a
+# runner of its own and this one has nothing left to do.
 _go_test_outside_integration() {
   local listed
   local -a packages=()
-  listed="$(go list ./...)" || return 1
+  listed="$(go list -f '{{.ImportPath}}{{"\t"}}{{.Dir}}' ./...)" || return 1
   if [[ -z "$listed" ]]; then
     echo "This module names no packages."
     return 0
   fi
-  # Anchored at the segment: a package named tests/integrationutil is not the
-  # tier, and a substring filter would silently stop testing it.
-  mapfile -t packages < <(grep -vE '/tests/integration(/|$)' <<<"$listed" || true)
+  # Filtered on the directory, not the import path: the tier is a path, and a
+  # tier that is a module of its own (a go.work `use`) has whatever import path
+  # its go.mod names. Anchored at the segment: a directory named
+  # tests/integrationutil is not the tier, and a substring filter would
+  # silently stop testing it.
+  mapfile -t packages < <(awk -F'\t' '$2 !~ /\/tests\/integration(\/|$)/ { print $1 }' <<<"$listed")
   if (( ${#packages[@]} == 0 )); then
     echo "Every package in this module is under tests/integration."
     return 0
