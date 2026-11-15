@@ -411,10 +411,11 @@ _capability_test_python() {
   return "$status"
 }
 # Run inside a module by go_each, so the packages it filters are that module's.
+# Takes the repository root, since go list names each directory absolutely.
 # A module whose every package is under the tier is not an error: the tier has a
 # runner of its own and this one has nothing left to do.
 _go_test_outside_integration() {
-  local listed
+  local root="$1" listed
   local -a packages=()
   listed="$(go list -f '{{.ImportPath}}{{"\t"}}{{.Dir}}' ./...)" || return 1
   if [[ -z "$listed" ]]; then
@@ -425,8 +426,11 @@ _go_test_outside_integration() {
   # tier that is a module of its own (a go.work `use`) has whatever import path
   # its go.mod names. Anchored at the segment: a directory named
   # tests/integrationutil is not the tier, and a substring filter would
-  # silently stop testing it.
-  mapfile -t packages < <(awk -F'\t' '$2 !~ /\/tests\/integration(\/|$)/ { print $1 }' <<<"$listed")
+  # silently stop testing it. Matched below the root, as integration_dirs is: a
+  # checkout that itself sits under some tests/integration/ would otherwise
+  # drop every package and pass having tested none. ENVIRON, not -v, so awk
+  # does not read backslashes in the path as escapes.
+  mapfile -t packages < <(root="$root" awk -F'\t' 'substr($2, length(ENVIRON["root"]) + 1) !~ /\/tests\/integration(\/|$)/ { print $1 }' <<<"$listed")
   if (( ${#packages[@]} == 0 )); then
     echo "Every package in this module is under tests/integration."
     return 0
@@ -438,7 +442,7 @@ _capability_test_go() {
     go_each go test ./...
     return
   fi
-  go_each _go_test_outside_integration
+  go_each _go_test_outside_integration "$PWD"
 }
 _capability_test_rust() { cargo test; }
 _capability_test_swift() { command -v swift >/dev/null 2>&1 || return "$NO_RUNNER"; swift_each swift test; }
