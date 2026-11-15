@@ -127,14 +127,15 @@ Then run the mechanical steps over all of them with scripts, not a subagent each
      --destination <destination> [<destination> ...]
    ```
 
-Spawn one subagent per destination only for a `reconcile`, `install-failed`, `check-failed` or `stopped` status. It continues that destination's flow from its records (from step 4 for `reconcile`, whose apply is already done) and returns only the [Final report](reporting.md#final-report) block. A subagent cannot ask the user, so it stops at each remote gate and returns what it would do. The parent owns every gate's confirmation. The parent's Final report is the `report` output of step 5, with each `[[FILL: <name>]]` slot it lists decided.
+Spawn one subagent per destination only for a `reconcile`, `install-failed`, `check-failed` or `stopped` status. It continues that destination's flow from its records (from step 4 for `reconcile`, whose apply is already done) and returns only the [Final report](reporting.md#final-report) block. A subagent cannot ask the user, so it stops at each remote gate and returns what it would do. The parent owns every gate's confirmation. The `report` output of step 5 is the full record: decide each `[[FILL: <name>]]` slot it lists in `report.md` itself, so the file it links holds none.
 
-`report.md` is the full record. The reply to the operator condenses it under the same `## Repo Builder Result` heading and sections, each label in bold, because per-repository path lists across twenty destinations bury what happened:
+The parent's Final report is the reply to the operator, which condenses `report.md` under the same `## Repo Builder Result` heading, each label in bold, because per-repository path lists across twenty destinations bury what happened. It carries these lines and drops the per-destination Pull request and Destination lines, which the full report keeps:
 
-- **Status:** one sentence: how many of the eligible repositories have a pull request with checks passing and what they wait on, and each blocked destination linked to what blocks it.
-- **Operation**, **Template** (the target, with any destination whose old commit differs named beside it), and **Full report:** a `file://` link to `report.md`, which keeps the per-repository table.
-- **Reconciliation:** each outcome by count and meaning: what the applied changes do and in how many repositories; a destination already current on most paths, with what its diff still holds; Preserved and Merged by repository and reason. Empty outcomes share one line.
+- **Status:** one sentence: finished or stopped, then how many of the eligible repositories have a pull request with checks passing and what they wait on, and each blocked destination linked to what blocks it.
+- **Operation**, **Template** (the target, with each destination whose `.apply.json` `template.recorded_commit` is not the common one named beside its old commit), and **Full report:** a `file://` link to `report.md`, which keeps the per-repository table.
+- **Reconciliation:** each outcome by count and meaning: what the applied changes do and in how many repositories; a destination already current on most paths, with what its diff still holds; Preserved, Merged and Conflicted by repository and reason. Empty outcomes share one line.
 - **File list:** the authored surface by count, each hand edit with its repository; a destination-owned file the flow rewrote, with what changed and which commit carries it; the byte-identical count.
+- **Repository settings:** each drift or unavailable row with its repository, or none found in one line.
 - **Verification:** one sentence per check, with the reason for any skipped CI check.
 - **Cleanup:** what stays and why, the clones carrying open pull requests on one line.
 - **Pending action:** numbered, each the action and the pull request it needs.
