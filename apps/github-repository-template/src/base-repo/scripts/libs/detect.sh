@@ -411,7 +411,8 @@ _capability_test_python() {
   return "$status"
 }
 # Run inside a module by go_each, so the packages it filters are that module's.
-# Takes the repository root, since go list names each directory absolutely.
+# Takes the repository root without a trailing slash, so a checkout at / strips
+# nothing; go list names each directory absolutely.
 # A module whose every package is under the tier is not an error: the tier has a
 # runner of its own and this one has nothing left to do.
 _go_test_outside_integration() {
@@ -442,7 +443,7 @@ _capability_test_go() {
     go_each go test ./...
     return
   fi
-  go_each _go_test_outside_integration "$PWD"
+  go_each _go_test_outside_integration "${PWD%/}"
 }
 _capability_test_rust() { cargo test; }
 _capability_test_swift() { command -v swift >/dev/null 2>&1 || return "$NO_RUNNER"; swift_each swift test; }
