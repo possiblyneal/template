@@ -29,7 +29,7 @@ Use these instead of per-language tools. `check` and `fix` run for every languag
 - `docs/` takes Markdown; anything else there needs `.structure-allow`.
 - Below a `src/`, an `examples/`, a `vendor/`, or a toolchain folder, that tree's own language or tool decides the layout.
 - A path ending in `/` in `.structure-allow` exempts that whole prefix, for a tracked fixture tree.
-- A package whose language has no root manifest fails the gate; add the root workspace manifest (`go.work`, `settings.gradle.kts`, a `CMakeLists.txt` that reaches it through `add_subdirectory()`, and so on) that lists it. Swift is excepted: it has no root manifest.
+- A package whose language has no root manifest fails the gate; add the root workspace manifest (`go.work`, `settings.gradle.kts`, a `CMakeLists.txt` that reaches it through `add_subdirectory()`, and so on) that lists it. Swift is excepted: it has no root manifest. So is a `CMakeLists.txt` below a `src/` or beside another language's manifest, which belongs to that language's native build.
 
 These are conventions `scripts/structure` does not check:
 

@@ -295,6 +295,23 @@ else
   fail "scripts/ci did not fail naming the orphaned CMakeLists.txt"
 fi
 
+# A CMakeLists.txt below a src/, as an Android NDK library sits in a Kotlin
+# unit, or beside another language's manifest, belongs to that build, so only
+# the unit's own one is an orphan.
+fixture "CMakeLists.txt owned by another build is no orphan"
+mkdir -p "$work/apps/fw" "$work/apps/android/src/main/cpp" "$work/apps/ios"
+printf 'add_executable(fw src/main.c)\n' > "$work/apps/fw/CMakeLists.txt"
+printf 'add_library(jni SHARED jni.c)\n' > "$work/apps/android/src/main/cpp/CMakeLists.txt"
+printf 'add_library(native native.c)\n' > "$work/apps/ios/CMakeLists.txt"
+printf '// swift-tools-version:5.9\n' > "$work/apps/ios/Package.swift"
+out="$(ci)"
+if grep -q "apps/fw/CMakeLists.txt has no root" <<<"$out" &&
+  ! grep -q "apps/android/src/main/cpp/CMakeLists.txt\|apps/ios/CMakeLists.txt" <<<"$out"; then
+  pass
+else
+  fail "the orphan search did not name apps/fw's CMakeLists.txt alone: $out"
+fi
+
 # --- root manifest specificity -------------------------------------------------
 
 # has_go accepts go.mod or go.work, and has_kotlin accepts build.gradle.kts or
@@ -1314,6 +1331,35 @@ else
   skip "jq is not installed"
 fi
 
+# CMake writes the database with the logical path it ran from, so a checkout
+# reached through a symlink still lints its own units rather than none.
+fixture "cpp lint matches units through a symlinked checkout"
+if command -v jq >/dev/null 2>&1; then
+  printf 'cmake_minimum_required(VERSION 3.20)\nproject(p C)\n' > "$work/CMakeLists.txt"
+  mkdir -p "$work/apps/fw/src"
+  : > "$work/apps/fw/src/main.c"
+  ln -s "$work" "$work.link"
+  stub cmake <<'STUB'
+#!/usr/bin/env bash
+mkdir -p build
+printf '[{"file":"%s"}]\n' "$PWD/apps/fw/src/main.c" > build/compile_commands.json
+STUB
+  stub clang-tidy <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$@" > "${MARKER:?}"
+STUB
+  out="$(cd "$work.link" && MARKER="$work/tidy-args" language_capabilities run lint 2>&1 </dev/null)"
+  if grep -qE '^lint +pass +cpp$' <<<"$out" &&
+    grep -qx "$work.link/apps/fw/src/main.c" "$work/tidy-args" 2>/dev/null; then
+    pass
+  else
+    fail "clang-tidy was not handed main.c through the symlink: $out"
+  fi
+  rm -f "$work.link"
+else
+  skip "jq is not installed"
+fi
+
 # A unit's enable_testing() without the root's leaves ctest reading no test
 # file and passing with "No tests were found", so the adapter refuses before
 # ctest runs.
@@ -1322,7 +1368,7 @@ printf 'cmake_minimum_required(VERSION 3.20)\nproject(p C)\n' > "$work/CMakeList
 stub cmake <<'STUB'
 #!/usr/bin/env bash
 mkdir -p build/apps/fw
-: > build/apps/fw/CTestTestfile.cmake
+printf 'add_test([=[t]=] "/bin/true")\n' > build/apps/fw/CTestTestfile.cmake
 STUB
 stub ctest <<'STUB'
 #!/usr/bin/env bash
@@ -1334,6 +1380,27 @@ if grep -qE '^test +FAIL +cpp' <<<"$out" && grep -q 'never calls enable_testing(
   pass
 else
   fail "the cpp test adapter did not refuse a nested CTestTestfile.cmake with no root one: $out"
+fi
+
+# A dependency fetched into _deps/ may call include(CTest) whatever its parent
+# does; its tests are not the project's, so a project with none still passes.
+fixture "cpp test ignores a dependency's own tests"
+printf 'cmake_minimum_required(VERSION 3.20)\nproject(p C)\n' > "$work/CMakeLists.txt"
+stub cmake <<'STUB'
+#!/usr/bin/env bash
+mkdir -p build/_deps/dep-build build/apps/fw
+printf 'add_test([=[t]=] "/bin/true")\n' > build/_deps/dep-build/CTestTestfile.cmake
+printf 'subdirs("x")\n' > build/apps/fw/CTestTestfile.cmake
+STUB
+stub ctest <<'STUB'
+#!/usr/bin/env bash
+: > "${MARKER:?}"
+STUB
+out="$(cd "$work" && MARKER="$work/ctest-ran" language_capabilities run test 2>&1 </dev/null)"
+if grep -qE '^test +pass +cpp' <<<"$out" && [[ -e "$work/ctest-ran" ]]; then
+  pass
+else
+  fail "the cpp test adapter refused a project whose only tests are a dependency's: $out"
 fi
 
 # --- aggregate outcomes ------------------------------------------------------

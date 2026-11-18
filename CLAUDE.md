@@ -129,7 +129,7 @@ Reading the file needs `jq`, which `scripts/doctor` requires. Without it the aud
 
 Three rules are about content, and no script can settle them: whether `libs/` holds what several apps share, whether `tests/` spans them, and whether a file sits at its own scope. `scripts/structure` reports them `not-applicable` rather than guessing from paths.
 
-A package whose language has no root manifest fails the run, because that manifest is what lists it: `go list -m` names only `go.work`'s `use` entries, the Gradle settings file likewise, and CMake configures only what the root `CMakeLists.txt` reaches through `add_subdirectory()`. Swift is excluded: it has no root manifest, and nested packages are how a Swift repository is meant to look. The failure names the root manifest to add.
+A package whose language has no root manifest fails the run, because that manifest is what lists it: `go list -m` names only `go.work`'s `use` entries, the Gradle settings file likewise, and CMake configures only what the root `CMakeLists.txt` reaches through `add_subdirectory()`. Swift is excluded: it has no root manifest, and nested packages are how a Swift repository is meant to look. So is a `CMakeLists.txt` below a `src/` or beside another language's manifest, which belongs to that language's native build. The failure names the root manifest to add.
 
 ## Repository settings
 

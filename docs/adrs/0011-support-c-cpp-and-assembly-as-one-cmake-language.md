@@ -66,8 +66,10 @@ Three behaviours shaped the adapters, each found by probing:
   only when the root `CMakeLists.txt` calls `enable_testing()`. When only a
   unit calls it, ctest prints "No tests were found" and exits 0, so tests
   that were written are silently skipped. The test adapter fails when a
-  nested test file exists and the top-level one does not. A project with
-  no tests at all still passes, as pytest collecting none does.
+  nested test file declares a test and the top-level one does not exist.
+  A dependency's test files under `build/_deps/` or a `vendor/` binary
+  directory do not count, and a project with no tests at all still
+  passes, as pytest collecting none does.
 - `FetchContent` clones each dependency's tree into `build/`, so the root
   `build/` is pruned from every search, and `scripts/clean` removes it by
   path.
@@ -102,7 +104,15 @@ guessing.
   same honest gap Swift's run has, until the firmware decision is made.
 - The root `CMakeLists.txt` is the workspace file. A nested one that the
   root does not reach is reported by `detect_orphan_manifests`, the same
-  way a Go module missing from `go.work` is.
+  way a Go module missing from `go.work` is. One below a `src/`, or beside
+  another language's manifest, belongs to that language's native build (an
+  Android NDK library, a scikit-build package, a cmake-js addon) and is
+  not reported.
+- clang-tidy reads the compilation database whichever compiler CMake chose,
+  which on Linux is usually gcc. A gcc-only flag in a target's options
+  reaches clang-tidy as an unknown argument and fails lint. A repository
+  that sets one configures clang for the build, or guards the flag with a
+  compiler-ID generator expression.
 - Neither clang-tidy nor clang-format reads a manifest. `.clang-format` and
   `.clang-tidy` are therefore permitted at the root by name, and without
   them each tool uses its built-in defaults.

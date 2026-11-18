@@ -273,24 +273,28 @@ cmake_build() {
 # the compilation database's files that cpp_sources also lists. That one
 # intersection leaves out assembly, which clang-tidy parses as C and fails on,
 # sources generated into the binary directory, fetched dependencies, and
-# everything pruned. The database names files by physical path, so the
-# comparison is made against `pwd -P`; a logical path through a symlink would
-# match nothing and lint nothing.
+# everything pruned. The database names files by the logical path CMake was
+# run from, which is the physical one unless the checkout is reached through a
+# symlink, so each entry is compared relative to whichever of the two it starts
+# with; matching only one would lint nothing and pass.
 _cmake_translation_units() {
   local -n _units_out="$1"
-  local file root
+  local file relative logical physical
   local -A sources=()
-  root="$(pwd -P)"
+  logical="${PWD%/}/"
+  physical="$(pwd -P)/"
   while IFS= read -r -d '' file; do
-    sources["$root/${file#./}"]=1
+    sources["${file#./}"]=1
   done < <(cpp_sources)
 
   _units_out=()
   while IFS= read -r file; do
+    relative="${file#"$logical"}"
+    [[ "$relative" != "$file" ]] || relative="${file#"$physical"}"
     # Unset once taken, so a file compiled into two targets is read once.
-    if [[ -n "${sources[$file]:-}" ]]; then
+    if [[ -n "${sources[$relative]:-}" ]]; then
       _units_out+=("$file")
-      unset 'sources[$file]'
+      unset 'sources[$relative]'
     fi
   done < <(jq -r '.[].file' "$CMAKE_BUILD_DIR/compile_commands.json")
 }
@@ -373,6 +377,16 @@ _detect_orphan_report() {
   echo "$nested has no root $root, so no check sees this $noun; $fix, or move it under an existing workspace"
 }
 
+# Whether the CMakeLists.txt in $1 belongs to another language's build.
+_cmake_owned_elsewhere() {
+  local dir="$1" manifest
+  [[ "/$dir/" != */src/* ]] || return 0
+  for manifest in package.json pyproject.toml Cargo.toml go.mod build.gradle.kts Package.swift; do
+    [[ ! -e "$dir/$manifest" ]] || return 0
+  done
+  return 1
+}
+
 detect_orphan_manifests() {
   local lang root nested dir
 
@@ -408,6 +422,12 @@ detect_orphan_manifests() {
       # project's own top-level manifest, already visible to every check
       # without a workspace file, not a nested module missing one.
       [[ "$dir" != "." ]] || continue
+
+      # A CMakeLists.txt is also how other languages build native code: an
+      # Android NDK library under a Kotlin unit's src/, a scikit-build Python
+      # package, a cmake-js Node addon. Below a src/, or beside another
+      # language's manifest, it belongs to that build and needs no root.
+      if [[ "$lang" == cpp ]] && _cmake_owned_elsewhere "$dir"; then continue; fi
 
       case "$lang" in
         go) _detect_orphan_report "$nested" "$root" "$noun" \
@@ -546,11 +566,15 @@ _capability_test_kotlin() { [[ -x ./gradlew ]] || return "$NO_RUNNER"; ./gradlew
 # ctest reads only the top-level CTestTestfile.cmake, which CMake writes only
 # when the root CMakeLists.txt calls enable_testing(). Called in a unit's alone,
 # every add_test() below it is skipped by that same passing message, so a
-# nested test file with no top-level one is refused.
+# nested test file declaring a test, with no top-level one, is refused. A
+# dependency's own test files, fetched into _deps/ or built from vendor/, are
+# not this project's tests: a library that calls include(CTest) regardless
+# must not fail a project that has none.
 _capability_test_cpp() {
   cmake_build || return
-  if [[ ! -f "$CMAKE_BUILD_DIR/CTestTestfile.cmake" &&
-    -n "$(find "$CMAKE_BUILD_DIR" -name CTestTestfile.cmake -print -quit)" ]]; then
+  if [[ ! -f "$CMAKE_BUILD_DIR/CTestTestfile.cmake" ]] &&
+    find "$CMAKE_BUILD_DIR" \( -path '*/_deps' -o -path '*/vendor' \) -prune -o \
+      -name CTestTestfile.cmake -exec grep -q '^add_test(' {} \; -print | grep -q .; then
     echo "Tests are declared below the root CMakeLists.txt, which never calls enable_testing(), so ctest finds none of them." >&2
     return 1
   fi
