@@ -18,7 +18,7 @@ Use these instead of per-language tools. `check` and `fix` run for every languag
 `scripts/check` fails on any of these; pre-commit runs `scripts/structure` over the placement rules on every commit.
 
 - Root holds only `apps/`, `docs/`, `libs/`, `scripts/`, `tests/`, `tools/`, `deploy/`, `assets/`, `config/`, `examples/`, `vendor/`, `tmp/`, the toolchain folders below, and the dot-folders `.claude/`, `.github/`, `.devcontainer/`.
-- Root files are permitted by name: the shipped dotfiles, `CLAUDE.md`, `GLOSSARY.md`, `GLOSSARY-MAP.md`, `.gitmodules`, `.structure-allow`, `.repo-template.json`, adopted addons, and each language's root manifests and lockfiles. Any other root file or folder needs an entry in `.structure-allow`.
+- Root files are permitted by name: the shipped dotfiles, `CLAUDE.md`, `GLOSSARY.md`, `GLOSSARY-MAP.md`, `.gitmodules`, `.structure-allow`, `.repo-template.json`, adopted addons, each language's root manifests and lockfiles, and `.clang-format` and `.clang-tidy`. Any other root file or folder needs an entry in `.structure-allow`.
 - `apps/<unit>/` is one unit: the smallest piece delivered on its own. Its code goes in `apps/<unit>/src/`. Nothing sits directly in `apps/`.
 - Split a unit into domains only for distinct business areas: `apps/<unit>/<domain>/src/`. A unit has `src/` or domains, never both. Domains do not nest.
 - A root, unit, or domain may hold its own `libs/`, `tests/`, `scripts/`, `tools/`, `assets/`, `config/`, `docs/`, `deploy/`, `examples/`, or `vendor/`, scoped to it. Outside `examples/` and `vendor/`, these never contain `src/`.
@@ -29,7 +29,7 @@ Use these instead of per-language tools. `check` and `fix` run for every languag
 - `docs/` takes Markdown; anything else there needs `.structure-allow`.
 - Below a `src/`, an `examples/`, a `vendor/`, or a toolchain folder, that tree's own language or tool decides the layout.
 - A path ending in `/` in `.structure-allow` exempts that whole prefix, for a tracked fixture tree.
-- A package whose language has no root manifest fails the gate; add the root workspace manifest (`go.work`, `settings.gradle.kts`, and so on) that lists it. Swift is excepted: it has no root manifest.
+- A package whose language has no root manifest fails the gate; add the root workspace manifest (`go.work`, `settings.gradle.kts`, a `CMakeLists.txt` that reaches it through `add_subdirectory()`, and so on) that lists it. Swift is excepted: it has no root manifest. So is a `CMakeLists.txt` below a `src/` or beside another language's manifest, which belongs to that language's native build.
 
 These are conventions `scripts/structure` does not check:
 

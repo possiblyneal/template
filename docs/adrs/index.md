@@ -14,3 +14,4 @@
 | [0008](0008-name-opaque-and-toolchain-folders.md) | Name the Folders a Repository Needs Beyond Its Code, and Let Tools Fix the Rest by Table | proposed |
 | [0009](0009-name-ticket-categories-after-commit-types.md) | Name Ticket Categories After Conventional Commit Types | accepted |
 | [0010](0010-run-generates-fixed-steps-as-commands.md) | Run Generate's Fixed Steps as Commands and Keep Their Reasoning Out of the Run | accepted |
+| [0011](0011-support-c-cpp-and-assembly-as-one-cmake-language.md) | Support C, C++ and Assembly as One Language Built by CMake | accepted |

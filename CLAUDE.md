@@ -86,7 +86,7 @@ Where a new file goes. `scripts/structure` enforces every placement rule here as
 - `tmp/` — gitignored scratch space
 - a toolchain folder, such as `gradle/` beside `gradlew`; see below
 
-Root *files* are permitted by name: the eight the template ships, `.repo-template.json`, `.gitmodules`, `.structure-allow`, `GLOSSARY.md`, `GLOSSARY-MAP.md`, every addition by occasion, and the root workspace manifests and lockfiles of five of the six languages (Swift has none; see the orphan-manifest rule). `.gitkeep` is permitted anywhere. Anything else needs an entry in `.structure-allow`.
+Root *files* are permitted by name: the eight the template ships, `.repo-template.json`, `.gitmodules`, `.structure-allow`, `GLOSSARY.md`, `GLOSSARY-MAP.md`, every addition by occasion, the root workspace manifests and lockfiles of six of the seven languages (Swift has none; see the orphan-manifest rule), and C and C++'s `.clang-format` and `.clang-tidy`, which read no manifest. `.gitkeep` is permitted anywhere. Anything else needs an entry in `.structure-allow`.
 
 **`apps/` holds the smallest deployable units**, possibly just one.
 
@@ -109,7 +109,7 @@ The two facts vary independently and every pairing is legal: a scheduled job run
 
 Reading the file needs `jq`, which `scripts/doctor` requires. Without it the audit reports `unavailable` and fails, and the suites that exercise a unit skip every case.
 
-**`tests/integration/` is the integration tier**, at any scope holder. It needs no placement rule, since `tests/` may nest its own kind; the name matters only to the capabilities: `scripts/integration` runs it and the gate does not. pytest and `go test ./...` discover by walking the tree, so their exclusion is wired; the other four languages declare their test set (an npm script, a Gradle source set, a SwiftPM or Cargo test target), and that declaration leaves the tier out.
+**`tests/integration/` is the integration tier**, at any scope holder. It needs no placement rule, since `tests/` may nest its own kind; the name matters only to the capabilities: `scripts/integration` runs it and the gate does not. pytest and `go test ./...` discover by walking the tree, so their exclusion is wired; the other five declare their test set (an npm script, a Gradle source set, a SwiftPM or Cargo test target, a CMake `add_test()`), and that declaration leaves the tier out.
 
 **Scoped folders nest freely but never hold a `src/`.** `libs/`, `tests/`, `scripts/`, `tools/`, `assets/`, `config/`, `docs/`, and `deploy/` may nest another kind (`scripts/tests/libs/`) or their own (`tests/` under `tests/`). Choose the folder whose scope matches the file's.
 
@@ -129,7 +129,7 @@ Reading the file needs `jq`, which `scripts/doctor` requires. Without it the aud
 
 Three rules are about content, and no script can settle them: whether `libs/` holds what several apps share, whether `tests/` spans them, and whether a file sits at its own scope. `scripts/structure` reports them `not-applicable` rather than guessing from paths.
 
-A package whose language has no root manifest fails the run, because that manifest is what lists it: `go list -m` names only `go.work`'s `use` entries, and the Gradle settings file likewise. Swift is excluded: it has no root manifest, and nested packages are how a Swift repository is meant to look. The failure names the root manifest to add.
+A package whose language has no root manifest fails the run, because that manifest is what lists it: `go list -m` names only `go.work`'s `use` entries, the Gradle settings file likewise, and CMake configures only what the root `CMakeLists.txt` reaches through `add_subdirectory()`. Swift is excluded: it has no root manifest, and nested packages are how a Swift repository is meant to look. So is a `CMakeLists.txt` below a `src/` or beside another language's manifest, which belongs to that language's native build. The failure names the root manifest to add.
 
 ## Repository settings
 

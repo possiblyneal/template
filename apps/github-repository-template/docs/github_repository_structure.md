@@ -89,7 +89,7 @@ The specific operating parameters for the AI agent.
 
 `scripts/fix`: The write half of what `scripts/check` checks, for every detected stack — the linter's own autofix, then the formatting, so what a lint rule rewrites is laid out by the formatter that follows it. Neither half is behind a flag: every autofix reached here is one the tool itself considers safe, withholding the rest as ruff does behind `--unsafe-fixes`, and it is a rewrite the linter would have demanded at the gate anyway. Go, Swift and Kotlin have no lint autofix distinct from their formatter, so `lint-fix` reports those three `not-applicable` rather than `unavailable`: there is no tool to install, and an `unavailable` would fail this command on every Go repository over a gap nothing can close. A `lint-fix` FAIL means findings remain that the tool could not fix itself, which is what every such linter exits non-zero for.
 
-`scripts/integration`: Runs the integration tier — every `tests/integration/` directory in the repository, at whatever scope holder it sits under. The tier is a path the layout owns rather than a marker each language spells its own way, so where an integration test goes is read off the layout rules and not off six idioms. It takes no unit name: a repository whose tiers must run separately runs this from inside the unit. Nothing in the gate calls it, and the `test` capability excludes the tier for the two runners that discover tests by walking the tree, pytest and `go test ./...`. `integration` reports `not-applicable` for every language in a repository that has no tier, and for Rust, Swift and Kotlin whether or not one exists — each names its integration tests somewhere its own build file decides, so `tests/integration/` is not a place any of the three looks and there is no runner for one to be missing.
+`scripts/integration`: Runs the integration tier — every `tests/integration/` directory in the repository, at whatever scope holder it sits under. The tier is a path the layout owns rather than a marker each language spells its own way, so where an integration test goes is read off the layout rules and not off seven idioms. It takes no unit name: a repository whose tiers must run separately runs this from inside the unit. Nothing in the gate calls it, and the `test` capability excludes the tier for the two runners that discover tests by walking the tree, pytest and `go test ./...`. `integration` reports `not-applicable` for every language in a repository that has no tier, and for Rust, Swift, Kotlin, and C and C++ whether or not one exists — each names its integration tests somewhere its own build file decides, so `tests/integration/` is not a place any of the four looks and there is no runner for one to be missing.
 
 `scripts/release`: Validates a version tag against the changelog, packages every unit under `apps/`, and cuts a GitHub release with whatever those units produced attached. Packaging runs before the tag, so a build that cannot be made publishes nothing; a repository where no unit ships a file still releases.
 
@@ -262,3 +262,13 @@ These languages have built-in or universally accepted package managers, meaning 
 **App-level:** `build.gradle.kts`
 
 Unlike the package managers above, Gradle writes no lockfile by default. Dependency locking is opt-in and produces `gradle.lockfile` per project only after it is enabled and written. Without it, builds are not reproducible across time.
+
+#### C, C++ and assembly
+
+One language, `cpp`, built by CMake: a single build file compiles all three.
+
+**Root-level:** `CMakeLists.txt` with `project()` and `enable_testing()`, reaching each unit through `add_subdirectory()`. CMake has no workspace file, so this file is the workspace. `.clang-format` and `.clang-tidy` sit beside it: neither tool reads a manifest, and each finds its file by walking up from the source. The binary directory is the gitignored root `build/`.
+
+**App-level:** `CMakeLists.txt`
+
+CMake writes no lockfile and Dependabot has no CMake ecosystem, so a `FetchContent` pin is one nothing bumps. clang-tidy and clang-format skip assembly, which neither can parse; CodeQL scans C and C++ without a build. A firmware unit's ship targets are not yet in the target vocabulary.
