@@ -186,7 +186,7 @@ That is not an exception to the exclusion above: the exclusion stops *language* 
 
 **An ecosystem outside the table is not derived, and not silently dropped either.** A destination may hold an entry for `terraform`, `nuget`, `bundler`, `docker-compose`, or another the table does not cover, and replacing the file would delete it. So read the destination's copy before replacing it and report every uncovered `package-ecosystem` by name on the flow's own gate; reinstating it is the destination's to authorize. The same goes for an entry under a table ecosystem whose directory the derivation did not produce — a `docker` entry over a `Dockerfile-prod` or Kubernetes or Helm YAML, which that ecosystem also reads — reported by ecosystem and directory.
 
-The table points the other way too. A tracked manifest whose filename it does not list — a Groovy `build.gradle`, a `requirements.txt` or `setup.py` — earns no entry. Do not widen the table: the six languages match the template's language vocabulary and `scripts/libs/detect.sh`, and `docker` is there because the layout names a place for its files. Report it on the same gate, by path, as a manifest Dependabot is not watching and why, for a person to decide whether the repository should carry that shape.
+The table points the other way too. A tracked manifest whose filename it does not list — a Groovy `build.gradle`, a `requirements.txt` or `setup.py` — earns no entry. Do not widen the table: its languages are `scripts/libs/detect.sh`'s, less `cpp`, and `docker` is there because the layout names a place for its files. `CMakeLists.txt` has no row because Dependabot has no CMake ecosystem, so a `FetchContent` pin is one nothing bumps; report it like any other unlisted manifest. Report it on the same gate, by path, as a manifest Dependabot is not watching and why, for a person to decide whether the repository should carry that shape.
 
 **A derived entry carries the policy the payload's own entries carry** — `interval: weekly`, `cooldown.default-days: 7`, and one group matching `*` named for the ecosystem — so only its origin differs from a shipped one.
 
@@ -224,6 +224,7 @@ The check surface dispatches per language, reads no record, and holds no exempti
 - **go** — none. `go vet`, `gofmt`, `go test`, and `go build` ship with the toolchain.
 - **rust** — none. `cargo clippy`, `cargo fmt`, `cargo test`, and `cargo build` come from the toolchain and its rustup components.
 - **swift** — none. `swift format`, `swift test`, and `swift build` are the compiler's own subcommands.
+- **cpp** — `enable_testing()` in the root `CMakeLists.txt` once any `add_test()` exists below it. ctest reads only the top-level test file, which CMake writes only then, so the test check fails a nested one the root never enables. `cmake`, `ctest`, `clang-format`, and `clang-tidy` are `PATH` lookups.
 
 The empty three are stated so they do not read as an oversight.
 

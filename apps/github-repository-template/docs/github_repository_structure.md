@@ -262,3 +262,13 @@ These languages have built-in or universally accepted package managers, meaning 
 **App-level:** `build.gradle.kts`
 
 Unlike the package managers above, Gradle writes no lockfile by default. Dependency locking is opt-in and produces `gradle.lockfile` per project only after it is enabled and written. Without it, builds are not reproducible across time.
+
+#### C, C++ and assembly
+
+One language, `cpp`, built by CMake: a single build file compiles all three.
+
+**Root-level:** `CMakeLists.txt` with `project()` and `enable_testing()`, reaching each unit through `add_subdirectory()`. CMake has no workspace file, so this file is the workspace. `.clang-format` and `.clang-tidy` sit beside it: neither tool reads a manifest, and each finds its file by walking up from the source. The binary directory is the gitignored root `build/`.
+
+**App-level:** `CMakeLists.txt`
+
+CMake writes no lockfile and Dependabot has no CMake ecosystem, so a `FetchContent` pin is one nothing bumps. clang-tidy and clang-format skip assembly, which neither can parse; CodeQL scans C and C++ without a build. A firmware unit's ship targets are not yet in the target vocabulary.

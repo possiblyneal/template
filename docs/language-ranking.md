@@ -25,4 +25,4 @@ If you could keep only N languages for all projects, keep the first N rows. Each
 | 19 | Ruby | Extending existing tools: Homebrew formulas, Rails apps, Metasploit modules. |
 | 20 | Solidity | Smart contracts on Ethereum and other EVM chains. |
 
-Rows 1–6 are the six languages this template supports. From row 7 on, each language is worth adding only when that specific kind of project comes up.
+Rows 1–8 and row 17 are the languages this template supports: C, C++ and assembly as one language, `cpp`, built by CMake (`docs/adrs/0011-support-c-cpp-and-assembly-as-one-cmake-language.md`). From row 9 on, each language is worth adding only when that specific kind of project comes up.
