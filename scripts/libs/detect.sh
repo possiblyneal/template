@@ -666,7 +666,35 @@ _capability_audit_python() {
   uv audit --help >/dev/null 2>&1 || return "$NO_RUNNER"
   uv audit --preview-features audit-command
 }
-_capability_audit_go() { command -v govulncheck >/dev/null 2>&1 || return "$NO_RUNNER"; go_each govulncheck ./...; }
+_capability_audit_go() { command -v govulncheck >/dev/null 2>&1 || return "$NO_RUNNER"; go_each _govulncheck_module; }
+
+# govulncheck audits the standard library of the Go that runs it, and
+# security.yml installs go-version: stable, so a local Go behind stable fails
+# here on CVEs CI never reports, and the findings read as the code's. The audit
+# still fails, since the local binary does carry them; when every finding is in
+# the standard library and has a fix, one line after the output names the Go
+# that clears them all.
+_govulncheck_module() {
+  local out status=0
+  out="$(govulncheck ./... 2>&1)" || status=$?
+  printf '%s\n' "$out"
+  (( status == 0 )) || _govulncheck_stdlib_note "$out"
+  return "$status"
+}
+_govulncheck_stdlib_note() {
+  local found fixed local_go needed
+  found="$(sed -n 's/^ *Found in: //p' <<< "$1")"
+  fixed="$(sed -n 's/^ *Fixed in: [^@ ]*@\(go[0-9][^ ]*\)$/\1/p' <<< "$1")"
+  # A fix naming a Go release for every finding means each is in the standard
+  # library and has one; a module's fix names a module version instead.
+  [[ -n "$found" ]] || return 0
+  (( $(wc -l <<< "$found") == $(grep -c . <<< "$fixed") )) || return 0
+  local_go="${found##*@}"
+  needed="$(sort -V <<< "$fixed" | tail -n 1)"
+  echo "Every finding is in the standard library of $local_go and fixed by $needed;"
+  echo "CI audits with go-version: stable and reports none of them. Install $needed"
+  echo "or later, or rerun with GOTOOLCHAIN=$needed+auto."
+}
 _capability_audit_rust() { command -v cargo-audit >/dev/null 2>&1 || return "$NO_RUNNER"; cargo audit; }
 _capability_audit_swift() { command -v trivy >/dev/null 2>&1 || return "$NO_RUNNER"; trivy_each Package.resolved; }
 _capability_audit_kotlin() { command -v trivy >/dev/null 2>&1 || return "$NO_RUNNER"; trivy_each gradle.lockfile; }

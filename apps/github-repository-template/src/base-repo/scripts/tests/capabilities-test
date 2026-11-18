@@ -441,6 +441,58 @@ else
   fail "trivy scanned $(tr '\n' ' ' < "$work/scanned")rather than both lockfiles"
 fi
 
+# --- a Go audit failing only on the local standard library says so -----------
+
+# govulncheck reports the standard library of the Go that runs it, and CI runs
+# stable, so stdlib-only findings fixed in a newer Go are named as such. One
+# finding in a module is the code's own, and gets no such line.
+govulncheck_stub() {
+  stub govulncheck <<STUB
+#!/usr/bin/env bash
+cat <<'OUT'
+Vulnerability #1: GO-2026-4601
+  Standard library
+    Found in: net/url@go1.24.4
+    Fixed in: net/url@go1.25.8
+Vulnerability #2: GO-2025-4010
+  $1
+    Found in: $2
+    Fixed in: $3
+OUT
+exit 3
+STUB
+}
+for case in stdlib module; do
+  fixture "a Go audit failing on $case findings"
+  go_mod "$work"
+  stub go <<'STUB'
+#!/usr/bin/env bash
+[[ "$1" == list ]] && printf '%s\n' "$PWD"
+exit 0
+STUB
+  stub gitleaks <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+  if [[ "$case" == stdlib ]]; then
+    govulncheck_stub "Standard library" "net/http@go1.24.4" "net/http@go1.24.8"
+  else
+    govulncheck_stub "Module: golang.org/x/net" "golang.org/x/net@v0.1.0" "golang.org/x/net@v0.38.0"
+  fi
+  out="$(cd "$work" && scripts/security 2>&1 </dev/null)"
+  status=$?
+  note="$(grep -c 'fixed by go1.25.8' <<< "$out")"
+  if (( status == 0 )) || ! grep -qE '^audit +FAIL +go' <<< "$out"; then
+    fail "wanted the audit to fail on its findings (exit $status): $out"
+  elif [[ "$case" == stdlib && "$note" != 1 ]]; then
+    fail "wanted one line naming go1.25.8 under stdlib-only findings: $out"
+  elif [[ "$case" == module && "$note" != 0 ]]; then
+    fail "wanted no toolchain line where a module carries a finding: $out"
+  else
+    pass
+  fi
+done
+
 # --- go checks must reach a module that is not at the repository root --------
 
 # `./...` matches only packages inside a module, and the root of a Go workspace
