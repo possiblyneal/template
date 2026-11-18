@@ -566,7 +566,9 @@ _capability_test_kotlin() { [[ -x ./gradlew ]] || return "$NO_RUNNER"; ./gradlew
 # ctest reads only the top-level CTestTestfile.cmake, which CMake writes only
 # when the root CMakeLists.txt calls enable_testing(). Called in a unit's alone,
 # every add_test() below it is skipped by that same passing message, so a
-# nested test file declaring a test, with no top-level one, is refused. A
+# nested test file declaring a test, with no top-level one, is refused. A test
+# is an add_test(), indented under a multi-config generator, or the include()
+# gtest_discover_tests and catch_discover_tests write in its place. A
 # dependency's own test files, fetched into _deps/ or built from vendor/, are
 # not this project's tests: a library that calls include(CTest) regardless
 # must not fail a project that has none.
@@ -574,7 +576,7 @@ _capability_test_cpp() {
   cmake_build || return
   if [[ ! -f "$CMAKE_BUILD_DIR/CTestTestfile.cmake" ]] &&
     find "$CMAKE_BUILD_DIR" \( -path '*/_deps' -o -path '*/vendor' \) -prune -o \
-      -name CTestTestfile.cmake -exec grep -q '^add_test(' {} \; -print | grep -q .; then
+      -name CTestTestfile.cmake -exec grep -qE '^[[:space:]]*(add_test|include)\(' {} \; -print | grep -q .; then
     echo "Tests are declared below the root CMakeLists.txt, which never calls enable_testing(), so ctest finds none of them." >&2
     return 1
   fi

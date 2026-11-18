@@ -1368,7 +1368,7 @@ printf 'cmake_minimum_required(VERSION 3.20)\nproject(p C)\n' > "$work/CMakeList
 stub cmake <<'STUB'
 #!/usr/bin/env bash
 mkdir -p build/apps/fw
-printf 'add_test([=[t]=] "/bin/true")\n' > build/apps/fw/CTestTestfile.cmake
+printf 'if(CTEST_CONFIGURATION_TYPE MATCHES "^Debug$")\n  add_test([=[t]=] "/bin/true")\nendif()\n' > build/apps/fw/CTestTestfile.cmake
 STUB
 stub ctest <<'STUB'
 #!/usr/bin/env bash
@@ -1380,6 +1380,26 @@ if grep -qE '^test +FAIL +cpp' <<<"$out" && grep -q 'never calls enable_testing(
   pass
 else
   fail "the cpp test adapter did not refuse a nested CTestTestfile.cmake with no root one: $out"
+fi
+
+# gtest_discover_tests writes an include() where add_test() would be, and a
+# multi-config generator indents add_test(), so either is a declared test.
+fixture "cpp test refuses discovered tests the root never enables"
+printf 'cmake_minimum_required(VERSION 3.20)\nproject(p C)\n' > "$work/CMakeLists.txt"
+stub cmake <<'STUB'
+#!/usr/bin/env bash
+mkdir -p build/apps/fw
+printf 'include("/x/fw_tests_include.cmake")\n' > build/apps/fw/CTestTestfile.cmake
+STUB
+stub ctest <<'STUB'
+#!/usr/bin/env bash
+: > "${MARKER:?}"
+STUB
+out="$(cd "$work" && MARKER="$work/ctest-ran" language_capabilities run test 2>&1 </dev/null)"
+if grep -qE '^test +FAIL +cpp' <<<"$out" && [[ ! -e "$work/ctest-ran" ]]; then
+  pass
+else
+  fail "the cpp test adapter did not refuse a nested include()-only CTestTestfile.cmake: $out"
 fi
 
 # A dependency fetched into _deps/ may call include(CTest) whatever its parent
