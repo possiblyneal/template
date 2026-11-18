@@ -23,6 +23,13 @@ set -uo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# For result_verdict alone. The verdict is the command's, not this script's,
+# so the EXIT trap sourcing installs is dropped.
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/result.sh
+source "$repo_root/scripts/libs/result.sh"
+trap - EXIT
+
 if (( $# == 0 )); then
   echo "usage: scripts/summarize <command> [args...]" >&2
   echo "  e.g. scripts/summarize scripts/ci" >&2
@@ -83,12 +90,9 @@ fi
 # A reader who keeps only the end of the output -- `| tail`, which also hides
 # the exit status behind its own -- still gets both, and an unavailable check
 # is counted beside FAIL rather than left for a FAIL-only grep to miss.
-verdict="$1 exited $status:"
-for state in FAIL unavailable not-applicable pass would-run; do
-  count="$(grep -cE "^[A-Za-z0-9_-]+ +$state( |\$)" <<< "$table")"
-  [[ "$state" == would-run && "$count" == 0 ]] && continue
-  verdict+=" $count $state,"
+for state in "${!result_counts[@]}"; do
+  result_counts[$state]="$(grep -cE "^[A-Za-z0-9_-]+ +$state( |\$)" <<< "$table")"
 done
-echo "${verdict%,}"
+result_verdict "$1" "$status"
 
 exit "$status"

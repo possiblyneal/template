@@ -141,6 +141,20 @@ else
   fail "wanted a root-to-payload command that resolves it, got '$fix', then: $(head -1 "$work/.audit-output")"
 fi
 
+# A staged deletion counts as the edit, and its mirror removes the other copy;
+# a cp from the deleted copy would fail.
+parity_fixture "a deletion of one copy names the git rm that mirrors it"
+commit_fixture
+rm "$work/$payload/workflows/ci.yml"
+audit
+fix="$(sed -n 's/.*; run: //p' "$work/.audit-output")"
+if [[ "$fix" == "git rm .github/workflows/ci.yml" ]] \
+  && (cd "$work" && eval "$fix" > /dev/null) && run_parity && (( parity_status == 0 )); then
+  pass
+else
+  fail "wanted a git rm that resolves it, got '$fix', then: $(head -1 "$work/.audit-output")"
+fi
+
 parity_fixture "an edit to both copies names no direction"
 commit_fixture
 write ".github/workflows/ci.yml" one

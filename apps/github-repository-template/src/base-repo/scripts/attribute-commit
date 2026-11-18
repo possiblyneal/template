@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # Write the commit's Generated-By trailer at prepare-commit-msg, before
-# commitlint reads the message, and with --check at commit-msg refuse a
-# trailer that is missing or names no model ID.
+# commitlint reads the message, and with --check at commit-msg refuse one
+# that names no model ID.
 #
 # A tool is not a co-author, but the model is worth keeping: it is the only
 # per-commit record of what produced the change. The model comes from outside
@@ -152,29 +152,25 @@ session_model() {
   matching_model "${cmdline%x}"
 }
 
-# --check, at commit-msg: the trailer must name a model ID. The record is only
-# worth keeping if it can be searched, and hand-typed trailers drifted into
-# display names -- `Claude Opus 5.5`, `Opus 5`, `Claude Opus 5.5 (1M context)`
-# -- beside the IDs, a dozen spellings for a handful of models. The shape is
-# any vendor's ID, lowercase with no spaces, not a list of Claude models,
-# which would refuse the next one. A missing trailer is refused here too, with
-# the line to add, since commitlint's `trailer-exists` names only the rule.
+# --check, at commit-msg: a Generated-By trailer must name a model ID. The
+# record is only worth keeping if it can be searched, and hand-typed trailers
+# drifted into display names -- `Claude Opus 5.5`, `Opus 5`, `Claude Opus 5.5
+# (1M context)` -- beside the IDs, a dozen spellings for a handful of models.
+# What is checked is the shape of any vendor's ID, one word with no [suffix],
+# not a list of Claude models, which would refuse the next one; `qwen3-coder:30b`
+# and `...@20250805` pass, and nothing asks whether the model exists. A missing
+# trailer is left to commitlint's `trailer-exists`, which skips the merge,
+# revert, and fixup subjects on its default ignore list where this could not.
 # Replayed commits are passed: they keep the trailer they were written with.
 if [[ -n "$check" ]]; then
   replaying && exit 0
-  values="$(git interpret-trailers --parse "$msg_file" | sed -n 's/^Generated-By:[[:space:]]*//p')"
-  if [[ -z "$values" ]]; then
-    echo "No Generated-By trailer. End the message with a paragraph holding" >&2
-    echo "'Generated-By: <model ID>', e.g. 'Generated-By: claude-opus-5-5'." >&2
-    exit 1
-  fi
   while IFS= read -r value; do
-    if [[ ! "$value" =~ ^[a-z0-9][a-z0-9._-]*$ ]]; then
-      echo "Generated-By: '$value' is not a model ID. Write the ID, lowercase" >&2
-      echo "with no spaces or [suffix], e.g. 'Generated-By: claude-opus-5-5'." >&2
+    if [[ ! "$value" =~ ^[A-Za-z0-9][A-Za-z0-9._:@/-]*$ ]]; then
+      echo "Generated-By: '$value' is not a model ID. Write the ID, one word" >&2
+      echo "with no [suffix], e.g. 'Generated-By: claude-opus-5-5'." >&2
       exit 1
     fi
-  done <<< "$values"
+  done < <(git interpret-trailers --parse "$msg_file" | sed -n 's/^Generated-By:[[:space:]]*//p')
   exit 0
 fi
 
@@ -187,8 +183,8 @@ model="${model%%\[*}"
 # ID is known it replaces that line, being the same fact in a form that can be
 # searched; otherwise the line becomes a Generated-By naming what it named,
 # spelled as an ID so --check accepts it: lowercased, a parenthetical such as
-# `(1M context)` dropped, and spaces and dots made hyphens, which turns
-# `Claude Opus 5.5` into `claude-opus-5-5`.
+# `(1M context)` dropped, spaces and dots made hyphens, and a hyphen left at
+# either end trimmed, which turns `Claude Opus 5.5` into `claude-opus-5-5`.
 co_author='^[Cc]o-[Aa]uthored-[Bb]y:[[:space:]]*(.+)[[:space:]]+<noreply@anthropic\.com>[[:space:]]*$'
 if [[ -n "$model" ]] && ! replaying; then
   sed -i -E "/$co_author/d" "$msg_file"
@@ -197,6 +193,7 @@ else
     s/$co_author/\1/
     s/[[:space:]]*\([^)]*\)//g
     s/[[:space:].]+/-/g
+    s/^-+|-+$//g
     y/ABCDEFGHIJKLMNOPQRSTUVWXYZ/abcdefghijklmnopqrstuvwxyz/
     s/^/Generated-By: /
   }" "$msg_file"

@@ -92,7 +92,8 @@ staged_edit() {
 # The command that mirrors a diverged pair, where the staged edit settles its
 # direction: exactly one copy changed since HEAD. Otherwise nothing, since a
 # merged root bump changes neither copy and an edit to both changes both, and
-# guessing a direction there overwrites the newer copy.
+# guessing a direction there overwrites the newer copy. A staged deletion is
+# such an edit, and is mirrored by removing the other copy.
 mirror_command() {
   local root_copy="$1" payload_copy="$payload_root/$1" from to
   if staged_edit "$root_copy" && ! staged_edit "$payload_copy"; then
@@ -100,6 +101,10 @@ mirror_command() {
   elif staged_edit "$payload_copy" && ! staged_edit "$root_copy"; then
     from="$payload_copy" to="$root_copy"
   else
+    return 0
+  fi
+  if ! git cat-file -e ":$from" 2> /dev/null; then
+    printf '; run: git rm %q' "$to"
     return 0
   fi
   printf '; run: mkdir -p %q && cp %q %q && git add %q %q' "${to%/*}" "$from" "$to" "$from" "$to"

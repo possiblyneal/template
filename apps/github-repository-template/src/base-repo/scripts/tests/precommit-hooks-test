@@ -149,10 +149,14 @@ fi
 
 # A machine-wide core.hooksPath makes `pre-commit install` refuse, so the fix
 # doctor prints there must be one that works with the key set: run verbatim,
-# it leaves nothing missing, and the global key is untouched.
+# it leaves nothing missing, and the global key is untouched. The clone's path
+# holds a space, so the remedy must quote it.
 if command -v pre-commit >/dev/null 2>&1; then
   fixture "doctor's remedy under a global core.hooksPath installs every hook" 'default_install_hook_types: [pre-commit, commit-msg]
 repos: []'
+  mv "$work" "$work with space"
+  work="$work with space"
+  PATH="$work/bin:$harness_path"
   printf '[core]\n\thooksPath = %s\n' "$work/global-hooks" > "$work/global-config"
   remedy="$(cd "$work" && GIT_CONFIG_GLOBAL="$work/global-config" scripts/doctor 2>&1 \
     | sed -n 's/.*so run: \(.*\), leaving init.templateDir.*/\1/p')"

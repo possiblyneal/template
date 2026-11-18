@@ -82,8 +82,20 @@ tally() {
   return "$result_failed"
 }
 
-# The verdict, printed as the process exits: the command, its exit status, and
-# a count per state, in the line scripts/summarize ends with. A reader who keeps
+# The verdict line: result_verdict <command> <status>, the command as invoked,
+# its exit status, and a count per state from result_counts, would-run left out
+# at zero. scripts/summarize fills result_counts from the table it parsed and
+# ends with this same line.
+result_verdict() {
+  local state line=""
+  for state in FAIL unavailable not-applicable pass would-run; do
+    [[ "$state" == would-run && "${result_counts[$state]}" == 0 ]] && continue
+    line+=" ${result_counts[$state]} $state,"
+  done
+  echo "$1 exited $2:${line%,}"
+}
+
+# The verdict, printed as the process exits. A reader who keeps
 # only the end of the output -- `| tail`, which also hides the exit status
 # behind its own -- still gets both, and unavailable is counted beside FAIL
 # rather than left for a FAIL-only grep to miss. An EXIT trap rather than a
@@ -97,13 +109,11 @@ tally() {
 # script that sets its own afterwards replaces this one, and calls
 # result_exit_verdict from it to keep the line.
 result_exit_verdict() {
-  local status=$? state line="" total=0
-  for state in FAIL unavailable not-applicable pass would-run; do
-    total=$(( total + result_counts[$state] ))
-    [[ "$state" == would-run && "${result_counts[$state]}" == 0 ]] && continue
-    line+=" ${result_counts[$state]} $state,"
+  local status=$? count total=0
+  for count in "${result_counts[@]}"; do
+    total=$(( total + count ))
   done
-  (( total > 0 )) && echo "$0 exited $status:${line%,}"
+  (( total > 0 )) && result_verdict "$0" "$status"
   return "$status"
 }
 [[ -n "$(trap -p EXIT)" ]] || trap result_exit_verdict EXIT

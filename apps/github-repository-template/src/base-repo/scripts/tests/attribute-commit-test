@@ -413,6 +413,19 @@ else
   fail "the message parses as: $(trailers "$out")"
 fi
 
+# Spacing around the name must not leave a hyphen at either end of the ID.
+fixture "extra spaces around the display name leave no end hyphen"
+out="$(rewrite "feat: add a thing
+
+A body.
+
+Co-Authored-By: Claude Opus 4.6 (1M context)  <noreply@anthropic.com>")"
+if [[ "$(trailers "$out")" == "Generated-By: claude-opus-4-6" ]]; then
+  pass
+else
+  fail "the rewritten message parses as: $(trailers "$out")"
+fi
+
 # --check at commit-msg: prints nothing and exits 0 for a model ID, refuses
 # anything else with the line to write.
 verify() {
@@ -425,10 +438,13 @@ out="$(verify $'feat: add a thing\n\nA body.\n\nGenerated-By: claude-opus-5-5')"
 status=$?
 out2="$(verify $'feat: add a thing\n\nA body.\n\nGenerated-By: gpt-5.1-codex')"
 status2=$?
-if (( status == 0 && status2 == 0 )) && [[ -z "$out$out2" ]]; then
+# Other vendors' IDs carry a tag, a version date, or a provider path.
+out3="$(verify $'feat: add a thing\n\nA body.\n\nGenerated-By: qwen3-coder:30b\nGenerated-By: claude-opus-4-1@20250805\nGenerated-By: meta/Llama-3.1-8B')"
+status3=$?
+if (( status == 0 && status2 == 0 && status3 == 0 )) && [[ -z "$out$out2$out3" ]]; then
   pass
 else
-  fail "a model ID was refused (exit $status, $status2): $out $out2"
+  fail "a model ID was refused (exit $status, $status2, $status3): $out $out2 $out3"
 fi
 
 fixture "--check refuses a display name"
@@ -449,13 +465,15 @@ else
   fail "a [1m] suffix passed: $out"
 fi
 
-fixture "--check names the line a missing trailer needs"
-out="$(verify $'feat: add a thing\n\nA body.')"
+# commitlint's trailer-exists refuses a missing trailer and skips the merge,
+# revert, and fixup subjects on its ignore list; refusing here would undo that.
+fixture "--check leaves a missing trailer to commitlint"
+out="$(verify $'Merge branch \'main\' into feature')"
 status=$?
-if (( status != 0 )) && grep -q "Generated-By: <model ID>" <<< "$out"; then
+if (( status == 0 )) && [[ -z "$out" ]]; then
   pass
 else
-  fail "a missing trailer was not refused with the fix, exit $status: $out"
+  fail "a merge with no trailer was refused, exit $status: $out"
 fi
 
 fixture "--check passes a replayed commit"
