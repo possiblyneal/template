@@ -2,7 +2,8 @@
 set -euo pipefail
 
 # Write the commit's Generated-By trailer at prepare-commit-msg, before
-# commitlint reads the message.
+# commitlint reads the message, and with --check at commit-msg refuse a
+# trailer that is missing or names no model ID.
 #
 # A tool is not a co-author, but the model is worth keeping: it is the only
 # per-commit record of what produced the change. The model comes from outside
@@ -30,8 +31,9 @@ set -euo pipefail
 # --amend run by an agent is stamped like any other commit, making the agent
 # its author of record.
 #
-# A Co-Authored-By addressed to noreply@anthropic.com is rewritten first, from
-# habit or with Claude Code's git instructions on, and the address dropped: it
+# A Co-Authored-By addressed to noreply@anthropic.com, from habit or with
+# Claude Code's git instructions on, gives way to the model ID when one is
+# known and otherwise becomes a Generated-By with the address dropped: it
 # exists so GitHub can attribute a Co-Authored-By to an account, which does not
 # apply to a Generated-By naming a model. A human co-author keeps their line.
 #
@@ -54,12 +56,14 @@ set -euo pipefail
 # other two arguments Git supplies -- the source and the commit object -- are
 # not read: the in-progress state above is what tells a replay apart.
 
+check=""
+if [[ "${1:-}" == --check ]]; then
+  check=1
+  shift
+fi
+
 msg_file="${1:-}"
 [[ -n "$msg_file" && -f "$msg_file" ]] || exit 0
-
-sed -i -E \
-  's/^[Cc]o-[Aa]uthored-[Bb]y:[[:space:]]*(.+)[[:space:]]+<noreply@anthropic\.com>[[:space:]]*$/Generated-By: \1/' \
-  "$msg_file"
 
 replaying() {
   local path
@@ -148,14 +152,61 @@ session_model() {
   matching_model "${cmdline%x}"
 }
 
+# --check, at commit-msg: the trailer must name a model ID. The record is only
+# worth keeping if it can be searched, and hand-typed trailers drifted into
+# display names -- `Claude Opus 5.5`, `Opus 5`, `Claude Opus 5.5 (1M context)`
+# -- beside the IDs, a dozen spellings for a handful of models. The shape is
+# any vendor's ID, lowercase with no spaces, not a list of Claude models,
+# which would refuse the next one. A missing trailer is refused here too, with
+# the line to add, since commitlint's `trailer-exists` names only the rule.
+# Replayed commits are passed: they keep the trailer they were written with.
+if [[ -n "$check" ]]; then
+  replaying && exit 0
+  values="$(git interpret-trailers --parse "$msg_file" | sed -n 's/^Generated-By:[[:space:]]*//p')"
+  if [[ -z "$values" ]]; then
+    echo "No Generated-By trailer. End the message with a paragraph holding" >&2
+    echo "'Generated-By: <model ID>', e.g. 'Generated-By: claude-opus-5-5'." >&2
+    exit 1
+  fi
+  while IFS= read -r value; do
+    if [[ ! "$value" =~ ^[a-z0-9][a-z0-9._-]*$ ]]; then
+      echo "Generated-By: '$value' is not a model ID. Write the ID, lowercase" >&2
+      echo "with no spaces or [suffix], e.g. 'Generated-By: claude-opus-5-5'." >&2
+      exit 1
+    fi
+  done <<< "$values"
+  exit 0
+fi
+
+# A context-window suffix such as [1m] is a setting, not part of the model ID.
+model="${CLAUDE_COMMIT_MODEL:-}"
+[[ -n "$model" ]] || model="$(session_model)"
+model="${model%%\[*}"
+
+# Claude Code's own Co-Authored-By names the model by display name. Where the
+# ID is known it replaces that line, being the same fact in a form that can be
+# searched; otherwise the line becomes a Generated-By naming what it named,
+# spelled as an ID so --check accepts it: lowercased, a parenthetical such as
+# `(1M context)` dropped, and spaces and dots made hyphens, which turns
+# `Claude Opus 5.5` into `claude-opus-5-5`.
+co_author='^[Cc]o-[Aa]uthored-[Bb]y:[[:space:]]*(.+)[[:space:]]+<noreply@anthropic\.com>[[:space:]]*$'
+if [[ -n "$model" ]] && ! replaying; then
+  sed -i -E "/$co_author/d" "$msg_file"
+else
+  sed -i -E "/$co_author/{
+    s/$co_author/\1/
+    s/[[:space:]]*\([^)]*\)//g
+    s/[[:space:].]+/-/g
+    y/ABCDEFGHIJKLMNOPQRSTUVWXYZ/abcdefghijklmnopqrstuvwxyz/
+    s/^/Generated-By: /
+  }" "$msg_file"
+fi
+
 # --if-exists add, because git compares keys case-insensitively and would
 # otherwise treat a lowercase trailer as this one and skip it. --no-divider
 # keeps a `---` body line from pulling the trailer up mid-message; commitlint,
 # whose parse stops at that line, then refuses the commit rather than
 # accepting a trailer buried in the body.
-model="${CLAUDE_COMMIT_MODEL:-}"
-[[ -n "$model" ]] || model="$(session_model)"
-
 if [[ -n "$model" ]] && ! attributed && ! replaying; then
   git interpret-trailers --in-place --no-divider --if-exists add \
     --trailer "Generated-By: $model" "$msg_file"

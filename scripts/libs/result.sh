@@ -27,6 +27,9 @@
 
 result_failed=0
 
+# Results printed per state, for the verdict line below.
+declare -A result_counts=([FAIL]=0 [unavailable]=0 [not-applicable]=0 [pass]=0 [would-run]=0)
+
 # The layout alone: result_line <check> <word> <detail>. What result prints
 # once it has judged the state, and what a table that is not a set of Results
 # -- the capability probe, whose words are wired and absent -- prints so it
@@ -46,6 +49,7 @@ result() {
       ;;
   esac
   result_line "$1" "$2" "$3"
+  result_counts[$2]=$(( result_counts[$2] + 1 ))
 }
 
 # Findings for the check currently being run, printed under its result line by
@@ -77,3 +81,29 @@ verdict() {
 tally() {
   return "$result_failed"
 }
+
+# The verdict, printed as the process exits: the command, its exit status, and
+# a count per state, in the line scripts/summarize ends with. A reader who keeps
+# only the end of the output -- `| tail`, which also hides the exit status
+# behind its own -- still gets both, and unavailable is counted beside FAIL
+# rather than left for a FAIL-only grep to miss. An EXIT trap rather than a
+# line in tally, because tally is also called mid-command (`tally || exit 1`)
+# and the status worth reporting is the one the process ends with.
+#
+# Printed only once a result line was, so a script sourcing these libraries for
+# their helpers stays silent. A subshell neither inherits the trap nor passes
+# its counts back, so a result belongs in the shell that exits. Installed only
+# where no EXIT trap is set yet, so the test harness keeps its cleanup; a
+# script that sets its own afterwards replaces this one, and calls
+# result_exit_verdict from it to keep the line.
+result_exit_verdict() {
+  local status=$? state line="" total=0
+  for state in FAIL unavailable not-applicable pass would-run; do
+    total=$(( total + result_counts[$state] ))
+    [[ "$state" == would-run && "${result_counts[$state]}" == 0 ]] && continue
+    line+=" ${result_counts[$state]} $state,"
+  done
+  (( total > 0 )) && echo "$0 exited $status:${line%,}"
+  return "$status"
+}
+[[ -n "$(trap -p EXIT)" ]] || trap result_exit_verdict EXIT

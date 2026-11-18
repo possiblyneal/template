@@ -34,4 +34,6 @@ find . \( "${prune[@]}" \) -prune -o \
 # fetched dependencies' own trees, so it is removed whole here.
 rm -rf node_modules/.cache target/debug/.fingerprint "$CMAKE_BUILD_DIR"
 
-echo "Cleaned common generated files and caches. Add project-specific cleanup to scripts/clean."
+# Project-specific cleanup goes above this line. The hint lives here rather
+# than in the output, where every run repeated it to a reader who only cleaned.
+echo "Cleaned common generated files and caches."
