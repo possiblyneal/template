@@ -87,6 +87,14 @@ else
   fail "wanted skip=false for a fork's artifact, got '$out': $(cat "$work/reason" 2>&1)"
 fi
 
+fixture "a record with no run runs the checks" '{"artifacts": [{"expired": false, "workflow_run": null}]}'
+out="$(decide)"
+if [[ "$out" == "skip=false" ]]; then
+  pass
+else
+  fail "wanted skip=false for an artifact with no run, got '$out': $(cat "$work/reason" 2>&1)"
+fi
+
 fixture "a failed query runs the checks" error
 out="$(decide)"
 if [[ "$out" == "skip=false" ]] && grep -q 'could not read' "$work/reason"; then
