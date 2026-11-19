@@ -24,6 +24,11 @@ DEPENDABOT_PAYLOAD = (PAYLOAD / ".github/dependabot.yml").read_text()
 SUBTREE = "base-repo"
 OLD = "old\n"
 NEW = "new\n"
+LINES = "one\ntwo\nthree\nfour\nfive\n"
+TEMPLATE_EDIT = "ONE\ntwo\nthree\nfour\nfive\n"
+DESTINATION_EDIT = "one\ntwo\nthree\nfour\nFIVE\n"
+BOTH_EDITS = "ONE\ntwo\nthree\nfour\nFIVE\n"
+BINARY = "bin\0ary\n"
 OWNERSHIP = [
     {"path": ".repo-template.json", "mode": "managed"},
     {"path": "scripts/**", "mode": "managed"},
@@ -209,6 +214,9 @@ class ApplyTests(unittest.TestCase):
         } | {
             LIBRARY_PATH: LIBRARY,
             ".github/dependabot.yml": DEPENDABOT_PAYLOAD,
+            "scripts/merged": LINES,
+            "scripts/merged-script": LINES,
+            "scripts/binary": BINARY,
         }
         cls.fixture = Fixture(
             cls.directory.name,
@@ -228,6 +236,9 @@ class ApplyTests(unittest.TestCase):
                 ".github/PULL_REQUEST_TEMPLATE.md": None,
                 "scripts/added": NEW,
                 "scripts/added-script": NEW,
+                "scripts/merged": TEMPLATE_EDIT,
+                "scripts/merged-script": TEMPLATE_EDIT,
+                "scripts/binary": "bin\0ary changed\n",
                 "apps/product": NEW,
                 ".github/workflows/ci.yml": NEW,
                 ".github/dependabot.yml": DEPENDABOT_PAYLOAD + "# v2\n",
@@ -238,6 +249,9 @@ class ApplyTests(unittest.TestCase):
             },
             held={
                 "scripts/modified": "destination edit\n",
+                "scripts/merged": DESTINATION_EDIT,
+                "scripts/merged-script": DESTINATION_EDIT,
+                "scripts/binary": "bin\0ary edited\n",
                 "scripts/current": NEW,
                 "scripts/current-script": NEW,
                 "scripts/deleted-modified": "destination edit\n",
@@ -249,7 +263,12 @@ class ApplyTests(unittest.TestCase):
                 ".github/PULL_REQUEST_TEMPLATE.md": "destination edit\n",
             },
             executable=frozenset(
-                {"scripts/mode", "scripts/added-script", "scripts/current-script"}
+                {
+                    "scripts/mode",
+                    "scripts/added-script",
+                    "scripts/current-script",
+                    "scripts/merged-script",
+                }
             ),
             overrides=[
                 {"path": "scripts/overridden", "reason": "ours"},
@@ -285,17 +304,42 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(self.read("scripts/added"), NEW)
         self.assertEqual(self.fixture.staged()["scripts/added"], "A")
 
-    def test_a_modified_path_is_left_untouched_and_named(self) -> None:
+    def test_a_modified_path_with_overlapping_edits_is_left_as_conflicted(self) -> None:
         self.assertEqual(
             self.left()["scripts/modified"],
             {
                 "path": "scripts/modified",
                 "status": "M",
                 "destination_state": "modified",
-                "reason": "modified",
+                "reason": "conflicted",
             },
         )
         self.assertEqual(self.read("scripts/modified"), "destination edit\n")
+        self.assertNotIn("scripts/modified", self.fixture.staged())
+
+    def test_a_modified_path_with_separate_edits_lands_merged_and_staged(self) -> None:
+        self.assertEqual(self.read("scripts/merged"), BOTH_EDITS)
+        self.assertEqual(self.fixture.staged()["scripts/merged"], "M")
+        self.assertNotIn("scripts/merged", self.left())
+        self.assertIn("scripts/merged", self.result["applied_paths"]["merge"])
+        for kept in ("removed", "discarded"):
+            self.assertNotIn(
+                "scripts/merged", [entry["path"] for entry in self.result[kept]]
+            )
+
+    def test_a_merged_path_travels_at_the_payload_mode(self) -> None:
+        self.assertEqual(self.read("scripts/merged-script"), BOTH_EDITS)
+        self.assertTrue(self.fixture.mode("scripts/merged-script"))
+        self.assertFalse(self.fixture.mode("scripts/merged"))
+        modes = git_output(
+            "ls-files", "-s", "scripts/merged-script", cwd=self.fixture.destination
+        )
+        self.assertTrue(modes.startswith("100755"))
+
+    def test_a_binary_modified_path_is_left_as_modified_and_untouched(self) -> None:
+        self.assertEqual(self.left()["scripts/binary"]["reason"], "modified")
+        self.assertEqual(self.read("scripts/binary"), "bin\0ary edited\n")
+        self.assertNotIn("scripts/binary", self.fixture.staged())
 
     def test_a_modified_deletion_is_left(self) -> None:
         self.assertEqual(self.left()["scripts/deleted-modified"]["reason"], "modified")
@@ -394,6 +438,7 @@ class ApplyTests(unittest.TestCase):
                 "already-absent": 1,
                 "already-current": 2,
                 "delete": 2,
+                "merge": 2,
                 "move": 1,
                 "write": 7,
             },
@@ -829,6 +874,24 @@ class ApplyEdgeTests(unittest.TestCase):
             self.assertEqual((fixture.destination / "docs/local.md").read_text(), NEW)
             self.assertEqual(fixture.staged(), {"scripts/keep": "M"})
 
+    def test_a_merged_ignored_path_is_written_to_disk_and_not_staged(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                directory,
+                {"docs/local.md": LINES},
+                {"docs/local.md": TEMPLATE_EDIT},
+                ignore="docs/local.md\n",
+            )
+            write(fixture.destination, "docs/local.md", DESTINATION_EDIT)
+
+            result = fixture.command("apply")
+
+            self.assertEqual(result["applied_paths"], {"merge": ["docs/local.md"]})
+            self.assertEqual(
+                (fixture.destination / "docs/local.md").read_text(), BOTH_EDITS
+            )
+            self.assertEqual(fixture.staged(), {})
+
     def test_an_expired_rename_writes_the_new_path_and_removes_nothing(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = Fixture(
@@ -1090,6 +1153,26 @@ class PrBodyTests(unittest.TestCase):
             self.assertIn("[[FILL: decisions]]", body)
             self.assertNotIn("None. Every delta path landed", body)
 
+    def test_merged_paths_are_named_in_decisions_when_nothing_is_left(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                directory,
+                {"scripts/merged": LINES},
+                {"scripts/merged": TEMPLATE_EDIT},
+                held={"scripts/merged": DESTINATION_EDIT},
+            )
+            self.records(fixture)
+
+            result, body = self.render(fixture)
+
+            self.assertEqual(result["slots"], [])
+            self.assertIn(
+                f"- `scripts/merged`: clean three-way merge against the payload at "
+                f"`{fixture.old_commit}`",
+                body,
+            )
+            self.assertNotIn("None. Every delta path landed", body)
+
     def test_the_blast_radius_names_both_sides_of_a_move_and_no_override(
         self,
     ) -> None:
@@ -1169,13 +1252,15 @@ def run_with(
     )
 
 
-def run_fixture(directory: str, **options: Any) -> Fixture:
+def run_fixture(
+    directory: str, copy: tuple[str, str] = (OLD, NEW), **options: Any
+) -> Fixture:
     """A destination a `run` can finish: PR template, stub check and settings."""
     template = (PAYLOAD / ".github/PULL_REQUEST_TEMPLATE.md").read_text()
     fixture = Fixture(
         directory,
-        {"scripts/copy": OLD, ".github/PULL_REQUEST_TEMPLATE.md": template},
-        {"scripts/copy": NEW},
+        {"scripts/copy": copy[0], ".github/PULL_REQUEST_TEMPLATE.md": template},
+        {"scripts/copy": copy[1]},
         **options,
     )
     write(fixture.destination, "scripts/check", CHECK_STUB, executable=True)
@@ -1252,6 +1337,21 @@ class RunTests(unittest.TestCase):
             self.assertIn("```\n" + CHECK_TABLE.rstrip() + "\n```", body)
             for suffix in (".apply.json", ".proof.json", ".check.txt", ".settings.txt"):
                 self.assertTrue(Path(f"{destination}{suffix}").is_file(), suffix)
+
+    def test_a_destination_whose_modified_path_merges_cleanly_ends_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = run_fixture(directory, copy=(LINES, TEMPLATE_EDIT))
+            destination = fixture.destination
+            write(destination, "scripts/copy", DESTINATION_EDIT)
+            git("commit", "-q", "-am", "destination edit", cwd=destination)
+
+            [entry] = run_command(fixture)
+
+            self.assertEqual(entry["status"], "ready")
+            self.assertEqual((destination / "scripts/copy").read_text(), BOTH_EDITS)
+            body = Path(f"{destination}.pr-body.md").read_text()
+            self.assertNotIn("[[FILL:", body)
+            self.assertIn("`scripts/copy`: clean three-way merge", body)
 
     def test_a_destination_already_at_the_target_ends_ready_without_decisions(
         self,
@@ -1881,6 +1981,27 @@ class ReportTests(unittest.TestCase):
             lines,
         )
         self.assertIn("- Overridden: `scripts/kept`: ours (owner/beta)", lines)
+
+    def test_merged_paths_are_aggregated_when_nothing_is_left(self) -> None:
+        self.records("alpha")
+        self.records("beta")
+        for name, merged in (
+            ("alpha", ["CLAUDE.md"]),
+            ("beta", ["CLAUDE.md", "scripts/a"]),
+        ):
+            record = Path(f"{self.destination(name)}.apply.json")
+            apply = json.loads(record.read_text())
+            apply["applied_paths"]["merge"] = merged
+            record.write_text(json.dumps(apply))
+
+        written, report = self.report()
+
+        self.assertEqual(written["slots"], [])
+        self.assertIn(
+            "- Preserved/Merged/Conflicted: merged `CLAUDE.md` (all); "
+            "`scripts/a` (owner/beta)",
+            report.splitlines(),
+        )
 
 
 class EligibleTests(unittest.TestCase):
