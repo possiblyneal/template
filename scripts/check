@@ -20,22 +20,43 @@ cd "$repo_root"
 # the cause is gone; the log is what a failure outside the table is diagnosed
 # from. --verbose streams the same text live. --gate is the internal entry that
 # runs the steps below and nothing else, so the tee wraps exactly one run.
-case "${1:-}" in
+#
+# --fast is the commit-time gate: every step below except build, which CI runs
+# on the same commit before it can land and which costs more than the rest of
+# the gate together in a repository that compiles. It rides through each entry,
+# and tmp/check.log opens by saying build was left out, so a fast run's log
+# never reads as the full gate's.
+usage() {
+  echo "usage: scripts/check [--fast] [--verbose]" >&2
+  exit 2
+}
+mode=""
+fast=()
+for arg in "$@"; do
+  case "$arg" in
+    --verbose | --gate)
+      [[ -z "$mode" ]] || usage
+      mode="$arg"
+      ;;
+    --fast) fast=(--fast) ;;
+    *) usage ;;
+  esac
+done
+case "$mode" in
   "")
-    exec scripts/summarize scripts/check --verbose
+    exec scripts/summarize scripts/check --verbose "${fast[@]}"
     ;;
   --verbose)
     mkdir -p tmp
     # pipefail (set above) makes the pipeline's status the gate's, not tee's.
-    scripts/check --gate 2>&1 | tee tmp/check.log
+    scripts/check --gate "${fast[@]}" 2>&1 | tee tmp/check.log
     exit "${PIPESTATUS[0]}"
     ;;
-  --gate) ;;
-  *)
-    echo "usage: scripts/check [--verbose]" >&2
-    exit 2
-    ;;
 esac
+
+if (( ${#fast[@]} )); then
+  echo "scripts/check --fast: build is left to CI."
+fi
 
 if [[ ! -x scripts/doctor ]]; then
   echo "scripts/doctor is missing or not executable."
@@ -78,7 +99,11 @@ if [[ ! -x scripts/ci ]]; then
   exit 1
 fi
 
-scripts/ci
+if (( ${#fast[@]} )); then
+  scripts/ci --no-build
+else
+  scripts/ci
+fi
 
 # The security workflow blocks a pull request the same way the CI workflow does,
 # so leaving it out here means finding out on the pull request instead of before
