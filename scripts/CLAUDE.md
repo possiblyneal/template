@@ -11,7 +11,7 @@ One flat directory, not a `ci/` and a `scripts/` split: `check` calls `ci` and `
 Each script's header comment says what it does and why it is shaped that way, and the lists below say who calls it; each `tests/*-test` header says what that suite covers. Read the header before editing the file. This document holds only the rules that span scripts.
 
 - Run by a person: `doctor`, `check`, `fix`, `clean`, `run`, `integration`, `package`, `summarize`, `repo-settings check`
-- Called by `.github/`: `ci`, `security`, `release`, `detect`, `changelog-check`, `system-packages`, `script-tests`
+- Called by `.github/`: `ci`, `ci-tested`, `security`, `release`, `detect`, `changelog-check`, `system-packages`, `script-tests`
 - Called by pre-commit: `adr-index`, `structure`, `payload-parity`, `attribute-commit` (`prepare-commit-msg`, and `--check` at `commit-msg`), `changelog-check` and `protect-branch` (`pre-push`), `worktree-cleanup` (`post-checkout`, `post-merge`, and SessionStart with `--report`)
 - Sourced: `libs/detect.sh`, `libs/result.sh`, `libs/unit.sh`, `libs/precommit.sh`, `libs/dependabot.sh`, `libs/quadlet.sh`, `tests/libs/harness.sh`
 
@@ -25,7 +25,7 @@ Each script's header comment says what it does and why it is shaped that way, an
 - **An adapter is honest about what it did.** Capture the tool's exit status, not only its output. No function stands in for an absent one: the probe reads `absent` off the function table and the dispatch reports `unavailable`. A runner that exits non-zero without a real failure is translated, and `libs/detect.sh`'s header lists the four.
 - **`libs/*.sh` and `harness.sh` are sourced, never executed**: no shebang, no executable bit, `.sh`. Every other script is extensionless and executable; pre-commit reads a shebang only on one.
 - **`adr-index` and `structure` are hooks, not capabilities**, and run `always_run` with no `files:` filter, since staged paths exclude deletions.
-- **Local commands stay off hosted GitHub state.** The boundary is hosted state, not connectivity; only `repo-settings check` crosses it.
+- **Local commands stay off hosted GitHub state.** The boundary is hosted state, not connectivity; only `repo-settings check` crosses it, and `ci-tested`, which only `ci.yml` calls.
 
 ## Work Guidance
 

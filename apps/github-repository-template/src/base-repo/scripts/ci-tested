@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Whether a push to the default branch landed a tree this workflow already
+# passed on a pull request, so ci.yml can skip its checks instead of proving the
+# same tree twice. Prints `skip=true` or `skip=false` for $GITHUB_OUTPUT and the
+# reason on stderr, which the job log keeps.
+#
+#   scripts/ci-tested <before>
+#
+# <before> is the branch tip the push replaced (github.event.before). The tip
+# that landed is HEAD's second parent for a merge commit, else HEAD itself, a
+# fast-forward. The skip holds only when <before> is an ancestor of that tip and
+# HEAD's tree is the tip's: a pull request run tests the tip merged onto the
+# base it saw, every such base is an ancestor of <before> while the branch only
+# moves forward, so that merge is the tip's own tree, the tree now on the
+# branch. The same test /land uses to skip its local gate. A squash or rebase
+# merge writes a commit no pull request run saw, so it never skips.
+#
+# Called by ci.yml alone: it reads hosted run state, which no local command does.
+# Every doubt answers skip=false, since running the checks again costs minutes
+# and skipping them wrongly leaves the branch unproven.
+
+before="${1:?usage: scripts/ci-tested <before>}"
+
+decide() {
+  echo "ci-tested: $2" >&2
+  echo "skip=$1"
+  exit 0
+}
+
+[[ "$before" =~ ^0+$ ]] && decide false "the push created the branch"
+git cat-file -e "$before^{commit}" 2>/dev/null ||
+  decide false "the replaced tip $before is not in this checkout"
+
+read -r -a parents <<< "$(git rev-list --parents -n 1 HEAD)"
+tip="${parents[0]}"
+(( ${#parents[@]} == 3 )) && tip="${parents[2]}"
+
+git merge-base --is-ancestor "$before" "$tip" ||
+  decide false "the branch moved past the pull request's base"
+[[ "$(git rev-parse "HEAD^{tree}")" == "$(git rev-parse "$tip^{tree}")" ]] ||
+  decide false "HEAD's tree differs from the pull request head $tip"
+
+workflow="${GITHUB_WORKFLOW_REF:?}"
+workflow="${workflow%@*}"
+workflow="${workflow##*/}"
+count="$(gh api \
+  "repos/${GITHUB_REPOSITORY:?}/actions/workflows/$workflow/runs?event=pull_request&status=success&head_sha=$tip&per_page=1" \
+  --jq .total_count 2>/dev/null)" || decide false "could not read $workflow's runs"
+
+[[ "$count" =~ ^[1-9] ]] ||
+  decide false "no passing pull request run of $workflow on $tip"
+decide true "$workflow passed on pull request head $tip, the tree now on the branch"

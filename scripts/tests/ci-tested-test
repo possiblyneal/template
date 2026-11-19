@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+# Whether scripts/ci-tested skips the default branch's checks only when a
+# passing pull request run already proved the tree that landed. Each case builds
+# the push in a scratch repository -- a merge commit, a fast-forward, a moved
+# base, a merge that changed the tree -- and `gh` is a stub answering the runs
+# query with a fixed count, recording what it was asked.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=libs/harness.sh
+source "$repo_root/scripts/tests/libs/harness.sh"
+
+echo "ci-tested-test"
+
+export GITHUB_REPOSITORY=owner/repo
+export GITHUB_WORKFLOW_REF=owner/repo/.github/workflows/ci.yml@refs/heads/main
+
+# A repository with one commit on main, the tip a push would replace, and a
+# branch `topic` one commit ahead of it. The gh stub answers with $2 runs, or
+# fails when $2 is `error`.
+fixture() {
+  scratch_repo
+  current="$1"
+  stub gh <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$work/gh-calls"
+[[ "$2" == error ]] && exit 1
+echo "$2"
+STUB
+  git -C "$work" add -A
+  git -C "$work" commit -qm base
+  git -C "$work" branch -qM main
+  before="$(git -C "$work" rev-parse HEAD)"
+  git -C "$work" checkout -qb topic
+  echo change > "$work/file"
+  git -C "$work" add file
+  git -C "$work" commit -qm change
+  tip="$(git -C "$work" rev-parse HEAD)"
+  git -C "$work" checkout -q main
+}
+
+decide() {
+  (cd "$work" && scripts/ci-tested "$1" 2>"$work/reason")
+}
+
+fixture "a merge of an unmoved base onto a green head skips" 1
+git -C "$work" merge -q --no-ff -m merge topic
+out="$(decide "$before")"
+if [[ "$out" == "skip=true" ]] && grep -q "head_sha=$tip" "$work/gh-calls" \
+  && grep -q 'workflows/ci.yml/runs?event=pull_request&status=success' "$work/gh-calls"; then
+  pass
+else
+  fail "wanted skip=true from a runs query on $tip, got '$out': $(cat "$work/reason" "$work/gh-calls" 2>&1)"
+fi
+
+fixture "a fast-forward onto a green head skips" 1
+git -C "$work" merge -q --ff-only topic
+out="$(decide "$before")"
+if [[ "$out" == "skip=true" ]] && grep -q "head_sha=$tip" "$work/gh-calls"; then
+  pass
+else
+  fail "wanted skip=true, got '$out': $(cat "$work/reason" 2>&1)"
+fi
+
+fixture "no passing pull request run runs the checks" 0
+git -C "$work" merge -q --no-ff -m merge topic
+out="$(decide "$before")"
+if [[ "$out" == "skip=false" ]] && grep -q 'no passing pull request run' "$work/reason"; then
+  pass
+else
+  fail "wanted skip=false, got '$out': $(cat "$work/reason" 2>&1)"
+fi
+
+fixture "a base that moved runs the checks without asking GitHub" 1
+echo other > "$work/other"
+git -C "$work" add other
+git -C "$work" commit -qm moved
+moved="$(git -C "$work" rev-parse HEAD)"
+git -C "$work" merge -q --no-ff -m merge topic
+out="$(decide "$moved")"
+if [[ "$out" == "skip=false" ]] && [[ ! -e "$work/gh-calls" ]]; then
+  pass
+else
+  fail "wanted skip=false and no gh call, got '$out': $(cat "$work/reason" 2>&1)"
+fi
+
+fixture "a merge that changed the tree runs the checks" 1
+git -C "$work" merge -q --no-ff --no-commit topic >/dev/null 2>&1
+echo extra > "$work/extra"
+git -C "$work" add extra
+git -C "$work" commit -qm merge
+out="$(decide "$before")"
+if [[ "$out" == "skip=false" ]] && grep -q 'tree differs' "$work/reason"; then
+  pass
+else
+  fail "wanted skip=false on a changed merge tree, got '$out': $(cat "$work/reason" 2>&1)"
+fi
+
+fixture "a failed runs query runs the checks" error
+git -C "$work" merge -q --no-ff -m merge topic
+out="$(decide "$before")"
+if [[ "$out" == "skip=false" ]] && grep -q 'could not read' "$work/reason"; then
+  pass
+else
+  fail "wanted skip=false when gh fails, got '$out': $(cat "$work/reason" 2>&1)"
+fi
+
+fixture "a push that created the branch runs the checks" 1
+out="$(decide 0000000000000000000000000000000000000000)"
+if [[ "$out" == "skip=false" ]]; then
+  pass
+else
+  fail "wanted skip=false for a new branch, got '$out'"
+fi
+
+fixture "a replaced tip missing from the checkout runs the checks" 1
+out="$(decide 1111111111111111111111111111111111111111)"
+if [[ "$out" == "skip=false" ]] && grep -q 'not in this checkout' "$work/reason"; then
+  pass
+else
+  fail "wanted skip=false for an unknown tip, got '$out': $(cat "$work/reason" 2>&1)"
+fi
+
+report
