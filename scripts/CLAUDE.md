@@ -39,7 +39,7 @@ Every change here belongs in `apps/github-repository-template/src/base-repo/scri
 
 ## Verification
 
-`scripts/check` runs every suite through `script-tests` before the checks they guard, then `structure` and `payload-parity` before `ci`. `ci.yml` runs them the same way before toolchain setup, with `pre-commit` installed first so `adr-index-test` and `commitlint-test` do not skip their hook-wiring cases. shellcheck runs via pre-commit with `-x`, skipping the payload's `scripts/`, which `payload-parity` holds identical to this tree.
+`scripts/check` runs `structure` and `payload-parity`, then every suite through `script-tests` beside `ci`, holding the suites' output until `ci` ends, and its pre-commit sweep last, skipping the hooks that repeat a gate step. `ci.yml` runs the suites before toolchain setup, with `pre-commit` installed first so `adr-index-test` and `commitlint-test` do not skip their hook-wiring cases. shellcheck runs via pre-commit with `-x`, skipping the payload's `scripts/`, which `payload-parity` holds identical to this tree.
 
 ## Child Index
 
