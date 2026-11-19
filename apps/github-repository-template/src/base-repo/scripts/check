@@ -85,18 +85,14 @@ fi
 # never interleave, and both must pass. A background job in a non-interactive
 # shell ignores SIGINT, so an interrupt exits the gate at once, without waiting
 # for the suites, and the EXIT trap stops them rather than leaving them running.
-stop_tree() {
-  local child
-  for child in $(pgrep -P "$1" 2>/dev/null); do
-    stop_tree "$child"
-  done
-  kill "$1" 2>/dev/null || true
-}
-
+# set -m starts the suites in a process group of their own, so one signal to the
+# group reaches every suite at once, including one started mid-shutdown.
 script_tests_log="$(mktemp)"
+set -m
 scripts/script-tests </dev/null >"$script_tests_log" 2>&1 &
 script_tests_pid=$!
-trap 'stop_tree "$script_tests_pid"; rm -f "$script_tests_log"' EXIT
+set +m
+trap 'kill -- -"$script_tests_pid" 2>/dev/null || true; rm -f "$script_tests_log"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
