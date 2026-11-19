@@ -892,6 +892,31 @@ class ApplyEdgeTests(unittest.TestCase):
             )
             self.assertEqual(fixture.staged(), {})
 
+    def test_a_symlinked_modified_path_is_left_as_modified_and_untouched(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                directory,
+                {"scripts/linked": LINES},
+                {"scripts/linked": TEMPLATE_EDIT},
+            )
+            link = fixture.destination / "scripts/linked"
+            write(fixture.destination, "scripts/real", DESTINATION_EDIT)
+            link.unlink()
+            link.symlink_to("real")
+            git("add", "-A", cwd=fixture.destination)
+            git("commit", "-q", "-m", "link", cwd=fixture.destination)
+
+            result = fixture.command("apply")
+
+            self.assertEqual(
+                [(entry["path"], entry["reason"]) for entry in result["left"]],
+                [("scripts/linked", "modified")],
+            )
+            self.assertTrue(link.is_symlink())
+            self.assertEqual(fixture.staged(), {})
+
     def test_an_expired_rename_writes_the_new_path_and_removes_nothing(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = Fixture(

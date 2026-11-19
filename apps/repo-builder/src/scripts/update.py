@@ -114,8 +114,15 @@ def merge_payload(
 
     Returns `merge` once the clean result is written, `conflicted` for
     overlapping edits, and `modified` where `git merge-file` cannot run, as on
-    a binary file. Only a clean merge writes.
+    a binary file, or where either side is a symlink, whose bytes are a link
+    target rather than content. Only a clean merge writes.
     """
+    modes = {
+        payload_mode(template_repo, commit, subtree, path)
+        for commit in (recorded, target)
+    }
+    if (destination / path).is_symlink() or SYMLINK in modes:
+        return "modified"
     with tempfile.TemporaryDirectory() as scratch:
         base, current, other = (Path(scratch) / name for name in ("base", "cur", "new"))
         base.write_bytes(blob_bytes(template_repo, f"{recorded}:{subtree}/{path}"))
@@ -433,8 +440,8 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
     ]
     for change in changes:
         refused = False
+        path = str(change["path"])
         if change.get("overridden"):
-            path = str(change["path"])
             entry = {
                 "path": path if path in overrides else str(change["old_path"]),
                 "reason": str(change.get("override_reason")),
@@ -445,18 +452,18 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
             refused_overrides.append(entry)
             refused = True
         reason = left_reason(change, codeql_omitted, rules)
-        path = str(change["path"])
         if reason == "modified" and str(change["status"]) == "M":
-            reason = merge_payload(
+            merged = merge_payload(
                 destination, template_repo, recorded, target, subtree, path
             )
-            if reason == "merge":
+            if merged == "merge":
                 applied.setdefault("merge", []).append(path)
                 continue
+            reason = merged
         if reason:
             left.append(
                 {
-                    "path": str(change["path"]),
+                    "path": path,
                     "status": str(change["status"]),
                     "destination_state": str(change.get("destination_state")),
                     "reason": reason,
