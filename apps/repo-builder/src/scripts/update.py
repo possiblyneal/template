@@ -17,6 +17,7 @@ import os
 import posixpath
 import re
 import subprocess
+import tempfile
 import tomllib
 from pathlib import Path
 
@@ -79,12 +80,8 @@ def stage(destination: Path, path: str) -> None:
         run_git(destination, "add", "--", path)
 
 
-def write_payload(
-    destination: Path, template_repo: Path, target: str, subtree: str, path: str
-) -> None:
-    """Write the payload's version of a path, at the payload's mode."""
-    mode = payload_mode(template_repo, target, subtree, path)
-    content = blob_bytes(template_repo, f"{target}:{subtree}/{path}")
+def write_content(destination: Path, path: str, content: bytes, mode: str) -> None:
+    """Write bytes at a path, at the payload's mode, and stage them."""
     file = destination / path
     file.parent.mkdir(parents=True, exist_ok=True)
     file.unlink(missing_ok=True)
@@ -94,6 +91,46 @@ def write_payload(
         file.write_bytes(content)
         file.chmod(0o755 if mode == EXECUTABLE else 0o644)
     stage(destination, path)
+
+
+def write_payload(
+    destination: Path, template_repo: Path, target: str, subtree: str, path: str
+) -> None:
+    """Write the payload's version of a path, at the payload's mode."""
+    mode = payload_mode(template_repo, target, subtree, path)
+    content = blob_bytes(template_repo, f"{target}:{subtree}/{path}")
+    write_content(destination, path, content, mode)
+
+
+def merge_payload(
+    destination: Path,
+    template_repo: Path,
+    recorded: str,
+    target: str,
+    subtree: str,
+    path: str,
+) -> str:
+    """Three-way merge a modified path: the old payload, the destination, the new.
+
+    Returns `merge` once the clean result is written, `conflicted` for
+    overlapping edits, and `modified` where `git merge-file` cannot run, as on
+    a binary file. Only a clean merge writes.
+    """
+    with tempfile.TemporaryDirectory() as scratch:
+        base, current, other = (Path(scratch) / name for name in ("base", "cur", "new"))
+        base.write_bytes(blob_bytes(template_repo, f"{recorded}:{subtree}/{path}"))
+        current.write_bytes((destination / path).read_bytes())
+        other.write_bytes(blob_bytes(template_repo, f"{target}:{subtree}/{path}"))
+        merged = subprocess.run(
+            ["git", "merge-file", "-p", str(current), str(base), str(other)],
+            capture_output=True,
+            check=False,
+        )
+    if merged.returncode == 0:
+        mode = payload_mode(template_repo, target, subtree, path)
+        write_content(destination, path, merged.stdout, mode)
+        return "merge"
+    return "conflicted" if 1 <= merged.returncode <= 127 else "modified"
 
 
 def remove(destination: Path, path: str) -> None:
@@ -363,6 +400,7 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
     template = result["template"]
     assert isinstance(template, dict)
     target, subtree = str(template["target_commit"]), str(template["subtree"])
+    recorded = str(template["recorded_commit"])
     destination = arguments.destination.resolve()
     template_repo = arguments.template_repo.resolve()
     manifest, rules, overrides = preflight.validate_manifest(destination / MANIFEST)
@@ -407,6 +445,14 @@ def apply_update(arguments: argparse.Namespace) -> dict[str, object]:
             refused_overrides.append(entry)
             refused = True
         reason = left_reason(change, codeql_omitted, rules)
+        path = str(change["path"])
+        if reason == "modified" and str(change["status"]) == "M":
+            reason = merge_payload(
+                destination, template_repo, recorded, target, subtree, path
+            )
+            if reason == "merge":
+                applied.setdefault("merge", []).append(path)
+                continue
         if reason:
             left.append(
                 {
@@ -669,11 +715,15 @@ def render_pr_body(arguments: argparse.Namespace) -> dict[str, object]:
                 "commit and safe to skim."
             ),
         ],
-        "## Decisions": [
-            slot("decisions")
+        "## Decisions": (
+            [slot("decisions")]
             if apply["left"]
-            else "None. Every delta path landed without a hand merge."
-        ],
+            else [
+                f"- `{path}`: clean three-way merge against the payload at `{recorded}`"
+                for path in apply["applied_paths"].get("merge", [])
+            ]
+            or ["None. Every delta path landed without a hand merge."]
+        ),
         "## Out of scope": ["None."],
         "## Verified": [
             *fence(check),
@@ -1108,6 +1158,7 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
     current: dict[str, list[str]] = {}
     removed: dict[str, list[str]] = {}
     overridden: dict[str, list[str]] = {}
+    merged: dict[str, list[str]] = {}
     authored: dict[str, list[str]] = {}
     drift: list[str] = []
     unavailable: list[str] = []
@@ -1153,6 +1204,8 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
         paths = apply["applied_paths"]
         for path in paths.get("write", []):
             applied.setdefault(f"`{path}`", []).append(name)
+        for path in paths.get("merge", []):
+            merged.setdefault(f"`{path}`", []).append(name)
         for path in paths.get("already-current", []):
             current.setdefault(f"`{path}`", []).append(name)
         for entry in apply["removed"]:
@@ -1191,7 +1244,13 @@ def render_report(arguments: argparse.Namespace) -> dict[str, object]:
         f"- Applied: {aggregate(applied, count)}",
         f"- Already current: {aggregate(current, count)}",
         "- Preserved/Merged/Conflicted: "
-        + (slot("preserved-merged-conflicted") if left else "none"),
+        + (
+            slot("preserved-merged-conflicted")
+            if left
+            else f"merged {aggregate(merged, count)}"
+            if merged
+            else "none"
+        ),
         f"- Renamed/deleted: {aggregate(removed, count)}",
         f"- Overridden: {aggregate(overridden, count)}",
         "",
