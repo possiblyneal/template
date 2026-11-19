@@ -86,7 +86,10 @@ fi
 # shell ignores SIGINT, so an interrupt exits the gate at once, without waiting
 # for the suites, and the EXIT trap stops them rather than leaving them running.
 # set -m starts the suites in a process group of their own, so one signal to the
-# group reaches every suite at once, including one started mid-shutdown.
+# group reaches every suite at once, including one started mid-shutdown. Being
+# their own group, a signal to the gate's group misses them: TERM still reaches
+# the trap, and PIPE, from an output pipe the same signal closed, gets one too.
+# A group SIGKILL runs no trap, so the suites finish on their own.
 script_tests_log="$(mktemp)"
 set -m
 scripts/script-tests </dev/null >"$script_tests_log" 2>&1 &
@@ -95,6 +98,7 @@ set +m
 trap 'kill -- -"$script_tests_pid" 2>/dev/null || true; rm -f "$script_tests_log"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+trap 'exit 141' PIPE
 
 ci_status=0
 scripts/ci || ci_status=$?
@@ -102,7 +106,7 @@ script_tests_status=0
 wait "$script_tests_pid" || script_tests_status=$?
 # Reaped, so its PID may now belong to another process.
 trap 'rm -f "$script_tests_log"' EXIT
-trap - INT TERM
+trap - INT TERM PIPE
 cat "$script_tests_log"
 (( ci_status == 0 )) || exit "$ci_status"
 (( script_tests_status == 0 )) || exit "$script_tests_status"
