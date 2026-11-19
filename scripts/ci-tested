@@ -1,27 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Whether a push to the default branch landed a tree this workflow already
-# passed on a pull request, so ci.yml can skip its checks instead of proving the
-# same tree twice. Prints `skip=true` or `skip=false` for $GITHUB_OUTPUT and the
-# reason on stderr, which the job log keeps.
+# Whether a passing pull request run of ci.yml already tested the tree a push to
+# the default branch landed, so ci.yml can skip its checks instead of proving
+# the same tree twice. Prints `skip=true` or `skip=false` for $GITHUB_OUTPUT
+# and the reason on stderr, which the job log keeps.
 #
-#   scripts/ci-tested <before>
+#   scripts/ci-tested
 #
-# <before> is the branch tip the push replaced (github.event.before). The tip
-# that landed is HEAD's second parent for a merge commit, else HEAD itself, a
-# fast-forward. The skip holds only when <before> is an ancestor of that tip and
-# HEAD's tree is the tip's: a pull request run tests the tip merged onto the
-# base it saw, every such base is an ancestor of <before> while the branch only
-# moves forward, so that merge is the tip's own tree, the tree now on the
-# branch. The same test /land uses to skip its local gate. A squash or rebase
-# merge writes a commit no pull request run saw, so it never skips.
+# A pull request run that passes uploads an artifact named for the tree it
+# tested, its merge ref's: ci-tested-tree-<tree>. The push skips when an
+# unexpired one of those names HEAD's tree, so any merge, squash or
+# fast-forward whose result is a tree some run already passed skips, and one
+# onto a base that moved since does not. Artifacts from a fork's run are
+# ignored, since a fork's pull request can rewrite the workflow that uploads
+# them.
 #
 # Called by ci.yml alone: it reads hosted run state, which no local command does.
 # Every doubt answers skip=false, since running the checks again costs minutes
 # and skipping them wrongly leaves the branch unproven.
-
-before="${1:?usage: scripts/ci-tested <before>}"
 
 decide() {
   echo "ci-tested: $2" >&2
@@ -29,26 +26,12 @@ decide() {
   exit 0
 }
 
-[[ "$before" =~ ^0+$ ]] && decide false "the push created the branch"
-git cat-file -e "$before^{commit}" 2>/dev/null ||
-  decide false "the replaced tip $before is not in this checkout"
-
-read -r -a parents <<< "$(git rev-list --parents -n 1 HEAD)"
-tip="${parents[0]}"
-(( ${#parents[@]} == 3 )) && tip="${parents[2]}"
-
-git merge-base --is-ancestor "$before" "$tip" ||
-  decide false "the branch moved past the pull request's base"
-[[ "$(git rev-parse "HEAD^{tree}")" == "$(git rev-parse "$tip^{tree}")" ]] ||
-  decide false "HEAD's tree differs from the pull request head $tip"
-
-workflow="${GITHUB_WORKFLOW_REF:?}"
-workflow="${workflow%@*}"
-workflow="${workflow##*/}"
-count="$(gh api \
-  "repos/${GITHUB_REPOSITORY:?}/actions/workflows/$workflow/runs?event=pull_request&status=success&head_sha=$tip&per_page=1" \
-  --jq .total_count 2>/dev/null)" || decide false "could not read $workflow's runs"
+tree="$(git rev-parse 'HEAD^{tree}')"
+count="$(gh api "repos/${GITHUB_REPOSITORY:?}/actions/artifacts?name=ci-tested-tree-$tree&per_page=100" \
+  --jq '[.artifacts[] | select((.expired | not)
+    and .workflow_run.head_repository_id == .workflow_run.repository_id)] | length' \
+  2>/dev/null)" || decide false "could not read the tested-tree artifacts"
 
 [[ "$count" =~ ^[1-9] ]] ||
-  decide false "no passing pull request run of $workflow on $tip"
-decide true "$workflow passed on pull request head $tip, the tree now on the branch"
+  decide false "no passing pull request run tested tree $tree"
+decide true "a passing pull request run tested tree $tree, the tree now on the branch"
