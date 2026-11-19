@@ -5,7 +5,7 @@ type: Note
 
 ### GitHub Automation
 
-`.github/workflows/ci.yml`: Runs tests, linting, formatting checks, type checks, and builds on every push and pull request.
+`.github/workflows/ci.yml`: Runs tests, linting, formatting checks, type checks, and builds on every pull request and every push to `main`. On a self-hosted runner, a passing pull request run records the tree it tested as an artifact, and a push whose tree one of those records names skips the checks and goes green; `scripts/ci-tested` decides.
 
 `.github/workflows/release.yml`: Validates a tagged release and publishes it, both through `scripts/release`.
 
@@ -79,7 +79,9 @@ The specific operating parameters for the AI agent.
 
 `scripts/script-tests`: Runs every `scripts/tests/*-test` concurrently, one per CPU, and prints each one's output whole once all have finished, naming every test that failed. Called by `scripts/check` and by `ci.yml`, so both run the suites the same way. The suites spend their time waiting on git and child processes, so running them side by side cuts the wall time several-fold.
 
-`scripts/check`: The full local gate. By default it prints only the Result table and the findings under any check that failed, by running itself under `scripts/summarize`, and it writes the complete run to `tmp/check.log` every time, passing or failing, since a pre-commit fixer repairs the file and a re-run no longer reproduces the failure. `--verbose` streams the whole run live, still writing the log. Exits with the gate's status either way. `scripts/script-tests` runs beside `scripts/ci`, since neither fills the CPUs, with its output printed once `ci` ends; the pre-commit sweep runs last, because its fixers rewrite files the other two read, and skips the hooks that repeat a step the gate already ran over the whole tree.
+`scripts/check`: The full local gate. By default it prints only the Result table and the findings under any check that failed, by running itself under `scripts/summarize`, and it writes the complete run to `tmp/check.log` every time, passing or failing, since a pre-commit fixer repairs the file and a re-run no longer reproduces the failure. `--verbose` streams the whole run live, still writing the log. `--fast` is the commit-time gate: every step but `build`, which CI runs on the same commit before it can land. Exits with the gate's status either way. `scripts/script-tests` runs beside `scripts/ci`, since neither fills the CPUs, with its output printed once `ci` ends; the pre-commit sweep runs last, because its fixers rewrite files the other two read, and skips the hooks that repeat a step the gate already ran over the whole tree.
+
+`scripts/ci-tested`: Called by `ci.yml` on a push to `main` on a self-hosted runner, and nowhere else, since it reads hosted run state. Prints `skip=true` when an unexpired `ci-tested-tree-<tree>` artifact from a same-repository pull request run names the push's tree: a merge, squash or fast-forward onto a base that has not moved since that run. Anything else, including a failed query, prints `skip=false` and the checks run.
 
 `scripts/summarize`: Runs a check command and prints only its Result table — one line per check, the findings under any that failed — dropping every other thing the command wrote. Exits with that command's status, so it can stand in for the command rather than only report on it, and ends with a verdict line naming that status and a count per state. `scripts/check` is its first caller; it stays the way to read `scripts/ci` and any other command. It is the one consumer of the printed layout `scripts/libs/result.sh` documents, which is where a change to the column widths has to be reflected.
 
