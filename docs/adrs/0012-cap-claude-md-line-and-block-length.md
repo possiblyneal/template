@@ -17,12 +17,14 @@ status: accepted
 `FAIL`: no physical line over 200 bytes (`claudemd-lines`), and no rendered
 block over 600 bytes (`claudemd-blocks`). A block is a paragraph or a single
 list item — a list marker opens a new block. A third measure, a run over 8,000
-bytes between headings, is a non-failing advisory printed below the Result
-table, not a check.
+bytes between headings, is a non-failing advisory: the `claudemd-blocks` row
+counts it, so it shows in `scripts/check`'s table, and `scripts/structure`
+lists each one below its own.
 
-Lengths are measured in bytes, under `LC_ALL=C`. Fenced code, table rows, and a
-line whose content is a single unbreakable token (a URL, a path) are exempt
-from the line cap. The caps govern `CLAUDE.md` files only; no other Markdown is
+Lengths are measured in bytes, under `LC_ALL=C`. Fenced code (```` ``` ```` or
+`~~~`, closed only by its own character at its opening length or longer), table
+rows, and a line whose content is a single unbreakable token (a URL, a path)
+are exempt from both caps; a heading is capped like any line. The caps govern `CLAUDE.md` files only; no other Markdown is
 touched.
 
 ## Context

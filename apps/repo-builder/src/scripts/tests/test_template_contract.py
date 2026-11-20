@@ -54,7 +54,8 @@ def contract_line(prefix):
 
     Layout bullets are capped at 200 bytes by `scripts/structure`, so a long
     one wraps across physical lines; its continuations are indented. Rejoin
-    them into the one logical line the enumeration lives on.
+    them into the one logical line the enumeration lives on. A nested list
+    marker opens a sub-bullet, which is not part of this one.
     """
     physical = CONTRACT.read_text().splitlines()
     starts = [i for i, line in enumerate(physical) if line.startswith(prefix)]
@@ -66,7 +67,7 @@ def contract_line(prefix):
     for line in physical[starts[0] + 1 :]:
         if line and not line[0].isspace():
             break
-        if not line.strip():
+        if not line.strip() or re.match(r"\s*([-*+]|\d+\.)\s", line):
             break
         logical.append(line.strip())
     return " ".join(logical)

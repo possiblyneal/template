@@ -595,10 +595,12 @@ verdict docs-content "docs/ holds Markdown only"
 # caps keep it scannable: no physical line past claudemd_line_max, no rendered
 # block (a paragraph, or a list item -- a marker opens a new one) past
 # claudemd_block_max, both measured in bytes so the audit is the same on every
-# host regardless of locale. Fenced code, table rows, and a line that is one
-# unbreakable token (a URL, a path) are exempt from the line cap, since none can
-# be rewrapped. A run between headings past claudemd_section_max is only an
-# advisory: splitting it is a judgment about meaning the audit will not force.
+# host regardless of locale. Fenced code (``` or ~~~), table rows, and a line
+# that is one unbreakable token (a URL, a path) are exempt from both caps, since
+# none can be rewrapped; a heading is capped like any line. A run between
+# headings past claudemd_section_max is only an advisory, named in the
+# claudemd-blocks row: splitting it is a judgment about meaning the audit will
+# not force.
 claudemd_line_max=200
 claudemd_block_max=600
 claudemd_section_max=8000
@@ -618,26 +620,35 @@ claudemd_program='
   }
   BEGIN { in_fence = 0; in_block = 0; block_sum = 0; sec = 0; sec_start = 1 }
   {
-    heading = ($0 ~ /^[ \t]*#/)
-    fence   = ($0 ~ /^[ \t]*```/)
+    # A fence closes only on its own character, at least as long as the one
+    # that opened it, so a ``` inside a ~~~ block is content, not a close.
+    if (match($0, /^ {0,3}(`{3,}|~{3,})/)) {
+      run = substr($0, RSTART, RLENGTH); sub(/^ */, "", run)
+      if (!in_fence) { in_fence = 1; fence_char = substr(run, 1, 1); fence_len = length(run) }
+      else if (substr(run, 1, 1) == fence_char && length(run) >= fence_len) in_fence = 0
+      sec += length($0) + 1; flush_block(); next
+    }
+    if (in_fence) { sec += length($0) + 1; flush_block(); next }
+
+    heading = ($0 ~ /^ {0,3}#{1,6}([ \t]|$)/)
     table   = ($0 ~ /^[ \t]*\|/)
     blank   = ($0 ~ /^[ \t]*$/)
     marker  = ($0 ~ /^[ \t]*([-*+]|[0-9]+\.)[ \t]+/)
 
     if (heading) flush_section(); else sec += length($0) + 1
-
-    if (fence) { flush_block(); in_fence = !in_fence; next }
-    if (in_fence || table) { flush_block(); next }
-    if (heading || blank) { flush_block(); next }
+    if (table) { flush_block(); next }
 
     content = $0
     sub(/^[ \t]*/, "", content)
     sub(/^>[ \t]*/, "", content)
     sub(/^([-*+]|[0-9]+\.)[ \t]+/, "", content)
-    if (content ~ / / && length($0) > LINE) printf "line:%d:%d\n", NR, length($0)
+    breakable = (content ~ / /)
+    if (breakable && length($0) > LINE) printf "line:%d:%d\n", NR, length($0)
 
-    if (!in_block || marker) { flush_block(); in_block = 1; block_start = NR; block_sum = length($0) + 1 }
-    else block_sum += length($0) + 1
+    if (heading || blank) { flush_block(); next }
+    size = breakable ? length($0) + 1 : 0
+    if (!in_block || marker) { flush_block(); in_block = 1; block_start = NR; block_sum = size }
+    else block_sum += size
   }
   END { flush_block(); flush_section() }
 '
@@ -670,7 +681,11 @@ else
   for finding in ${claudemd_line_findings[@]+"${claudemd_line_findings[@]}"}; do record "$finding"; done
   verdict claudemd-lines "every CLAUDE.md line is within the ${claudemd_line_max}-byte cap"
   for finding in ${claudemd_block_findings[@]+"${claudemd_block_findings[@]}"}; do record "$finding"; done
-  verdict claudemd-blocks "every CLAUDE.md block is within the ${claudemd_block_max}-byte cap"
+  blocks_detail="every CLAUDE.md block is within the ${claudemd_block_max}-byte cap"
+  if (( ${#claudemd_sections[@]} > 0 )); then
+    blocks_detail+="; advisory: ${#claudemd_sections[@]} section(s) over ${claudemd_section_max} bytes; scripts/structure lists them"
+  fi
+  verdict claudemd-blocks "$blocks_detail"
 fi
 
 # --- what this cannot answer ------------------------------------------------
