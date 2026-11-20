@@ -50,15 +50,26 @@ def json_list(name):
 
 
 def contract_line(prefix):
-    """The one contract line starting with `prefix`."""
-    lines = [
-        line for line in CONTRACT.read_text().splitlines() if line.startswith(prefix)
-    ]
-    if len(lines) != 1:
+    """The one contract bullet starting with `prefix`, wrapped lines rejoined.
+
+    Layout bullets are capped at 200 bytes by `scripts/structure`, so a long
+    one wraps across physical lines; its continuations are indented. Rejoin
+    them into the one logical line the enumeration lives on.
+    """
+    physical = CONTRACT.read_text().splitlines()
+    starts = [i for i, line in enumerate(physical) if line.startswith(prefix)]
+    if len(starts) != 1:
         raise AssertionError(
-            f"expected one contract line starting {prefix!r}, found {len(lines)}"
+            f"expected one contract line starting {prefix!r}, found {len(starts)}"
         )
-    return lines[0]
+    logical = [physical[starts[0]]]
+    for line in physical[starts[0] + 1 :]:
+        if line and not line[0].isspace():
+            break
+        if not line.strip():
+            break
+        logical.append(line.strip())
+    return " ".join(logical)
 
 
 def contract_spans(prefix):

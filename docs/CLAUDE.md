@@ -7,9 +7,11 @@ Durable knowledge about this repository: why decisions were made, what contracts
 ## Ownership
 
 - `adrs/` — architectural decision records, one repo-wide numbered sequence; `adrs/index.md` is generated from their frontmatter and is never hand-edited
-- `specs/` — contracts spanning apps, such as service-to-service APIs and shared schemas. A convention, not a directory on disk: it exists once the first spec is written, since a folder holding only its own name would be a second, uncheckable statement of this line
+- `specs/` — contracts spanning apps, such as service-to-service APIs and shared schemas. A convention, not a directory on disk: it exists once the first spec is written, since a folder holding only
+  its own name would be a second, uncheckable statement of this line
 - `plans/` — plans written in plan mode, pointed here by `plansDirectory` in `.claude/settings.json`
-- `research/` — findings from the `research` skill, one Markdown file per question, each citing the primary sources it read, and naming the probe environment where the finding came from one. A record of what was found rather than a decision, so a decision it supports belongs in an ADR or a ticket answer; kept because re-running the probes costs more than reading the file
+- `research/` — findings from the `research` skill, one Markdown file per question, each citing the primary sources it read, and naming the probe environment where the finding came from one. A
+  record of what was found rather than a decision, so a decision it supports belongs in an ADR or a ticket answer; kept because re-running the probes costs more than reading the file
 - `language-ranking.md` — a judgement ranking of the languages to keep if limited to N, with why each earns its place; guidance, not a decision, so changing the supported set still takes an ADR
 - `TODO.md` — backlogged informal tasks for this repository, not for a project generated from it
 
@@ -17,28 +19,36 @@ Specs for a single unit belong to that unit, under `apps/<name>/docs/specs/`, an
 
 ## Local Contracts
 
-**ADRs use one repo-wide numbered sequence**, so decisions stay discoverable without knowing which app to look in. `adrs/0000-template.md` is the template: copy it, replace every frontmatter line and placeholder, and number from `0001`. Never reuse a number across scopes. An app may keep its own `adrs/` once local decisions would drown the repo-wide ones; link it from here when that happens.
+**ADRs use one repo-wide numbered sequence**, so decisions stay discoverable without knowing which app to look in. `adrs/0000-template.md` is the template: copy it, replace every frontmatter line and
+placeholder, and number from `0001`. Never reuse a number across scopes. An app may keep its own `adrs/` once local decisions would drown the repo-wide ones; link it from here when that happens.
 
 **An ADR explains why**, so an agent does not revert or fundamentally alter an established decision. Do not rewrite history in one — supersede it with a new record.
 
-**`adrs/index.md` is derived, not written.** `scripts/adr-index` rebuilds it from each record's `title`, `status`, and `superseded_by`; a pre-commit hook runs on every commit and fails it when the file changed, so stage the regenerated index with the record that changed it. A hand edit does not survive the next run.
+**`adrs/index.md` is derived, not written.** `scripts/adr-index` rebuilds it from each record's `title`, `status`, and `superseded_by`; a pre-commit hook runs on every commit and fails it when the
+file changed, so stage the regenerated index with the record that changed it. A hand edit does not survive the next run.
 
 - Listed records are the files named `NNNN-…`, minus `0000-template.md`. Anything else in `adrs/` is left alone rather than listed.
-- `superseded_by` must name a file that exists, written from the repository root or as a bare filename when the replacement sits in `adrs/`. That is the only thing the script rejects; nothing else validates frontmatter.
+- `superseded_by` must name a file that exists, written from the repository root or as a bare filename when the replacement sits in `adrs/`. That is the only thing the script rejects; nothing else
+  validates frontmatter.
 - The index is absent until a real record exists, so a fresh repository carries no file listing nothing.
 
 **`plans/` is tracked**, unlike the `~/.claude/plans` default, so a plan arrives in the diff alongside the code it describes. That is the moment a human approves the plan before the work starts.
 
-**An approved plan is frozen.** Never rewrite its body to match a later rename, move, or reversal — that falsifies the record of what was agreed to. When the tree moves out from under one, add a blockquote directly under the title saying what to read instead, and leave everything below it alone. The five plans carrying `.openclaude/` paths are annotated that way and are the pattern to copy; do not "fix" their paths.
+**An approved plan is frozen.** Never rewrite its body to match a later rename, move, or reversal — that falsifies the record of what was agreed to. When the tree moves out from under one, add a
+blockquote directly under the title saying what to read instead, and leave everything below it alone. The five plans carrying `.openclaude/` paths are annotated that way and are the pattern to copy;
+do not "fix" their paths.
 
 ## Work Guidance
 
-`docs/` is product-owned in `.repo-template.json`, so a template update never overwrites anything here. `adrs/0000-template.md` arrived from the payload and stays as the reusable template; edits to the ADR *format* belong in the payload copy as well.
+`docs/` is product-owned in `.repo-template.json`, so a template update never overwrites anything here. `adrs/0000-template.md` arrived from the payload and stays as the reusable template; edits to
+the ADR *format* belong in the payload copy as well.
 
 The payload's inventory lives in `apps/github-repository-template/docs/github_repository_structure.md`. Do not restate it here.
 
 ## Verification
 
-`scripts/adr-index` through pre-commit, covering `adrs/` only: the index matches the records, and each record's frontmatter is well-formed. `scripts/tests/adr-index-test` covers the script itself. Nothing checks the prose in any document here.
+`scripts/adr-index` through pre-commit, covering `adrs/` only: the index matches the records, and each record's frontmatter is well-formed. `scripts/tests/adr-index-test` covers the script itself.
+Nothing checks the prose in any document here.
 
-The closeout pass in `~/.claude/rules/documentation.md` is the check: re-check changed paths against the `CLAUDE.md` chain, update owning docs, refresh every affected Child Index, and remove stale text.
+The closeout pass in `~/.claude/rules/documentation.md` is the check: re-check changed paths against the `CLAUDE.md` chain, update owning docs, refresh every affected Child Index, and remove stale
+text.
