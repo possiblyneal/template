@@ -621,9 +621,10 @@ claudemd_program='
   BEGIN { in_fence = 0; in_block = 0; block_sum = 0; sec = 0; sec_start = 1 }
   {
     # A fence closes only on its own character, at least as long as the one
-    # that opened it, so a ``` inside a ~~~ block is content, not a close.
-    if (match($0, /^ {0,3}(`{3,}|~{3,})/)) {
-      run = substr($0, RSTART, RLENGTH); sub(/^ */, "", run)
+    # that opened it, so a ``` inside a ~~~ block is content, not a close. Any
+    # indent is allowed, since a fence in a nested list item sits deep.
+    if (match($0, /^[ \t]*(`{3,}|~{3,})/)) {
+      run = substr($0, RSTART, RLENGTH); sub(/^[ \t]*/, "", run)
       if (!in_fence) { in_fence = 1; fence_char = substr(run, 1, 1); fence_len = length(run) }
       else if (substr(run, 1, 1) == fence_char && length(run) >= fence_len) in_fence = 0
       sec += length($0) + 1; flush_block(); next

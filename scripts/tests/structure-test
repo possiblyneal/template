@@ -639,6 +639,19 @@ $long_line
 ~~~"
 assert_passes
 
+# A fence inside a nested list item is indented past three spaces and is
+# still code, not prose.
+fixture "a fence indented under a nested list item is exempt"
+write CLAUDE.md "# Title
+
+- item
+    - nested
+
+      \`\`\`bash
+      $long_line
+      \`\`\`"
+assert_passes
+
 # A heading is capped like any line, and #331 opening a prose line is not a
 # heading, so neither escapes the line cap.
 fixture "a CLAUDE.md heading over the cap fails"
