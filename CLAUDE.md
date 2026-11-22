@@ -25,7 +25,7 @@ Choose the tree by who needs the change:
 
 - **This checkout:** Edit the live configuration under `scripts/`, `.github/`, `.claude/`, or the root dotfiles.
 - **Generated repositories:** Edit `apps/github-repository-template/src/base-repo/`. Read `apps/github-repository-template/docs/github_repository_structure.md` before changing what ships.
-- **Shared behavior:** Edit both copies. `scripts/payload-parity` requires `.github/` and `scripts/` to match the payload, except for `scripts/CLAUDE.md`.
+- **Shared behavior:** Edit both copies. `scripts/payload-parity` checks `.github/` and `scripts/`; see the template app contract for intentional differences.
 
 In `.repo-template.json`, keep this file managed so template updates reconcile it. Keep `apps/**` product-owned so updates cannot overwrite the payload.
 
@@ -41,7 +41,7 @@ Use the repository scripts instead of per-language tools. When changing a comman
 | Read CI or another check | Use `scripts/summarize <command…>` for findings and exit status. `scripts/check` already summarizes its output. |
 | Apply automatic fixes | Run `scripts/fix` for lint autofix followed by formatting. A remaining `lint-fix` failure needs a hand edit. |
 | Check layout | Run `scripts/structure` for file placement and unit declarations. Judge content scope separately. |
-| Check mirrored files | Run `scripts/payload-parity`. It reports rather than repairs; when only one side changed since `HEAD`, the finding names the mirror command. |
+| Check mirrored files | Run `scripts/payload-parity`. It reports rather than repairs; some findings include a mirror command when staged changes establish the direction. |
 | Run a program | Use `scripts/run [unit] [--entry <name>] [-- args…]`. Name the unit or entry when there is more than one; take the entry name from its language manifest. |
 | Run integration tests | Run `scripts/integration` for `tests/integration/` at any scope. The gate excludes this tier because it may need external services. |
 | Package a unit | Run `scripts/package [unit]` outside the gate. Executable packaging empties the unit's `dist/` before writing targets; Quadlet packaging validates `deploy/quadlet/`. |

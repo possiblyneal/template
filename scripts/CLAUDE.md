@@ -25,7 +25,7 @@ Keep scripts in one directory regardless of caller. Read the script or suite hea
 - **Adapters:** Capture exit status as well as output. Leave missing adapters absent so the probe reports `absent` and dispatch reports `unavailable`.
   An expected check that is unavailable fails the run. See the `libs/detect.sh` header for translation of nonzero statuses that do not indicate real failures.
 - **Result output:** `summarize` parses `libs/result.sh`'s layout. Keep `tally` as the exit status.
-  The default EXIT trap prints `<command as invoked> exited <status>: <count per state>`; do not print a second verdict.
+  After at least one result row, the default EXIT trap prints `<command as invoked> exited <status>: <count per state>`; do not print a second verdict.
   Emit results in the shell that exits; a subshell's counts cannot reach its trap. A custom EXIT trap calls `result_exit_verdict`. `summarize` ends with the verdict of the command it ran.
 - **Stdin:** `script-tests` closes fd 0 for suites, `check` closes it for `structure`, and dispatch closes it except for `run`. `*_each` reads its list on fd 3.
   Capture pipeline output in a variable rather than using a reader that exits early: under `pipefail`, SIGPIPE becomes 141 and can be read as absent.
