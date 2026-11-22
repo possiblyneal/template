@@ -54,7 +54,7 @@ bare rules; `apps/github-repository-template/CLAUDE.md` owns keeping them in ste
 - `scripts/integration` — run every `tests/integration/` tier, at any scope. Kept out of the gate, since a tier may need a database, container, or network the gate cannot assume
 - `scripts/package [unit]` — deliver what the unit ships: an executable per declared target into its `dist/`, emptied first so no stale binary reaches a release, or its `deploy/quadlet/` files
   validated. Not part of the gate
-- `scripts/structure` — audit file placement against Layout below, and cap each `CLAUDE.md`'s line and block length (ADR 0012); run by `scripts/check` and by pre-commit on every commit
+- `scripts/structure` — audit file placement against Layout below; run by `scripts/check` and by pre-commit on every commit
 - `scripts/payload-parity` — refuse a divergence between `.github/` or `scripts/` and the payload's copy, `scripts/CLAUDE.md` excepted; run by `scripts/check` and by pre-commit. It reports rather
   than repairs, so a Dependabot bump merged into the root fails until it is mirrored; where exactly one copy changed since `HEAD`, a finding ends with the command that mirrors it: a `cp`, or a `git
   rm` for a deletion. The shellcheck hook skips the payload's `scripts/` on the strength of it

@@ -6,10 +6,12 @@ scope: [global]
 tags: [documentation, tooling, structure]
 generated: { by: "agent/claude-opus-4-8", at: "2026-11-19T00:00:00Z" }
 superseded_by:
-status: accepted
+status: deprecated
 ---
 
 # Cap CLAUDE.md Line and Block Length in the Structure Audit
+
+> Deprecated: the CLAUDE.md-specific length checks and section advisory were removed. The repository-wide large-file hook remains.
 
 ## Decision
 

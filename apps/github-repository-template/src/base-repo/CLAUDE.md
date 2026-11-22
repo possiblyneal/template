@@ -19,7 +19,7 @@ Use these instead of per-language tools. `check` and `fix` run for every languag
 
 ### Layout
 
-`scripts/check` fails on any of these; pre-commit runs `scripts/structure` over the placement rules, and the line and block length of every `CLAUDE.md`, on each commit.
+`scripts/check` fails on any of these; pre-commit runs `scripts/structure` over the placement rules on each commit.
 
 - Root holds only `apps/`, `docs/`, `libs/`, `scripts/`, `tests/`, `tools/`, `deploy/`, `assets/`, `config/`, `examples/`, `vendor/`, `tmp/`, the toolchain folders below, and the dot-folders
   `.claude/`, `.github/`, `.devcontainer/`.
