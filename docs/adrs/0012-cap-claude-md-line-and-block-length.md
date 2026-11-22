@@ -5,11 +5,13 @@ description: scripts/structure fails a CLAUDE.md with a physical line over 200 b
 scope: [global]
 tags: [documentation, tooling, structure]
 generated: { by: "agent/claude-opus-4-8", at: "2026-11-19T00:00:00Z" }
-superseded_by:
-status: accepted
+superseded_by: 0013-leave-claude-md-length-to-authors.md
+status: superseded
 ---
 
 # Cap CLAUDE.md Line and Block Length in the Structure Audit
+
+> Superseded by [ADR 0013: Leave CLAUDE.md Length to Authors](0013-leave-claude-md-length-to-authors.md).
 
 ## Decision
 
