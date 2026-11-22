@@ -1227,7 +1227,7 @@ _in_list() {
 }
 
 _language_capabilities_run() {
-  local dry_run="" selected="" cap lang function status
+  local dry_run="" selected="" cap lang function status start
   local unavailable=0
   local -a capabilities=() languages=()
 
@@ -1285,10 +1285,14 @@ _language_capabilities_run() {
       # one capability that starts the unit's own program in the foreground, so
       # it is the one that keeps the stdin it was given.
       status=0
+      start=$SECONDS
       if [[ "$cap" == run ]]; then
         "$function" || status=$?
       else
         "$function" </dev/null || status=$?
+      fi
+      if [[ -n "${CHECK_TIMING_FILE:-}" && "$status" != "$NO_RUNNER" ]]; then
+        printf '%s/%s %ss\n' "$cap" "$lang" "$((SECONDS - start))" >> "$CHECK_TIMING_FILE"
       fi
       case "$status" in
         0) result "$cap" pass "$lang" ;;
