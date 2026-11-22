@@ -5,13 +5,11 @@ description: scripts/structure fails a CLAUDE.md with a physical line over 200 b
 scope: [global]
 tags: [documentation, tooling, structure]
 generated: { by: "agent/claude-opus-4-8", at: "2026-11-19T00:00:00Z" }
-superseded_by:
-status: deprecated
+superseded_by: 0013-leave-claude-md-length-to-authors.md
+status: superseded
 ---
 
 # Cap CLAUDE.md Line and Block Length in the Structure Audit
-
-> Deprecated: the CLAUDE.md-specific length checks and section advisory were removed. The repository-wide large-file hook exempts `CLAUDE.md` at every depth.
 
 ## Decision
 

@@ -15,4 +15,5 @@
 | [0009](0009-name-ticket-categories-after-commit-types.md) | Name Ticket Categories After Conventional Commit Types | accepted |
 | [0010](0010-run-generates-fixed-steps-as-commands.md) | Run Generate's Fixed Steps as Commands and Keep Their Reasoning Out of the Run | accepted |
 | [0011](0011-support-c-cpp-and-assembly-as-one-cmake-language.md) | Support C, C++ and Assembly as One Language Built by CMake | accepted |
-| [0012](0012-cap-claude-md-line-and-block-length.md) | Cap CLAUDE.md Line and Block Length in the Structure Audit | deprecated |
+| [0012](0012-cap-claude-md-line-and-block-length.md) | Cap CLAUDE.md Line and Block Length in the Structure Audit | superseded by [0013](0013-leave-claude-md-length-to-authors.md) |
+| [0013](0013-leave-claude-md-length-to-authors.md) | Leave CLAUDE.md Length to Authors | accepted |
