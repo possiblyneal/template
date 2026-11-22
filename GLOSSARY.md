@@ -1,163 +1,129 @@
 # Template
 
-This repository builds other repositories. Its language is about how a
-repository is shaped, what its parts deliver, and which checks apply to them.
+This repository builds other repositories. These terms describe their structure, delivery, and checks.
 
 ## Language
 
 ### Structure
 
 **Unit**:
-The smallest piece of a repository delivered on its own — deployed, installed,
-published, or copied. One folder under `apps/`.
+The smallest piece delivered on its own, whether deployed, installed, published, or copied. Each unit occupies one folder under `apps/`.
 _Avoid_: app, service, package, project, module
 
 **Domain**:
-A distinct business area within a unit, given its own folder when isolation
-earns its keep. A unit has domains or it has none.
+A distinct business area within a unit with its own folder when it benefits from isolation. Domains are optional.
 _Avoid_: subdomain, area, feature
 
 **Scope holder**:
-A place that owns scoped folders — the repository root, a unit, or a domain.
-`apps/` is not one.
+A repository root, unit, or domain that owns scoped folders. `apps/` itself is not a scope holder.
 _Avoid_: container, parent, level
 
 **Scoped folder**:
-A folder whose contents belong to exactly one scope: `libs/`, `tests/`,
-`scripts/`, `tools/`, `assets/`, `docs/`, `deploy/`.
+A folder whose contents belong to one scope, such as `libs/`, `tests/`, `scripts/`, `tools/`, `assets/`, `docs/`, or `deploy/`.
 _Avoid_: shared folder, common folder
 
 ### Delivery
 
 **Unit declaration**:
-`.unit.json` at a unit's root, stating how that unit runs and what it ships.
+The `.unit.json` at a unit's root that states its run fact and ship fact.
 _Avoid_: unit config, manifest, metadata
 
 **Run fact**:
-How a unit is invoked locally: `oneshot` for a process that exits on its own,
-`longlived` for one that runs until stopped, `none` for a unit with nothing to run.
+How a unit runs locally: `oneshot` exits on its own, `longlived` runs until stopped, and `none` means there is nothing to run.
 _Avoid_: shape, type, mode, dev command
 
 **Entry point**:
-One of the programs a unit can be started as, named by the unit's own language
-manifest rather than by `.unit.json`. `scripts/run --entry` picks among them.
+A program the unit can start, named in its language manifest rather than `.unit.json`. Select it with `scripts/run --entry`.
 _Avoid_: target, command, service, binary
 
 **Ship fact**:
-What a unit delivers, named as intent so the language adapter decides the
-concrete form: `executable`, `quadlet`, or `none`.
+What a unit intends to deliver: `executable`, `quadlet`, or `none`. The language adapter determines the concrete form.
 _Avoid_: artifact type, output, build target
 
 **Target**:
-A platform an executable is built for, in a vocabulary the template owns and
-each language adapter translates: `linux-amd64`, `macos-arm64`.
+A platform an executable is built for. Language adapters translate the template's target names: `linux-amd64` and `macos-arm64`.
 _Avoid_: platform, arch, triple, GOOS
 
 **Web language**:
-Node, the language this template reaches for when a unit serves or renders. A
-Node unit that runs and exits is a script or a job; a CLI here is written in Go,
-Rust, or Python.
+Node, the template's choice for units that serve or render. A Node unit that exits is a script or job; CLIs here use Go, Rust, or Python.
 _Avoid_: frontend stack, JS, TS, JavaScript
 
 **Shape**:
-Deliberately not a term here: one word naming what a unit "is" collapses the run
-fact and the ship fact, which vary separately. ADR 0001 has the argument.
+Not a unit classification: use the run fact and ship fact separately because they vary independently. See ADR 0001 for the rationale.
 _Avoid_: shape, kind, app type
 
 ### Template
 
 **Payload**:
-The content copied into repositories generated from this one. Editing it changes
-every future generated repository and changes nothing here.
+The content copied into generated repositories. Editing it changes future generated repositories, not this checkout.
 _Avoid_: template files, source, boilerplate
 
 **Addon**:
-A file held back from the payload for a generated repository to adopt when the
-occasion arrives, rather than shipped to every repository by default.
+A file held back from the payload for a generated repository to adopt when it needs it.
 _Avoid_: optional file, extra
 
 **Addition by occasion**:
-The rule that governs an addon — it arrives when a repository has a reason for
-it, not at generation.
+The rule that an addon arrives when the repository has a reason for it, not at generation.
 _Avoid_: optional, as-needed
 
 **Template Contract**:
-The opening section of a generated repository's root `CLAUDE.md` — Commands and
-Layout as bare rules, identical in every generated repository and changed only
-through the template.
+The Commands and Layout rules opening a generated repository's root `CLAUDE.md`. They are identical across generated repositories and change only through the template.
 _Avoid_: template rules, shared instructions
 
 ### Flows
 
 **Flow**:
-One of the four routes the payload takes into a repository: `generate`,
-`update`, `adopt`, `retrofit`.
+A route the payload takes into a repository: `generate`, `update`, `adopt`, or `retrofit`.
 _Avoid_: mode, command, operation, run
 
 **Destination**:
-The repository a flow acts on. Never this repository, and never the candidate.
+The repository a flow acts on, distinct from both this template repository and the candidate.
 _Avoid_: target, output repo, the repo
 
 **Retrofit**:
-Landing the payload in a repository that grew without it, which arrives with its
-own content and no record of the template.
+Landing the payload in an existing repository that has its own content and no template record.
 _Avoid_: convert, migrate, onboard, adopt, backfill
 
 **Overridden path**:
-A payload path a flow did not land, because the destination's own version was
-chosen over it.
+A payload path a flow leaves out because it keeps the destination's version instead.
 _Avoid_: skipped file, collision, exception
 
 **Superseded path**:
-A destination path a flow removed because the payload now carries what it did.
-The inverse of an overridden path: there the destination's version won, here the
-payload's did and the destination's is gone.
+A destination path the flow removes because the payload now fulfills its role. An override keeps the destination version; supersession removes it.
 _Avoid_: replaced file, deleted file, clobbered
 
 **Departure**:
-A deliberate difference from the template's default that a destination records
-in `generation.features`, such as an omitted file or a tracker other than GitHub
-Issues. Absent a record, the default holds.
+A deliberate difference from a template default, recorded by the destination in `generation.features`, such as an omitted file or a tracker other than GitHub Issues. If unrecorded, the default holds.
 _Avoid_: override, exception, customization
 
 **Retired**:
-Of a superseded gate script: deleted with its callers repointed at the payload
-command covering it, so the behaviour survives under a different name.
+A superseded gate script is retired when it is deleted and its callers switch to the equivalent payload command, preserving behavior.
 _Avoid_: removed, dropped, deprecated
 
 **Candidate**:
-The working copy of a destination a flow builds and measures before publishing
-anything. It is not the destination: the destination is what the pull request
-asks to change.
+The destination's working copy, built and measured before publication. The pull request asks to change the destination, not the candidate.
 _Avoid_: working copy, staging repo, draft, workspace
 
 **Resume record**:
-The account, held beside the candidate, of what a stopped flow decided and of the
-writes it made that cannot be observed back.
+The record beside the candidate of a stopped flow's decisions and writes it cannot verify by reading the destination back.
 _Avoid_: journal, checkpoint, state file, progress file
 
 **Unobservable write**:
-A write a flow cannot recognize as its own by reading the destination back, so
-repeating it duplicates rather than repeats.
+A write the flow cannot recognize as its own by reading the destination. Retrying it creates a duplicate.
 _Avoid_: keyless write, non-idempotent write
 
 **Hosted write**:
-A change to a destination's state on GitHub itself, which no pull request can
-carry.
+A change to the destination's GitHub state that a pull request cannot carry.
 _Avoid_: remote write, settings change, API call
 
 **Authored surface**:
-The part of a candidate a flow wrote rather than copied, and so the only part a
-reader must read line by line. A file proved identical to what it was copied
-from, or proved unchanged by a move, is not on it, and neither is one the
-destination's own linter or formatter rewrote under a retrofit's autofix pass.
+The parts a flow wrote in the candidate and that require line-by-line review. Exclude proven identical copies and unchanged moves, and files the destination's linter or formatter rewrote during retrofit autofix.
 _Avoid_: custom content, hand-written files, non-template files, the diff
 
 ### Checks
 
 **Capability**:
-A named check or action — `lint`, `test`, `build`, `run`, `package` — that
-callers request without knowing which language or tool provides it.
+A named check or action, such as `lint`, `test`, `build`, `run`, or `package`, that callers request independently of language or tool.
 _Avoid_: task, command, step, script
 
 **Adapter**:
@@ -165,27 +131,21 @@ The per-language implementation of one capability.
 _Avoid_: handler, driver, backend
 
 **Integration tier**:
-The tests under a `tests/integration/` directory at any scope holder. Run by
-`scripts/integration`, excluded from the `test` capability, and outside the gate.
+Tests under `tests/integration/` at any scope holder. `scripts/integration` runs them outside the `test` capability and the gate.
 _Avoid_: e2e, functional tests, slow tests, acceptance tests
 
 **Result state**:
-The outcome of one capability against one language: `pass`, `not-applicable`,
-`unavailable`, or `FAIL`.
+The outcome of one capability for one language: `pass`, `not-applicable`, `unavailable`, or `FAIL`.
 _Avoid_: status, skipped, n/a
 
 **Bar**:
-The destination's own `scripts/check` passing, measured on the candidate before
-it is published. `FAIL` and `unavailable` both fail it; `not-applicable` does
-not.
+A passing run of the destination's own `scripts/check` on the candidate before publication. `FAIL` and `unavailable` fail the bar; `not-applicable` does not.
 _Avoid_: gate, green, verification, passing checks
 
 **Tool declaration**:
-The entries in a repository's root manifest naming the tools its adapters run.
+The root manifest entries naming the tools the repository's adapters run.
 _Avoid_: dev dependencies, dev group, tooling config, npm scripts
 
 **Configuration boundary**:
-A section in a repository's own manifest that stops a tool resolving settings
-from a directory above it. Written by the tool declaration, at the tool's
-defaults where the repository declares no preference.
+A section in the repository's own manifest that keeps a tool from reading settings above the repository. The tool declaration writes it using tool defaults where the repository sets no preference.
 _Avoid_: anchor, config root, settings file, pin

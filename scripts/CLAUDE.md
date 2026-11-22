@@ -2,72 +2,61 @@
 
 ## Purpose
 
-Every portable shell script, whether a person runs it or a workflow does. Project logic lives here rather than in YAML so it runs locally exactly as it runs in GitHub Actions.
+Keep portable shell logic here so local runs and GitHub Actions use the same implementation. Put helpers that must be built before use in `tools/`.
 
 ## Ownership
 
-One flat directory, not a `ci/` and a `scripts/` split: `check` calls `ci` and `security` and runs itself under `summarize`, `release` calls `ci`, and every script sources the same detection library,
-so a file's caller is not a property that stays put. A helper that must be built before it runs belongs in `tools/`.
+Keep scripts in one directory regardless of caller. Read the script or suite header before editing it; this contract covers rules shared across scripts.
 
-Each script's header comment says what it does and why it is shaped that way, and the lists below say who calls it; each `tests/*-test` header says what that suite covers. Read the header before
-editing the file. This document holds only the rules that span scripts.
-
-- Run by a person: `doctor`, `check`, `fix`, `clean`, `run`, `integration`, `package`, `summarize`, `repo-settings check`
-- Called by `.github/`: `ci`, `ci-tested`, `security`, `release`, `detect`, `changelog-check`, `system-packages`, `script-tests`
-- Called by pre-commit: `adr-index`, `structure`, `payload-parity`, `attribute-commit` (`prepare-commit-msg`, and `--check` at `commit-msg`), `changelog-check` and `protect-branch` (`pre-push`),
-  `worktree-cleanup` (`post-checkout`, `post-merge`, and SessionStart with `--report`)
-- Sourced: `libs/detect.sh`, `libs/result.sh`, `libs/unit.sh`, `libs/precommit.sh`, `libs/dependabot.sh`, `libs/quadlet.sh`, `tests/libs/harness.sh`
+| Caller | Entry points |
+|---|---|
+| Operator | `doctor`, `check`, `fix`, `clean`, `run`, `integration`, `package`, `summarize`, `repo-settings check` |
+| `.github/` | `ci`, `ci-tested`, `security`, `release`, `detect`, `changelog-check`, `system-packages`, `script-tests` |
+| Pre-commit | `adr-index`, `structure`, `payload-parity`, `attribute-commit` (with `--check` at `commit-msg`), `changelog-check` and `protect-branch` (`pre-push`), `worktree-cleanup` (`post-checkout`, `post-merge`) |
+| Other hooks | `attribute-commit` (`prepare-commit-msg`), `worktree-cleanup --report` (SessionStart) |
 
 ## Local Contracts
 
-- **`libs/detect.sh` owns every language decision.** Commands name a capability, never an adapter; `DETECT_LANGUAGES` and `DETECT_PRUNE_DIRS` are the lists.
-- **The toolchains are the machine's, not a pinned set.** `check` runs whatever compiler, linter, and formatter the machine has;
-
-  `.github/actions/setup-toolchains` installs each fresh on the runner (`go-version: stable`, `node-version: lts/*`, `swift-version: latest`, `rustup component add` over a rustup the host must already
-  have).
-
-  pre-commit pins what it owns by `rev`, so a check that passes locally and fails in CI is a version difference before it is a flaky runner, and the reverse holds for the Go audit, which reads the
-  local Go's standard library and names the release that clears a failure found only there. rustup is the one prerequisite neither installs; the setup action and `security.yml`'s cargo-audit step fail
-  with one line naming the host.
-
-  Pin a toolchain in the repository that has the language: a pin shipped from the payload obliges every generated repository to bump a file for a language it may not have, and Dependabot has no
-  ecosystem for any of them.
-- **A check that did not run is not a check that passed.** `unavailable` fails the run whenever the check was expected.
-- **`libs/result.sh`'s printed layout is an interface**, parsed by `summarize`; `tally` is a command's exit status, and the verdict its EXIT trap prints through `result_verdict` (`<command as invoked>
-  exited <status>: <count per state>`) is the last line, and `summarize` ends with the same line for the command it ran. Print results in the shell that exits, since a subshell's counts never reach
-  the trap, and a script setting its own EXIT trap calls `result_exit_verdict` from it.
-- **A check owns no stdin.** `script-tests` closes fd 0 for each suite and `check` for `structure`, and the dispatch closes it for every capability but `run`, so a stdin-draining tool cannot hang the
-  gate. The `*_each` helpers take their list on fd 3, and pipes end in a variable, never a reader that exits early, since `pipefail` turns SIGPIPE into 141, read as absent.
-- **An adapter is honest about what it did.** Capture the tool's exit status, not only its output. No function stands in for an absent one: the probe reads `absent` off the function table and the
-  dispatch reports `unavailable`. A runner that exits non-zero without a real failure is translated, and `libs/detect.sh`'s header lists the four.
-- **`libs/*.sh` and `harness.sh` are sourced, never executed**: no shebang, no executable bit, `.sh`. Every other script is extensionless and executable; pre-commit reads a shebang only on one.
-- **`adr-index` and `structure` are hooks, not capabilities**, and run `always_run` with no `files:` filter, since staged paths exclude deletions.
-- **Local commands stay off hosted GitHub state.** The boundary is hosted state, not connectivity; only `repo-settings check` crosses it, and `ci-tested`, which only `ci.yml` calls.
+- **Detection:** `libs/detect.sh` owns language decisions. Commands name a capability, not an adapter. `DETECT_LANGUAGES` and `DETECT_PRUNE_DIRS` control discovery.
+- **Toolchains:** `check` uses the machine's versions; `.github/actions/setup-toolchains/action.yml` installs fresh versions in CI, except that the host must already have `rustup`.
+  The setup action and `security.yml`'s cargo audit report a missing `rustup`. Check versions first when CI and local results differ. Pre-commit pins its tools by `rev`.
+  The Go audit reads the local standard library and names the release that clears a finding.
+  Pin versions in repositories that use the language, not in the shared payload: Dependabot cannot maintain those toolchain pins.
+- **Adapters:** Capture exit status as well as output. Leave missing adapters absent so the probe reports `absent` and dispatch reports `unavailable`.
+  An expected check that is unavailable fails the run. See the `libs/detect.sh` header for translation of nonzero statuses that do not indicate real failures.
+- **Result output:** `summarize` parses `libs/result.sh`'s layout. Keep `tally` as the exit status.
+  Use `result_verdict` for the final line: `<command as invoked> exited <status>: <count per state>`.
+  Emit results in the shell that exits; a subshell's counts cannot reach its trap. A custom EXIT trap calls `result_exit_verdict`. `summarize` ends with the verdict of the command it ran.
+- **Stdin:** `script-tests` closes fd 0 for suites, `check` closes it for `structure`, and dispatch closes it except for `run`. `*_each` reads its list on fd 3.
+  Capture pipeline output in a variable rather than using a reader that exits early: under `pipefail`, SIGPIPE becomes 141 and can be read as absent.
+- **File mode:** Source `libs/*.sh` and `tests/libs/harness.sh`; omit the shebang and executable bit. Other scripts are executable and extensionless, so pre-commit can identify them by shebang.
+- **Hooks:** `adr-index` and `structure` are hooks, not capabilities. Use `always_run` with no `files:` filter because staged path lists omit deletions.
+- **Hosted state:** Only `repo-settings check` and `ci-tested` (called only by `ci.yml`) inspect hosted GitHub state. Other commands may still need network access.
 
 ## Work Guidance
 
-Adding a language: add it to `DETECT_LANGUAGES`, add its `has_<lang>` detector, add a `_capability_<check>_<lang>` function for each capability it can answer (one with no honest adapter is left
-absent, not stubbed), add a `_codeql_entry` row, add its toolchain to `.github/actions/setup-toolchains/action.yml`, and add its column to the table `tests/capabilities-test` holds against
-`language_capabilities probe`, naming which cells are deliberately `absent`.
+**Adding a language:**
 
-That suite is the only thing that notices a dropped language, which otherwise produces a shorter green run.
+1. Add it to `DETECT_LANGUAGES`. Write `has_<lang>` and each supported `_capability_<check>_<lang>`; leave unsupported adapters absent.
+2. Add a `_codeql_entry` row and the toolchain setup in `.github/actions/setup-toolchains/action.yml`.
+3. Add its column to `tests/capabilities-test` against `language_capabilities probe`, marking intentionally `absent` cells.
+   This suite detects a dropped language even if the gate stays green.
+4. Add root manifests and lockfiles to `scripts/structure`'s `root_files`. Add the nested/root pair to `detect_orphan_manifests`'s `pairs`.
+5. Add the manifest to `libs/dependabot.sh`'s `dependabot_ecosystem_of` if Dependabot supports it (it does not for C or C++).
 
-Also add its root workspace manifests and lockfiles to `scripts/structure`'s `root_files`, its nested/root pair to `detect_orphan_manifests`'s `pairs`, and its manifest to `libs/dependabot.sh`'s
-`dependabot_ecosystem_of` unless Dependabot has no ecosystem for it, as for C and C++; a language missing from any of the three is rejected at the root, escapes the orphan search, or goes unwatched by
-Dependabot.
+**Adding a check:** Add it to `DETECT_CAPABILITIES`. Write adapters per language or declare inapplicability in `_capability_is_not_applicable`.
 
-Adding a check: add it to `DETECT_CAPABILITIES` and write an adapter per language, or declare it not-applicable in `_capability_is_not_applicable`.
+**Adding a suite:** Name it `tests/<name>-test`, report through `tests/libs/harness.sh`, test the public surface, and state coverage in the header.
+Suites run concurrently: use private scratch repositories or write only paths the suite owns outright.
 
-Adding a suite: name it `tests/<name>-test`, report through `tests/libs/harness.sh`, assert through the public surface, and say what it covers in its header. It runs concurrently beside every other
-suite, so it keeps to its own scratch repositories, or owns outright any path it writes in this one.
-
-Every change here belongs in `apps/github-repository-template/src/base-repo/scripts/` too; `payload-parity` fails until the two trees match. This file is the one root-only path.
+**Mirroring edits:** Apply changes under `scripts/` to `apps/github-repository-template/src/base-repo/scripts/` as well. `payload-parity` exempts this contract only.
 
 ## Verification
 
-`scripts/check` runs `structure` and `payload-parity`, then every suite through `script-tests` beside `ci`, holding the suites' output until `ci` ends, and its pre-commit sweep last, skipping the
-hooks that repeat a gate step. `ci.yml` runs the suites before toolchain setup, with `pre-commit` installed first so `adr-index-test` and `commitlint-test` do not skip their hook-wiring cases.
-shellcheck runs via pre-commit with `-x`, skipping the payload's `scripts/`, which `payload-parity` holds identical to this tree.
+`scripts/check` runs `structure` and `payload-parity`, runs `script-tests` beside `ci` (holding suite output until `ci` ends), then sweeps pre-commit, skipping hooks that duplicate gate steps.
+
+`ci.yml` runs suites before toolchain setup but after installing pre-commit so `adr-index-test` and `commitlint-test` exercise hook wiring.
+Pre-commit runs ShellCheck with `-x` against live scripts; payload parity covers the copies.
 
 ## Child Index
 

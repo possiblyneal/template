@@ -19,7 +19,6 @@ source "$repo_root/scripts/libs/detect.sh"
 # test capability leaves it out. A language with no tier present reports
 # not-applicable, so a repository without one never fails for lacking a runner.
 #
-# Takes no unit name. A repository whose tiers must run separately says so by
-# running this from inside the unit, and a flag for that is not owed until one
-# does.
+# Takes no unit name. Discovery starts at the repository root even when the
+# command is invoked from inside a unit.
 capability_command test integration

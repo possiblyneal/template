@@ -1,13 +1,9 @@
 # shellcheck shell=bash
-# Which manifests Dependabot is watching, and which tracked ones it is not.
-# Sourced by scripts/doctor, which reports the gap as a passing row carrying
-# the advisory rather than as a finding. The entries are derived per
-# repository by the /repo-builder flows, so a manifest added since the last
-# update flow owes one: a line for the operator to read, never a red gate on a
-# repository for gaining a module. Nor is it not-applicable, which says the
-# check did not apply; here it applied and found something, and the detail is
-# what separates the two passing rows. A workspace member is still named here:
-# the exception for it is the advisory's, in scripts/doctor.
+# Which directories Dependabot watches, and which tracked manifests it misses.
+# scripts/doctor reports gaps as a passing row with an advisory, not a finding
+# or not-applicable: the check ran, but gaining a module must not fail the gate.
+# Workspace members are
+# named here; scripts/doctor owns their advisory exception.
 #
 # The derivation rule in apps/repo-builder/src/references/lifecycle.md excludes
 # the payload tree at apps/github-repository-template/src/base-repo/, and this

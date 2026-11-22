@@ -2,165 +2,102 @@
 
 ## Purpose
 
-Owns the payload copied into every repository generated from this template, and the reference documentation explaining why the payload is shaped the way it is.
+Owns what generated repositories receive and the reference documentation that explains why. Read `docs/github_repository_structure.md` before changing what ships.
 
 ## Ownership
 
-- `src/base-repo/` — the payload. Every file here is destined for other repositories.
-- `src/repository-addons/` — files held back from the payload because each answers a condition the template cannot know has arrived. Not copied during generation; added by hand when the occasion
-  does arrive. `docs/github_repository_structure.md` groups them under "Additions by Occasion" and names the condition for each.
+| Path | What it owns |
+|---|---|
+| `src/base-repo/` | The payload for generated repositories. `/repo-builder` reads it at a specific commit, not from the working tree. |
+| `src/repository-addons/` | Files adopted when a destination needs them, not copied during generation. See “Additions by Occasion” in `docs/github_repository_structure.md` for each trigger. |
+| `src/addon-adoption.json` | The addon walkthrough inputs: `slots` are tokens to replace, `reviews` require judgment without a token, and `external` steps happen outside the repository. See `apps/repo-builder/src/references/addon-adoption.md`. |
+| `src/ownership.json` | The starting ownership rules for a destination's `.repo-template.json`. `apps/repo-builder/src/scripts/generate.py manifest` reads the rules at the source commit. Add a rule in the same commit as a new payload path; `test_reference_assertions.py` checks coverage. |
+| `src/ruleset.json` | The initial `main` ruleset sent to GitHub by `apps/repo-builder/src/scripts/generate.py settings`. Keep the required contexts in sync with the job `name:` values in payload `ci.yml`, `security.yml`, and `codeql.yml`'s `scanning` job. Update both in the same commit; `test_generate.py` checks the match. |
+| `docs/github_repository_structure.md` | The payload's inventory, placement conventions, and reasons for additions. |
 
-  No addon shares a path with `src/base-repo/`: adoption copies into a tree that already holds the payload, so a shared path would overwrite a shipped file while reading as an addition everywhere the
-  directory is described. Guidance about a payload path belongs in that payload file, commented out. The test below enforces it.
-
-  No addon ships empty either: each carries its own guidance — comments where the format has them, prose where it does not — because someone adopting a file by hand has no manifest to read, and a
-  zero-byte copy gives them a path and nothing else.
-- `src/addon-adoption.json` — which regions of each addon must be edited before that addon is safe to ship: `slots` (a token to replace), `reviews` (a section demanding a judgement, with no token to
-  grep for), `external` (a step outside the repository). Read by the `repo-builder` skill's walkthrough in `apps/repo-builder/src/references/addon-adoption.md`.
-- `src/ownership.json` — the ownership rules every generated repository's `.repo-template.json` starts with. `apps/repo-builder/src/scripts/generate.py manifest` writes them at the source commit,
-  and `test_reference_assertions.py` fails when a payload path has no rule here, so a path added to `src/base-repo/` needs a rule in the same commit.
-- `src/ruleset.json` — the `main` ruleset body every generated repository starts with, sent by `apps/repo-builder/src/scripts/generate.py settings`. Its required contexts are the job `name:` values
-  of the payload's `ci.yml` and `security.yml` and of `codeql.yml`'s `scanning` job, and `apps/repo-builder/src/scripts/tests/test_generate.py` fails when they differ, so renaming one of those jobs
-  means editing this file in the same commit. Root-only like `src/addon-adoption.json`: it is data for the skill, not a file a generated repository holds.
-- `docs/github_repository_structure.md` — Structure and bill of materials for this repo, and briefly what each file/folder is for.
-- `scripts/contract-eval` — measures what `src/base-repo/CLAUDE.md`'s Template Contract saves an agent: the same tasks, in fixtures generated from the committed payload, run by `claude -p` with and
-  without that section, reporting pass, turns, tokens, and cost per arm. Run it by hand after committing a contract change, since fixtures come from `HEAD` and it refuses an uncommitted payload; it
-  spends money, so it is in no gate. Its header says how each run is isolated from the operator's own instructions.
-
-The `repo-builder` skill reads `src/base-repo` at a specific commit, never the working tree, so an uncommitted payload edit does not reach a generated repository.
+Keep the three JSON files beside the payload and addons, not inside either tree.
+They are inputs to `/repo-builder`, not files for a destination to adopt or read.
+In-file addon guidance serves manual adoption and is not a substitute for the walkthrough manifest.
 
 ## Local Contracts
 
-**A file under `src/base-repo/` is not this repository's configuration. It is data.** `src/base-repo/scripts/check` never runs here; the root `scripts/check` does.
+### Choose what ships
 
-**Payload and root are separate edits.** When a change should apply to both, make it in both places in the same commit. A fix at the root only leaves the template shipping the bug to every repository
-generated afterward.
+**Day-one test:** Ship a file only if its reason for being there holds for every generated repository.
+Keep `README.md`, `LICENSE`, `CONTRIBUTING.md`, `CODEOWNERS`, and other conditional files as additions by occasion; their absence is not a consequence of repository visibility.
 
-**The `github-actions` ecosystem only ever bumps the root.** `.github/dependabot.yml` scans it at `/` and `/.github/actions/*`, and neither reaches `apps/`. A bot pull request bumping a pinned action
-therefore updates the root copy and leaves the payload pinned to the old revision. Mirror the bump into `src/base-repo/.github/` on the bot's own branch before merging it.
+**Addons:** Use a path absent from `src/base-repo/` so adoption cannot overwrite a shipped file.
+Put optional guidance for an existing payload path in comments in that file.
+Each addon must be nonempty and carry its own adoption guidance: use comments where supported and prose otherwise.
 
-Nothing in the files themselves says the trees disagree, since both are valid YAML and both pass actionlint, so `scripts/payload-parity` is what reports it: it fails the commit and the gate until the
-bump is mirrored. It refuses the divergence rather than repairing it, which is what turns each action bump into a complete one.
+**Optional support in the payload:** A shipped file may support an addon if the unadopted state is a no-op.
+`src/base-repo/scripts/system-packages` exits `0` if `.github/system-packages.txt` is absent.
+A failure without the addon would break every destination that did not adopt it.
 
-That guard reaches `.github/` and nothing else, so `.pre-commit-config.yaml` — shipped in both trees — is covered by no check at all. The answer there is not a mirror but a second directory, which
-that ecosystem does allow: `.github/dependabot.yml`'s `pre-commit` entry names the payload alongside the root, and its group carries `group-by: dependency-name`, so a bot bump arrives mirrored rather
-than needing to be completed by hand.
+### Mirror live and payload changes
 
-Without that key Dependabot opens one pull request per directory and the split returns in a new shape, so the second directory is worth nothing on its own. That directory is derived rather than
-carried, from this repository tracking a `.pre-commit-config.yaml` under the payload — the rule is in `apps/repo-builder/src/references/lifecycle.md` beside the one for language entries, so a
-template update rewriting this file cannot drop it.
+Use root `scripts/check` to verify this checkout; `src/base-repo/scripts/check` is data for generated repositories.
+If a change applies to both, edit both trees in the same commit.
+Write payload references against the destination's layout, without the `src/base-repo/` prefix.
 
-A hand edit to one copy is still refused by nothing, so read the two against each other rather than waiting for a check to say. The `uv` ecosystem needs no second directory: the root `pyproject.toml`
-is root-only, for the reason the repository's own `CLAUDE.md` gives.
+| Change | What to do |
+|---|---|
+| Dependabot action bump | Mirror it into `src/base-repo/.github/` on the bot's branch before merging. The `github-actions` ecosystem scans the root and `/.github/actions/*`, not `apps/`. Actionlint can pass on both copies while revisions differ. |
+| Pre-commit dependency bump | Keep both directories in the `pre-commit` ecosystem and keep `group-by: dependency-name`; otherwise Dependabot opens separate pull requests. The payload directory is re-derived from tracked manifests, not carried forward. |
+| Manual `.pre-commit-config.yaml` edit | Compare the two configs directly; `scripts/payload-parity` checks `.github/` and `scripts/`, not these root files. Preserve the deliberate differences below. |
+| New language manifest | Let `/repo-builder` derive entries for tracked destination manifests. The payload Dependabot config ships only actions and pre-commit; an entry without a manifest fails with `dependency_file_not_found`. Root `uv` needs no second directory because root `pyproject.toml` is not shipped. |
 
-**`src/addon-adoption.json`, `src/ownership.json` and `src/ruleset.json` are root-only and stay that way**, deliberate exceptions to the rule above, as `scripts/CLAUDE.md` below is.
-`src/ownership.json` describes the payload rather than shipping in it: a generate writes its rules into the destination's manifest, so a copy in the payload would be a second list to keep in step.
+When changing Dependabot derivation, read “Dependabot entries follow the manifests present” in `apps/repo-builder/src/references/lifecycle.md`.
+See `.github/dependabot.yml`'s header for the manifest mapping.
 
-`src/ruleset.json` is the body a generate sends to the host, which a generated repository never reads. `src/addon-adoption.json` describes `src/repository-addons/`, which never reaches a generated
-repository, so mirroring it into the payload ships an index of files that are not there. It is also a sibling of that directory rather than a file inside it, because anything inside is an addon to
-copy.
+### Deliberate differences between root and payload
 
-The in-file guidance carried by the addons themselves is not deduplicated against it: that guidance serves someone adopting a file by hand, in a repository that has no manifest to read.
+- **Dev container JSON:** Preserve `check-json` exclusions for the commented `devcontainer.json`.
+  Root excludes `apps/github-repository-template/src/repository-addons/.devcontainer/devcontainer.json`; payload excludes `.devcontainer/devcontainer.json` at the destination root.
+  The dev container schema allows comments, but the hook requires strict JSON.
+- **Root-only hooks:** Keep `addon-adoption` and `reference-assertions` here; their inputs never reach a destination.
+  Ship `payload-parity` in both configs; it reports `not-applicable` until a repository holds a payload of its own.
+- **Scripts contract:** Keep `scripts/CLAUDE.md` root-only.
+  It is the sole expected difference under `scripts/`; `scripts/payload-parity` reports other differences and fails until they are fixed.
+  Destinations build their own child contracts.
+- **Template Contract:** Put the bare Commands and Layout rules in `src/base-repo/CLAUDE.md`; the root keeps the fuller versions and rationale.
+  Update a changed rule in both in the same commit.
+  Merge template updates into root Commands and Layout instead of adding a second contract section.
+  Keep the payload's four common commands and point to `ls scripts/` for the rest.
+  Leave out Git rules enforced by shipped hooks and references to this repository, its `pyproject.toml`, or ADRs that do not ship.
 
-**A payload file may exist to serve an addon**, where the unadopted state is a no-op rather than a failure. `src/base-repo/scripts/system-packages` reads `.github/system-packages.txt`, which never
-ships: without it the script stats one path and exits 0. That is what satisfies the test "The payload is what is useful on day one" sets below — adding a file to the payload asserts its condition
-holds for every generated repository — since an absence that costs nothing asserts nothing. A shipped file that errors without its addon fails every generated repository instead, which is the line.
+### Preserve intentional scaffolding
 
-**The `check-json` exclude diverges between the two `.pre-commit-config.yaml` copies on purpose.** `devcontainer.json` is JSON with comments — the dev container schema sets `allowComments` — and
-both the addon and any copy adopted into a generated repository carry their guidance in them, so the strict-JSON hook has to be told to skip the file.
-
-The path differs because the file lives in different places: root excludes the addon at `apps/github-repository-template/src/repository-addons/.devcontainer/devcontainer.json`, the payload excludes
-`.devcontainer/devcontainer.json` at a destination root.
-
-A normalized diff of the two configs shows five divergences and no others: this `exclude` line; the comment above it, since root's explains an addon path and the payload's a destination path; the two
-root-only hooks `addon-adoption` and `reference-assertions`, which check paths that never reach a generated repository; and the `rulesets` comment, which names this template at the root and cannot at
-the destination.
-
-The `payload-parity` hook is not among them: the check ships in both trees and reports `not-applicable` where there is no payload, so a repository that later grows one is guarded without a sixth
-divergence to maintain.
-
-**`scripts/CLAUDE.md` is root-only.** It is this repository's own contract for `scripts/`, and the payload ships no copy — a generated repository gets the Template Contract in
-`src/base-repo/CLAUDE.md` and builds the rest of its `CLAUDE.md` tree itself, rather than inheriting prose it did not write. So `diff -r scripts apps/github-repository-template/src/base-repo/scripts`
-reports that one file as only-in-root and nothing else; a second difference is a drift to fix, in whichever tree is behind.
-
-**`src/base-repo/CLAUDE.md`'s Template Contract restates the root `CLAUDE.md`'s Commands and Layout as bare rules.** The root keeps the reasoning; the payload keeps only what a generated repository's
-agent must obey, since it loads in every session there. Commands names only the four an agent reaches for in most tasks and points to `ls scripts/` for the rest. Git rules are left out: the shipped
-hooks refuse a bad commit and say why.
-
-This repository's root `CLAUDE.md` carries the full Commands and Layout in place of the contract, so a template update to the root merges a contract change into those sections rather than adding a `##
-Template Contract` beside them. Change a rule in both in the same commit; `test_template_contract.py` catches the payload half when it drifts from the code. Leave out anything that names this
-repository: the payload, `pyproject.toml`, ADRs it does not ship.
-
-**Payload paths lose the `src/base-repo/` prefix when generated**, so a relative reference written inside the payload must be relative to the generated repository's root, not to this one.
-
-**Deliberate placeholders, not omissions:**
-
-- `src/base-repo/apps/app-name/` is replaced during generation, and the payload says nothing about it. `apps/repo-builder/src/references/generate.md` step 8 owns the rename: the placeholder is moved
-  to the first derived deployable rather than copied, so it cannot survive generation.
-- **The payload ships no directory whose only content is its own name.** `apps/app-name/` carries `.unit.json` and `src/` and nothing else; root `libs/`, `tests/`, `docs/specs/`, and `docs/plans/` and
-  the unit's `tests/` and `docs/specs/` are not shipped. Each was a third statement of what `src/base-repo/scripts/structure` and `docs/github_repository_structure.md` already make — one that
-  carries no reason, cannot be checked, and is free to drift from both.
-
-  Shipping `tests/` empty at the root *and* at the unit additionally posed the scope question with nothing in either to answer it, and `docs/specs/` contradicted the default tracker, GitHub Issues,
-  which holds specs as issues. Every one remains a valid placement; the structure doc records them as conventions rather than shipped directories.
-
-  `tmp/` and the `.claude/` subdirectories keep their `.gitkeep` — the first is gitignored and cannot survive empty otherwise, and the second is the surfaces bullet below. `docs/plans/` does not,
-  since plan mode creates it on its first plan. `generate.md` step 8 replicates the two-entry skeleton, so widening it here means widening it there.
-- `src/base-repo/.env` is an intentionally empty tracked file giving a generated repository somewhere to put local variables. Do not add content. It is tracked only because the root `.gitignore`
-  pattern does not reach into the payload; at a destination root the same pattern matches it, so it copies across like any other file and can never be committed there. A generated repository has it
-  locally and a clone of that repository does not.
-- `.mcp.json` and every `.claude/` subdirectory ship empty, so a new project sees the available surfaces without inheriting rules. Hooks, rules, output styles, and skills are personal tooling, not
-  project configuration — an operator's own global `~/.claude` covers them instead of the payload vendoring copies.
-
-  The whole `.claude/` tree is gitignored in a generated repository, so — like `.env` — it arrives in its working tree but not its history, and is force-tracked here to ship at all. `CLAUDE.md` is
-  not gitignored there: it carries the repository's actual contract now, not a disposable shim, so it is committed like any other payload file, at the root and at every nested location.
-
-**`.github/dependabot.yml` lists only actions and pre-commit**, and that is not an oversight. An entry naming a manifest the repository does not have fails with `dependency_file_not_found` rather than
-being skipped, and a template cannot know which ecosystem a clone will use — listing six guarantees five broken entries in every one.
-
-Nobody copies an entry out of this file by hand either: every `/repo-builder` flow that writes it derives one entry per manifest the destination tracks and appends it to these two, re-deriving the
-whole set each run, so the entry survives an update by being rebuilt rather than by being carried.
-
-The rule is "Dependabot entries follow the manifests present" in `apps/repo-builder/src/references/lifecycle.md`, and the file's own header states the manifest-to-ecosystem mapping for whoever is
-reading the file rather than the rule.
-
-**The payload is what is useful on day one.** `README.md`, `LICENSE`, `CONTRIBUTING.md`, `CODEOWNERS`, and the rest are absent because each answers a condition the template cannot know has arrived —
-not because the baseline is private. The structure doc's "Additions by Occasion" groups them by that condition. Adding one to the payload asserts its condition holds for every generated repository,
-which is the test to apply before doing so.
+- **First unit:** `src/base-repo/apps/app-name/` contains only `.unit.json` and `src/`.
+  Generation moves it to the first derived unit rather than copying it.
+  Update `apps/repo-builder/src/references/generate.md` step 8 if you change that skeleton.
+- **Empty directories:** Keep root `libs/`, `tests/`, `docs/specs/`, and `docs/plans/`, and unit `tests/` and `docs/specs/`, as placement conventions rather than shipped placeholders.
+  The default tracker holds specs as GitHub Issues; plan mode creates `docs/plans/` on first use.
+  Keep `.gitkeep` in `tmp/` and the empty `.claude/` subdirectories so those scaffolds ship.
+- **Local configuration:** Keep `src/base-repo/.env` empty.
+  The root ignore pattern permits tracking the nested payload file; it ignores the copied `.env` at a destination root.
+  Generation provides the local file, but later clones do not inherit it.
+- **Agent surfaces:** Ship `.mcp.json` and the `.claude/` subdirectories without rules or tooling; personal hooks, rules, output styles, and skills live in `~/.claude`.
+  Force-track the `.claude/` scaffold here so it ships, but keep it ignored in destinations.
+  Track `CLAUDE.md` at every scope in destinations: it is the contract, not a shim.
 
 ## Work Guidance
 
-Before editing under `src/`, ask whether this is a payload change or a root change; no rule in this repository's settings prompts for it.
+Decide whether a change affects the live checkout, the payload, or both before editing.
+Update `docs/github_repository_structure.md` in the same commit when a payload change makes its description stale.
 
-A payload change ships to repositories that cannot be inspected from here, so prefer changes that fail loudly in a generated repository over changes that silently do nothing. The payload's scripts
-distinguish `pass`, `not-applicable`, `unavailable`, and `FAIL` for exactly that reason.
-
-When the structure doc and the payload disagree, one of them is wrong — fix both in the same commit rather than leaving the rationale describing a file that no longer behaves that way.
+Prefer explicit failure over silent omission in generated repositories. Keep `pass`, `not-applicable`, `unavailable`, and `FAIL` distinct so an agent can tell whether a check actually ran.
 
 ## Verification
 
-The root `scripts/check` runs shellcheck and actionlint over these files through pre-commit, which is syntax-level only.
-
-The root `scripts/structure` audits these paths too, since they are tracked files of this repository like any other. `src/base-repo/` mirrors a whole repository and passes the Layout rules unaltered,
-which is a property worth keeping: a payload that needed a `.structure-allow` entry to survive its own audit would be shipping a shape it forbids. `src/repository-addons/` passes for a duller reason
-— the root allowlists apply only at the real repository root, and nothing there trips a rule that applies at depth.
-
-One check reads this directory semantically: the `addon-adoption` pre-commit hook runs `apps/repo-builder/src/scripts/tests/test_addon_adoption.py`, which fails when `src/addon-adoption.json` and
-`src/repository-addons/` disagree about which files exist, when an addon sits at a path `src/base-repo/` already ships, when an entry declares a slot token no longer present in its file, or when any
-addon ships as a zero-byte file.
-
-It runs on every commit rather than on a path filter, because `git rm` of an addon is the case a filter cannot see. It does not check that a described region is described *well* — only that it
-exists.
-
-`apps/repo-builder/src/scripts/tests/test_template_contract.py` reads `src/base-repo/CLAUDE.md` against `src/base-repo/scripts/structure`: the Template Contract's root folders, scoped folders,
-toolchain folders, `deploy/` folders, and `.unit.json` values must equal the audit's lists, every root file it names must be one the audit permits, its `.unit.json` example must pass the audit's own
-`unit_facts_program` (skipped where `jq` is absent), and every script it names must exist and be executable.
-
-It runs under pytest in `scripts/check`, not as a hook, so it adds no divergence between the two `.pre-commit-config.yaml` copies. It checks the contract against code, not against the root
-`CLAUDE.md`'s prose, so the root half of the sync rule above is still kept by hand.
-
-The payload's behavior is verified where it lands: by `src/base-repo/scripts/tests/*-test` once a repository is generated, and by the `repo-builder` evals under `apps/repo-builder/src/evals/`.
+| To verify… | Use… |
+|---|---|
+| Syntax and placement | Root `scripts/check` runs ShellCheck and actionlint through pre-commit; `scripts/structure` audits both trees. The payload must pass layout without a special `.structure-allow` entry. Root allowlists apply only at the real repository root. |
+| Addon coverage | The `addon-adoption` hook always runs `apps/repo-builder/src/scripts/tests/test_addon_adoption.py`, with no path filter so deletions count. It checks manifest coverage, collisions with payload paths, nonempty addons, and presence of declared slot tokens. It does not judge the guidance. |
+| Contract against code | `apps/repo-builder/src/scripts/tests/test_template_contract.py` runs under pytest in `scripts/check`, not as a hook. It compares root, scoped, toolchain, and `deploy/` folders and `.unit.json` values to payload `scripts/structure`. It checks named root files and executable commands, and runs the example through `unit_facts_program` when `jq` is available. Compare the root prose by hand. |
+| Generated behavior | Use `src/base-repo/scripts/tests/*-test` after generation and the `/repo-builder` evals in `apps/repo-builder/src/evals/`. |
+| Agent cost of the Template Contract | Run `scripts/contract-eval` manually after committing a contract change. It refuses a dirty payload and uses `HEAD` fixtures. It runs the same tasks with and without the contract via `claude -p` and reports pass, turns, tokens, and cost per arm. It spends money and is outside the gate; see its header for isolation. |
 
 ## Child Index
 
-None. `src/base-repo/CLAUDE.md` is payload content addressed to a generated repository, not a child contract for this one.
+None for this app. `src/base-repo/CLAUDE.md` addresses a generated repository, not this checkout.

@@ -17,9 +17,9 @@ set -uo pipefail
 # undeclared one is asked for, and a usage error with no value. Skips without
 # jq.
 #
-# Every case sets CI_DRY_RUN, which is the seam scripts/ci already uses: the
-# commands report what they would dispatch and run nothing, so the result comes
-# from the resolution alone and is the same on a machine with no toolchains.
+# Resolution cases use CI_DRY_RUN, the seam scripts/ci already uses: commands
+# report what they would dispatch without running it. Cases that exercise real
+# packaging or program execution run without that flag.
 #
 # Not `set -e`: a failing assertion is recorded and the remaining cases still
 # run, so one break does not hide the rest.
