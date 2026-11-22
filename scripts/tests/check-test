@@ -108,10 +108,23 @@ if (( status == 0 )) \
   && grep -qE '^audit/python +[0-9]+s$' <<< "$out" \
   && grep -qE '^lint/python +[0-9]+s$' <<< "$out" \
   && grep -qE '^lint/swift +[0-9]+s$' <<< "$out" \
-  && ! grep -qE '^(build/|typecheck/swift )' <<< "$out"; then
+  && grep -qE '^lint +[0-9]+s$' <<< "$out" \
+  && grep -qE '^format-check +[0-9]+s$' <<< "$out" \
+  && grep -qE '^typecheck +[0-9]+s$' <<< "$out" \
+  && grep -qE '^test +[0-9]+s$' <<< "$out" \
+  && ! grep -qE '^(build([ /])|typecheck/swift )' <<< "$out"; then
   pass
 else
-  fail "wanted per-language timings and no unrun stages, got exit $status: $out"
+  fail "wanted stage and per-language timings and no unrun stages, got exit $status: $out"
+fi
+
+current="a failed adapter timing write does not exit doctor early"
+out="$(cd "$work" && CHECK_TIMING_FILE="$work/scripts" scripts/doctor 2>&1)"
+status=$?
+if (( status == 0 )) && grep -qE '^toolchain +pass +python$' <<< "$out"; then
+  pass
+else
+  fail "wanted successful toolchain detection despite the unusable timing sink, got exit $status: $out"
 fi
 
 gate_fixture "doctor and security language timings reach the summary"
@@ -165,28 +178,45 @@ else
   fail "wanted only the actual footer: $out"
 fi
 
-gate_fixture "closed footer output leaves no timing directory"
+gate_fixture "nested summarize keeps elapsed timings on early failure"
 printf '#!/usr/bin/env bash\nexit 9\n' > "$work/scripts/doctor"
-(cd "$work" && scripts/check --gate | head -n 0) 2>/dev/null
+out="$(cd "$work" && scripts/summarize scripts/check 2>&1)"
 status=$?
-if (( status == 141 )) && ! compgen -G "$work/tmp/check-timing.*" >/dev/null; then
+if (( status == 9 )) && grep -qE '^total +[0-9]+s$' <<< "$out"; then
   pass
 else
-  fail "wanted SIGPIPE status 141 and no timing directory, got $status"
+  fail "wanted exit 9 and timings from nested summarize: $out"
 fi
 
-gate_fixture "verbose output closes without leaking timing files"
-printf '#!/usr/bin/env bash\necho first\nsleep 0.2\necho second\nexit 9\n' > "$work/scripts/doctor"
-(cd "$work" && scripts/check --verbose | head -n 1 >/dev/null) 2>/dev/null
+current="summarize keeps timings when check is found on PATH"
+out="$(cd "$work" && PATH="$work/scripts:$PATH" scripts/summarize check --verbose 2>&1)"
 status=$?
-if (( status == 141 )) && ! compgen -G "$work/tmp/check-timing.*" >/dev/null; then
+if (( status == 9 )) && grep -qE '^total +[0-9]+s$' <<< "$out"; then
   pass
 else
-  fail "wanted SIGPIPE status 141 and no timing directory, got $status"
+  fail "wanted exit 9 and timings from check on PATH: $out"
 fi
 
-gate_fixture "an early failure reports completed timings and omits later stages"
-printf '#!/usr/bin/env bash\nexit 9\n' > "$work/scripts/doctor"
+# An ignored PIPE survives exec (as on hosted CI). Close the read end before
+# releasing doctor so a runner's scheduling cannot accidentally drain the footer.
+for mode in --gate --verbose; do
+  gate_fixture "$mode cleans up after the reader closes with SIGPIPE ignored"
+  printf '#!/usr/bin/env bash\necho first\nfor ((i=0; i<100; i++)); do\n  [[ -e reader-closed ]] && exit 9\n  sleep 0.02\ndone\nexit 1\n' > "$work/scripts/doctor"
+  (
+    cd "$work" || exit
+    trap '' PIPE
+    scripts/check "$mode" | (read -r _; exec 0<&-; touch reader-closed)
+  ) 2>/dev/null
+  status=$?
+  if (( status == 9 )) && ! compgen -G "$work/tmp/check-timing.*" >/dev/null; then
+    pass
+  else
+    fail "wanted doctor exit 9 and no timing directory, got $status"
+  fi
+done
+
+gate_fixture "an early failure reports completed timings after unterminated output"
+printf '#!/usr/bin/env bash\nprintf "doctor failed"\nexit 9\n' > "$work/scripts/doctor"
 out="$(cd "$work" && scripts/check 2>&1)"
 status=$?
 if (( status == 9 )) && grep -qE '^doctor +[0-9]+s$' <<< "$out" \
