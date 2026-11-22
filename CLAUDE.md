@@ -47,8 +47,8 @@ bare rules; `apps/github-repository-template/CLAUDE.md` owns keeping them in ste
   which CI runs on the pull request. It reads no hosted GitHub state but is not offline: `commitlint-test` and pre-commit's hook environments fetch on first use
 - `scripts/fix` — the write half of `check`: lint autofix, then formatting, for every stack, unconditionally and in that order so the formatter lays out what the linter rewrote. Go, Swift and Kotlin
   have no lint autofix and report `lint-fix` `not-applicable`. A `lint-fix` FAIL means findings remain that need hand work
-- `scripts/summarize <command…>` — run a check and print only its Result table with findings, then a verdict line of its exit status and a count per state, exiting with that status; read `ci` and
-  other commands through this, since `check` already does
+- `scripts/summarize <command…>` — run a check and print its Result table with findings, any elapsed summary, and a verdict line with its exit status and counts by state. Exits with that status;
+  read `ci` and other commands through this, since `check` already does
 - `scripts/clean` — recursively delete build output and tool caches (`dist`, `build`, `coverage`, `__pycache__`, `.*_cache`, `*.pyc`)
 - `scripts/run [unit] [--entry <name>] [-- args…]` — start a unit per its declared `run` fact. The unit name is required when `apps/` holds several; `--entry` names one program from the unit's own
   language manifest (a `[project.scripts]` name, a `bin` key, a main package's import path) and is required when it declares several. Arguments after `--` pass through unchanged

@@ -12,8 +12,8 @@ Use these instead of per-language tools. `check` and `fix` run for every languag
   `--fast`, the commit-time gate, leaves `build`
   to CI and so is no superset of it
 - `scripts/fix` — lint autofix, then formatting
-- `scripts/summarize <command…>` — run a check and print only its Result table, then a verdict line of its exit status and a count per state; read `ci` and other commands through this, since
-  `check` already does
+- `scripts/summarize <command…>` — run a check and print its Result table, any elapsed summary, and a verdict line with its exit status and counts by state; read `ci` and other commands through
+  this, since `check` already does
 - `scripts/run [unit] [--entry <name>] [-- args…]` — start a unit; the unit name is required when `apps/` holds several
 
 `ls scripts/` lists the rest, such as `doctor`, `integration`, and `package`.
