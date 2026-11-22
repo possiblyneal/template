@@ -42,7 +42,8 @@ bare rules; `apps/github-repository-template/CLAUDE.md` owns keeping them in ste
 - `scripts/doctor` — verify local toolchains, dependencies, hooks, and configuration without contacting hosted services
 - `scripts/repo-settings check` — inspect GitHub-hosted security and branch settings; run explicitly, since it needs the network and administration visibility
 - `scripts/check` — the full local gate: `doctor`, `structure` and `payload-parity`, then lint, format, type check, test, and build with the script tests beside them, the security audit, and
-  pre-commit over every file, tracked and untracked. It prints only the Result table and always writes the full run to `tmp/check.log`; `--verbose` streams everything; `--fast` leaves out `build`,
+  pre-commit over every file, tracked and untracked. It prints the Result table and elapsed wall times and always writes the full run to `tmp/check.log`; overlapping timings are not additive.
+  `--verbose` streams everything; `--fast` leaves out `build`,
   which CI runs on the pull request. It reads no hosted GitHub state but is not offline: `commitlint-test` and pre-commit's hook environments fetch on first use
 - `scripts/fix` — the write half of `check`: lint autofix, then formatting, for every stack, unconditionally and in that order so the formatter lays out what the linter rewrote. Go, Swift and Kotlin
   have no lint autofix and report `lint-fix` `not-applicable`. A `lint-fix` FAIL means findings remain that need hand work

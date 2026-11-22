@@ -3,7 +3,7 @@ set -uo pipefail
 
 # What scripts/check prints, writes, and exits with. The gate's steps are
 # stubbed in a scratch copy of the scripts, so the cases assert the wrapper's
-# contract -- table only by default, the whole run in tmp/check.log every time,
+# contract -- table and timings by default, the whole run in tmp/check.log every time,
 # raw output under --verbose, the gate's own exit status, --fast handing ci
 # --no-build -- and not the output of any real check.
 
@@ -43,6 +43,71 @@ else
   fail "wanted the table alone and exit 0, got exit $status: $out"
 fi
 
+current="the concise summary and log include elapsed gate timings"
+if grep -qE '^Elapsed wall time' <<< "$out" \
+  && grep -qE '^doctor +[0-9]+s$' <<< "$out" \
+  && grep -qE '^total +[0-9]+s$' <<< "$out" \
+  && grep -qE '^Elapsed wall time' "$work/tmp/check.log"; then
+  pass
+else
+  fail "wanted elapsed timings in both summary and log"
+fi
+
+current="verbose output contains the same elapsed section as the log"
+out="$(cd "$work" && scripts/check --verbose 2>&1)"
+if grep -qE '^Elapsed wall time' <<< "$out" && [[ "$out" == "$(cat "$work/tmp/check.log")" ]]; then
+  pass
+else
+  fail "wanted elapsed timings in verbose output and its log"
+fi
+
+gate_fixture "script tests are timed over their lifetime rather than the wait"
+printf '#!/usr/bin/env bash\nsleep 2\ntouch done\n' > "$work/scripts/script-tests"
+printf '#!/usr/bin/env bash\nwhile [[ ! -e done ]]; do sleep 0.1; done\necho "lint               pass             python"\n' > "$work/scripts/ci"
+out="$(cd "$work" && scripts/check 2>&1)"
+if grep -qE '^script-tests +[1-9][0-9]*s$' <<< "$out"; then
+  pass
+else
+  fail "wanted the script-tests lifetime even when ci waits for it: $out"
+fi
+
+gate_fixture "per-language timings name only runners that ran"
+cp "$repo_root/scripts/ci" "$work/scripts/ci"
+printf '[project]\nname = "example"\nversion = "1"\n' > "$work/pyproject.toml"
+printf '// swift-tools-version:5.9\n' > "$work/Package.swift"
+stub uv <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+stub swift <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+out="$(cd "$work" && scripts/check --fast 2>&1)"
+status=$?
+if (( status == 0 )) \
+  && grep -qE '^lint/python +[0-9]+s$' <<< "$out" \
+  && grep -qE '^lint/swift +[0-9]+s$' <<< "$out" \
+  && ! grep -qE '^(build/|typecheck/swift )' <<< "$out"; then
+  pass
+else
+  fail "wanted per-language timings and no unrun stages, got exit $status: $out"
+fi
+
+gate_fixture "an early failure reports completed timings and omits later stages"
+printf '#!/usr/bin/env bash\nexit 9\n' > "$work/scripts/doctor"
+out="$(cd "$work" && scripts/check 2>&1)"
+status=$?
+if (( status == 9 )) && grep -qE '^doctor +[0-9]+s$' <<< "$out" \
+  && grep -qE '^total +[0-9]+s$' <<< "$out" \
+  && ! grep -qE '^(structure|security|script-tests) +[0-9]+s$' <<< "$out"; then
+  pass
+else
+  fail "wanted exit 9 and only completed timings: $out"
+fi
+
+gate_fixture "the log holds the whole run after a passing run"
+out="$(cd "$work" && scripts/check 2>&1)"
 current="the log holds the whole run after a passing run"
 log="$work/tmp/check.log"
 if grep -q 'chatter from doctor' "$log" \
@@ -106,6 +171,17 @@ if (( status == 3 )) \
   pass
 else
   fail "wanted exit 3 with both outputs and no later step, got exit $status: $out"
+fi
+
+gate_fixture "ci failure takes precedence over a failing parallel suite" 'exit 4'
+printf '#!/usr/bin/env bash\nexit 3\n' > "$work/scripts/script-tests"
+out="$(cd "$work" && scripts/check --fast 2>&1)"
+status=$?
+if (( status == 4 )) && grep -qE '^script-tests +[0-9]+s$' <<< "$out" \
+  && ! grep -qE '^security +[0-9]+s$' <<< "$out"; then
+  pass
+else
+  fail "wanted ci exit 4 and no security timing, got exit $status: $out"
 fi
 
 gate_fixture "summarize still reads check" \
