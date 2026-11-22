@@ -127,6 +127,17 @@ else
   fail "wanted successful toolchain detection despite the unusable timing sink, got exit $status: $out"
 fi
 
+current="a capability with no applicable adapters emits no elapsed time"
+mv "$work/pyproject.toml" "$work/pyproject.disabled"
+out="$(cd "$work" && scripts/check --fast 2>&1)"
+status=$?
+if (( status == 0 )) && grep -qE '^typecheck +not-applicable +swift$' <<< "$out" \
+  && ! grep -qE '^typecheck(/[a-z]+)? +[0-9]+s$' <<< "$out"; then
+  pass
+else
+  fail "wanted a not-applicable typecheck and no elapsed time, got exit $status: $out"
+fi
+
 gate_fixture "doctor and security language timings reach the summary"
 for step in doctor security; do
   # shellcheck disable=SC2016
