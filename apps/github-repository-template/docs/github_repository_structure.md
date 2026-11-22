@@ -217,7 +217,7 @@ These live in `src/repository-addons/` and are never copied during generation �
 
 #### When a helper needs to be built before it runs
 
-`tools/CLAUDE.md`: Creates `tools/` and owns it as a documented boundary — each helper gets its own `tools/<name>/` with its own manifest and source, and a helper that's just a shell script belongs in `scripts/` instead. Copied in only when the project needs a helper that must be built before it runs: a linter, a code generator, a protobuf plugin. Its sections ship seeded with what the template can know, including the trap: `scripts/check` reads the manifests at the repository root, so a tool whose language has no root manifest is built and tested by nobody. Being a child document, it has to be added to the root `CLAUDE.md`'s Child Index when adopted, or nothing walking the tree reaches it.
+`tools/CLAUDE.md`: Creates `tools/` and owns it as a documented boundary — each helper gets its own `tools/<name>/` with its own manifest and source, and a helper that's just a shell script belongs in `scripts/` instead. Copied in only when the project needs a helper that must be built before it runs: a linter, a code generator, a protobuf plugin. Its sections ship seeded with what the template can know, including the trap: when a language requires a root workspace manifest, `scripts/check` cannot build or test its tools without that manifest. Swift is discovered from `Package.swift` files directly. Being a child document, it has to be added to the root `CLAUDE.md`'s Child Index when adopted, or nothing walking the tree reaches it.
 
 #### When a build links against a system library
 
