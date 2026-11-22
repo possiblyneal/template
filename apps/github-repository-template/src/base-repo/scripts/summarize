@@ -60,8 +60,21 @@ table="$(awk '
 table_reported_failure=$?
 [[ -z "$table" ]] || printf '%s\n' "$table"
 
-# check's elapsed summary is separate from Result rows and is the last section.
-awk '/^Elapsed wall time \(overlapping stages are not additive\):$/ { timing = 1 } timing { print; if ($1 == "total") exit }' <<< "$output"
+# Only check owns this footer. Accept its last complete block at the end of
+# output, followed at most by the verdict from check's own summarize wrapper.
+if [[ "$1" -ef "$repo_root/scripts/check" ]]; then
+  awk '
+    /^Elapsed wall time \(overlapping stages are not additive\):$/ { block = $0; timing = 1; complete = 0; next }
+    timing && /^[A-Za-z0-9_/-]+ +[0-9]+s$/ {
+      block = block "\n" $0
+      if ($1 == "total") { timing = 0; complete = 1 }
+      next
+    }
+    complete && / exited [0-9]+: / { next }
+    { timing = 0; complete = 0 }
+    END { if (complete) print block }
+  ' <<< "$output"
+fi
 
 # Not everything a check command runs reports through the Result table: the
 # script suites print their own tally, and pre-commit prints its own hook list.

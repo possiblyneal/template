@@ -36,7 +36,7 @@ editing the file. This document holds only the rules that span scripts.
 - **`libs/result.sh`'s printed layout is an interface**, parsed by `summarize`; `tally` is a command's exit status, and the verdict its EXIT trap prints through `result_verdict` (`<command as invoked>
   exited <status>: <count per state>`) is the last line, and `summarize` ends with the same line for the command it ran. Print results in the shell that exits, since a subshell's counts never reach
   the trap, and a script setting its own EXIT trap calls `result_exit_verdict` from it.
-- **`check` timings are wall time**, reported separately from Result rows. The script-tests job overlaps `ci`, so its duration and the per-language durations are not additive; unrun stages have no duration.
+- **`check` timings are wall time**, reported separately from Result rows for each stage and each language runner, including doctor and security. The script-tests job overlaps `ci`, so durations are not additive; unrun stages have no duration. Timing failures never replace a check's status.
 - **A check owns no stdin.** `script-tests` closes fd 0 for each suite and `check` for `structure`, and the dispatch closes it for every capability but `run`, so a stdin-draining tool cannot hang the
   gate. The `*_each` helpers take their list on fd 3, and pipes end in a variable, never a reader that exits early, since `pipefail` turns SIGPIPE into 141, read as absent.
 - **An adapter is honest about what it did.** Capture the tool's exit status, not only its output. No function stands in for an absent one: the probe reads `absent` off the function table and the

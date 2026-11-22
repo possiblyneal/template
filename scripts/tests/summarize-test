@@ -16,6 +16,14 @@ source "$repo_root/scripts/tests/libs/harness.sh"
 
 echo "summarize-test"
 
+current="ordinary output resembling a timing footer stays hidden"
+out2="$(scripts/summarize printf '%s\n' 'Elapsed wall time (overlapping stages are not additive):' 'ordinary child output' 'total 99s')"
+if ! grep -q 'Elapsed wall time\|ordinary child output\|total 99s' <<< "$out2"; then
+  pass
+else
+  fail "wanted ordinary output hidden: $out2"
+fi
+
 # A command printing one of each state, findings under the FAIL, and noise
 # around all of it. Exits non-zero, as a run with a FAIL in it does.
 noisy() {

@@ -1292,7 +1292,7 @@ _language_capabilities_run() {
         "$function" </dev/null || status=$?
       fi
       if [[ -n "${CHECK_TIMING_FILE:-}" && "$status" != "$NO_RUNNER" ]]; then
-        printf '%s/%s %ss\n' "$cap" "$lang" "$((SECONDS - start))" >> "$CHECK_TIMING_FILE"
+        { printf '%s/%s %ss\n' "$cap" "$lang" "$((SECONDS - start))" >> "$CHECK_TIMING_FILE"; } 2>/dev/null || true
       fi
       case "$status" in
         0) result "$cap" pass "$lang" ;;
