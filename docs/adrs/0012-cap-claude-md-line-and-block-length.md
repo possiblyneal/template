@@ -11,7 +11,7 @@ status: deprecated
 
 # Cap CLAUDE.md Line and Block Length in the Structure Audit
 
-> Deprecated: the CLAUDE.md-specific length checks and section advisory were removed. The repository-wide large-file hook remains.
+> Deprecated: the CLAUDE.md-specific length checks and section advisory were removed. The repository-wide large-file hook exempts `CLAUDE.md` at every depth.
 
 ## Decision
 

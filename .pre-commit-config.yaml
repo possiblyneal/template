@@ -314,6 +314,7 @@ repos:
       # a known large file belongs in `exclude` below it, named, where the
       # exception stays visible instead of widening the limit for everything.
       - id: check-added-large-files
+        exclude: '(^|/)CLAUDE\.md$'
 
       # scripts/check exits early when a script it calls is not executable,
       # and shell detection depends on the same bit.

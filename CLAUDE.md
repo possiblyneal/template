@@ -73,6 +73,7 @@ The only non-shell code here is the Python under `apps/repo-builder/`, declared 
 ## Git
 
 - Pre-commit blocks commits to `main` and `master`; branch first.
+- `CLAUDE.md` files have no repository-enforced length or size limit.
 - Run `scripts/check --fast` before committing, and the whole `scripts/check` when the change could break the build. It runs CI's checks plus pre-commit over every file, `--fast` leaving the build to
   CI, but with the machine's tool versions rather than CI's fresh installs, so a lint can pass here and fail there; `scripts/CLAUDE.md` carries the rule.
 - These prompt for approval: `git reset --hard`, `git clean`, `git rebase`, `rm`, `git rm`, and the `gh` commands that merge pull requests, cut releases, or delete the repository. Edits do not: this
