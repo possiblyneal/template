@@ -18,4 +18,6 @@ Authors decide how long a `CLAUDE.md` file, section, block, or line should be. T
 
 ## Context
 
-ADR 0012 used byte counts to enforce readability. The operator chose to leave wrapping and section breaks to authors. Keeping only the repository-wide size check would still prevent adding a long instruction file, so its exemption is limited to `CLAUDE.md` rather than raising the threshold for all files.
+ADR 0012 used byte counts to enforce readability. A byte count can tell an author where to wrap a line or split a paragraph, but not whether that break makes the instruction clearer. The audit therefore neither requires breaks nor suggests headings based on length.
+
+Keeping only the repository-wide size check would still prevent adding a long instruction file, so its exemption is limited to `CLAUDE.md` rather than raising the threshold for all files.

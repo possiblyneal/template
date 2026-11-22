@@ -11,6 +11,8 @@ status: superseded
 
 # Cap CLAUDE.md Line and Block Length in the Structure Audit
 
+> Superseded by [ADR 0013: Leave CLAUDE.md Length to Authors](0013-leave-claude-md-length-to-authors.md).
+
 ## Decision
 
 `scripts/structure` reads every tracked `CLAUDE.md` and enforces two caps as
