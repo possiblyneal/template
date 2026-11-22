@@ -12,8 +12,8 @@ Replace the placeholder with one entry per actual tool as you add it.
 
 ## Local Contracts
 
-Add the root workspace manifest with the first tool in a language. A tool's `go.mod` needs a root `go.work`; a tool's `pyproject.toml` needs a root `pyproject.toml`.
-Without the root manifest, `scripts/check` cannot run that language's checks.
+Add the root workspace manifest with the first tool in a language that requires one. A tool's `go.mod` needs a root `go.work`; a tool's `pyproject.toml` needs a root `pyproject.toml`.
+Swift has no root workspace manifest: `scripts/check` discovers `Package.swift` files directly.
 
 ## Work Guidance
 
