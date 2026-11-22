@@ -1,41 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Refuse to let the root's .github/ and scripts/ trees diverge from the
-# payload's. A repository that ships a template payload holds its own copy of
-# each at the root and the copy every generated repository is cut from under
-# apps/github-repository-template/src/base-repo/, and each pair is
-# byte-identical by discipline rather than by mechanism. Runs from
-# scripts/check and from pre-commit on every commit.
+# Compare the root's .github/ and scripts/ with the template payload. Runs from
+# scripts/check and pre-commit; a repository without a payload is not-applicable.
+# Unlike scripts/structure, this checks content as well as path presence.
 #
-# Dependabot is what ends that discipline. Its github-actions ecosystem reaches
-# root only -- the reference requires directory / to find workflow files -- so
-# a bump lands on the root copy and leaves the payload pinned to the old SHA,
-# through a pull request that looks routine. This does not update anything: it
-# fails until the bump is mirrored, which turns each root bump into a complete
-# one. A hand edit to one tree fails the same way.
+# Dependabot's github-actions ecosystem reaches the root, so a routine bump can
+# leave the payload pinned to an old SHA. Fail rather than update either copy;
+# the same applies to hand edits. Comparing scripts/ also lets the ShellCheck
+# hook skip the payload copy.
 #
-# scripts/ is compared so the shellcheck hook may skip the payload's copy: it
-# would report exactly the root's findings, at about half the gate's shellcheck
-# time. That skip is sound only while the two trees agree, and this is what
-# says they do.
-#
-# Not folded into scripts/structure, which audits where a file sits. This is a
-# question about content equality between two trees.
-#
-# A repository with no payload has one copy of each tree and nothing to
-# compare it against, which is not-applicable rather than a pass -- and it is the state
-# most repositories carrying this script are in. It is shipped to them anyway
-# because a generated repository that later grows a payload of its own is not
-# hypothetical: this repository is one, generated from the payload it now
-# holds.
-#
-# Everything is read from the Git index, both which paths exist and what each
-# one contains. The index is the tree being committed, and this runs at
-# pre-commit: reading content from the working tree instead would pass a staged
-# divergence whose fix is sitting unstaged beside it, and fail a staged
-# agreement carrying an unstaged scratch edit. Both are the wrong answer to
-# "may this commit proceed".
+# Read paths and content from the Git index: pre-commit must judge the staged
+# tree, not an unstaged fix or scratch edit in the working tree.
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"

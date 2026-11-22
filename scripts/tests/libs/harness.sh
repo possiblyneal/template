@@ -15,9 +15,9 @@
 # Callers use `set -uo pipefail` without -e: a failing assertion is recorded and
 # the remaining cases still run, so one break does not hide the rest.
 #
-# No suite changes directory; a case addresses its fixture by path. Only a case
-# about scripts/run lets a stub read its stdin, since run is the one capability
-# that keeps the stdin it was given.
+# Cases normally address fixtures by path; cleanup also handles a suite that
+# changes into its fixture. Only a case about scripts/run lets a stub read its
+# stdin, since run is the one capability that keeps the stdin it was given.
 
 # Every suite here scaffolds throwaway Git repositories, and a fixture inherits
 # the operator's global config unless told not to. One setting breaks them
