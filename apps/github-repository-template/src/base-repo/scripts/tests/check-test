@@ -3,7 +3,7 @@ set -uo pipefail
 
 # What scripts/check prints, writes, and exits with. The gate's steps are
 # stubbed in a scratch copy of the scripts, so the cases assert the wrapper's
-# contract -- table only by default, the whole run in tmp/check.log every time,
+# contract -- table and timings by default, the whole run in tmp/check.log every time,
 # raw output under --verbose, the gate's own exit status, --fast handing ci
 # --no-build -- and not the output of any real check.
 
@@ -43,6 +43,203 @@ else
   fail "wanted the table alone and exit 0, got exit $status: $out"
 fi
 
+current="the concise summary and log include elapsed gate timings"
+if grep -qE '^Elapsed wall time' <<< "$out" \
+  && grep -qE '^doctor +[0-9]+s$' <<< "$out" \
+  && grep -qE '^total +[0-9]+s$' <<< "$out" \
+  && grep -qE '^Elapsed wall time' "$work/tmp/check.log"; then
+  pass
+else
+  fail "wanted elapsed timings in both summary and log"
+fi
+
+current="verbose output contains the same elapsed section as the log"
+out="$(cd "$work" && scripts/check --verbose 2>&1)"
+if grep -qE '^Elapsed wall time' <<< "$out" && [[ "$out" == "$(cat "$work/tmp/check.log")" ]]; then
+  pass
+else
+  fail "wanted elapsed timings in verbose output and its log"
+fi
+
+gate_fixture "script tests are timed over their lifetime rather than the wait"
+printf '#!/usr/bin/env bash\nsleep 2\ntouch done\n' > "$work/scripts/script-tests"
+# The variables belong to the generated fixture, not this test.
+# shellcheck disable=SC2016
+printf '#!/usr/bin/env bash\nfor ((i=0; i<${FIXTURE_WAIT_ATTEMPTS:-100}; i++)); do\n  [[ -e done ]] && break\n  sleep 0.1\ndone\nif [[ ! -e done ]]; then echo "timed out waiting for done" >&2; exit 1; fi\necho "lint               pass             python"\n' > "$work/scripts/ci"
+out="$(cd "$work" && scripts/check 2>&1)"
+if grep -qE '^script-tests +[1-9][0-9]*s$' <<< "$out"; then
+  pass
+else
+  fail "wanted the script-tests lifetime even when ci waits for it: $out"
+fi
+current="timing fixture reports a missing readiness marker"
+rm -f "$work/done"
+(cd "$work" && FIXTURE_WAIT_ATTEMPTS=1 exec scripts/ci) > "$work/wait-output" 2>&1 &
+wait_pid=$!
+(sleep 2; kill "$wait_pid" 2>/dev/null) &
+watchdog_pid=$!
+wait "$wait_pid"
+status=$?
+kill "$watchdog_pid" 2>/dev/null || true
+wait "$watchdog_pid" 2>/dev/null || true
+out="$(cat "$work/wait-output")"
+if (( status == 1 )) && grep -q 'timed out waiting for done' <<< "$out"; then
+  pass
+else
+  fail "wanted a bounded diagnostic, got exit $status: $out"
+fi
+
+gate_fixture "per-language timings name only runners that ran"
+cp "$repo_root/scripts/ci" "$repo_root/scripts/doctor" "$repo_root/scripts/security" "$work/scripts/"
+printf '[project]\nname = "example"\nversion = "1"\n' > "$work/pyproject.toml"
+printf '// swift-tools-version:5.9\n' > "$work/Package.swift"
+stub uv <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+stub swift <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+out="$(cd "$work" && scripts/check --fast 2>&1)"
+status=$?
+if (( status == 0 )) \
+  && grep -qE '^toolchain/python +[0-9]+s$' <<< "$out" \
+  && grep -qE '^audit/python +[0-9]+s$' <<< "$out" \
+  && grep -qE '^lint/python +[0-9]+s$' <<< "$out" \
+  && grep -qE '^lint/swift +[0-9]+s$' <<< "$out" \
+  && grep -qE '^lint +[0-9]+s$' <<< "$out" \
+  && grep -qE '^format-check +[0-9]+s$' <<< "$out" \
+  && grep -qE '^typecheck +[0-9]+s$' <<< "$out" \
+  && grep -qE '^test +[0-9]+s$' <<< "$out" \
+  && ! grep -qE '^(build([ /])|typecheck/swift )' <<< "$out"; then
+  pass
+else
+  fail "wanted stage and per-language timings and no unrun stages, got exit $status: $out"
+fi
+
+current="a failed adapter timing write does not exit doctor early"
+out="$(cd "$work" && CHECK_TIMING_FILE="$work/scripts" scripts/doctor 2>&1)"
+status=$?
+if (( status == 0 )) && grep -qE '^toolchain +pass +python$' <<< "$out"; then
+  pass
+else
+  fail "wanted successful toolchain detection despite the unusable timing sink, got exit $status: $out"
+fi
+
+current="a capability with no applicable adapters emits no elapsed time"
+mv "$work/pyproject.toml" "$work/pyproject.disabled"
+out="$(cd "$work" && scripts/check --fast 2>&1)"
+status=$?
+if (( status == 0 )) && grep -qE '^typecheck +not-applicable +swift$' <<< "$out" \
+  && ! grep -qE '^typecheck(/[a-z]+)? +[0-9]+s$' <<< "$out"; then
+  pass
+else
+  fail "wanted a not-applicable typecheck and no elapsed time, got exit $status: $out"
+fi
+
+gate_fixture "doctor and security language timings reach the summary"
+for step in doctor security; do
+  # shellcheck disable=SC2016
+  printf '#!/usr/bin/env bash\nprintf "%s/python 0s\\n" >> "${CHECK_TIMING_FILE:-/dev/null}"\n' "$step" > "$work/scripts/$step"
+done
+out="$(cd "$work" && scripts/check 2>&1)"
+if grep -qE '^doctor/python +0s$' <<< "$out" && grep -qE '^security/python +0s$' <<< "$out"; then
+  pass
+else
+  fail "wanted both language timings: $out"
+fi
+
+gate_fixture "timing write failure preserves the step status"
+# shellcheck disable=SC2016
+printf '#!/usr/bin/env bash\nfor d in tmp/check-timing.*; do mkdir "$d/stages"; done\nexit 9\n' > "$work/scripts/doctor"
+out="$(cd "$work" && scripts/check --gate 2>&1)"
+status=$?
+if (( status == 9 )); then
+  pass
+else
+  fail "wanted exit 9 despite a failed timing write, got $status: $out"
+fi
+
+gate_fixture "background and language timing write failures preserve results"
+cp "$repo_root/scripts/ci" "$work/scripts/ci"
+printf '[project]\nname = "example"\nversion = "1"\n' > "$work/pyproject.toml"
+# shellcheck disable=SC2016
+printf '#!/usr/bin/env bash\nmkdir "$CHECK_TIMING_FILE"\n' > "$work/scripts/doctor"
+# shellcheck disable=SC2016
+printf '#!/usr/bin/env bash\nfor d in tmp/check-timing.*; do mkdir "$d/script-tests"; done\nexit 3\n' > "$work/scripts/script-tests"
+stub uv <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+out="$(cd "$work" && scripts/check --gate --fast 2>&1)"
+status=$?
+if (( status == 3 )) && grep -qE '^lint +pass' <<< "$out"; then
+  pass
+else
+  fail "wanted the original suite status and successful language results, got $status: $out"
+fi
+
+gate_fixture "only the final timing footer reaches the concise output"
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "Elapsed wall time (overlapping stages are not additive):" "doctor 99s" "total 99s"\n' > "$work/scripts/doctor"
+out="$(cd "$work" && scripts/check 2>&1)"
+if grep -qE '^total +[0-9]+s$' <<< "$out" && ! grep -q '99s' <<< "$out"; then
+  pass
+else
+  fail "wanted only the actual footer: $out"
+fi
+
+gate_fixture "nested summarize keeps elapsed timings on early failure"
+printf '#!/usr/bin/env bash\nexit 9\n' > "$work/scripts/doctor"
+out="$(cd "$work" && scripts/summarize scripts/check 2>&1)"
+status=$?
+if (( status == 9 )) && grep -qE '^total +[0-9]+s$' <<< "$out"; then
+  pass
+else
+  fail "wanted exit 9 and timings from nested summarize: $out"
+fi
+
+current="summarize keeps timings when check is found on PATH"
+out="$(cd "$work" && PATH="$work/scripts:$PATH" scripts/summarize check --verbose 2>&1)"
+status=$?
+if (( status == 9 )) && grep -qE '^total +[0-9]+s$' <<< "$out"; then
+  pass
+else
+  fail "wanted exit 9 and timings from check on PATH: $out"
+fi
+
+# An ignored PIPE survives exec (as on hosted CI). Close the read end before
+# releasing doctor so a runner's scheduling cannot accidentally drain the footer.
+for mode in --gate --verbose; do
+  gate_fixture "$mode cleans up after the reader closes with SIGPIPE ignored"
+  printf '#!/usr/bin/env bash\necho first\nfor ((i=0; i<100; i++)); do\n  [[ -e reader-closed ]] && exit 9\n  sleep 0.02\ndone\nexit 1\n' > "$work/scripts/doctor"
+  (
+    cd "$work" || exit
+    trap '' PIPE
+    scripts/check "$mode" | (read -r _; exec 0<&-; touch reader-closed)
+  ) 2>/dev/null
+  status=$?
+  if (( status == 9 )) && ! compgen -G "$work/tmp/check-timing.*" >/dev/null; then
+    pass
+  else
+    fail "wanted doctor exit 9 and no timing directory, got $status"
+  fi
+done
+
+gate_fixture "an early failure reports completed timings after unterminated output"
+printf '#!/usr/bin/env bash\nprintf "doctor failed"\nexit 9\n' > "$work/scripts/doctor"
+out="$(cd "$work" && scripts/check 2>&1)"
+status=$?
+if (( status == 9 )) && grep -qE '^doctor +[0-9]+s$' <<< "$out" \
+  && grep -qE '^total +[0-9]+s$' <<< "$out" \
+  && ! grep -qE '^(structure|security|script-tests) +[0-9]+s$' <<< "$out"; then
+  pass
+else
+  fail "wanted exit 9 and only completed timings: $out"
+fi
+
+gate_fixture "the log holds the whole run after a passing run"
+out="$(cd "$work" && scripts/check 2>&1)"
 current="the log holds the whole run after a passing run"
 log="$work/tmp/check.log"
 if grep -q 'chatter from doctor' "$log" \
@@ -106,6 +303,17 @@ if (( status == 3 )) \
   pass
 else
   fail "wanted exit 3 with both outputs and no later step, got exit $status: $out"
+fi
+
+gate_fixture "ci failure takes precedence over a failing parallel suite" 'exit 4'
+printf '#!/usr/bin/env bash\nexit 3\n' > "$work/scripts/script-tests"
+out="$(cd "$work" && scripts/check --fast 2>&1)"
+status=$?
+if (( status == 4 )) && grep -qE '^script-tests +[0-9]+s$' <<< "$out" \
+  && ! grep -qE '^security +[0-9]+s$' <<< "$out"; then
+  pass
+else
+  fail "wanted ci exit 4 and no security timing, got exit $status: $out"
 fi
 
 gate_fixture "summarize still reads check" \

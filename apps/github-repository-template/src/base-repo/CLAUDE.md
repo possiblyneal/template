@@ -8,11 +8,12 @@ next template update (`/repo-builder`) carry it. This repository's own instructi
 Use these instead of per-language tools. `check` and `fix` run for every language present and report `pass`, `not-applicable`, `unavailable`, or `FAIL`.
 
 - `scripts/check` — the full local gate, a superset of CI except the pull request's changelog check: doctor, structure, then lint, format, type check, test, and build with the script tests beside
-  them, security audit, pre-commit over every file. Prints only the Result table, with the full run in `tmp/check.log`; `--verbose` streams everything; `--fast`, the commit-time gate, leaves `build`
+  them, security audit, pre-commit over every file. Prints the Result table and elapsed wall times, with the full run in `tmp/check.log`; overlapping timings are not additive. `--verbose` streams everything;
+  `--fast`, the commit-time gate, leaves `build`
   to CI and so is no superset of it
 - `scripts/fix` — lint autofix, then formatting
-- `scripts/summarize <command…>` — run a check and print only its Result table, then a verdict line of its exit status and a count per state; read `ci` and other commands through this, since
-  `check` already does
+- `scripts/summarize <command…>` — run a check and print its Result table, any elapsed summary, and a verdict line with its exit status and counts by state; read `ci` and other commands through
+  this, since `check` already does
 - `scripts/run [unit] [--entry <name>] [-- args…]` — start a unit; the unit name is required when `apps/` holds several
 
 `ls scripts/` lists the rest, such as `doctor`, `integration`, and `package`.

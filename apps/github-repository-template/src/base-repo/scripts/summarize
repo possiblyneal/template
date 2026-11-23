@@ -4,6 +4,7 @@ set -uo pipefail
 # Runs a check command and prints only its Result table: one line per check and
 # the findings under any that failed. Everything else the command wrote --
 # compiler noise, pre-commit's own log, a test runner's progress -- is dropped.
+# The separate elapsed summary from scripts/check passes through unchanged.
 #
 # The layout it reads is the interface libs/result.sh documents: the check name
 # padded to 18 columns, the state to 16, findings indented under a FAIL. This
@@ -84,6 +85,26 @@ if (( status != 0 && table_reported_failure != 0 )); then
     echo "Result table, and $log could not be written, so the run is lost."
     echo "Re-run redirecting to a file you can write; it may not reproduce."
   fi
+fi
+
+# Only check owns this footer. Accept its last complete block at the end of
+# output, followed at most by the verdict from check's own summarize wrapper.
+command_path="$1"
+if [[ "$command_path" != */* ]]; then
+  command_path="$(type -P -- "$command_path")"
+fi
+if [[ "$command_path" -ef "$repo_root/scripts/check" ]]; then
+  awk '
+    /^Elapsed wall time \(overlapping stages are not additive\):$/ { block = $0; timing = 1; complete = 0; next }
+    timing && /^[A-Za-z0-9_/-]+ +[0-9]+s$/ {
+      block = block "\n" $0
+      if ($1 == "total") { timing = 0; complete = 1 }
+      next
+    }
+    complete && / exited [0-9]+: / { next }
+    { timing = 0; complete = 0 }
+    END { if (complete) print block }
+  ' <<< "$output"
 fi
 
 # The verdict, always the last line: the exit status and a count per state.

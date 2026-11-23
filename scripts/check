@@ -8,7 +8,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-# By default only the Result table reaches the caller, because the rest of the
+# By default the Result table and elapsed summary reach the caller; the rest of the
 # run -- pre-commit's hook list, test progress, compiler noise -- is what an
 # agent would otherwise read to learn what the table already says. The filter is
 # scripts/summarize rather than a second one here: check runs itself under it
@@ -54,6 +54,44 @@ case "$mode" in
     ;;
 esac
 
+mkdir -p tmp
+timing_dir="$(mktemp -d tmp/check-timing.XXXXXXXX 2>/dev/null)" || timing_dir=""
+total_start=$SECONDS
+timing_file="${timing_dir:+$timing_dir/ci}"
+finish() {
+  local status=$?
+  trap - EXIT
+  if [[ -n "${script_tests_pid:-}" ]]; then
+    kill -- -"$script_tests_pid" 2>/dev/null || true
+  fi
+  local timing=""
+  if [[ -n "$timing_dir" ]]; then
+    timing="$(for file in stages ci script-tests; do
+      [[ ! -f "$timing_dir/$file" ]] || cat "$timing_dir/$file" 2>/dev/null || true
+    done)" || true
+    rm -rf "$timing_dir" || true
+  fi
+  [[ -z "${script_tests_log:-}" ]] || rm -f "$script_tests_log" || true
+  trap 'exit 141' PIPE
+  {
+    printf '\nElapsed wall time (overlapping stages are not additive):\n'
+    [[ -z "$timing" ]] || printf '%s\n' "$timing"
+    printf 'total %ss\n' "$((SECONDS - total_start))"
+  } 2>/dev/null || true
+  exit "$status"
+}
+trap finish EXIT
+
+timed() {
+  local name="$1" start=$SECONDS status=0
+  shift
+  CHECK_TIMING_FILE="$timing_file" "$@" || status=$?
+  if [[ -n "$timing_dir" ]]; then
+    { printf '%s %ss\n' "$name" "$((SECONDS - start))" >> "$timing_dir/stages"; } 2>/dev/null || true
+  fi
+  return "$status"
+}
+
 if (( ${#fast[@]} )); then
   echo "scripts/check --fast: build is left to CI."
 fi
@@ -63,7 +101,7 @@ if [[ ! -x scripts/doctor ]]; then
   exit 1
 fi
 
-scripts/doctor
+timed doctor scripts/doctor
 
 # Where a file sits, checked before what is in it. A misplaced file passes every
 # language check in this repository, because each one reads the manifests and
@@ -73,7 +111,7 @@ if [[ ! -x scripts/structure ]]; then
   exit 1
 fi
 
-scripts/structure </dev/null
+timed structure scripts/structure </dev/null
 
 # Whether this repository's own .github/ still matches the copy it ships to
 # generated repositories. Reports not-applicable where there is no payload,
@@ -83,7 +121,7 @@ if [[ ! -x scripts/payload-parity ]]; then
   exit 1
 fi
 
-scripts/payload-parity </dev/null
+timed payload-parity scripts/payload-parity </dev/null
 
 if [[ ! -x scripts/script-tests ]]; then
   echo "scripts/script-tests is missing or not executable."
@@ -113,10 +151,17 @@ fi
 # A group SIGKILL runs no trap, so the suites finish on their own.
 script_tests_log="$(mktemp)"
 set -m
-scripts/script-tests </dev/null >"$script_tests_log" 2>&1 &
+(
+  start=$SECONDS
+  status=0
+  scripts/script-tests </dev/null || status=$?
+  if [[ -n "$timing_dir" ]]; then
+    { printf 'script-tests %ss\n' "$((SECONDS - start))" > "$timing_dir/script-tests"; } 2>/dev/null || true
+  fi
+  exit "$status"
+) >"$script_tests_log" 2>&1 &
 script_tests_pid=$!
 set +m
-trap 'kill -- -"$script_tests_pid" 2>/dev/null || true; rm -f "$script_tests_log"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 141' PIPE
@@ -126,11 +171,11 @@ if (( ${#fast[@]} )); then
   ci_args=(--no-build)
 fi
 ci_status=0
-scripts/ci "${ci_args[@]}" || ci_status=$?
+CHECK_TIMING_FILE="$timing_file" scripts/ci "${ci_args[@]}" || ci_status=$?
 script_tests_status=0
 wait "$script_tests_pid" || script_tests_status=$?
 # Reaped, so its PID may now belong to another process.
-trap 'rm -f "$script_tests_log"' EXIT
+script_tests_pid=""
 trap - INT TERM PIPE
 cat "$script_tests_log"
 (( ci_status == 0 )) || exit "$ci_status"
@@ -144,7 +189,7 @@ if [[ ! -x scripts/security ]]; then
   exit 1
 fi
 
-scripts/security
+timed security scripts/security
 
 # The commit hooks see staged files only, so a file stays unchecked until it is
 # next touched: a hook added today never reaches the files already committed,
@@ -162,10 +207,10 @@ scripts/security
 # in ci collects. They stay on at commit time, where nothing else runs them.
 # Naming a hook a repository lacks skips nothing.
 skip=no-commit-to-branch,structure,payload-parity,addon-adoption,reference-assertions
-if [[ -s .pre-commit-config.yaml ]]; then
+precommit_sweep() {
   echo
   echo "Running pre-commit across all files"
-  SKIP="$skip" pre-commit run --all-files
+  SKIP="$skip" pre-commit run --all-files || return $?
 
   # --all-files means every file Git knows about, so a file written but not yet
   # staged is not one of them. That is this sweep's blind spot at the moment it
@@ -183,6 +228,9 @@ if [[ -s .pre-commit-config.yaml ]]; then
   if (( ${#untracked[@]} )); then
     echo
     echo "Running pre-commit across ${#untracked[@]} untracked file(s)"
-    SKIP="$skip" pre-commit run --files "${untracked[@]}"
+    SKIP="$skip" pre-commit run --files "${untracked[@]}" || return $?
   fi
+}
+if [[ -s .pre-commit-config.yaml ]]; then
+  timed pre-commit precommit_sweep
 fi

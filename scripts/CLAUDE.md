@@ -27,6 +27,7 @@ Keep scripts in one directory regardless of caller. Read the script or suite hea
 - **Result output:** `summarize` parses `libs/result.sh`'s layout. Keep `tally` as the exit status.
   After at least one result row, the default EXIT trap prints `<command as invoked> exited <status>: <count per state>`; do not print a second verdict.
   Emit results in the shell that exits; a subshell's counts cannot reach its trap. A custom EXIT trap calls `result_exit_verdict`. `summarize` ends with the verdict of the command it ran.
+- **Elapsed time:** `check` reports wall time separately from Result rows, for each stage and each language runner that ran. Stages and runners overlap; use the measured total instead of adding rows.
 - **Stdin:** `script-tests` closes fd 0 for suites, `check` closes it for `structure`, and dispatch closes it except for `run`. `*_each` reads its list on fd 3.
   Capture pipeline output in a variable rather than using a reader that exits early: under `pipefail`, SIGPIPE becomes 141 and can be read as absent.
 - **File mode:** Source `libs/*.sh` and `tests/libs/harness.sh`; omit the shebang and executable bit. Other scripts are executable and extensionless, so pre-commit can identify them by shebang.

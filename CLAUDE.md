@@ -37,7 +37,7 @@ Use the repository scripts instead of per-language tools. When changing a comman
 |---|---|
 | Check prerequisites | Run `scripts/doctor` for local tools, dependencies, hooks, and configuration. It does not inspect GitHub. |
 | Verify a change | Run `scripts/check --fast` before committing. Run `scripts/check` instead when the change could break the build; `--fast` skips only the build. |
-| Diagnose a gate failure | Read `tmp/check.log` for the full run or use `scripts/check --verbose`. First-time hook setup and `commitlint-test` may need the network. |
+| Diagnose a slow or failing gate | Read the Result table and elapsed wall times. For the full run, read `tmp/check.log` or use `scripts/check --verbose`. First-time hook setup and `commitlint-test` may need the network. |
 | Read CI or another check | Use `scripts/summarize <command…>` for findings and exit status. `scripts/check` already summarizes its output. |
 | Apply automatic fixes | Run `scripts/fix` for lint autofix followed by formatting. A remaining `lint-fix` failure needs a hand edit. |
 | Check layout | Run `scripts/structure` for file placement and unit declarations. Judge content scope separately. |
