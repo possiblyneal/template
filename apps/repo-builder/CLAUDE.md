@@ -2,10 +2,8 @@
 
 ## Purpose
 
-Develops the `/repo-builder` skill, which builds a repository from the payload at `apps/github-repository-template/src/base-repo/` and carries later template deltas into repositories already generated
-from it.
-
-The skill is this repository's product, so it lives under `apps/` like any other unit; the tracked symlink at `.claude/skills/repo-builder` points at it rather than holding a second copy.
+Develops `/repo-builder`, which builds repositories from `apps/github-repository-template/src/base-repo/` and carries later template deltas into generated repositories.
+The skill is a product under `apps/`; the tracked `.claude/skills/repo-builder` symlink exposes it without a second copy.
 
 ## Ownership
 
@@ -19,29 +17,27 @@ The skill is this repository's product, so it lives under `apps/` like any other
   - `update.md`, `adopt.md`, `retrofit.md`, `wayfinding.md`, `addon-adoption.md`.
   - `reporting.md` — at the end of any of them.
 
-  `retrofit.md` is an index. It states the `lifecycle.md` rules a retrofit needs throughout inline, each with an anchor link for the reasoning, so a retrofit never opens the whole file. It names the
-  step that reads each of the rest, states the records convention once, and links one file per step, `retrofit-step-1-preflight.md` through `retrofit-step-9-publish.md`, each read when the flow
-  reaches it.
+  `retrofit.md` indexes `retrofit-step-1-preflight.md` through `retrofit-step-9-publish.md`, each read at its named step. It states the records convention once and inlines the lifecycle rules
+  needed throughout, each linked to its reasoning; a retrofit never opens the whole `lifecycle.md`.
   - `retrofit-unmet-bar.md` — read from step 7 only when the bar is unmet.
   - `retrofit-report.md` — read once the flow ends or stops.
 
   The reasoning behind the flow's shape is `docs/adrs/0005-stage-a-retrofit-locally-and-write-the-host-last.md`, which step files link rather than restate.
 
-  `update.md` is inlined the same way: it opens with the lifecycle rules every update needs, each with an anchor link, puts each conditional rule at its triggering step, and leaves out the sections an
-  update never reads (the first manifest's tools, hooks after a merge, ruleset satisfiability, architecture records).
+  `update.md` opens with its always-needed lifecycle rules, each anchor-linked, and places conditional rules at their triggering steps. It omits the first manifest's tools, hooks after a merge,
+  ruleset satisfiability, and architecture records, which updates never read.
 
-  `generate.md` is inlined the same way, with the eight lifecycle rules a generate needs and a link to `### Working hooks in a candidate` at step 9. The rules for a destination that already has
-  content are in `generate-into-content.md`, read from step 1 only then, and the reasoning behind the fixed steps is `docs/adrs/0010-run-generates-fixed-steps-as-commands.md`, which steps link rather
-  than restate.
+  `generate.md` inlines its eight lifecycle rules and links `### Working hooks in a candidate` at step 9. Step 1 reads `generate-into-content.md` only for a destination with content. Steps link
+  `docs/adrs/0010-run-generates-fixed-steps-as-commands.md` for the fixed steps' reasoning.
 
-  A lifecycle rule a generate, a retrofit or an update newly depends on goes on that flow's list or behind an anchor link at the step that needs it, or the flow never reads it.
+  Add any newly needed lifecycle rule to the generate, retrofit, or update flow's list, or link its anchor at the step that needs it; the flow otherwise never reads it.
 
-  `choosing_a_language.md` is the method wayfinding is a short path through.
+  `choosing_a_language.md` is the method behind wayfinding's short path.
 
 ### preflight.py and retrofit.py
 
-- `src/scripts/preflight.py` — validates and describes a flow's inputs before it acts. Retrofit shares the git helpers and the addon manifest reader, and none of the record ones: every check in
-  `load_provenance` reads a `.repo-template.json` a retrofit has not written yet.
+- `src/scripts/preflight.py` — validates and describes inputs before a flow acts. Retrofit shares its git helpers and addon manifest reader, not its record helpers: every `load_provenance` check
+  reads a `.repo-template.json` retrofit has not written yet.
 
 - `src/scripts/retrofit.py` — runs a retrofit's fixed steps and reports each as JSON. Subcommands:
   - `proofs`, `normalize`, `facts`.
@@ -59,10 +55,9 @@ The skill is this repository's product, so it lives under `apps/` like any other
   - `pr-body` — renders the pull-request body from the records the others wrote.
   - `decide` — records the judgements both leave as slots.
 
-  Every slot is keyed in `SLOTS`, so a judgement both renderers show is decided once. `Report` takes the slot table as an argument so `generate.py` renders with its own keys; a line a record can
-  settle renders from that record rather than becoming a slot.
+  `SLOTS` keys each judgement once for both renderers; record-settled lines are not slots. `Report` accepts the slot table so `generate.py` uses its own keys.
 
-  It writes where `preflight.py` is read-only by contract, which is why it is a second file rather than more subcommands there; it imports `preflight.py`'s git helpers rather than copying them.
+  Unlike the read-only `preflight.py`, this file writes; it imports preflight's git helpers rather than copying them.
 
 ### update.py
 
@@ -138,7 +133,7 @@ The skill is this repository's product, so it lives under `apps/` like any other
     Preserved/Merged/Conflicted aggregates the merged paths, `none` when there are none; a line the records cannot settle (status when a destination is unverified, has no checks, or has a failing
     check conclusion, `left`, cleanup for an unpublished destination, pending action) is a `[[FILL: <name>]]` slot.
 
-  It writes where `preflight.py` is read-only by contract, which is why it is a separate file; it imports `preflight.py`'s helpers rather than copying them.
+  Unlike the read-only `preflight.py`, this file writes; it imports preflight's helpers rather than copying them.
 
 ### generate.py
 
@@ -206,27 +201,23 @@ The skill is this repository's product, so it lives under `apps/` like any other
 
 ## Local Contracts
 
-**The link is the install.** `.claude/skills/repo-builder` is a tracked symlink to `../../apps/repo-builder/src`, so every clone and worktree gets the skill on checkout with no step to forget. Never
-gitignore it or replace it with a copy: an ignored link is missing from every fresh worktree, and a copy puts the skill at two paths where the second goes stale.
+**The link is the install.** `.claude/skills/repo-builder` is a tracked symlink to `../../apps/repo-builder/src`, delivered to every clone and worktree. Never ignore it or replace it with a copy:
+an ignored link is missing from fresh worktrees; a copy goes stale. It targets `src/`, not the unit root: a skill directory is `SKILL.md` and its neighbors, not `.unit.json` or this file.
 
-**The link targets `src/`, not the unit root.** A skill directory is `SKILL.md` plus the paths beside it; `.unit.json` and this file are this repository's bookkeeping and have no meaning to the skill.
+**Run the skill from this repository.** Its paths, including `apps/github-repository-template/src/base-repo` and `src/addon-adoption.json`, are repository-root-relative; pass the destination as an
+argument, not the working directory. Elsewhere they resolve against the wrong tree.
 
-**The skill runs from this repository.** Its paths are repository-root-relative — `apps/github-repository-template/src/base-repo`, `src/addon-adoption.json` — and the destination is an argument
-rather than the working directory. A session that invokes it from somewhere else resolves those paths against the wrong tree.
+A generate candidate is also root-relative, under gitignored `tmp/`: it cannot be committed here, and materializing it needs no outside-repository approval. `generate.py materialize` builds it;
+`references/generate.md` step 3 and `SKILL.md` name it. Avoid further copies of the path.
 
-A generate's candidate is repository-root-relative too, under the gitignored `tmp/`, so it cannot be committed here and materializing a whole tree needs no approval for a path outside the repository.
-`generate.py materialize` builds it, `references/generate.md` step 3 names it, and `SKILL.md` repeats it for routing; a further copy of the path is one more than can be kept in step.
+**`ships.kind` is `none`.** The allowed kinds are `executable`, `quadlet`, and `none`; none describes a symlinked skill. Here `none` means the packaging adapters build nothing; the tracked link
+provides delivery. A fourth kind requires changing `scripts/structure`, mirrored to every generated repository. `docs/adrs/0001-declare-unit-delivery-as-two-facts.md` gates the declaration's shape.
 
-**`ships.kind` is `none` because the vocabulary has no word for this.** The three kinds are `executable`, `quadlet`, and `none`, and a symlinked skill is none of them. Adding a fourth means editing
-`scripts/structure`, which is mirrored into the payload, so every generated repository would gain a kind it has no unit to use; `docs/adrs/0001-declare-unit-delivery-as-two-facts.md` gates the
-declaration's shape. `none` here reads as "nothing this repository's packaging adapters build", which is accurate — the tracked link is what delivers it.
+**Retrofit fixtures use the real layout audit.** `src/evals/setup_fixture.py` copies `scripts/structure` and `scripts/libs/result.sh` from `apps/github-repository-template/src/base-repo/`, so
+scoring uses the destination's actual check surface. Moving either payload path breaks both retrofit scenarios.
 
-**The retrofit fixture copies the payload's real layout audit.** `src/evals/setup_fixture.py` reads `scripts/structure` and `scripts/libs/result.sh` out of
-`apps/github-repository-template/src/base-repo/` rather than writing a stand-in, because a retrofit is scored on its destination's own check surface and a hand-written audit would prove nothing about
-the rules this template actually enforces. Moving either payload path breaks the two retrofit scenarios.
-
-**Two root-level checks name paths inside this unit**, and moving a file here breaks them silently rather than loudly: the `addon-adoption` pre-commit hook's `entry`, and `testpaths` in the root
-`pyproject.toml`. The root `pyproject.toml` exists for this unit's Python; it is root-only and never mirrored into the payload.
+**Two root-level checks name unit paths:** the `addon-adoption` pre-commit hook's `entry` and root `pyproject.toml`'s `testpaths`. Moving a file can break them silently. The Python manifest exists
+for this unit and is never mirrored into the payload.
 
 **A generate records its fresh clone for the operator's hooks.** `references/generate.md` step 13 appends the clone's real path, one per line, to
 `${XDG_CACHE_HOME:-~/.cache}/claude-generated-repos/<session id>`, chained onto the `gh repo clone` so a reused or operator clone is never recorded. The operator's user-level hooks
@@ -247,45 +238,33 @@ flow; this is its home for the code. `generate.py` follows it at the same prefix
 
 ## Work Guidance
 
-`test_addon_adoption.py` and `test_reference_assertions.py` are stdlib-only, and each file says why: both run under pytest and standalone from a pre-commit hook that resolves no dependencies. A
-pytest-only idiom added later passes the first and breaks the second.
+Keep `test_addon_adoption.py` and `test_reference_assertions.py` stdlib-only: both run under pytest and standalone in dependency-free pre-commit hooks. Pytest-only idioms break the latter.
 
-`test_reference_assertions.py` checks only mechanical claims — a destination path a reference names exists in the payload or in `repository-addons/`, a decision record it cites exists under
-`docs/adrs/`, and a Markdown heading it quotes exists in some payload file or in `src/references/` itself.
+`test_reference_assertions.py` checks mechanical claims:
 
-The heading set spans both trees because a quoted heading is one of two claims: payload content a flow acts on, or an address one reference cites in another, which is what `generate.md`'s `### Step N`
-headings are for.
+- A destination path named by a reference exists in the payload or `repository-addons/`, and a cited decision record exists under `docs/adrs/`.
+- A quoted Markdown heading exists in the payload or `src/references/`: it names either payload content a flow acts on or an address another reference cites, such as `generate.md`'s `### Step N`
+  headings.
+- A heading link resolves in its target, including `file.md#anchor`, a relative path such as `../x.md#anchor` resolved from the linking file's directory, and a bare `#anchor`. Retrofits read lifecycle
+  sections through these links alone. Anchors follow GitHub's: retain non-ASCII letters, suffix repeated headings with `-1`/`-2`, and skip fenced code, including indented fences.
+- A code span in a `generate.md`, `retrofit.md` or `update.md` bullet linking `lifecycle.md#<anchor>` appears verbatim in that section. Correct a drifting extract to quote its source; do not loosen
+  the check.
 
-It also fails on a link to a heading the target does not hold, whether `file.md#anchor`, a relative path such as `../x.md#anchor` resolved against the linking file's directory, or a bare `#anchor`,
-since a retrofit reads a lifecycle section through that link alone. Anchors follow GitHub's: non-ASCII letters kept, `-1`/`-2` suffixes on repeated headings, and fenced code, indented fences included,
-skipped.
+The check cannot judge whether a sentence about a named file is correct. Extend it with mechanically decidable claims, without weakening these checks.
 
-And it fails when a code span in a `generate.md`, `retrofit.md` or `update.md` bullet that links `lifecycle.md#<anchor>` is not verbatim in that section, since those bullets are inline extracts of the
-source, and an extract that drifts must be corrected to quote the source rather than the check loosened. Whether a sentence is right about a file it names is not decidable there, so widening it means
-finding another claim a script can settle, not loosening these.
+It also checks that every shipped payload path is reached separately by both this repository's `.repo-template.json` and the canonical `apps/github-repository-template/src/ownership.json` written
+by every generate. Unmatched paths are product-owned and would escape updates. The lists may diverge: this repository's manifest adds its own merges to the payload's shape. Keep both complete.
 
-A fourth claim was added that way: every path the payload ships is reached by an ownership rule, checked against this repository's `.repo-template.json` and against the canonical
-`apps/github-repository-template/src/ownership.json` every generate writes.
+For stdlib-only execution, `reaches()` copies `preflight.py`'s `path_matches` for the two list shapes. It is strictly narrower, so it can only false-alarm.
 
-It reads two ownership lists rather than the references, and it belongs here because the claim it settles is one the references make — an unmatched path is product-owned, so a payload path no rule
-reaches sits outside every update with nothing naming it.
+Run every hand-written git command in `test_preflight.py` through its `git` or `git_output` helper, never `subprocess.run` directly. Each call supplies `-c user.name`/`-c user.email`: hand commits
+otherwise fall back to ambient git config, absent on the CI runner with its empty gecos field, and fail with "empty ident name". `test_retrofit.py` imports both helpers rather than copying them.
 
-It asserts reachability of each list separately rather than agreement between them, because the two describe different repositories and are free to diverge: this repository's manifest is the payload's
-shape plus its own merges. Each is kept complete on its own, which is what makes a rule added to the payload a rule added to both.
+`src/scripts/tests/conftest.py` sets `GIT_CONFIG_GLOBAL` and `GIT_CONFIG_SYSTEM` to `/dev/null` for pytest, as `scripts/tests/libs/harness.sh` does for shell suites. Bypassing the helper then fails
+locally as in CI, and test commits do not run the operator's global hooks. Fixture commits are exempt: `src/evals/setup_fixture.py` supplies its own `GIT_ENV`.
 
-`reaches()` is a hand-copy of `preflight.py`'s `path_matches` for the two shapes the lists use, kept rather than imported for the stdlib-only reason above; it is strictly the narrower of the two, so
-it can only false-alarm.
-
-Every git command `test_preflight.py` writes by hand goes through its own `git` or `git_output` helper, never `subprocess.run` direct. The helper supplies a `-c user.name`/`-c user.email` identity on
-every call, because a hand commit is the only kind that falls back to ambient git config and a CI runner has none — its gecos field is empty, so git fails with "empty ident name".
-
-`src/scripts/tests/conftest.py` points `GIT_CONFIG_GLOBAL` and `GIT_CONFIG_SYSTEM` at `/dev/null` for the whole pytest run, as `scripts/tests/libs/harness.sh` does for the shell suites, so a call site
-that bypasses the helper fails locally as it would in CI, and no commit a test makes runs the operator's global hooks. Fixture commits are exempt: `src/evals/setup_fixture.py` carries its own
-`GIT_ENV`.
-
-`test_retrofit.py` imports those two helpers from `test_preflight.py` rather than holding a copy, so the rule has one home. A subcommand that commits itself, as `hooks` does in its throwaway worktree,
-gets the same identity through `GIT_AUTHOR_*`/`GIT_COMMITTER_*` in the environment the test runs it under, and its own `GIT_CONFIG_GLOBAL` where a case needs a global config, which overrides the
-suite's.
+For a subcommand that commits itself, such as `hooks` in its throwaway worktree, provide the identity through `GIT_AUTHOR_*`/`GIT_COMMITTER_*` in its test environment. A case needing global config
+supplies its own `GIT_CONFIG_GLOBAL`, overriding the suite's.
 
 `HooksTests` run the payload's real hooks and skip, naming why, where pre-commit cannot build their environments. They copy the payload over the fixture rather than building a retrofit's real layout,
 and set a prior `core.hooksPath` per case through that isolated config — none, global, or local — since which directory git was running decides what gets chained. The host is the one thing the
