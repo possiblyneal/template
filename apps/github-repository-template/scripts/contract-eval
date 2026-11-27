@@ -44,12 +44,12 @@ for tool in claude jq uv; do
 done
 [[ -z "$(git -C "$repo_root" status --porcelain -- "$payload")" ]] ||
   { echo "commit $payload first: fixtures are built from HEAD" >&2; exit 1; }
-# The bare arm deletes from the contract's heading up to ## Purpose; without a
+# The bare arm deletes from the contract's heading up to ## Purpose & Tradeoffs; without a
 # Purpose after it, that range would run to the end of the file.
-strip_contract='/^## Template Contract$/,/^## Purpose$/{/^## Purpose$/!d}'
+strip_contract='/^## Template Contract$/,/^## Purpose & Tradeoffs$/{/^## Purpose & Tradeoffs$/!d}'
 contract_md="$(git -C "$repo_root" show "HEAD:$payload/CLAUDE.md")"
-if ! awk '/^## Template Contract$/ {c = 1} /^## Purpose$/ && c {p = 1} END {exit !p}' <<<"$contract_md"; then
-  echo "payload CLAUDE.md: no Template Contract ending at ## Purpose" >&2; exit 1
+if ! awk '/^## Template Contract$/ {c = 1} /^## Purpose & Tradeoffs$/ && c {p = 1} END {exit !p}' <<<"$contract_md"; then
+  echo "payload CLAUDE.md: no Template Contract ending at ## Purpose & Tradeoffs" >&2; exit 1
 fi
 [[ -s "$HOME/.claude/.credentials.json" ]] || { echo "no Claude login at ~/.claude/.credentials.json" >&2; exit 1; }
 
@@ -152,7 +152,7 @@ EOF
   # neither spends its run indexing; only the bare arm loses the contract.
   local claude_md="$dir/CLAUDE.md"
   [[ "$arm" == bare ]] && sed -i "$strip_contract" "$claude_md"
-  sed -i '/^## Purpose$/a\
+  sed -i '/^## Purpose & Tradeoffs$/a\
 \
 A greeting command-line program in apps/greeter.' "$claude_md"
   sed -i '/^## Child Index$/,$d' "$claude_md"

@@ -59,17 +59,17 @@ Every unit has a `.unit.json` at its root, never at a domain's:
 - `ships.kind`: `executable`, `quadlet`, or `none`. `ships.targets` (`linux-amd64`, `macos-arm64`) is required for `executable` and rejected otherwise.
 - Any pairing of `run` and `ships` is valid.
 
-## Purpose
+## Purpose & Tradeoffs
 
 ## Ownership
-
-## Local Contracts
-
-## Work Guidance
-
-## Verification
 
 ## Child Index
 
 This project is not yet indexed. Before continuing you must scan the repository, create a `CLAUDE.md` in every child folder that is a durable boundary, and replace this message with one bullet per
 child `CLAUDE.md` — its path, then what that file owns. Go deep and scan files recursively to properly evaluate complexity. Do not create `CLAUDE.md` files in dot folders.
+
+## Contracts
+
+## Execution & Escalation
+
+## Commands & Verification
