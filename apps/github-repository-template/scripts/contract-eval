@@ -155,8 +155,11 @@ EOF
   sed -i '/^## Purpose & Tradeoffs$/a\
 \
 A greeting command-line program in apps/greeter.' "$claude_md"
-  sed -i '/^## Child Index$/,$d' "$claude_md"
-  printf '## Child Index\n\nNone.\n' >>"$claude_md"
+  sed -i '/^## Child Index$/,/^## Contracts$/{/^## /!d}' "$claude_md"
+  sed -i '/^## Child Index$/a\
+\
+None.\
+' "$claude_md"
   (cd "$dir" && uv sync --quiet && git init -q && git add -A && git commit -qm "chore: fixture")
 }
 
