@@ -155,7 +155,7 @@ EOF
   sed -i '/^## Purpose & Tradeoffs$/a\
 \
 A greeting command-line program in apps/greeter.' "$claude_md"
-  sed -i '/^## Child Index$/,/^## Contracts$/{/^## /!d}' "$claude_md"
+  sed -i '/^## Child Index$/,/^## /{/^## /!d}' "$claude_md"
   sed -i '/^## Child Index$/a\
 \
 None.\
